@@ -1,0 +1,36 @@
+import { app } from '../config/firebase-config.js';
+
+export const APP_VERSION = '1.0.1';
+
+export const APP_CACHE = {
+  currentUser: null,
+  branches: [],
+  courses: [],
+  levels: []
+};
+
+window.APP_CACHE = APP_CACHE;
+
+export function clearAppCache() {
+  APP_CACHE.currentUser = null;
+  APP_CACHE.branches = [];
+  APP_CACHE.courses = [];
+  APP_CACHE.levels = [];
+}
+
+export function setContext(ctx) {
+  if (ctx !== 'youth' && ctx !== 'school') {
+    return;
+  }
+  document.body.dataset.ctx = ctx;
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  if (!document.body.dataset.ctx) {
+    document.body.dataset.ctx = 'youth';
+  }
+  if (typeof lucide !== 'undefined') {
+    lucide.createIcons();
+  }
+  console.info(`Unique Infotech CMS v${APP_VERSION} - Firebase initialized`);
+});

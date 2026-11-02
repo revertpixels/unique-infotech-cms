@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Unique Infotech CMS</title>
+  <!-- TEMPORARY - real favicon added once the official PNG logo is received -->
+  <link rel="icon" href="data:,">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/main.css">
+  <!-- TEMPORARY - removed when the real shell is built -->
+  <style>
+    body {
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 1rem;
+    }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--r-lg);
+      padding: 2rem;
+      max-width: 420px;
+      width: 100%;
+      text-align: center;
+    }
+    .card svg {
+      color: var(--primary);
+      width: 40px;
+      height: 40px;
+      margin: 0 auto 0.75rem;
+    }
+    .card h1 {
+      color: var(--primary);
+      margin-bottom: 0.5rem;
+    }
+    #version-line {
+      color: var(--text-mute);
+      margin-top: 0.75rem;
+    }
+  </style>
+  <script src="https://unpkg.com/lucide@0.344.0/dist/umd/lucide.min.js"></script>
+</head>
+<body data-ctx="youth">
+  <div class="card">
+    <i data-lucide="check-circle"></i>
+    <h1>Foundation check</h1>
+    <p>Design tokens, fonts and Firebase SDK loaded.</p>
+    <p id="version-line"></p>
+  </div>
+  <script type="module">
+    import { APP_VERSION } from './js/core/app.js?v=1.0.1';
+    document.getElementById('version-line').textContent = 'Version ' + APP_VERSION;
+  </script>
+  <script type="module" src="js/core/app.js?v=1.0.1"></script>
+</body>
+</html>

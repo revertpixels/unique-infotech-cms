@@ -72,3 +72,11 @@ This document records the architectural and business logic decisions made for th
 ## 11. Interim Security Rules
 
 Both rules files set to deny-all baseline because storage.rules contained corrupted pasted text. Real role-based rules arrive in Phase 1 Step 3.
+
+## 12. Role Lookup via users/{email}
+
+Decision: role documents are stored at users/{lowercased email} (not UID). Reasoning: a Head's UID does not exist before first Google login; keying by email lets Firestore rules check role instantly and lets Super Admin revoke access by editing/deleting one document.
+
+## 13. App Shell: Single Page Shell + Hash Router
+
+Decision: one shell index.html with hash routes (#/dashboard etc.) loading pages/*.html fragments, plus standalone login.html. Firebase SDK loaded from pinned gstatic CDN ES modules, no build step.

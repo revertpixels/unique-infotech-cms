@@ -45,6 +45,47 @@
 
 ---
 
+### [2026-11-02 04:39] Version 1.0.1 — Phase 1 · Step 2
+
+**What was built:**
+- public/css/base/variables.css — design tokens (approved palette, youth/school ctx overrides)
+- public/css/base/reset.css — minimal modern reset
+- public/css/base/typography.css — 13.5px base, Plus Jakarta Sans, heading weights, muted helpers
+- public/css/main.css — @import chain for base CSS only
+- public/js/config/firebase-config.js — Firebase 11.0.2 ES module config, exports app/auth/db/storage
+- public/js/core/app.js — APP_VERSION 1.0.1, APP_CACHE, setContext, DOMContentLoaded init
+- public/index.html — temporary foundation-check page
+
+**Why:**
+- Establish the foundation layer (tokens, Firebase SDK, app core) before any login/auth or shell code; no hardcoded org/person/email/designation values.
+
+**Files touched (created / modified / deleted):**
+- CREATED: public/css/base/variables.css
+- CREATED: public/css/base/reset.css
+- CREATED: public/css/base/typography.css
+- CREATED: public/css/main.css
+- CREATED: public/js/config/firebase-config.js
+- CREATED: public/js/core/app.js
+- CREATED: public/index.html
+- MODIFIED: docs/01-MASTER-PLAN.md (Node.js version)
+- MODIFIED: docs/03-DECISIONS.md (decisions 12 and 13)
+
+**Firestore changes:**
+- None yet (SDK initialized only; no reads/writes).
+
+**Tested on:**
+- Chrome Desktop: ✅ (owner tested; zero console errors; youth/school ctx switch verified)
+- Mobile (Android Chrome): ✅ (Chrome device-toolbar emulation at 375px width)
+
+**Edge cases checked:** None.
+
+**Known issues created (if any):**
+- index.html is a temporary page to be replaced by the real shell in a later step.
+
+**Next task:**
+- Phase 1 Step 3: Firestore/Storage security rules + users collection schema
+---
+
 ### [2026-11-02 04:18] Version 1.0.0 — Phase 1 · Step 1
 
 **What was built:**

@@ -19,7 +19,7 @@
 | **Budget Alert** | $0.01 Google Cloud Budget Alert ("Zero Cost Safety Alert") |
 | **Firestore Region** | `asia-south1` (Mumbai) |
 | **Storage Region** | `US-EAST1` (always-free bucket) |
-| **Node.js (local)** | 11.17.0 |
+| **Node.js (local)** | 24.19.0 |
 | **Firebase CLI** | 15.30.2 |
 | **IDE** | WebStorm (primary), VS Code + Kilocode (worker agent) |
 | **Current Version** | `1.0.0` |

@@ -45,6 +45,34 @@
 
 ---
 
+### [2026-11-02 05:02] Version 1.0.1 — Phase 1 · Step 3
+
+**What was built:**
+- firestore.rules — rewritten with role-based rules for users, settings, branches, courses, batches, levels (deny-all catch-all)
+
+**Why:**
+- Enforce server-side role + branch isolation before any login/auth code goes live; Super Admin locked to email+password, Heads require Google verified + active users doc.
+
+**Files touched (created / modified / deleted):**
+- MODIFIED: firestore.rules
+- MODIFIED: docs/03-DECISIONS.md (decision 14)
+
+**Firestore changes:**
+- Rules rewritten: users/{userEmail}, settings/{docId}, branches/{branchId}, courses/{courseId}, batches/{batchId}, levels/{levelId}; catch-all /{document=**} denied.
+
+**Tested on:**
+- Chrome Desktop: Rules written; NOT yet deployed. Architect audit pending; live test happens after deploy.
+- Mobile (Android Chrome): N/A
+
+**Edge cases checked:** Short-circuit order in isSuperAdmin()/isGoogleVerified() avoids unnecessary users-doc reads; provider check prevents email/password self-registration as a Head.
+
+**Known issues created (if any):**
+- Super Admin users document must be created manually (utpal.goutam@gmail.com) before login works.
+
+**Next task:**
+- Deploy rules to unique-infotech-cms, create the Super Admin users document, then Phase 1 Step 4 (login + auth).
+---
+
 ### [2026-11-02 04:39] Version 1.0.1 — Phase 1 · Step 2
 
 **What was built:**

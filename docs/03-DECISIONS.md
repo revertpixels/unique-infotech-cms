@@ -80,3 +80,7 @@ Decision: role documents are stored at users/{lowercased email} (not UID). Reaso
 ## 13. App Shell: Single Page Shell + Hash Router
 
 Decision: one shell index.html with hash routes (#/dashboard etc.) loading pages/*.html fragments, plus standalone login.html. Firebase SDK loaded from pinned gstatic CDN ES modules, no build step.
+
+## 14. Firestore Security Rules (Phase 1 Step 3)
+
+Decision: Super Admin is recognised by email+password provider and the locked email; Heads need Google provider + verified email + an active users/{email} document; Heads see only their own branch; rules cover users, settings, branches, courses, batches, levels only; everything else denied until its phase; Storage stays deny-all until Phase 3. Reasoning: provider checks stop anyone from self-registering with a Head's email via email/password; short-circuit order avoids needless users-document reads.

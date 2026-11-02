@@ -1,6 +1,97 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null && request.auth.token.email != null;
+    }
+    function authEmail() {
+      return request.auth.token.email.lower();
+    }
+    function provider() {
+      return request.auth.token.firebase.sign_in_provider;
+    }
+
+    // Super Admin: ONE locked identity, email+password sign-in only
+    function isSuperAdmin() {
+      return signedIn()
+        && provider() == 'password'
+        && authEmail() == 'utpal.goutam@gmail.com';
+    }
+
+    // Heads: Google sign-in only, verified email
+    function isGoogleVerified() {
+      return signedIn()
+        && provider() == 'google.com'
+        && request.auth.token.email_verified == true;
+    }
+    function userPath() {
+      return /databases/$(database)/documents/users/$(authEmail());
+    }
+    function hasUserDoc() {
+      return isGoogleVerified() && exists(userPath());
+    }
+    function me() {
+      return get(userPath()).data;
+    }
+    function isActiveHead() {
+      return hasUserDoc() && me().status == 'active';
+    }
+    function isBranchHead() {
+      return isActiveHead() && me().role == 'branch_head';
+    }
+    function isSchoolHead() {
+      return isActiveHead() && me().role == 'school_head';
+    }
+    function myBranchId() {
+      return me().branchId;
+    }
+
+    function validUserDoc(userEmail) {
+      let d = request.resource.data;
+      return userEmail == userEmail.lower()
+        && d.email == userEmail
+        && d.keys().hasOnly(['email', 'name', 'phone', 'role', 'branchId', 'status', 'createdAt', 'createdBy', 'updatedAt'])
+        && d.keys().hasAll(['email', 'role', 'status'])
+        && d.role in ['branch_head', 'school_head']
+        && d.status in ['active', 'inactive']
+        && (d.role == 'school_head' || (d.branchId is string && d.branchId.size() > 0));
+    }
+
+    match /users/{userEmail} {
+      allow get: if isSuperAdmin()
+                 || (isGoogleVerified() && userEmail == authEmail());
+      allow list: if isSuperAdmin();
+      allow create, update: if isSuperAdmin() && validUserDoc(userEmail);
+      allow delete: if isSuperAdmin();
+    }
+
+    match /settings/{docId} {
+      allow read: if isSuperAdmin() || isActiveHead();
+      allow write: if isSuperAdmin();
+    }
+
+    match /branches/{branchId} {
+      allow read: if isSuperAdmin() || (isBranchHead() && branchId == myBranchId());
+      allow write: if isSuperAdmin();
+    }
+
+    match /courses/{courseId} {
+      allow read: if isSuperAdmin() || isBranchHead();
+      allow write: if isSuperAdmin();
+    }
+
+    match /batches/{batchId} {
+      allow read: if isSuperAdmin() || isBranchHead();
+      allow write: if isSuperAdmin();
+    }
+
+    match /levels/{levelId} {
+      allow read: if isSuperAdmin() || isSchoolHead();
+      allow write: if isSuperAdmin();
+    }
+
+    // Everything else is denied until its phase adds rules
     match /{document=**} {
       allow read, write: if false;
     }

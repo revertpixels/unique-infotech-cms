@@ -45,6 +45,37 @@
 
 ---
 
+### [2026-11-02 05:18] Version 1.0.1 — Phase 1 · Step 3b
+
+**What was built:**
+- firebase.json — Firestore location corrected nam5 → asia-south1
+- docs/06-KNOWN-ISSUES.md — ISS-003 resolved
+- docs/03-DECISIONS.md — decision 15 added
+
+**Why:**
+- Firestore database location cannot be changed after creation; it was created in nam5 contrary to Master Plan, so it was recreated in asia-south1 before any real data existed, and firebase.json updated to match.
+
+**Files touched (created / modified / deleted):**
+- MODIFIED: firebase.json
+- MODIFIED: docs/06-KNOWN-ISSUES.md
+- MODIFIED: docs/03-DECISIONS.md
+
+**Firestore changes:**
+- Database recreated in asia-south1; rules redeployed; users/{superadmin email} document recreated manually.
+
+**Tested on:**
+- Chrome Desktop: Verified by owner in Firebase Console (location shown as asia-south1).
+- Mobile (Android Chrome): N/A
+
+**Edge cases checked:** Database location is immutable post-creation, so recreation before real data was the only correct path.
+
+**Known issues created (if any):**
+- Storage bucket region still to be verified (not blocking).
+
+**Next task:**
+- Phase 1 Step 4: login + auth.
+---
+
 ### [2026-11-02 05:02] Version 1.0.1 — Phase 1 · Step 3
 
 **What was built:**

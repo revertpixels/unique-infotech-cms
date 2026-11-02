@@ -84,3 +84,7 @@ Decision: one shell index.html with hash routes (#/dashboard etc.) loading pages
 ## 14. Firestore Security Rules (Phase 1 Step 3)
 
 Decision: Super Admin is recognised by email+password provider and the locked email; Heads need Google provider + verified email + an active users/{email} document; Heads see only their own branch; rules cover users, settings, branches, courses, batches, levels only; everything else denied until its phase; Storage stays deny-all until Phase 3. Reasoning: provider checks stop anyone from self-registering with a Head's email via email/password; short-circuit order avoids needless users-document reads.
+
+## 15. Firestore Region Correction
+
+Decision: Firestore (default) database recreated in asia-south1 (Mumbai) because the original database had been created in nam5 (US multi-region) contrary to the Master Plan. Reasoning: a database location cannot be changed after creation; branch heads use mobile networks in West Bengal, so latency matters; only one bootstrap document existed so recreation cost nothing. Rules and the Super Admin users document were redeployed/recreated.

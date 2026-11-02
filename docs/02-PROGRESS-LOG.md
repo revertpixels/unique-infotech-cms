@@ -45,6 +45,41 @@
 
 ---
 
+### [2026-11-02 04:18] Version 1.0.0 — Phase 1 · Step 1
+
+**What was built:**
+- storage.rules — replaced corrupted pasted text with deny-all baseline rules
+- firestore.rules — set to deny-all baseline rules
+- .gitignore — added .idea/ entry
+- docs/05-FILE-INDEX.md — renamed batch-heads references to branch-heads
+- docs/03-DECISIONS.md — added decision 11: Interim Security Rules
+
+**Why:**
+- Lock Firebase Storage and Firestore behind production deny-all rules before any feature code; storage.rules contained ~320 KB of pasted chat text instead of valid rules.
+
+**Files touched (created / modified / deleted):**
+- MODIFIED: storage.rules
+- MODIFIED: firestore.rules
+- MODIFIED: .gitignore
+- MODIFIED: docs/05-FILE-INDEX.md
+- MODIFIED: docs/03-DECISIONS.md
+
+**Firestore changes:**
+- Rule files set to deny-all baseline; no data changes.
+
+**Tested on:**
+- Chrome Desktop: N/A (rules-only change)
+- Mobile (Android Chrome): N/A
+
+**Edge cases checked:** None.
+
+**Known issues created (if any):**
+- Real role-based rules deferred to Phase 1 Step 3.
+
+**Next task:**
+- Phase 1 Step 2: build firebase-config.js + app.js + variables.css
+---
+
 ### [2026-10-31 20:40] Version 1.0.0 — Phase 0 · Final Setup
 
 **What was built:**

@@ -71,7 +71,7 @@ unique-infotech-cms/
     │   ├── pages/
     │   │   ├── admissions.page.js
     │   │   ├── archives.page.js
-    │   │   ├── batch-heads.page.js
+    │   │   ├── branch-heads.page.js
     │   │   ├── batches.page.js
     │   │   ├── branches.page.js
     │   │   ├── courses.page.js
@@ -100,7 +100,7 @@ unique-infotech-cms/
     └── pages/
         ├── admissions.html
         ├── archives.html
-        ├── batch-heads.html
+        ├── branch-heads.html
         ├── batches.html
         ├── branches.html
         ├── courses.html

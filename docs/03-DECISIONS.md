@@ -68,3 +68,7 @@ This document records the architectural and business logic decisions made for th
 - **Reasoning:**
     - Prevents accidental data loss or malicious deletion by disgruntled staff.
     - The "Archive ZIP" feature ensures a permanent backup exists before data is purged from the cloud.
+
+## 11. Interim Security Rules
+
+Both rules files set to deny-all baseline because storage.rules contained corrupted pasted text. Real role-based rules arrive in Phase 1 Step 3.

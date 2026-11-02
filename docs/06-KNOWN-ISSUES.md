@@ -1,10 +1,3 @@
-
----
-
-### File 6: `docs/06-KNOWN-ISSUES.md`
-Please create `docs/06-KNOWN-ISSUES.md` and paste:
-
-```markdown
 # Known Issues & Pending Client Inputs: Unique Infotech CMS
 
 This document tracks unresolved items, pending client inputs, technical debt, and edge cases under surveillance.
@@ -46,3 +39,6 @@ This document tracks unresolved items, pending client inputs, technical debt, an
 | ID | Date Reported | Description | Severity | Affected Module | Status | Resolution / Notes |
 |---|---|---|---|---|---|---|
 | ISS-001 | 2026-10-31 | Initial project creation baseline | Info | Global | Logged | Operational setup complete |
+| ISS-002 | 2026-11-02 | `storage.rules` contained ~320 KB of pasted web text; `06-KNOWN-ISSUES.md` contained pasted instruction wrapper | High | Repo / Security | Resolved | Rules replaced with deny-all baseline; 06 cleaned (Phase 1 Step 1) |
+| ISS-003 | 2026-11-02 | `firebase.json` shows Firestore location `nam5`, docs say `asia-south1`; Node 11.17.0 listed but Firebase CLI 15.x needs a newer Node | Medium | Environment | Open | Verify in Firebase Console and via `node --version` / `firebase --version` |
+| ISS-004 | 2026-11-02 | `04-DATABASE-MAP.md` conflicts with Master Plan (batches carry `branchId`; no `users` or `audit` collection; rule references nonexistent `branchHeadEmail`) | High | Docs / Security | Open | Must be corrected before Phase 1 Step 3 (security rules) |

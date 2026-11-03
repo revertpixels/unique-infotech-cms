@@ -1,6 +1,6 @@
-import { ROUTES, ROLE_LABELS } from '../core/router.js?v=1.3.4';
-import { APP_VERSION } from '../core/app.js?v=1.3.4';
-import { getRunningPeriod, getNextDueDate, formatDayMonth } from '../utils/date.utils.js?v=1.3.4';
+import { ROUTES, ROLE_LABELS } from '../core/router.js?v=1.3.5';
+import { APP_VERSION } from '../core/app.js?v=1.3.5';
+import { getRunningPeriod, getNextDueDate, formatDayMonth } from '../utils/date.utils.js?v=1.3.5';
 
 let drawerOpen = false;
 let tipEl = null;

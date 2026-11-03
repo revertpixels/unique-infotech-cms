@@ -43,6 +43,26 @@
 
 ---
 
+### [2026-11-03 14:57] Version 1.3.5 — Phase 1 · Step 5d-1
+
+**What was built:**
+- index.html — org_config and branch load failures now logged with console.warn (were silently swallowed); missing org_config doc reported; APP_CACHE guaranteed before write
+- .gitattributes — normalise line endings to LF (removes CRLF warnings)
+- APP_VERSION and all ?v= strings -> 1.3.5
+- Diagnosis result: superadmin can read settings/org_config per rules; branch_head/school_head read depends on rules; org.page.js writes orgName/tagline fields
+
+**Files touched:**
+- CREATED: .gitattributes
+- MODIFIED: public/index.html, public/js/core/app.js, public/js/core/router.js, public/js/components/sidebar.js, public/js/components/topbar.js, public/pages/login.html, docs/02-PROGRESS-LOG.md
+
+**Firestore changes:** None (rules NOT modified).
+
+**Tested on:** Pending owner live test.
+
+---
+
+
+
 ### [2026-11-03 14:52] Version 1.3.4 — Phase 1 · Step 5c-3e
 
 **What was built:**

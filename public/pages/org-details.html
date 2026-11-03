@@ -1,0 +1,28 @@
+<section class="page-head">
+  <h2>Organisation</h2>
+  <p class="text-mute">Institute details shown in the sidebar, receipts and reports.</p>
+</section>
+<div class="card org-card">
+  <form id="org-form" novalidate>
+    <div class="field">
+      <label for="org-name">Institute name <span aria-hidden="true">*</span></label>
+      <input id="org-name" type="text" maxlength="80" required autocomplete="off" class="input">
+    </div>
+    <div class="field">
+      <label for="org-tagline">Tagline</label>
+      <input id="org-tagline" type="text" maxlength="120" autocomplete="off" class="input">
+    </div>
+    <div class="field">
+      <label for="org-phone">Phone</label>
+      <input id="org-phone" type="tel" maxlength="20" autocomplete="off" class="input">
+    </div>
+    <div class="field">
+      <label for="org-address">Address</label>
+      <textarea id="org-address" rows="3" maxlength="300" class="input"></textarea>
+    </div>
+    <p id="org-msg" class="org-msg" role="status" aria-live="polite"></p>
+    <button id="org-save" type="submit" class="btn pri">
+      <i data-lucide="save"></i><span>Save</span>
+    </button>
+  </form>
+</div>

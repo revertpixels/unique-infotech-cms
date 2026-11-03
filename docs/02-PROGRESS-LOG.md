@@ -43,6 +43,66 @@
 
 ---
 
+### [2026-11-03 15:08] Version 1.3.8 — Phase 1 · Step 5d-2c
+
+**What was built:**
+- Renamed js/pages/org.page.js -> js/pages/org-details.page.js (router derives module name from route.page 'org-details'; old name caused 404 so the page never loaded or saved)
+- org-details.html — form classes aligned to project CSS (.field, .input, .btn .pri)
+- dashboard.css — org form field layout
+- Rule: page module filename must equal route.page + '.page.js'
+- APP_VERSION and all ?v= strings -> 1.3.8
+
+**Files touched:**
+- CREATED: public/js/pages/org-details.page.js
+- DELETED: public/js/pages/org.page.js
+- MODIFIED: public/pages/org-details.html, public/css/pages/dashboard.css, public/js/core/app.js, public/js/core/router.js, public/js/components/sidebar.js, public/js/components/topbar.js, public/index.html, public/pages/login.html, docs/05-FILE-INDEX.md, docs/02-PROGRESS-LOG.md
+
+**Firestore changes:** None.
+
+**Tested on:** Pending owner live test.
+
+---
+
+
+
+### [2026-11-03 15:05] Version 1.3.7 — Phase 1 · Step 5d-2b
+
+**What was built:**
+- pages/org-details.html — Organisation form (name required, tagline, phone, address)
+- js/pages/org.page.js — loads settings/org_config, validates, saves with merge + updatedAt/updatedBy, updates APP_CACHE.org and sidebar brand live, inline status messages (toast.js is still empty)
+- css/pages/dashboard.css — org card + status message styles
+- APP_VERSION and all ?v= strings -> 1.3.7
+
+**Files touched:**
+- MODIFIED: public/pages/org-details.html, public/js/pages/org.page.js, public/css/pages/dashboard.css, public/css/main.css, public/js/core/app.js, public/js/core/router.js, public/js/components/sidebar.js, public/js/components/topbar.js, public/index.html, public/pages/login.html, docs/02-PROGRESS-LOG.md
+
+**Firestore changes:**
+- settings/org_config: orgName, tagline, phone, address, updatedAt, updatedBy
+
+**Known issues:** toast.js is empty — build toast component in a later step.
+
+**Tested on:** Pending owner live test.
+
+---
+
+
+
+### [2026-11-03 15:00] Version 1.3.6 — Phase 1 · Step 5d-2
+
+**What was built:**
+- APP_VERSION and all ?v= strings -> 1.3.6
+
+**Files touched:**
+- MODIFIED: public/js/core/app.js, public/js/core/router.js, public/js/components/sidebar.js, public/js/components/topbar.js, public/index.html, public/pages/login.html, docs/02-PROGRESS-LOG.md
+
+**Firestore changes:** None.
+
+**Tested on:** Pending owner live test.
+
+---
+
+
+
 ### [2026-11-03 14:57] Version 1.3.5 — Phase 1 · Step 5d-1
 
 **What was built:**

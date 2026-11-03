@@ -1,5 +1,6 @@
 @import url('./base/reset.css');
 @import url('./base/variables.css');
+@import url('./pages/dashboard.css');
 @import url('./base/typography.css');
 @import url('./components/buttons.css');
 @import url('./components/forms.css');

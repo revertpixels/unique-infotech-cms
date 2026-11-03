@@ -161,7 +161,7 @@ export function startRouter({ profile, getContext, setContext, onRouteChange }) 
     view.innerHTML = html;
     if (thisNav !== navCounter) return;
     try {
-      const mod = await import('/js/pages/' + route.page + '.page.js?v=1.3.5');
+      const mod = await import('/js/pages/' + route.page + '.page.js?v=1.3.8');
       if (thisNav !== navCounter) return;
       if (mod && typeof mod.mount === 'function') {
         currentModule = mod;

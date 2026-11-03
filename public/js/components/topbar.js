@@ -1,4 +1,4 @@
-import { getRunningPeriod, getPeriodOptions } from '../utils/date.utils.js?v=1.3.5';
+import { getRunningPeriod, getPeriodOptions } from '../utils/date.utils.js?v=1.3.8';
 
 let listenersRegistered = false;
 

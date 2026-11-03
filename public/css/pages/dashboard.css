@@ -83,3 +83,11 @@
 .dashboard .quick-card .delta.down {
   color: var(--danger);
 }
+
+.org-card { max-width: 640px; padding: 20px; }
+.org-card .field { margin-bottom: 14px; display: flex; flex-direction: column; gap: 6px; }
+.org-card .input { width: 100%; }
+.org-card textarea.input { resize: vertical; min-height: 84px; }
+.org-msg { min-height: 18px; font-size: 13px; margin: 4px 0 12px; }
+.org-msg.is-error { color: var(--danger); }
+.org-msg.is-ok { color: var(--success, #15803D); }

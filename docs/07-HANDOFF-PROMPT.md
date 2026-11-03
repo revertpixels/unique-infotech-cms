@@ -27,7 +27,7 @@ STRICT WORKING RULES:
 4. Always update APP_VERSION in public/js/core/app.js and the `?v=` query parameter in index.html when changing code.
 5. NO Emojis in the UI. Use Lucide SVG icons only (v0.344.0).
 6. Typography: Plus Jakarta Sans strictly (Weights 400, 500, 600, 700, 800).
-7. Theme contexts: Youth (#4F2DA3) and School (#0D9488). Context toggle must switch colors seamlessly.
+7. Theme contexts: Youth (#323A85) and School (#0F766E). Context toggle must switch colors seamlessly.
 8. Every inner page must include a top mini KPI summary strip, filter bar, and paginated table (limit 20) with floating 3-dot action menus.
 9. Security: Enforce Firebase role-based access control. Super Admin = utpal.goutam@gmail.com.
 10. Financial rules: No partial installment payments. ₹1/day fine after the 10th of the month.

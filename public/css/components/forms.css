@@ -1,0 +1,69 @@
+.field {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+label {
+  font-weight: 600;
+  color: var(--text-sec);
+  font-size: 0.92rem;
+}
+
+.input {
+  height: 42px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r);
+  padding: 0 12px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  width: 100%;
+}
+
+.input:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-soft);
+}
+
+.pw-wrap {
+  position: relative;
+}
+
+.pw-wrap .input {
+  padding-right: 44px;
+}
+
+.pw-wrap .icon-btn {
+  position: absolute;
+  right: 3px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.msg {
+  display: flex;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: var(--r);
+  font-size: 0.92rem;
+  margin-top: 14px;
+}
+
+.msg.error {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.msg.info {
+  background: var(--info-soft);
+  color: var(--info);
+}
+
+.msg [data-lucide],
+.msg svg {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+}

@@ -1,6 +1,6 @@
 import { app } from '../config/firebase-config.js';
 
-export const APP_VERSION = '1.0.1';
+export const APP_VERSION = '1.2.0';
 
 export const APP_CACHE = {
   currentUser: null,
@@ -23,6 +23,27 @@ export function setContext(ctx) {
     return;
   }
   document.body.dataset.ctx = ctx;
+  try {
+    sessionStorage.setItem('uic_ctx', ctx);
+  } catch (e) {
+    // silent
+  }
+}
+
+export function getContext() {
+  return document.body.dataset.ctx || 'youth';
+}
+
+export function loadSavedContext() {
+  try {
+    const v = sessionStorage.getItem('uic_ctx');
+    if (v === 'youth' || v === 'school') {
+      return v;
+    }
+  } catch (e) {
+    // silent
+  }
+  return null;
 }
 
 document.addEventListener('DOMContentLoaded', () => {

@@ -1,0 +1,950 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dashboard — Unique Infotech CMS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/lucide@0.344.0/dist/umd/lucide.min.js"></script>
+<style>
+/* =========================================================
+   DESIGN TOKENS — reuse these on every other page
+   ========================================================= */
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+ /* brand */
+ --primary:#4F2DA3;--primary-hover:#3F2385;--primary-soft:#F3EFFB;--primary-light:#7C5CD4;
+ --school:#0D9488;--school-soft:#E6F6F4;
+ /* surfaces */
+ --bg:#F6F6F8;--surface:#fff;--border:#EAEAEA;--border-strong:#D4D4D4;
+ --sidebar-bg:#1A1530;--sidebar-text:#B4ADC9;--sidebar-hover:#2A2246;--sidebar-border:#2A2246;
+ /* text */
+ --text:#171717;--text-sec:#525252;--text-mute:#8A8A8A;
+ /* status */
+ --success:#16A34A;--success-soft:#F0FDF4;--warning:#D97706;--warning-soft:#FFFBEB;
+ --danger:#DC2626;--danger-soft:#FEF2F2;--info:#2563EB;--info-soft:#EFF6FF;--amber:#F59E0B;--amber-soft:#FFFBEB;
+ /* type */
+ --font-main:'Plus Jakarta Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+ --font-head:'Plus Jakarta Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+ /* shape + layout */
+ --r-sm:4px;--r:6px;--r-lg:8px;
+ --sb-w:260px;--sb-w-collapsed:72px;--topbar-h:64px;
+ --shadow-pop:0 10px 40px -10px rgba(0,0,0,.2);
+}
+body{font-family:var(--font-main);background:var(--bg);color:var(--text);display:flex;min-height:100vh;font-size:13.5px;line-height:1.5;-webkit-font-smoothing:antialiased}
+a{text-decoration:none;color:inherit}
+button{font-family:inherit;cursor:pointer}
+:focus-visible{outline:2px solid var(--primary-light);outline-offset:2px}
+svg.lucide{width:16px;height:16px;stroke-width:2;flex-shrink:0}
+
+/* SIDEBAR */
+.sidebar{width:var(--sb-w);background:var(--sidebar-bg);display:flex;flex-direction:column;position:fixed;top:0;left:0;height:100vh;z-index:100;color:var(--sidebar-text);transition:width .2s ease,transform .2s ease;overflow:hidden}
+.sb-brand{padding:18px;display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--sidebar-border);height:79px;flex-shrink:0}
+.logo-box{width:42px;height:42px;background:var(--primary);border-radius:var(--r);display:flex;align-items:center;justify-content:center;font-family:var(--font-head);font-weight:700;font-size:17px;color:#fff;flex-shrink:0}
+.brand-txt{white-space:nowrap;overflow:hidden}
+.brand-txt h3{font-family:var(--font-head);font-size:14.5px;font-weight:800;letter-spacing:-.01em;color:#fff;line-height:1.2}
+.brand-txt p{font-size:11px;color:#8A82A8;margin-top:3px;font-weight:500}
+.sb-nav{flex:1;padding:10px;overflow-y:auto;overflow-x:hidden}
+.sb-nav::-webkit-scrollbar{width:4px}.sb-nav::-webkit-scrollbar-thumb{background:#2A2246;border-radius:2px}
+.sb-section{margin-bottom:10px}
+.sb-section-label{font-size:10px;text-transform:uppercase;letter-spacing:.09em;color:#6E6690;font-weight:700;padding:10px 12px 6px;display:flex;align-items:center;gap:7px;white-space:nowrap}
+.ssl-dot{width:5px;height:5px;border-radius:50%;background:var(--primary-light);flex-shrink:0}
+.school .ssl-dot{background:var(--school)}.admin .ssl-dot{background:var(--amber)}
+.sb-nav a{display:flex;align-items:center;gap:11px;padding:8px 12px;color:var(--sidebar-text);font-size:13px;font-weight:500;transition:background .12s,color .12s;border-radius:var(--r-sm);margin-bottom:1px;position:relative;white-space:nowrap}
+.sb-nav a svg.lucide{width:17px;height:17px}
+.sb-nav a:hover{background:var(--sidebar-hover);color:#fff}
+.sb-nav a.active{background:var(--primary);color:#fff;font-weight:600}
+.sb-nav a.active::before{content:"";position:absolute;left:-10px;top:8px;bottom:8px;width:3px;background:#fff;border-radius:0 2px 2px 0}
+.nav-count{margin-left:auto;background:rgba(255,255,255,.08);font-size:10.5px;font-weight:700;padding:1px 7px;border-radius:var(--r);min-width:20px;text-align:center}
+.active .nav-count{background:rgba(255,255,255,.2);color:#fff}
+.sb-footer{padding:12px 14px;border-top:1px solid var(--sidebar-border);font-size:11px;color:#6E6690;line-height:1.4;white-space:nowrap;flex-shrink:0}
+.sb-footer .row{display:flex;align-items:center;justify-content:space-between}
+.sb-footer .row:first-child{margin-bottom:4px}
+.sb-footer .row span:last-child{color:#B4ADC9}
+.sb-backdrop{display:none}
+
+/* MAIN + TOP BAR */
+.main{margin-left:var(--sb-w);flex:1;display:flex;flex-direction:column;min-height:100vh;min-width:0;transition:margin-left .2s ease}
+.top-header{background:var(--surface);padding:0 24px;height:var(--topbar-h);display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);position:sticky;top:0;z-index:50;gap:16px}
+.th-left,.th-right{display:flex;align-items:center;gap:14px}
+.th-left{flex:1;min-width:0}
+.th-right{flex-shrink:0}
+.icon-btn{width:36px;height:36px;border-radius:var(--r);border:1px solid var(--border);background:var(--surface);color:var(--text-sec);display:flex;align-items:center;justify-content:center;position:relative;transition:background .15s,color .15s}
+.icon-btn:hover{background:var(--bg);color:var(--text)}
+.dot-n{position:absolute;top:7px;right:8px;width:8px;height:8px;background:var(--danger);border-radius:50%;border:2px solid #fff}
+/* section switcher */
+.switcher{display:flex;background:var(--bg);border:1px solid var(--border);border-radius:var(--r-lg);padding:3px;gap:2px}
+.switcher button{display:flex;align-items:center;gap:8px;border:0;background:none;padding:6px 14px;border-radius:var(--r);font-size:13px;font-weight:600;color:var(--text-sec);height:30px;transition:all .15s;white-space:nowrap}
+.switcher button:hover{color:var(--text)}
+.switcher button.on{background:var(--primary);color:#fff}
+.switcher button.on.school{background:var(--school)}
+.search-box{position:relative;flex:1;min-width:0;max-width:760px}
+.search-box input{width:100%;height:36px;padding:0 38px 0 36px;border:1px solid var(--border);border-radius:var(--r);font-size:13px;font-family:inherit;background:var(--bg);transition:all .15s;outline:none}
+.search-box input:focus{border-color:var(--primary);background:var(--surface)}
+.search-box>svg{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--text-mute);width:15px;height:15px}
+.dd{position:relative}
+.dd-btn{display:flex;align-items:center;gap:8px;padding:0 12px;background:#fff;border:1px solid var(--border);border-radius:var(--r);height:36px;font-size:13px;font-weight:500;color:var(--text-sec)}
+.dd-btn:hover{border-color:var(--border-strong)}
+.dd-btn svg:first-child{color:var(--primary)}
+.dd-btn svg:last-child{width:12px;height:12px;color:var(--text-mute)}
+.dd-menu{position:absolute;top:calc(100% + 6px);right:0;background:#fff;border:1px solid var(--border);border-radius:var(--r);padding:4px;min-width:190px;box-shadow:var(--shadow-pop);opacity:0;pointer-events:none;transition:opacity .15s;z-index:70}
+.dd.open .dd-menu{opacity:1;pointer-events:auto}
+.dd-menu button{display:flex;align-items:center;gap:10px;width:100%;padding:7px 10px;border:0;background:none;border-radius:var(--r-sm);font-size:13px;color:var(--text-sec);text-align:left}
+.dd-menu button svg{color:var(--text-mute);width:14px;height:14px}
+.dd-menu button:hover{background:var(--bg)}
+.dd-menu button.sel{background:var(--primary-soft);color:var(--primary);font-weight:600}
+.dd-menu button.sel svg{color:var(--primary)}
+.dd-menu button.danger{color:var(--danger)}.dd-menu button.danger svg{color:var(--danger)}
+.dd-menu hr{border:0;height:1px;background:var(--border);margin:4px 6px}
+.user-box{display:flex;align-items:center;gap:10px;padding:0 4px 0 14px;border-left:1px solid var(--border);height:38px}
+.user-av{width:36px;height:36px;background:var(--primary);border-radius:var(--r);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:13px}
+.u-name{font-size:13px;font-weight:600;line-height:1.2;display:flex;align-items:center;gap:6px}
+.u-tag{font-size:10px;font-weight:700;background:var(--primary-soft);color:var(--primary);padding:1px 6px;border-radius:var(--r-sm);text-transform:uppercase;letter-spacing:.03em}
+.u-mail{font-size:11.5px;color:var(--text-mute)}
+.u-btn{color:var(--text-mute);padding:8px;border-radius:var(--r-sm);border:0;background:none;display:flex}
+.u-btn:hover{color:var(--text);background:var(--bg)}
+
+/* CONTENT */
+.content{flex:1;padding:26px 28px 36px;max-width:1600px;width:100%}
+.page-header{margin-bottom:20px;display:flex;justify-content:space-between;align-items:flex-end;gap:20px}
+.eyebrow{font-size:12.5px;font-weight:500;color:var(--text-mute);margin-bottom:4px}
+.page-header h1{font-family:var(--font-head);font-size:22px;font-weight:800;letter-spacing:-.02em;line-height:1.3;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.scope-tag{font-family:var(--font-main);background:var(--primary-soft);color:var(--primary);font-size:11px;font-weight:700;padding:4px 9px;border-radius:var(--r-sm);text-transform:uppercase;letter-spacing:.04em}
+.subtitle{font-size:13.5px;color:var(--text-mute);margin-top:4px}
+.ph-right{display:flex;align-items:center;gap:8px}
+.synced{font-size:12px;font-weight:500;color:var(--text-sec);margin-right:6px;display:flex;align-items:center;gap:7px}
+.synced i{width:7px;height:7px;border-radius:50%;background:var(--success)}
+
+/* QUICK ACTIONS */
+.quick-bar{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px}
+.qbtn{display:flex;align-items:center;gap:12px;padding:11px 14px;background:var(--surface);border:1px solid var(--border-strong);border-radius:var(--r);text-align:left;transition:background .15s,border-color .15s}
+.qbtn:hover{background:var(--bg);border-color:var(--c)}
+.qic{width:38px;height:38px;border-radius:var(--r);background:var(--cs);color:var(--c);border:1px solid color-mix(in srgb,var(--c) 25%,transparent);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.qic svg.lucide{width:17px;height:17px}
+.qtx{flex:1}.qtx b{display:block;font-size:13.5px;font-weight:600;line-height:1.25}
+.qtx span{font-size:11.5px;color:var(--text-mute)}
+.qgo{color:var(--text-mute)}.qgo svg.lucide{width:14px;height:14px}
+.qbtn:hover .qgo{color:var(--c)}
+
+/* KPI */
+.kpi-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;margin-bottom:20px}
+.kpi{position:relative;overflow:hidden;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:16px 18px;transition:border-color .15s}
+.kpi:hover{border-color:var(--c)}
+.kpi::before{content:"";position:absolute;top:0;right:0;width:70px;height:70px;background:var(--cs);border-bottom-left-radius:100%}
+.kpi .ci{position:absolute;top:13px;right:14px;z-index:2;color:var(--c)}
+.kpi .ci svg.lucide{width:17px;height:17px}
+.kpi label{display:block;font-size:12px;font-weight:600;color:var(--text-sec);margin-bottom:10px;padding-right:44px}
+.kpi .v{font-size:26px;font-weight:800;letter-spacing:-.03em;line-height:1.1;margin-bottom:10px;font-variant-numeric:tabular-nums;position:relative;z-index:1}
+.kpi .m{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--text-mute);position:relative;z-index:1;flex-wrap:wrap}
+.pill{padding:2px 7px;border-radius:var(--r-sm);font-weight:700;font-size:11px;display:inline-flex;align-items:center;gap:4px}
+.pill svg.lucide{width:11px;height:11px}
+.pill.up{background:var(--success-soft);color:var(--success)}.pill.down{background:var(--danger-soft);color:var(--danger)}.pill.neutral{background:#F0EFF5;color:var(--text-sec)}
+
+/* CARDS */
+.card{background:var(--surface);border-radius:var(--r);border:1px solid var(--border);overflow:hidden;min-width:0}
+.card-header{display:flex;justify-content:space-between;align-items:center;padding:15px 20px;border-bottom:1px solid var(--border);gap:12px}
+.card-header>div:first-child{display:flex;align-items:flex-start;gap:10px}
+.card-header h3{font-family:var(--font-head);font-size:14.5px;font-weight:700;line-height:1.35}
+.ch-icon{width:28px;height:28px;border-radius:var(--r-sm);display:flex;align-items:center;justify-content:center;border:1px solid color-mix(in srgb,currentColor 25%,transparent);flex-shrink:0;margin-top:1px}
+.ch-icon svg.lucide{width:14px;height:14px}
+.ch-subtitle{font-size:12px;color:var(--text-mute);margin-top:2px;font-weight:400;line-height:1.4}
+.card-body{padding:20px}
+.view-all{font-size:12.5px;color:var(--primary);font-weight:600;display:inline-flex;align-items:center;gap:4px;white-space:nowrap}
+.view-all svg.lucide{width:13px;height:13px}
+.view-all:hover{text-decoration:underline}
+.charts-row{display:grid;grid-template-columns:1.5fr 1fr;gap:16px;margin-bottom:20px}
+.charts-row.b{grid-template-columns:1fr 1.5fr}
+.lists-row{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px}
+.table-scroll{overflow-x:auto}
+
+/* CHARTS */
+.collection-summary{display:flex;align-items:baseline;gap:12px;margin-bottom:6px;flex-wrap:wrap}
+.cs-amount{font-size:26px;font-weight:700;letter-spacing:-.03em}
+.cs-period{font-size:12.5px;color:var(--text-mute)}
+.chart{position:relative}
+.chart svg{width:100%;height:auto;display:block;overflow:visible}
+.chart text{font-family:var(--font-main);font-size:11px;fill:#8A8A8A}
+.chart .val{font-size:12.5px;font-weight:700;fill:#171717}
+.col{transition:filter .15s}.col:hover{filter:brightness(1.1)}
+.tipbox{position:absolute;pointer-events:none;background:#1A1530;color:#fff;font-size:12px;padding:6px 10px;border-radius:var(--r-sm);white-space:nowrap;transform:translate(-50%,-120%);opacity:0;transition:opacity .12s;z-index:5}
+.total-note{display:flex;justify-content:space-between;background:var(--bg);border-radius:var(--r);padding:10px 14px;margin-top:12px;font-size:12.5px;color:var(--text-sec)}
+.total-note b{color:var(--text)}
+.donut-section{display:flex;flex-direction:column;align-items:center;gap:18px}
+.donut-wrapper{position:relative;width:170px;height:170px}
+.donut-center{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center}
+.donut-total{font-size:26px;font-weight:700;letter-spacing:-.03em}
+.donut-label{font-size:10.5px;color:var(--text-mute);margin-top:2px;text-transform:uppercase;letter-spacing:.04em;font-weight:600}
+.donut-svg{width:170px;height:170px;transform:rotate(-90deg)}
+.donut-ring{fill:none;stroke-width:22}
+.donut-legend{display:grid;grid-template-columns:1fr 1fr;gap:8px 14px;width:100%}
+.legend-item{display:flex;align-items:center;gap:8px;font-size:12px}
+.legend-dot{width:9px;height:9px;border-radius:2px;flex-shrink:0}
+.legend-item .ln2{color:var(--text-sec);flex:1;font-weight:500}.legend-item .lv{font-weight:700}
+
+/* TABLES */
+.data-table{width:100%;border-collapse:collapse;min-width:560px}
+.data-table td,.data-table th{font-variant-numeric:tabular-nums}
+.data-table thead th{text-align:left;font-size:11px;font-weight:700;color:var(--text-mute);text-transform:uppercase;letter-spacing:.05em;padding:10px 20px;background:var(--bg);border-bottom:1px solid var(--border);white-space:nowrap}
+.data-table thead th.right,.right{text-align:right}
+.data-table tbody td{padding:13px 20px;font-size:13px;color:var(--text-sec);border-bottom:1px solid var(--border);vertical-align:middle}
+.data-table tbody tr:last-child td{border-bottom:none}
+.data-table tbody tr:hover{background:#FAF9FD}
+.branch-cell{display:flex;align-items:center;gap:10px}
+.badge-sq{width:36px;height:36px;border-radius:var(--r);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;flex-shrink:0;border:1px solid color-mix(in srgb,currentColor 30%,transparent)}
+.bn{color:var(--text);font-weight:600;font-size:13px}
+.bl{font-size:11px;color:var(--text-mute);margin-top:1px;display:flex;align-items:center;gap:4px}
+.bl svg.lucide{width:10px;height:10px}
+.amount{color:var(--text);font-weight:700;font-size:13px}
+.amount-due{color:var(--danger);font-weight:700;font-size:13px}
+.fine-text{color:var(--danger);font-weight:600;font-size:12.5px}
+.due-tag{display:inline-flex;align-items:center;gap:4px;padding:2px 7px;border-radius:var(--r-sm);font-size:11px;font-weight:600;white-space:nowrap}
+.due-tag svg.lucide{width:11px;height:11px}
+.due-tag.overdue{background:var(--danger-soft);color:var(--danger)}.due-tag.soon{background:var(--warning-soft);color:var(--warning)}
+.btn-collect{padding:6px 11px;background:var(--primary);color:#fff;border:none;border-radius:var(--r-sm);font-size:11.5px;font-weight:600;display:inline-flex;align-items:center;gap:5px;transition:background .15s}
+.btn-collect svg.lucide{width:12px;height:12px}
+.btn-collect:hover{background:var(--primary-hover)}
+.btn-ghost{width:28px;height:28px;background:var(--surface);color:var(--text-sec);border:1px solid var(--border);border-radius:var(--r-sm);display:inline-flex;align-items:center;justify-content:center;margin-left:4px;vertical-align:middle}
+.btn-ghost svg.lucide{width:13px;height:13px}
+.btn-ghost:hover{background:var(--bg);color:var(--primary);border-color:var(--primary)}
+.notif{width:380px;padding:0;overflow:hidden}
+.notif-head{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--border);font-size:13px}
+.notif-head b{font-family:var(--font-head);font-weight:700}
+.notif-count{background:var(--danger-soft);color:var(--danger);font-weight:700;font-size:11px;padding:1px 8px;border-radius:var(--r-sm)}
+.alert{display:flex;align-items:flex-start;gap:10px;border-left:3px solid var(--c);border-bottom:1px solid var(--border);padding:12px 16px;font-size:12.5px;color:var(--text-sec);line-height:1.45}
+.alert:last-child{border-bottom:0}.alert:hover{background:var(--bg)}
+.alert svg.lucide{color:var(--c);margin-top:2px}.alert b{color:var(--text);font-weight:700}
+.legend-row{display:flex;gap:16px;font-size:12px;color:var(--text-sec);margin:2px 0 6px}
+.legend-row i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:6px}
+.stage{font-weight:600;color:var(--text);font-size:12.5px}.stage small{display:block;font-size:11px;color:var(--text-mute);font-weight:500;margin-top:1px}
+.mini-select{height:30px;padding:0 10px;border:1px solid var(--border);border-radius:var(--r-sm);font-size:12px;font-family:inherit;color:var(--text-sec);background:var(--surface);cursor:pointer;outline:none;font-weight:500}
+
+/* LISTS */
+.list-item{display:flex;align-items:center;gap:12px;padding:12px 20px;border-bottom:1px solid var(--border);transition:background .15s}
+.list-item:last-child{border-bottom:none}.list-item:hover{background:var(--bg)}
+.list-avatar{width:38px;height:38px;border-radius:var(--r);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:13px;flex-shrink:0}
+.list-info{flex:1;min-width:0}
+.li-title{font-size:13px;font-weight:600;line-height:1.3}
+.li-meta{font-size:11.5px;color:var(--text-mute);margin-top:3px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.sep{width:3px;height:3px;background:var(--border-strong);border-radius:50%}
+.list-amount{text-align:right;flex-shrink:0}
+.la-value{font-size:13.5px;font-weight:700}
+.la-sub{font-size:10.5px;color:var(--text-mute);margin-top:3px}
+.la-mode{font-size:10.5px;margin-top:3px;display:inline-flex;align-items:center;gap:4px;padding:2px 7px;border-radius:var(--r-sm);font-weight:600}
+.la-mode svg.lucide{width:10px;height:10px}
+.la-mode.cash{background:var(--success-soft);color:var(--success)}.la-mode.upi{background:var(--info-soft);color:var(--info)}.la-mode.bank{background:var(--primary-soft);color:var(--primary)}
+
+/* MODAL */
+.modal{display:none;position:fixed;inset:0;background:rgba(23,23,23,.5);align-items:center;justify-content:center;z-index:200}
+.modal-box{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);width:400px;max-width:calc(100% - 32px);box-shadow:0 20px 40px -10px rgba(0,0,0,.25);overflow:hidden}
+.modal-head{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--border)}
+.modal-head h4{font-family:var(--font-head);font-size:14px}
+.modal-body{padding:18px;display:flex;flex-direction:column;gap:14px}
+.modal-body label{display:block;font-size:12px;font-weight:600;color:var(--text-sec);margin-bottom:6px}
+.modal-body input{width:100%;height:36px;padding:0 10px;border:1px solid var(--border);border-radius:var(--r-sm);font-size:13px;font-family:inherit}
+.btn{height:34px;padding:0 14px;border-radius:var(--r-sm);font-size:12.5px;font-weight:600;border:1px solid var(--border);background:var(--surface);color:var(--text-sec)}
+.btn.pri{background:var(--primary);border-color:var(--primary);color:#fff}
+
+::-webkit-scrollbar{width:8px;height:8px}::-webkit-scrollbar-thumb{background:var(--border-strong);border-radius:4px}
+
+@media(max-width:1300px){.kpi-grid{grid-template-columns:repeat(3,1fr)}.charts-row,.charts-row.b,.lists-row{grid-template-columns:1fr}.quick-bar{grid-template-columns:repeat(2,1fr)}.search-box{display:none}}
+@media(max-width:768px){
+ .notif{position:fixed;top:calc(var(--topbar-h) + 6px);left:14px;right:14px;width:auto}
+ .sidebar{transform:translateX(-100%)}.main{margin-left:0}
+ .kpi-grid,.quick-bar{grid-template-columns:1fr}
+ .user-box>div:not(.user-av),.dd-btn span{display:none}
+ .top-header{padding:0 14px}.content{padding:20px 14px 28px}
+ .switcher button{padding:6px 10px}
+ .page-header{flex-direction:column;align-items:flex-start}
+ .donut-legend{grid-template-columns:1fr}
+ body.sb-open .sidebar{transform:translateX(0);box-shadow:0 0 40px rgba(0,0,0,.35)}
+ body.sb-open .sb-backdrop{display:block;position:fixed;inset:0;background:rgba(23,23,23,.45);z-index:90}
+}
+/* collapsed sidebar (desktop) */
+@media(min-width:769px){
+ body.sb-collapsed .sidebar{width:var(--sb-w-collapsed)}
+ body.sb-collapsed .main{margin-left:var(--sb-w-collapsed)}
+ body.sb-collapsed .sb-brand{padding:18px 15px;justify-content:center}
+ body.sb-collapsed .brand-txt{display:none}
+ body.sb-collapsed .sb-nav{padding:10px 12px}
+ body.sb-collapsed .sb-section-label{height:1px;padding:0;margin:12px 6px;background:var(--sidebar-border);font-size:0;gap:0;overflow:hidden}
+ body.sb-collapsed .sb-section-label .ssl-dot,body.sb-collapsed .sb-section-label .sl-text{display:none}
+ body.sb-collapsed .sb-nav a{justify-content:center;padding:10px 0;gap:0}
+ body.sb-collapsed .sb-nav a svg.lucide{width:18px;height:18px}
+ body.sb-collapsed .sb-nav a .nl{display:none}
+ body.sb-collapsed .sb-nav a.active::before{left:-12px}
+ body.sb-collapsed .sb-nav a .nav-count{position:absolute;top:1px;right:2px;margin:0;min-width:16px;padding:0 4px;font-size:9px;line-height:15px;background:var(--primary-light);color:#fff}
+ body.sb-collapsed .sb-footer{padding:10px 4px;text-align:center}
+ body.sb-collapsed .sb-footer .row{justify-content:center}
+ body.sb-collapsed .sb-footer .row:last-child,body.sb-collapsed .sb-footer .row span:first-child{display:none}
+ body.sb-collapsed .sb-footer .row:first-child{margin-bottom:0}
+}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+
+/* =========================================================
+   v6 REFINEMENTS — calmer, less crowded, clearer numbers
+   ========================================================= */
+.ch-icon{display:none}
+.card-header{padding:16px 20px}
+.card-header h3{font-size:15px}
+.list-avatar,.badge-sq{background:var(--primary-soft)!important;color:var(--primary)!important;border:0!important}
+body[data-ctx=school] .list-avatar,body[data-ctx=school] .badge-sq{background:var(--school-soft)!important;color:var(--school)!important}
+.ph-actions{display:flex;gap:8px;margin-right:4px}
+.btn-act{height:36px;padding:0 14px;border-radius:var(--r);border:1px solid var(--primary);background:var(--primary);color:#fff;font-size:13px;font-weight:600;display:inline-flex;align-items:center;gap:7px;transition:background .15s}
+.btn-act:hover{background:var(--primary-hover)}
+.btn-act.sec{background:var(--surface);color:var(--text);border-color:var(--border-strong)}
+.btn-act.sec:hover{background:var(--bg)}
+body[data-ctx=school] .btn-act:not(.sec){background:var(--school);border-color:var(--school)}
+/* one connected strip of numbers */
+.kpi-grid{grid-template-columns:repeat(4,1fr);gap:1px;background:var(--border);border:1px solid var(--border);border-radius:var(--r);overflow:hidden}
+.kpi{border:0;border-radius:0;padding:20px 22px}
+.kpi::before{display:none}
+.kpi .ci{position:static;display:flex;margin-bottom:12px;color:var(--text-mute)}
+.kpi label{padding-right:0;margin-bottom:6px;font-weight:500;color:var(--text-sec)}
+.kpi .v{font-size:30px;margin-bottom:12px}
+.kpi:last-child .v{color:var(--danger)}
+.charts-row.one{grid-template-columns:1fr}
+/* tables */
+.data-table thead th{text-transform:none;letter-spacing:0;font-size:12px;font-weight:600;color:var(--text-sec)}
+.data-table tbody td{padding:14px 20px}
+.rate{height:4px;background:var(--border);border-radius:0;margin:7px 0 3px auto;width:110px;overflow:hidden}
+.rate i{display:block;height:100%;background:var(--success)}
+.rate-t{font-size:11px;color:var(--text-mute)}
+/* horizontal bars */
+.hb{margin-bottom:14px}
+.hb-top{display:flex;justify-content:space-between;font-size:13px;margin-bottom:6px;color:var(--text-sec);font-weight:500}
+.hb-top b{color:var(--text);font-variant-numeric:tabular-nums}
+.hb-track{height:8px;background:var(--bg);border-radius:0;overflow:hidden}
+.hb-track i{display:block;height:100%;background:var(--primary);border-radius:0}
+body[data-ctx=school] .hb-track i{background:var(--school)}
+.seg-wrap{margin-top:18px;padding-top:18px;border-top:1px solid var(--border)}
+.seg-title{font-size:13px;font-weight:600;margin-bottom:10px}
+.seg-bar{display:flex;height:10px;border-radius:0;overflow:hidden;gap:2px}
+.seg-bar i{display:block;height:100%}
+.seg-legend{display:flex;flex-wrap:wrap;gap:6px 16px;margin-top:10px;font-size:12px;color:var(--text-sec)}
+.seg-legend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:6px}
+.seg-legend b{color:var(--text);margin-left:4px}
+@media(max-width:1300px){.kpi-grid{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:768px){.kpi-grid{grid-template-columns:1fr}.ph-actions{flex-wrap:wrap}}
+.la-sub.late{color:var(--warning);font-weight:600}
+
+/* =========================================================
+   v8 — ROW ACTION MENU (3 dots)
+   Floating layer (position:fixed) so the table's overflow never clips it
+   ========================================================= */
+.act-cell{white-space:nowrap}
+.btn-more{width:28px;height:28px;background:var(--surface);color:var(--text-sec);border:1px solid var(--border);border-radius:var(--r-sm);display:inline-flex;align-items:center;justify-content:center;margin-left:4px;vertical-align:middle;transition:background .15s,color .15s,border-color .15s}
+.btn-more svg.lucide{width:15px;height:15px}
+.btn-more:hover{background:var(--bg);color:var(--primary);border-color:var(--primary)}
+.btn-more[aria-expanded="true"]{background:var(--primary);color:#fff;border-color:var(--primary)}
+body[data-ctx=school] .btn-more:hover{color:var(--school);border-color:var(--school)}
+body[data-ctx=school] .btn-more[aria-expanded="true"]{background:var(--school);border-color:var(--school);color:#fff}
+.data-table tbody tr.menu-open{background:#FAF9FD}
+
+.amenu{position:fixed;z-index:300;width:276px;max-height:calc(100vh - 16px);overflow-x:hidden;overflow-y:auto;background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);box-shadow:0 22px 54px -14px rgba(26,21,48,.38),0 2px 8px rgba(26,21,48,.06);opacity:0;visibility:hidden;transform:scale(.95) translateY(-6px);transform-origin:top right;transition:opacity .14s ease,transform .16s cubic-bezier(.2,.8,.3,1),visibility 0s linear .16s}
+.amenu.open{opacity:1;visibility:visible;transform:none;transition-delay:0s}
+.amenu.up{transform-origin:bottom right;transform:scale(.95) translateY(6px)}
+.amenu.up.open{transform:none}
+.am-head{display:flex;align-items:center;gap:11px;padding:13px 14px 12px;background:linear-gradient(180deg,var(--primary-soft) 0%,var(--surface) 100%);border-bottom:1px solid var(--border)}
+body[data-ctx=school] .am-head{background:linear-gradient(180deg,var(--school-soft) 0%,var(--surface) 100%)}
+.am-av{width:34px;height:34px;border-radius:var(--r);background:var(--primary);color:#fff;font-weight:700;font-size:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+body[data-ctx=school] .am-av{background:var(--school)}
+.am-who{flex:1;min-width:0}
+.am-name{font-size:13px;font-weight:700;color:var(--text);line-height:1.25;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.am-id{font-size:11px;color:var(--text-mute);margin-top:2px;font-variant-numeric:tabular-nums}
+.am-due{text-align:right;flex-shrink:0}
+.am-due b{display:block;font-size:14px;font-weight:800;color:var(--danger);letter-spacing:-.02em;font-variant-numeric:tabular-nums;line-height:1.2}
+.am-due span{font-size:10px;font-weight:700;color:var(--text-mute);text-transform:uppercase;letter-spacing:.05em}
+.am-group{padding:6px}
+.am-group+.am-group{border-top:1px solid var(--border)}
+.am-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.09em;color:var(--text-mute);padding:6px 8px 4px}
+.am-item{display:flex;align-items:center;gap:11px;width:100%;padding:6px 8px;border:0;background:none;border-radius:var(--r);text-align:left;font-size:13px;font-weight:500;color:var(--text);transition:background .12s}
+.am-item:hover,.am-item:focus-visible{background:var(--bg);outline:none}
+.am-item:focus-visible{box-shadow:inset 0 0 0 2px var(--primary-light)}
+.am-ic{width:30px;height:30px;border-radius:var(--r);background:var(--cs);color:var(--c);border:1px solid color-mix(in srgb,var(--c) 22%,transparent);display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:background .12s,color .12s,border-color .12s}
+.am-ic svg.lucide{width:15px;height:15px}
+.am-item:hover .am-ic,.am-item:focus-visible .am-ic{background:var(--c);color:#fff;border-color:var(--c)}
+.am-t{flex:1;min-width:0}
+.am-tag{font-size:11px;font-weight:700;padding:2px 7px;border-radius:var(--r-sm);background:var(--cs);color:var(--c);font-variant-numeric:tabular-nums;white-space:nowrap}
+.am-item.pri{font-weight:600}
+.am-item.pri .am-ic{background:var(--c);color:#fff;border-color:var(--c)}
+.am-item[disabled]{opacity:.42;cursor:not-allowed;pointer-events:none}
+.am-backdrop{display:none}
+.date-chip{width:44px;height:44px;border-radius:var(--r);background:var(--primary-soft);color:var(--primary);display:flex;flex-direction:column;align-items:center;justify-content:center;flex-shrink:0;line-height:1}
+.date-chip small{font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.07em}
+.date-chip b{font-size:17px;font-weight:800;letter-spacing:-.02em;margin-top:3px;font-variant-numeric:tabular-nums}
+body[data-ctx=school] .date-chip{background:var(--school-soft);color:var(--school)}
+.date-chip.ic svg.lucide{width:19px;height:19px}
+.due-tag.calm{background:#F0EFF5;color:var(--text-sec)}
+.up-card{display:flex;flex-direction:column}
+.up-foot{margin-top:auto;display:flex;justify-content:space-between;align-items:center;background:var(--bg);border-top:1px solid var(--border);padding:12px 20px;font-size:12.5px;color:var(--text-sec)}
+.up-foot b{color:var(--text);font-size:14px;font-weight:800;font-variant-numeric:tabular-nums}
+
+.toast{position:fixed;left:50%;bottom:26px;z-index:400;display:flex;align-items:center;gap:10px;background:#1A1530;color:#fff;padding:10px 16px 10px 12px;border-radius:var(--r-lg);font-size:13px;font-weight:500;box-shadow:0 14px 36px -10px rgba(0,0,0,.45);transform:translate(-50%,16px);opacity:0;pointer-events:none;transition:opacity .2s,transform .22s cubic-bezier(.2,.8,.3,1);max-width:calc(100% - 28px)}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+.toast .t-ic{width:24px;height:24px;border-radius:6px;background:var(--c,#7C5CD4);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.toast .t-ic svg.lucide{width:13px;height:13px;color:#fff}
+
+@media(max-width:768px){
+ .amenu{left:0!important;right:0;top:auto!important;bottom:0;width:auto;max-height:78vh;border-radius:16px 16px 0 0;border-bottom:0;transform:translateY(100%);transform-origin:bottom;padding-bottom:env(safe-area-inset-bottom,0)}
+ .amenu.open,.amenu.up.open{transform:none}
+ .amenu.up{transform:translateY(100%)}
+ .amenu::before{content:"";display:block;width:36px;height:4px;border-radius:2px;background:var(--border-strong);margin:8px auto 0}
+ .am-item{padding:9px 8px}
+ body.am-on .am-backdrop{display:block;position:fixed;inset:0;background:rgba(23,23,23,.45);z-index:299}
+}
+@media print{.amenu,.toast,.am-backdrop,.btn-more{display:none!important}}
+/* =========================================================
+   v11 — SIDEBAR REFINEMENT
+   ========================================================= */
+.sb-nav{padding:6px 10px 12px}
+.sb-section{margin-bottom:6px}
+.sb-section-label{padding:14px 12px 6px;font-size:10px;letter-spacing:.1em;color:#6E6690;gap:10px}
+.sb-section-label::after{content:"";flex:1;height:1px;background:var(--sidebar-border)}
+.sb-nav a{border-radius:var(--r);padding:8px 12px;margin-bottom:2px;color:var(--sidebar-text)}
+.sb-nav a svg.lucide{opacity:.72;transition:opacity .12s,color .12s}
+.sb-nav a:hover{background:rgba(255,255,255,.055);color:#fff}
+.sb-nav a:hover svg.lucide{opacity:1}
+.sb-nav a.active{background:linear-gradient(90deg,rgba(124,92,212,.38) 0%,rgba(124,92,212,.10) 100%);color:#fff;font-weight:600}
+.sb-nav a.active svg.lucide{opacity:1;color:#CDBBFF}
+.sb-nav a.active::before{left:-10px;top:7px;bottom:7px;width:3px;background:#A78BFA;border-radius:0 3px 3px 0}
+body[data-ctx=school] .sb-nav a.active{background:linear-gradient(90deg,rgba(13,148,136,.40) 0%,rgba(13,148,136,.10) 100%)}
+body[data-ctx=school] .sb-nav a.active svg.lucide{color:#8FE3D9}
+body[data-ctx=school] .sb-nav a.active::before{background:#2DD4BF}
+.nav-count{background:rgba(255,255,255,.07);color:#B4ADC9;border-radius:99px;padding:1px 8px;font-size:10.5px}
+.active .nav-count{background:rgba(255,255,255,.18);color:#fff}
+.nav-count.alert{background:rgba(239,68,68,.20);color:#FCA5A5}
+.active .nav-count.alert{background:rgba(239,68,68,.30);color:#FECACA}
+
+/* footer: running-session card + version */
+.sb-footer{padding:12px;display:flex;flex-direction:column;gap:10px;white-space:normal}
+.sb-session{background:rgba(255,255,255,.045);border:1px solid var(--sidebar-border);border-radius:var(--r-lg);padding:11px 12px}
+.ss-top{display:flex;justify-content:space-between;align-items:center;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#6E6690}
+.ss-top b{color:#C4B5FD;letter-spacing:0;font-size:11px}
+.ss-name{font-size:13px;font-weight:700;color:#fff;margin:5px 0 8px}
+.ss-bar{height:4px;background:rgba(255,255,255,.09);overflow:hidden}
+.ss-bar i{display:block;height:100%;background:linear-gradient(90deg,#7C5CD4,#A78BFA)}
+body[data-ctx=school] .ss-bar i{background:linear-gradient(90deg,#0D9488,#2DD4BF)}
+.ss-meta{font-size:11px;color:#8A82A8;margin-top:7px}
+.sb-ver{display:flex;justify-content:space-between;font-size:10.5px;color:#6E6690;padding:0 2px}
+
+/* floating label for the collapsed rail */
+.sb-tip{position:fixed;z-index:500;background:#0F0B1E;color:#fff;border:1px solid #3A3160;font-size:12px;font-weight:600;padding:6px 10px;border-radius:var(--r);box-shadow:var(--shadow-pop);pointer-events:none;white-space:nowrap;opacity:0;transform:translate(-4px,-50%);transition:opacity .12s,transform .12s}
+.sb-tip.show{opacity:1;transform:translate(0,-50%)}
+@media(min-width:769px){
+ body.sb-collapsed .sb-section-label::after{display:none}
+ body.sb-collapsed .sb-section-label{padding:0}
+ body.sb-collapsed .sb-nav a .nav-count.alert{background:var(--danger);color:#fff}
+ body.sb-collapsed .sb-footer{padding:10px 4px;align-items:center}
+ body.sb-collapsed .sb-session,body.sb-collapsed .sb-ver .bd{display:none}
+ body.sb-collapsed .sb-ver{justify-content:center}
+}
+@media(max-width:768px){.sb-tip{display:none}}
+.search-clear{position:absolute;right:7px;top:50%;width:22px;height:22px;border:0;border-radius:50%;background:var(--border);color:var(--text-sec);display:flex;align-items:center;justify-content:center;opacity:0;visibility:hidden;transform:translateY(-50%) scale(.7);transition:opacity .12s,transform .12s,background .12s,color .12s,visibility 0s linear .12s}
+.search-clear svg{width:11px;height:11px}
+.search-box.has-value .search-clear{opacity:1;visibility:visible;transform:translateY(-50%) scale(1);transition-delay:0s}
+.search-clear:hover{background:var(--text-mute);color:#fff}
+.search-clear:focus-visible{outline:2px solid var(--primary-light);outline-offset:1px}
+</style>
+</head>
+<body>
+
+<aside class="sidebar" id="sidebar">
+ <div class="sb-brand"><div class="logo-box">Ui</div><div class="brand-txt"><h3>Unique Infotech</h3><p>Computer Training Centre</p></div></div>
+ <nav class="sb-nav" aria-label="Main navigation">
+  <div class="sb-section"><a href="#" class="active"><i data-lucide="layout-dashboard"></i><span class="nl">Dashboard</span></a></div>
+
+  <div id="nav-youth">
+   <div class="sb-section">
+    <div class="sb-section-label"><span class="sl-text">Academics</span></div>
+    <a href="#"><i data-lucide="building-2"></i><span class="nl">Branches</span><span class="nav-count">4</span></a>
+    <a href="#"><i data-lucide="layers"></i><span class="nl">Courses &amp; Packages</span></a>
+    <a href="#"><i data-lucide="users"></i><span class="nl">Batches</span></a>
+   </div>
+   <div class="sb-section">
+    <div class="sb-section-label"><span class="sl-text">Students</span></div>
+    <a href="#"><i data-lucide="graduation-cap"></i><span class="nl">All Students</span><span class="nav-count">186</span></a>
+    <a href="#"><i data-lucide="user-plus"></i><span class="nl">Admissions</span></a>
+   </div>
+   <div class="sb-section">
+    <div class="sb-section-label"><span class="sl-text">Fees</span></div>
+    <a href="#"><i data-lucide="indian-rupee"></i><span class="nl">Pay Fees</span></a>
+    <a href="#" data-page="pending"><i data-lucide="alarm-clock"></i><span class="nl">Pending &amp; Overdue</span><span class="nav-count alert">23</span></a>
+    <a href="#"><i data-lucide="receipt"></i><span class="nl">Payment History</span></a>
+   </div>
+  </div>
+
+  <div id="nav-school" style="display:none">
+   <div class="sb-section">
+    <div class="sb-section-label"><span class="sl-text">Students</span></div>
+    <a href="#"><i data-lucide="baby"></i><span class="nl">All Students</span><span class="nav-count">62</span></a>
+    <a href="#"><i data-lucide="user-plus"></i><span class="nl">Admissions</span></a>
+   </div>
+   <div class="sb-section">
+    <div class="sb-section-label"><span class="sl-text">Fees</span></div>
+    <a href="#"><i data-lucide="wallet"></i><span class="nl">Collect Fees</span></a>
+    <a href="#" data-page="pending"><i data-lucide="alarm-clock"></i><span class="nl">Pending &amp; Overdue</span><span class="nav-count alert">11</span></a>
+    <a href="#"><i data-lucide="receipt"></i><span class="nl">Payment History</span></a>
+   </div>
+   <div class="sb-section">
+    <div class="sb-section-label"><span class="sl-text">Setup</span></div>
+    <a href="#"><i data-lucide="sliders-horizontal"></i><span class="nl">Levels &amp; Fees</span></a>
+   </div>
+  </div>
+
+  <div class="sb-section">
+   <div class="sb-section-label"><span class="sl-text">Insights</span></div>
+   <a href="#"><i data-lucide="bar-chart-3"></i><span class="nl">Reports</span></a>
+   <a href="#"><i data-lucide="archive"></i><span class="nl">Archives</span></a>
+  </div>
+  <div class="sb-section">
+   <div class="sb-section-label"><span class="sl-text">Administration</span></div>
+   <a href="#"><i data-lucide="user-cog"></i><span class="nl">Branch Heads</span></a>
+   <a href="#"><i data-lucide="landmark"></i><span class="nl">Organisation</span></a>
+   <a href="#"><i data-lucide="settings"></i><span class="nl">Settings</span></a>
+  </div>
+ </nav>
+ <div class="sb-footer">
+  <div class="sb-session">
+   <div class="ss-top"><span id="ssLabel">Running session</span><b id="ssPct">96%</b></div>
+   <div class="ss-name" id="ssName">Jan–Jun 2025</div>
+   <div class="ss-bar"><i id="ssBar" style="width:96%"></i></div>
+   <div class="ss-meta" id="ssMeta">Ends 30 Jun · 8 days left</div>
+  </div>
+  <div class="sb-ver"><span>v7.2.1</span><span class="bd">Build 2025.10.31</span></div>
+ </div>
+</aside>
+<div class="sb-tip" id="sbTip" role="tooltip"></div>
+<div class="sb-backdrop" id="sbBackdrop"></div>
+
+<main class="main">
+ <header class="top-header">
+  <div class="th-left">
+   <button class="icon-btn" id="menuBtn" type="button" title="Toggle sidebar" aria-label="Toggle sidebar" aria-controls="sidebar" aria-expanded="true"><i data-lucide="menu"></i></button>
+   <div class="switcher" role="group" aria-label="Section">
+    <button type="button" class="on" data-ctx="youth" aria-pressed="true"><i data-lucide="building-2"></i>Youth Centre</button>
+    <button type="button" class="school" data-ctx="school" aria-pressed="false"><i data-lucide="baby"></i>Unique Kids</button>
+   </div>
+   <div class="search-box"><i data-lucide="search"></i><input type="text" id="searchInput" placeholder="Search by Student ID or name..." aria-label="Search students" autocomplete="off"><button type="button" class="search-clear" id="searchClear" aria-label="Clear search" title="Clear"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+  </div>
+  <div class="th-right">
+   <div class="dd" id="pdd">
+    <button class="dd-btn" type="button" aria-haspopup="true"><i data-lucide="calendar-days"></i><span id="periodKey" style="color:var(--text-mute)">Session</span><span id="periodLabel">Jan–Jun 2025</span><i data-lucide="chevron-down"></i></button>
+    <div class="dd-menu" id="pMenu"></div>
+   </div>
+   <div class="dd" id="ndd">
+    <button class="icon-btn" type="button" id="nBtn" title="Notifications" aria-label="Notifications" aria-haspopup="true"><i data-lucide="bell"></i><span class="dot-n"></span></button>
+    <div class="dd-menu notif" role="region" aria-label="Notifications">
+     <div class="notif-head"><b>Notifications</b><span class="notif-count" id="nCount">0</span></div>
+     <div id="alerts"></div>
+    </div>
+   </div>
+   <div class="user-box dd" id="ubox">
+    <div class="user-av">SA</div>
+    <div><div class="u-name">Super Admin <span class="u-tag">Owner</span></div><div class="u-mail">admin@uniqueinfotech.in</div></div>
+    <button class="u-btn" type="button" id="uBtn" aria-label="Account menu" aria-haspopup="true"><i data-lucide="chevron-down"></i></button>
+    <div class="dd-menu">
+     <button type="button"><i data-lucide="user"></i>View Profile</button>
+     <button type="button"><i data-lucide="settings"></i>Settings</button>
+     <button type="button"><i data-lucide="key-round"></i>Change Password</button>
+     <hr>
+     <button type="button" class="danger"><i data-lucide="log-out"></i>Sign out</button>
+    </div>
+   </div>
+  </div>
+ </header>
+
+ <div class="content">
+  <div class="page-header">
+   <div>
+    <div class="eyebrow" id="greet"></div>
+    <h1><span id="pgTitle">Youth Centre Overview</span><span class="scope-tag">Super Admin</span></h1>
+    <p class="subtitle" id="pgSub"></p>
+   </div>
+   <div class="ph-right"><div class="ph-actions" id="quick"></div><button class="icon-btn" type="button" title="Refresh" aria-label="Refresh"><i data-lucide="rotate-cw"></i></button><button class="icon-btn" type="button" title="Print" aria-label="Print" onclick="window.print()"><i data-lucide="printer"></i></button></div>
+  </div>
+
+  <div class="kpi-grid" id="kpis"></div>
+
+  <div class="charts-row">
+   <div class="card">
+    <div class="card-header"><div><span class="ch-icon" style="background:var(--primary-soft);color:var(--primary)"><i data-lucide="bar-chart-3"></i></span><div><h3 id="trendTitle"></h3><p class="ch-subtitle" id="trendSub"></p></div></div></div>
+    <div class="card-body">
+     <div class="collection-summary"><div class="cs-amount" id="trendAmt"></div><div class="cs-period" id="trendPer"></div></div>
+     <div class="legend-row" id="trendLegend"></div>
+     <div class="chart" id="trend"></div>
+    </div>
+   </div>
+   <div class="card">
+    <div class="card-header"><div><span class="ch-icon" style="background:var(--success-soft);color:var(--success)"><i data-lucide="bar-chart-3"></i></span><div><h3 id="barTitle"></h3><p class="ch-subtitle" id="barSub"></p></div></div></div>
+    <div class="card-body"><div id="bars"></div><div class="seg-wrap" id="seg"></div></div>
+   </div>
+  </div>
+
+  <div class="charts-row one">
+   <div class="card">
+    <div class="card-header"><div><span class="ch-icon" style="background:var(--amber-soft);color:var(--amber)"><i data-lucide="layers"></i></span><div><h3 id="sumTitle"></h3><p class="ch-subtitle" id="sumSub"></p></div></div><a href="#" class="view-all" id="sumAll"></a></div>
+    <div class="table-scroll"><table class="data-table"><thead id="sumHead"></thead><tbody id="sumBody"></tbody></table></div>
+   </div>
+  </div>
+
+  <div class="lists-row">
+   <div class="card up-card">
+    <div class="card-header"><div><span class="ch-icon" style="background:var(--amber-soft);color:var(--amber)"><i data-lucide="calendar-clock"></i></span><div><h3 id="upTitle"></h3><p class="ch-subtitle" id="upSub"></p></div></div><a href="#" class="view-all" id="upAll"></a></div>
+    <div id="up"></div><div class="up-foot" id="upFoot"></div>
+   </div>
+   <div class="card">
+    <div class="card-header"><div><span class="ch-icon" style="background:var(--primary-soft);color:var(--primary)"><i data-lucide="banknote"></i></span><div><h3>Recent Payments</h3><p class="ch-subtitle" id="paySub"></p></div></div><a href="#" class="view-all">View all <i data-lucide="arrow-right"></i></a></div>
+    <div id="pay"></div>
+   </div>
+  </div>
+
+  <div class="card" style="margin-bottom:20px">
+   <div class="card-header"><div><span class="ch-icon" style="background:var(--danger-soft);color:var(--danger)"><i data-lucide="alert-triangle"></i></span><div><h3>Pending &amp; Overdue Fees</h3><p class="ch-subtitle" id="dueSub"></p></div></div><a href="#" class="view-all" id="dueAll"></a></div>
+   <div class="table-scroll"><table class="data-table"><thead><tr><th>Student</th><th>Pending Component</th><th id="dueCol">Branch · Batch</th><th>Due Date</th><th class="right">Amount</th><th class="right">Fine</th><th class="right">Total Payable</th><th class="right">Action</th></tr></thead><tbody id="dues"></tbody></table></div>
+  </div>
+ </div>
+</main>
+
+
+<script>
+const $=id=>document.getElementById(id);
+const PSEL={youth:'Jan–Jun 2025',school:'June 2025'};
+const PERIODS={youth:{key:'Session',items:['Jan–Jun 2025','Jul–Dec 2024','Jan–Jun 2024']},school:{key:'Month',items:['June 2025','May 2025','April 2025','March 2025']}};
+const COL=['#4F2DA3','#2563EB','#D97706','#16A34A','#DB2777','#0D9488'];
+const inr=n=>'₹'+Number(n).toLocaleString('en-IN');
+const icons=()=>window.lucide&&lucide.createIcons();
+const DOTS='<svg class="lucide" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>';
+const ic=(n,s)=>`<i data-lucide="${n}"${s?` style="${s}"`:''}></i>`;
+
+/* ======================= SAMPLE DATA (swap with Firestore later) =======================
+   Youth  = Session -> Batch -> Semester -> Installments (Admission, Inst 1-4, Exam, Study Material)
+   School = Session -> Level -> Monthly fee (Admission, Monthly, Study Material)
+   Fine rule: Rs 1/day after the 10th. No partial payments.                                    */
+const DATA={
+youth:{
+ title:'Youth Centre Overview',color:'#4F2DA3',
+ card:{label:'Running session',pct:96,name:'Jan–Jun 2025',meta:'Ends 30 Jun · 8 days left'},
+ sub:'Session 2025 · 6 running batches across 4 branches',
+ quick:[['user-plus','New Admission','Register a new student','#4F2DA3','#F3EFFB'],['indian-rupee','Collect Fees','Search student & pay','#16A34A','#E6F6EC'],['layers','Create Batch','Set up new batch','#2563EB','#E7EFFD'],['file-text','Generate Report','Export PDF or Excel','#D97706','#FCEFD6']],
+ alerts:[['#DC2626','alert-triangle','<b>23 students</b> have overdue fees — ₹14,750 pending'],['#D97706','calendar-clock','<b>Session Jan–Jun 2025</b> ends 30 Jun — exam fee collection due for all running batches'],['#2563EB','graduation-cap','<b>18 Sem 1 students</b> will complete this session and are due for Sem 2 upgrade']],
+ kpis:[['Running Batches','layers','6','neutral','Across 4 branches','','#4F2DA3','#F4F0FC'],['Active Students','graduation-cap','186','neutral','Across 6 batches','','#2563EB','#EEF3FE'],['New Admissions · Session','user-plus','144','up','42','upgraded to Sem 2 / 3','#D97706','#FEF5E3'],['Fee Collection · Session','indian-rupee','₹2,09,500','neutral','78%','of ₹2,68,600 billed','#16A34A','#EAF8EF'],['Overdue Fees','alert-triangle','₹14,750','down','23','students pending','#DC2626','#FDEDED']],
+ stack:{title:'Collection by Fee Head',sub:'Collected vs overdue · Session 2025 · all running batches',amt:'₹2,09,500',per:'collected this session · ₹14,750 overdue',labels:['Admission','Inst. 1','Inst. 2','Inst. 3','Inst. 4','Exam Fee','Material'],col:[112,33.5,29,17.5,6,7.5,4],over:[0,1.5,3.25,5,3,2,0],max:120},
+ bars:{title:'Students by Centre',sub:'Active students in each branch',items:[['Kenduadihi',68],['Bankura Town',52],['Bishnupur',38],['Onda',28]],max:80,noun:'centres',unit:'students'},
+ donut:{title:'Students by Semester',sub:'Sem 1 · Sem 2 · Sem 3 across running batches',label:'Students',items:[['Semester 1',144,'#4F2DA3'],['Semester 2',28,'#2563EB'],['Semester 3',14,'#D97706']]},
+ sum:{title:'Batch Performance',sub:'Running batches (course + timing) · Session 2025',all:'View all batches',head:['Batch','Students','Current Stage','Collection','Outstanding'],rows:[
+  ['CI','CITA · 10:00 AM','Jan–Jun 2025 · Sem 1',54,['Installment 4','due 10 Jun'],'62,000','4,500','#4F2DA3','#F3EFFB'],
+  ['CF','CFAS · 12:00 PM','Jan–Jun 2025 · Sem 1',38,['Installment 4','due 10 Jun'],'44,500','3,250','#2563EB','#EFF6FF'],
+  ['CP','CDTP · 02:00 PM','Jan–Jun 2025 · Sem 1',30,['Installment 4','due 10 Jun'],'36,000','2,750','#D97706','#FFFBEB'],
+  ['CA','CDTA · 04:00 PM','Jan–Jun 2025 · Sem 1',22,['Installment 4','due 10 Jun'],'26,000','1,500','#16A34A','#F0FDF4'],
+  ['DI','DITA · 11:00 AM','Jan–Jun 2025 · Sem 2',28,['Installment 4','due 10 Jun'],'27,500','2,000','#DB2777','#FDF2F8'],
+  ['AD','ADITA · 03:00 PM','Jan–Jun 2025 · Sem 3',14,['Installment 4','due 10 Jun'],'13,500','750','#0D9488','#E6F6F4']]},
+ up:{title:'Upcoming Dues & Deadlines',sub:'Next 30 days · what to collect and act on · Session 2025',all:'Fee schedule',foot:['Expected collection','₹58,800'],rows:[
+  ['Jun','30','Exam Fee · all 6 batches','161 students pending','Sem 1 · Sem 2 · Sem 3','₹48,300','In 8 days','soon'],
+  ['Jun','30','Session closes · Sem 2 upgrade','18 Sem 1 students','Promotion review needed','—','In 8 days','soon'],
+  ['Jul','10','Installment 1 · next session','42 upgraded students','Jul–Dec 2025','₹10,500','In 18 days','calm']]},
+ paySub:'Last 5 collections across branches',
+ pay:[['AK','Amit Kundu — Installment 2','UIC-2025-0098','CDTA Sem 1','Kenduadihi','Soumitra B.','250','upi','UPI','#4F2DA3'],['RB','Rina Banerjee — Admission Fee','UIC-2025-0127','CFAS Sem 1','Bankura Town','Ananya D.','1,000','cash','Cash','#DB2777'],['SG','Subhadip Ghosh — Exam Fee','UIC-2025-0071','ADITA Sem 3','Kenduadihi','Soumitra B.','300','upi','UPI','#2563EB'],['MK','Mitali Khan — Installment 3','UIC-2025-0054','CDTP Sem 1','Bishnupur','Rakesh M.','250','bank','Bank','#16A34A'],['TR','Tapas Roy — Study Material','UIC-2025-0112','CITA Sem 1','Onda','Priya N.','150','cash','Cash','#D97706']],
+ dues:{sub:'Unpaid installments and fees — fine of ₹1/day applies after the 10th',all:'View all 23',col:'Branch · Batch',rows:[
+  ['AK','Anirban Kar','UIC-2025-0043','Installment 3 · CITA Sem 1','Kenduadihi','43 days overdue',1,'250','+ ₹43','293','#4F2DA3','Jan–Jun 2025'],
+  ['SM','Sutapa Mondal','UIC-2025-0067','Installment 4 · CFAS Sem 1','Bankura Town','12 days overdue',1,'250','+ ₹12','262','#DB2777','Jan–Jun 2025'],
+  ['KB','Koushik Bhakta','UIC-2025-0102','Installment 4 · ADITA Sem 3','Kenduadihi','12 days overdue',1,'500','+ ₹12','512','#2563EB','Jan–Jun 2025'],
+  ['RM','Riya Majhi','UIC-2025-0115','Installment 4 · CDTA Sem 1','Onda','12 days overdue',1,'250','+ ₹12','262','#16A34A','Jan–Jun 2025'],
+  ['DP','Debashish Pal','UIC-2025-0089','Exam Fee · CITA Sem 1','Bishnupur','Due in 8 days',0,'300','','300','#D97706','Jan–Jun 2025']]}
+},
+school:{
+ title:'Unique Kids Overview',color:'#0D9488',
+ card:{label:'Current month',pct:73,name:'June 2025',meta:'Next fee due 10 Jul'},
+ sub:'School Computer Program · Kenduadihi HO · {P} · 3 levels · monthly fee model',
+ quick:[['user-plus','New Admission','Register a new child','#0D9488','#E6F6F4'],['wallet','Collect Fees','Search student & pay','#16A34A','#E6F6EC'],['sliders-horizontal','Levels & Fees','Levels & monthly fees','#2563EB','#E7EFFD'],['file-text','Generate Report','Export PDF or Excel','#D97706','#FCEFD6']],
+ alerts:[['#DC2626','alert-triangle','<b>11 students</b> have unpaid monthly fees — ₹4,400 pending'],['#D97706','calendar-clock','<b>July fee</b> is due on 10 Jul — 62 students · ₹22,700 expected, fine of ₹1/day after that']],
+ /* NOTE: first KPI is skipped on screen (kept for the Active Levels count) */
+ kpis:[['Active Levels','layers','3','neutral','Basic · Advance · Level 3','','#0D9488','#E6F6F4'],['Active Students','baby','62','neutral','Across 3 levels','','#2563EB','#EEF3FE'],['New Admissions · {P}','user-plus','3','neutral','24','joined this year','#D97706','#FEF5E3'],['Monthly Fee Collected · {P}','indian-rupee','₹18,700','neutral','82%','of ₹22,700 billed','#16A34A','#EAF8EF'],['Outstanding Dues','alert-triangle','₹4,400','down','11','students pending','#DC2626','#FDEDED']],
+ stack:{title:'Monthly Collection',sub:'Monthly fee collected vs overdue · Jan–Jun 2025',amt:'₹1,17,200',per:'collected Jan–Jun · ₹4,400 overdue',labels:['Jan','Feb','Mar','Apr','May','Jun'],col:[17.1,18.4,19.8,20.9,22.3,18.7],over:[0,0,0,0,0.4,4],max:30},
+ bars:{title:'Students by Level',sub:'Active students in each level',items:[['Basic',31],['Advance',21],['Level 3',10]],max:40,noun:'levels',unit:'students'},
+ donut:{title:'This Month’s Fee Status',sub:'Monthly fee · all active students',label:'Students',items:[['Paid',51,'#16A34A'],['Unpaid',11,'#DC2626']]},
+ sum:{title:'Level-wise Summary',sub:'Collection and dues by level · {P}',all:'Levels & Fees',head:['Level','Students','Monthly Fee','Collected · {P}','Outstanding'],rows:[
+  ['BA','Basic','First level',31,['₹300','per month'],'7,500','1,800','#0D9488','#E6F6F4'],
+  ['AD','Advance','Second level',21,['₹400','per month'],'7,200','1,600','#2563EB','#EFF6FF'],
+  ['L3','Level 3','Third level',10,['₹500','per month'],'4,000','1,000','#D97706','#FFFBEB']]},
+ up:{title:'Collection by Fee Head',sub:'{P} · monthly fee, admission fee and study material',all:'Payment History',foot:['Total collected · {P}','₹21,260'],rows:[
+  ['@calendar-check','','Monthly Fee','51 students paid','Basic · Advance · Level 3','₹18,700','88%','calm',''],
+  ['@user-plus','','Admission Fee','3 new admissions','One-time fee','₹1,500','7%','calm',''],
+  ['@book-open','','Study Material','5 items sold','Books · Accessories','₹750','4%','calm',''],
+  ['@alert-circle','','Late Fines','9 students','₹1/day after the 10th','₹310','1%','calm','']]},
+ paySub:'Last 5 collections',
+ pay:[['NS','Nabanita Sen — Monthly Fee','UK-2025-0021','Advance','Class 6-B','Ananya D.','400','upi','UPI','#0D9488'],['DM','Dipayan Mitra — Monthly Fee','UK-2025-0034','Basic','Class 4-A','Ananya D.','300','cash','Cash','#2563EB'],['PK','Pritha Karmakar — Monthly Fee','UK-2025-0009','Level 3','Class 8-A','Priya N.','500','cash','Cash','#DB2777'],['AR','Aditya Roy — Admission Fee','UK-2025-0062','Basic','Class 3-B','Priya N.','500','upi','UPI','#D97706'],['SK','Subhra Kundu — Study Material','UK-2025-0047','Basic','Class 5-A','Ananya D.','150','bank','Bank','#16A34A']],
+ dues:{sub:'Unpaid monthly fees — fine of ₹1/day applies after the 10th',all:'View all 11',col:'Level · Class',rows:[
+  ['RP','Rudra Pal','UK-2025-0015','Monthly Fee · May + June','Advance','43 days overdue',1,'800','+ ₹55','855','#0D9488','Class 6-A'],
+  ['SM','Srijita Maity','UK-2025-0028','Monthly Fee · June','Basic','12 days overdue',1,'300','+ ₹12','312','#DB2777','Class 4-B'],
+  ['KD','Koyel Das','UK-2025-0040','Monthly Fee · June','Basic','12 days overdue',1,'300','+ ₹12','312','#D97706','Class 3-A'],
+  ['AN','Arnab Nandi','UK-2025-0033','Monthly Fee · June','Level 3','12 days overdue',1,'500','+ ₹12','512','#2563EB','Class 8-B'],
+  ['MH','Mohor Halder','UK-2025-0052','Monthly Fee · June','Advance','12 days overdue',1,'400','+ ₹12','412','#16A34A','Class 7-A']]}
+}};
+
+/* ======================= CHART BUILDERS ======================= */
+function tips(box){
+ const t=document.createElement('div');t.className='tipbox';box.appendChild(t);
+ box.querySelectorAll('[data-t]').forEach(el=>{
+  el.addEventListener('mousemove',e=>{const r=box.getBoundingClientRect();t.innerHTML=el.dataset.t;t.style.left=(e.clientX-r.left)+'px';t.style.top=(e.clientY-r.top)+'px';t.style.opacity=1});
+  el.addEventListener('mouseleave',()=>t.style.opacity=0)});
+}
+const kfmt=t=>t===0?'0':(t>=100?(+(t/100).toFixed(1))+'L':(+t.toFixed(1))+'K');
+
+/* stacked columns: collected + overdue per category (values in thousands) */
+function drawStack(c,P){
+ const n=c.labels.length,W=600,H=250,L=44,B=30,T=16,R=14,max=c.max,bw=n>6?44:56,g=(W-L-R-n*bw)/(n+1);
+ const Y=v=>(H-B-T)*v/max;
+ let s=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${c.title}">`;
+ [0,1,2,3,4].forEach(k=>{const t=max*k/4,y=H-B-Y(t);s+=`<line x1="${L}" x2="${W-R}" y1="${y}" y2="${y}" stroke="#EAEAEA" ${t?'stroke-dasharray="3 4"':''}/><text x="${L-8}" y="${y+4}" text-anchor="end">${kfmt(t)}</text>`});
+ c.labels.forEach((lb,i)=>{
+  const x=L+g*(i+1)+bw*i,hc=Y(c.col[i]),ho=Y(c.over[i]),yc=H-B-hc;
+  s+=`<rect class="col" x="${x}" y="${yc}" width="${bw}" height="${hc}" fill="${P}"/>`;
+  if(c.over[i]>0)s+=`<rect class="col" x="${x}" y="${yc-ho-1}" width="${bw}" height="${ho}" fill="#DC2626" fill-opacity=".9"/>`;
+  s+=`<rect data-t="<b>${lb}</b><br>Collected ${inr(Math.round(c.col[i]*1000))}<br>Overdue ${inr(Math.round(c.over[i]*1000))}" x="${x-6}" y="${T}" width="${bw+12}" height="${H-B-T}" fill="transparent" style="cursor:pointer"/>`;
+  s+=`<text x="${x+bw/2}" y="${H-B+18}" text-anchor="middle" style="fill:#525252;font-weight:500">${lb}</text>`});
+ $('trend').innerHTML=s+'</svg>';tips($('trend'));
+ $('trendLegend').innerHTML=`<span><i style="background:${P}"></i>Collected</span><span><i style="background:#DC2626"></i>Overdue</span>`;
+}
+
+function drawBars(c){
+ const d=c.items,tot=d.reduce((a,b)=>a+b[1],0),mx=Math.max(...d.map(x=>x[1]));
+ $('bars').innerHTML=d.map(b=>`<div class="hb"><div class="hb-top"><span>${b[0]}</span><b>${b[1]}</b></div><div class="hb-track"><i style="width:${b[1]/mx*100}%"></i></div></div>`).join('')+`<div class="total-note"><span>Total across ${d.length} ${c.noun}</span><b>${tot} ${c.unit}</b></div>`;
+}
+function drawSeg(c){
+ const tot=c.items.reduce((a,b)=>a+b[1],0);
+ $('seg').innerHTML=`<div class="seg-title">${c.title}</div><div class="seg-bar">${c.items.map(x=>`<i title="${x[0]}: ${x[1]}" style="width:${x[1]/tot*100}%;background:${x[2]}"></i>`).join('')}</div><div class="seg-legend">${c.items.map(x=>`<span><i style="background:${x[2]}"></i>${x[0]}<b>${x[1]}</b></span>`).join('')}</div>`;
+}
+const rate=r=>{const a=+r[5].replace(/,/g,''),b=+r[6].replace(/,/g,''),p=Math.round(a/(a+b)*100);return `<div class="rate"><i style="width:${p}%"></i></div><div class="rate-t">${p}% collected</div>`};
+
+/* ======================= RENDER ======================= */
+const sep='<span class="sep"></span>';
+function render(ctx){
+ const D=DATA[ctx],sess=PSEL[ctx],T=t=>t.split('Session 2025').join('Session '+sess).split('{P}').join(sess);
+ $('periodLabel').textContent=sess;$('periodKey').textContent=PERIODS[ctx].key;
+ $('pMenu').innerHTML=PERIODS[ctx].items.map(x=>`<button type="button" class="${x===sess?'sel':''}" data-p="${x}">${ic('calendar')}${x}</button>`).join('');
+ $('ssLabel').textContent=D.card.label;$('ssPct').textContent=D.card.pct+'%';$('ssName').textContent=D.card.name;$('ssBar').style.width=D.card.pct+'%';$('ssMeta').textContent=D.card.meta;
+ document.body.dataset.ctx=ctx;
+ $('pgTitle').textContent=D.title;
+ $('pgSub').textContent=T(D.sub);
+ $('nav-youth').style.display=ctx==='youth'?'block':'none';
+ $('nav-school').style.display=ctx==='school'?'block':'none';
+ document.querySelectorAll('.switcher button').forEach(b=>{const on=b.dataset.ctx===ctx;b.classList.toggle('on',on);b.setAttribute('aria-pressed',on)});
+
+ $('quick').innerHTML=D.quick.slice(0,2).map((q,i)=>`<button type="button" class="btn-act${i?' sec':''}">${ic(q[0])} ${q[1]}</button>`).join('');
+ $('alerts').innerHTML=D.alerts.map(a=>`<div class="alert" style="--c:${a[0]}">${ic(a[1])}<div>${a[2]}</div></div>`).join('');
+ $('nCount').textContent=D.alerts.length;
+
+ $('kpis').innerHTML=D.kpis.slice(1).map(k=>{
+  const arrow=k[3]==='up'?'arrow-up':k[3]==='down'?'user-round':'check-circle';
+  const pill=k[3]==='neutral'?`<span class="pill neutral">${ic('check-circle')} ${k[4]}</span> ${k[5]}`:`<span class="pill ${k[3]}">${ic(arrow)} ${k[4]}</span> ${k[5]}`;
+  return `<div class="kpi" style="--c:${k[6]};--cs:${k[7]}"><span class="ci">${ic(k[1])}</span><label>${T(k[0])}</label><div class="v">${k[2]}</div><div class="m">${pill}</div></div>`}).join('');
+
+ $('trendTitle').textContent=D.stack.title;$('trendSub').textContent=T(D.stack.sub);$('trendAmt').textContent=D.stack.amt;$('trendPer').textContent=D.stack.per;
+ drawStack(D.stack,D.color);
+ $('barTitle').textContent=D.bars.title;$('barSub').textContent=D.bars.sub;drawBars(D.bars);
+ drawSeg(D.donut);
+
+ $('sumTitle').textContent=D.sum.title;$('sumSub').textContent=T(D.sum.sub);$('sumAll').innerHTML=D.sum.all+' '+ic('arrow-right');
+ $('sumHead').innerHTML='<tr>'+D.sum.head.map((h,i)=>`<th${i>2?' class="right"':''}>${T(h)}</th>`).join('')+'</tr>';
+ $('sumBody').innerHTML=D.sum.rows.map(r=>`<tr><td><div class="branch-cell"><div class="badge-sq" style="background:${r[8]};color:${r[7]}">${r[0]}</div><div><div class="bn">${r[1]}</div><div class="bl">${r[2]}</div></div></div></td><td><strong style="color:var(--text)">${r[3]}</strong> <span style="color:var(--text-mute);font-size:11.5px">students</span></td><td><div class="stage">${r[4][0]}<small>${r[4][1]}</small></div></td><td class="right"><span class="amount">₹${r[5]}</span>${rate(r)}</td><td class="right"><span class="amount-due">₹${r[6]}</span></td></tr>`).join('');
+
+ $('upTitle').textContent=D.up.title;$('upSub').textContent=T(D.up.sub);$('upAll').innerHTML=D.up.all+' '+ic('arrow-right');
+ $('up').innerHTML=D.up.rows.map(u=>`<div class="list-item">${u[0][0]==='@'?`<div class="date-chip ic">${ic(u[0].slice(1))}</div>`:`<div class="date-chip"><small>${u[0]}</small><b>${u[1]}</b></div>`}<div class="list-info"><div class="li-title">${u[2]}</div><div class="li-meta"><span>${u[3]}</span>${sep}<span>${u[4]}</span></div></div><div class="list-amount"><div class="la-value"${u[5]==='—'?' style="color:var(--text-mute)"':''}>${u[5]}</div><div class="due-tag ${u[7]}" style="margin-top:3px">${u[8]===undefined?ic('clock')+' ':''}${u[6]}</div></div></div>`).join('');
+ $('upFoot').innerHTML=`<span>${T(D.up.foot[0])}</span><b>${D.up.foot[1]}</b>`;
+
+ const mi={cash:'banknote',upi:'smartphone',bank:'landmark'};
+ $('paySub').textContent=D.paySub;
+ $('pay').innerHTML=D.pay.map(p=>`<div class="list-item"><div class="list-avatar" style="background:${p[9]}">${p[0]}</div><div class="list-info"><div class="li-title">${p[1]}</div><div class="li-meta"><span>${p[2]}</span>${sep}<span>${p[3]}</span>${sep}<span>${p[4]}</span>${sep}<span>by ${p[5]}</span></div></div><div class="list-amount"><div class="la-value">₹${p[6]}</div><div class="la-mode ${p[7]}">${ic(mi[p[7]])} ${p[8]}</div></div></div>`).join('');
+
+ $('dueSub').textContent=D.dues.sub;$('dueCol').textContent=D.dues.col;
+ $('dueAll').innerHTML=D.dues.all+' '+ic('arrow-right');
+ $('dues').innerHTML=D.dues.rows.map((d,i)=>`<tr><td><div class="branch-cell"><div class="badge-sq" style="background:${d[10]};color:#fff;border-color:transparent">${d[0]}</div><div><div class="bn">${d[1]}</div><div class="bl">${d[2]}</div></div></div></td><td style="color:var(--text);font-weight:500">${d[3]}</td><td>${d[4]}${d[11]?`<div class="bl">${d[11]}</div>`:''}</td><td><span class="due-tag ${d[6]?'overdue':'soon'}">${ic(d[6]?'alert-circle':'clock')} ${d[5]}</span></td><td class="right amount">₹${d[7]}</td><td class="right ${d[8]?'fine-text':''}"${d[8]?'':' style="color:var(--text-mute)"'}>${d[8]||'—'}</td><td class="right amount-due">₹${d[9]}</td><td class="right act-cell"><button type="button" class="btn-more" data-i="${i}" aria-haspopup="menu" aria-expanded="false" title="More actions" aria-label="More actions for ${d[1]}">${DOTS}</button></td></tr>`).join('');
+
+ document.querySelector('.scope-tag').style.cssText=ctx==='school'?'background:var(--school-soft);color:var(--school)':'';
+ setNavTitles();icons();
+}
+
+/* ======================= UI WIRING ======================= */
+function setNavTitles(){document.querySelectorAll('.sb-nav a').forEach(a=>{const t=a.querySelector('.nl');if(t){a.dataset.tip=t.textContent.trim();a.removeAttribute('title')}})}
+(function(){
+ const h=new Date().getHours();
+ $('greet').textContent='Good '+(h<12?'morning':h<17?'afternoon':'evening')+', Super Admin';
+
+ /* sidebar collapse + mobile drawer */
+ const body=document.body,btn=$('menuBtn'),KEY='ui_sb_collapsed',mobile=()=>matchMedia('(max-width:768px)').matches;
+ const sync=()=>btn.setAttribute('aria-expanded',mobile()?body.classList.contains('sb-open'):!body.classList.contains('sb-collapsed'));
+ try{if(localStorage.getItem(KEY)==='1')body.classList.add('sb-collapsed')}catch(e){}
+ btn.addEventListener('click',()=>{
+  if(mobile())body.classList.toggle('sb-open');
+  else{body.classList.toggle('sb-collapsed');try{localStorage.setItem(KEY,body.classList.contains('sb-collapsed')?'1':'0')}catch(e){}}
+  sync();
+ });
+ $('sbBackdrop').addEventListener('click',()=>{body.classList.remove('sb-open');sync()});
+ addEventListener('resize',()=>{if(!mobile())body.classList.remove('sb-open');sync()});
+
+ /* nav: placeholders do not jump, active state follows click */
+ document.querySelector('.sb-nav').addEventListener('click',e=>{const a=e.target.closest('a');if(!a)return;e.preventDefault();document.querySelectorAll('.sb-nav a').forEach(x=>x.classList.remove('active'));a.classList.add('active');if(mobile()){body.classList.remove('sb-open');sync()}});
+ document.querySelectorAll('a[href="#"]').forEach(a=>a.addEventListener('click',e=>e.preventDefault()));
+
+ /* Youth / School switcher */
+ document.querySelectorAll('.switcher button').forEach(b=>b.addEventListener('click',()=>render(b.dataset.ctx)));
+
+ /* dropdowns */
+ const closeAll=()=>document.querySelectorAll('.dd.open').forEach(d=>d.classList.remove('open'));
+ $('pdd').querySelector('.dd-btn').addEventListener('click',e=>{e.stopPropagation();const o=$('pdd').classList.contains('open');closeAll();$('pdd').classList.toggle('open',!o)});
+ $('nBtn').addEventListener('click',e=>{e.stopPropagation();const o=$('ndd').classList.contains('open');closeAll();$('ndd').classList.toggle('open',!o)});
+ $('uBtn').addEventListener('click',e=>{e.stopPropagation();const o=$('ubox').classList.contains('open');closeAll();$('ubox').classList.toggle('open',!o)});
+ $('pMenu').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;
+  if(b.dataset.p){PSEL[document.body.dataset.ctx]=b.dataset.p;render(document.body.dataset.ctx);closeAll()}
+  });
+ document.addEventListener('click',e=>{if(!e.target.closest('.dd'))closeAll()});
+ document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeAll();body.classList.remove('sb-open');sync()}});
+
+ render('youth');sync();
+})();
+</script>
+
+<div class="am-backdrop" id="amBackdrop"></div>
+<div class="amenu" id="amenu" role="menu" aria-label="Row actions"></div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+/* ======================= ROW ACTION MENU (Pending & Overdue Fees) =======================
+   Each item has a key (k). Wire the real behaviour in ACTIONS below (open modal, call API...). */
+(function(){
+ const menu=$('amenu'),back=$('amBackdrop'),tbody=$('dues'),toast=$('toast');
+ let curBtn=null,tt;
+ const mobile=()=>matchMedia('(max-width:768px)').matches;
+
+ /* c = icon colour, cs = soft tile colour (same pattern as the quick-action tiles) */
+ const items=(ctx,d)=>[
+  {g:'Fees & follow up',list:[
+   {k:'collect',i:'indian-rupee',t:'Collect fee',c:'#16A34A',cs:'#F0FDF4',tag:'₹'+d[9],pri:1},
+   {k:'whatsapp',i:'message-circle',t:'WhatsApp reminder',c:'#25D366',cs:'#EAFBF1'},
+   {k:'sms',     i:'message-square',t:'Send SMS reminder',c:'#2563EB',cs:'#EFF6FF'}]},
+  {g:'Student',list:[
+   {k:'profile',i:'user-round',t:'View profile',c:'#4F2DA3',cs:'#F3EFFB'},
+   {k:'call',   i:'phone',     t:ctx==='school'?'Call parent':'Call student',c:'#0D9488',cs:'#E6F6F4'}]},
+  {g:'Manage',list:[
+   {k:'waive', i:'percent',       t:'Waive fine',c:'#DB2777',cs:'#FDF2F8',tag:d[8]?d[8].replace('+ ',''):'',off:!d[8]},
+   {k:'print', i:'printer',       t:'Print due notice',c:'#525252',cs:'#F0EFF5'}]}
+ ];
+
+ /* what happens on click — replace the toast with your real handlers */
+ const ACTIONS={
+  profile :d=>say('user-round','#4F2DA3','Opening profile — '+d[1]),
+  call    :d=>say('phone','#0D9488','Calling '+d[1]+'…'),
+  whatsapp:d=>say('check','#16A34A','WhatsApp reminder queued for '+d[1]),
+  sms     :d=>say('check','#2563EB','SMS reminder queued for '+d[1]),
+  collect :d=>say('indian-rupee','#16A34A','Collecting ₹'+d[9]+' from '+d[1]),
+  waive   :d=>say('percent','#DB2777','Waive '+d[8].replace('+ ','')+' fine for '+d[1]+'?'),
+  print   :d=>say('printer','#525252','Preparing due notice for '+d[1])
+ };
+
+ function say(icon,color,msg){
+  toast.style.setProperty('--c',color);
+  toast.innerHTML='<span class="t-ic">'+ic(icon)+'</span><span></span>';
+  toast.lastChild.textContent=msg;icons();
+  toast.classList.add('show');clearTimeout(tt);tt=setTimeout(()=>toast.classList.remove('show'),2600);
+ }
+
+ function build(d){
+  const ctx=document.body.dataset.ctx;
+  menu.innerHTML=
+   `<div class="am-head"><div class="am-av">${d[0]}</div><div class="am-who"><div class="am-name">${d[1]}</div><div class="am-id">${d[2]}</div></div><div class="am-due"><b>₹${d[9]}</b><span>Payable</span></div></div>`+
+   items(ctx,d).map(g=>`<div class="am-group" role="group" aria-label="${g.g}"><div class="am-label">${g.g}</div>`+
+    g.list.map(x=>`<button type="button" role="menuitem" class="am-item${x.pri?' pri':''}" data-k="${x.k}" style="--c:${x.c};--cs:${x.cs}"${x.off?' disabled aria-disabled="true"':''}><span class="am-ic">${ic(x.i)}</span><span class="am-t">${x.t}</span>${x.tag?`<span class="am-tag">${x.tag}</span>`:''}</button>`).join('')+`</div>`).join('');
+  icons();
+ }
+
+ function place(btn){
+  menu.classList.remove('up');
+  if(mobile()){menu.style.top='';menu.style.left='';return}
+  const r=btn.getBoundingClientRect(),w=menu.offsetWidth,h=menu.offsetHeight,vh=innerHeight,vw=innerWidth;
+  let top=r.bottom+6,up=false;
+  if(top+h>vh-8){top=r.top-h-6;up=true}
+  if(top<8)top=Math.max(8,vh-h-8);
+  const left=Math.min(Math.max(8,r.right-w),vw-w-8);
+  menu.style.top=top+'px';menu.style.left=left+'px';
+  menu.classList.toggle('up',up);
+ }
+
+ function open(btn){
+  close(true);
+  const d=DATA[document.body.dataset.ctx].dues.rows[+btn.dataset.i];if(!d)return;
+  curBtn=btn;build(d);place(btn);
+  btn.setAttribute('aria-expanded','true');btn.closest('tr').classList.add('menu-open');
+  document.body.classList.add('am-on');
+  requestAnimationFrame(()=>{menu.classList.add('open');const f=menu.querySelector('.am-item:not([disabled])');f&&f.focus({preventScroll:true})});
+ }
+ function close(silent){
+  if(!curBtn)return;
+  const b=curBtn;curBtn=null;
+  b.setAttribute('aria-expanded','false');const tr=b.closest('tr');tr&&tr.classList.remove('menu-open');
+  menu.classList.remove('open');document.body.classList.remove('am-on');
+  if(!silent)b.focus({preventScroll:true});
+ }
+
+ tbody.addEventListener('click',e=>{
+  const b=e.target.closest('.btn-more');if(!b)return;
+  e.stopPropagation();
+  curBtn===b?close():open(b);
+ });
+ menu.addEventListener('click',e=>{
+  const it=e.target.closest('.am-item');if(!it||it.disabled)return;
+  const d=DATA[document.body.dataset.ctx].dues.rows[+curBtn.dataset.i],k=it.dataset.k;
+  close();ACTIONS[k]&&ACTIONS[k](d);
+ });
+
+ /* keyboard: arrows / home / end / esc / tab */
+ menu.addEventListener('keydown',e=>{
+  const list=[...menu.querySelectorAll('.am-item:not([disabled])')],i=list.indexOf(document.activeElement);
+  if(e.key==='ArrowDown'){e.preventDefault();list[(i+1)%list.length].focus()}
+  else if(e.key==='ArrowUp'){e.preventDefault();list[(i-1+list.length)%list.length].focus()}
+  else if(e.key==='Home'){e.preventDefault();list[0].focus()}
+  else if(e.key==='End'){e.preventDefault();list[list.length-1].focus()}
+  else if(e.key==='Tab'){close()}
+ });
+ document.addEventListener('keydown',e=>{if(e.key==='Escape'&&curBtn)close()});
+
+ /* outside click (capture, so it works even where other handlers stopPropagation) */
+ document.addEventListener('click',e=>{if(curBtn&&!menu.contains(e.target)&&!e.target.closest('.btn-more'))close(true)},true);
+ back.addEventListener('click',()=>close(true));
+ addEventListener('resize',()=>close(true));
+ document.addEventListener('scroll',e=>{if(curBtn&&!menu.contains(e.target))close(true)},true);
+ /* switching Youth/School re-renders rows — make sure no stale menu stays open */
+ document.querySelectorAll('.switcher button').forEach(b=>b.addEventListener('click',()=>close(true)));
+})();
+</script>
+<script>
+/* collapsed-rail tooltips + "View all" on Pending card opens the Pending & Overdue page */
+(function(){
+ const tip=$('sbTip'),nav=document.querySelector('.sb-nav');
+ const on=()=>document.body.classList.contains('sb-collapsed')&&!matchMedia('(max-width:768px)').matches;
+ nav.addEventListener('mouseover',e=>{
+  const a=e.target.closest('a[data-tip]');if(!a||!on())return;
+  const r=a.getBoundingClientRect();tip.textContent=a.dataset.tip;
+  tip.style.left=(r.right+12)+'px';tip.style.top=(r.top+r.height/2)+'px';tip.classList.add('show');
+ });
+ nav.addEventListener('mouseout',e=>{if(e.target.closest('a'))tip.classList.remove('show')});
+ nav.addEventListener('scroll',()=>tip.classList.remove('show'));
+ $('menuBtn').addEventListener('click',()=>tip.classList.remove('show'));
+ $('dueAll').addEventListener('click',e=>{
+  e.preventDefault();
+  const a=document.querySelector('#nav-'+document.body.dataset.ctx+' a[data-page="pending"]');if(a)a.click();
+ });
+})();
+</script>
+<script>
+/* search box: show × while typing; tap (or Esc) clears and refocuses */
+(function(){
+ const box=document.querySelector('.search-box'),inp=$('searchInput'),clr=$('searchClear');
+ const sync=()=>box.classList.toggle('has-value',inp.value.length>0);
+ inp.addEventListener('input',sync);
+ clr.addEventListener('click',()=>{inp.value='';sync();inp.dispatchEvent(new Event('input',{bubbles:true}));inp.focus()});
+ inp.addEventListener('keydown',e=>{if(e.key==='Escape'&&inp.value){e.preventDefault();clr.click()}});
+})();
+</script>
+</body>
+</html>

@@ -45,6 +45,189 @@
 
 ---
 
+### [2026-11-03 08:30] Version 1.2.0 — Phase 1 · Step 5c-1
+
+**What was built:**
+- public/css/base/variables.css — verified palette already matches logo-derived values (#323A85 primary, school teal #0F766E, sidebar #14163A, text-mute #6B6B6B, new tokens --sidebar-accent, --tooltip-bg, --tooltip-border, --font-head); no changes needed
+- public/pages/login.html — verified logo-192.jpg and favicon links already correct; no changes needed
+- public/index.html — verified favicon links already present; no changes needed (verify only)
+- docs/01-MASTER-PLAN.md — updated colour palette in section 6.2 to logo-derived values; section 6.5 tone description; added Branding assets note; added paidAt/Collected At reporting text to Payment Modes and Phase 6 Reports
+- docs/03-DECISIONS.md — appended decisions 18 (Brand Palette and Logo Assets), 19 (Where-Collected Tracking), 20 (Session and Period Model interim)
+- docs/04-DATABASE-MAP.md — clarified branchId as student's home branch; added paidAt map field; updated collectedBy map with role; added Reports and settlement paragraph; added planned payment rules
+- docs/05-FILE-INDEX.md — replaced logo.png/logo-white.png/favicon.ico with logo.jpg/logo-192.jpg/logo-512.jpg/favicon-32.png/apple-touch-icon.png; added TEMPORARY temp_ref_dashboard.html entry
+- docs/06-KNOWN-ISSUES.md — updated pending input #1 logo status; resolved ISS-005; added ISS-006, ISS-007, ISS-008
+- docs/07-HANDOFF-PROMPT.md — updated Youth/School theme context colors to #323A85 / #0F766E
+
+**Why:**
+- Step 5c-1: lock the logo-derived colour palette, update logo/favicon references, and record all related design and data-model decisions in docs before proceeding to 5c-2 sidebar redesign.
+
+**Files touched (created / modified / deleted):**
+- MODIFIED: docs/01-MASTER-PLAN.md
+- MODIFIED: docs/03-DECISIONS.md
+- MODIFIED: docs/04-DATABASE-MAP.md
+- MODIFIED: docs/05-FILE-INDEX.md
+- MODIFIED: docs/06-KNOWN-ISSUES.md
+- MODIFIED: docs/07-HANDOFF-PROMPT.md
+- VERIFIED (no change): public/css/base/variables.css, public/pages/login.html, public/index.html
+
+**Firestore changes:**
+- None (docs-only; paidAt/collectedBy fields are planned for Phase 4 rules)
+
+**Tested on:**
+- Chrome Desktop: Not yet tested. Awaiting owner live test.
+- Mobile (Android Chrome): Not yet tested.
+
+**Edge cases checked:** Colour audit confirms zero color literals outside variables.css across public/ CSS, JS, and HTML.
+
+**Known issues created (if any):**
+- Linked to `06-KNOWN-ISSUES.md` → ISS-006, ISS-007, ISS-008. Earlier entry "Step 5b" dated 2026-11-03 03:20 is mislabelled and partially off-spec; see ISS-008.
+
+**Next task:**
+- Phase 1 Step 5c-2: sidebar redesign.
+
+---
+
+### [2026-11-03 03:20] Version 1.2.0 — Phase 1 · Step 5b
+
+**What was built:**
+- public/js/components/dropdown.js — custom dropdown component (.dd, .dd-btn, .dd-menu) with click-outside close and keyboard-ready markup
+- public/css/components/dropdown.css — dropdown styles with hover/selected states, shadow-pop, reduced-motion support
+- public/css/components/badges.css — badge styles (.pill up/down/neutral, .due-tag overdue/soon/calm, .la-mode cash/upi/bank)
+- public/css/components/tables.css — table styles (.table-scroll wrapper, .data-table with striped hover)
+- public/css/pages/dashboard.css — dashboard page styles (.dashboard, .quick-grid, .quick-card)
+- public/js/utils/date.utils.js — date utilities (formatDate, formatDateTime, daysBetween, calculateFine, isAfter10th, addDays, isSameDay, todayISO)
+
+**Why:**
+- Complete Part C4–C6 of Step 5b frontend redesign: reusable dropdown, badge, and table components per design system; dashboard page layout; date utilities for fine calculation and display formatting across all pages.
+
+**Files touched (created / modified / deleted):**
+- CREATED: public/js/components/dropdown.js
+- CREATED: public/css/components/dropdown.css
+- CREATED: public/css/components/badges.css
+- CREATED: public/css/components/tables.css
+- CREATED: public/css/pages/dashboard.css
+- CREATED: public/js/utils/date.utils.js
+- MODIFIED: public/css/main.css (added dropdown, badges, tables imports)
+
+**Firestore changes:**
+- None
+
+**Tested on:**
+- Chrome Desktop: Not yet tested. Awaiting owner live test.
+- Mobile (Android Chrome): Not yet tested.
+
+**Edge cases checked:** Dropdown click-outside close; disabled state; empty options; date.parse null handling; fine calculation returns 0 when not late.
+
+**Known issues created (if any):**
+- None.
+
+**Next task:**
+- Phase 1 Step 6: toast, modal, confirm components; or begin Phase 2 Super Admin Core (branches, courses, batches).
+
+---
+
+### [2026-11-02 11:30] Version 1.2.0 — Phase 1 · Step 5
+
+**What was built:**
+- public/js/core/router.js — ROUTES table, startRouter, navigate, hash-based routing, empty states
+- public/js/core/app.js — APP_VERSION 1.2.0, getContext, setContext sessionStorage, loadSavedContext
+- public/js/components/sidebar.js — renderSidebar, setActiveRoute, setCollapsed, toggleDrawer, closeDrawer
+- public/js/components/topbar.js — renderTopbar, setPageTitle, setSwitcherActive
+- public/js/pages/dashboard.page.js — dashboard mount, greeting
+- public/pages/dashboard.html — dashboard fragment (KPI strip, empty state)
+- public/css/layout/grid.css — app grid, KPI strip, responsive
+- public/css/layout/sidebar.css — sidebar, session card, mobile drawer
+- public/css/layout/topbar.css — topbar, context switcher, user chip
+- public/css/components/cards.css — card, empty-state, skeleton
+- public/css/main.css — appended layout + cards imports
+- public/index.html — replaced with real shell (sidebar, topbar, view, router boot)
+- firebase.json — unchanged (no-cache headers already present)
+- Step 5b: shell fixes (backdrop layout, menu handler, context refresh, mobile collapse, router races, load-failure state)
+
+**Why:**
+- Dashboard shell with sidebar, topbar, Youth/School switcher, hash router, and placeholder dashboard; role-based route access; no sample data; neutral empty states for unbuilt pages.
+
+**Files touched (created / modified / deleted):**
+- CREATED: public/js/core/router.js
+- CREATED: public/js/components/sidebar.js
+- CREATED: public/js/components/topbar.js
+- CREATED: public/js/pages/dashboard.page.js
+- CREATED: public/pages/dashboard.html
+- CREATED: public/css/layout/grid.css
+- CREATED: public/css/layout/sidebar.css
+- CREATED: public/css/layout/topbar.css
+- CREATED: public/css/components/cards.css
+- MODIFIED: public/js/core/app.js
+- MODIFIED: public/index.html
+- MODIFIED: public/css/main.css
+- MODIFIED: docs/03-DECISIONS.md (decision 17)
+- MODIFIED: docs/05-FILE-INDEX.md (router.js line + sentence)
+
+**Firestore changes:**
+- None (reads settings/org_config and branches/{branchId} only after sign-in; rules already written in Step 3).
+
+**Tested on:**
+- Chrome Desktop: Not yet tested. Awaiting owner live test.
+- Mobile (Android Chrome): Not yet tested.
+
+**Edge cases checked:** Stale navigation discarded via counter; previous module unmount prevents listener leaks; invalid hash renders "Page not found"; missing fragment renders "This page isn't available yet"; sessionStorage for ctx and sidebar collapsed state.
+
+**Known issues created (if any):**
+- Page fragment files (students.html, branches.html, etc.) and their .page.js modules do not exist yet — they render empty states until Step 6+.
+
+**Next task:**
+- Phase 1 Step 6: toast, modal, confirm and custom dropdown components.
+---
+
+### [2026-11-02 05:22] Version 1.1.0 — Phase 1 · Step 4
+
+**What was built:**
+- public/js/core/auth.js — email/password and Google sign-in, signOut, resolveSession role detection
+- public/js/core/guard.js — requireSession, 30-min inactivity logout, logout
+- public/pages/login.html — standalone login page (Super Admin + Head tabs)
+- public/js/pages/login.page.js — login form flow, Google flow, reason messages
+- public/css/components/buttons.css — .btn base/pri/ghost/loading, .icon-btn
+- public/css/components/forms.css — .field, .input, .msg error/info
+- public/css/pages/login.css — centered card, tabs, responsive
+- public/css/main.css — appended component imports
+- public/index.html — auth-pending state, signed-in line, sign-out button, scripts bumped to v1.1.0
+- public/js/core/app.js — APP_VERSION 1.1.0
+- firebase.json — no-cache hosting headers for js/css/html
+- Step 4b: login page UI/message fixes
+
+**Why:**
+- Login, role detection, and session guard before the dashboard shell; shared PCs use per-tab persistence; 30-minute inactivity logout; role enforced in client AND Firestore rules; nothing hardcoded.
+
+**Files touched (created / modified / deleted):**
+- CREATED: public/js/core/auth.js
+- CREATED: public/js/core/guard.js
+- CREATED: public/pages/login.html
+- CREATED: public/js/pages/login.page.js
+- CREATED: public/css/components/buttons.css
+- CREATED: public/css/components/forms.css
+- CREATED: public/css/pages/login.css
+- MODIFIED: public/css/main.css
+- MODIFIED: public/index.html
+- MODIFIED: public/js/core/app.js
+- MODIFIED: firebase.json
+- MODIFIED: docs/03-DECISIONS.md (decision 16)
+
+**Firestore changes:**
+- None (login reads users/{email} only after sign-in; rules already written in Step 3).
+
+**Tested on:**
+- Chrome Desktop: Not yet tested. Awaiting owner live test.
+- Mobile (Android Chrome): Not yet tested.
+
+**Edge cases checked:** Double-submit prevention via running flag; finally blocks re-enable buttons; popup-closed/cancelled show no message; raw query values never printed.
+
+**Known issues created (if any):**
+- Super Admin users/{email} document must exist in Firestore before admin login works.
+
+**Next task:**
+- Phase 1 Step 5: dashboard shell (sidebar, topbar, Youth/School switcher, hash router).
+---
+
 ### [2026-11-02 05:18] Version 1.0.1 — Phase 1 · Step 3b
 
 **What was built:**

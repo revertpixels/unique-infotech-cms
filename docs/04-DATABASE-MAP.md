@@ -141,7 +141,8 @@ Corrected: fines are NOT a payment type. A fine is calculated on the fly and rec
 |---|---|
 | `section` | `youth` / `school` |
 | `studentId`, `studentName` | Denormalised |
-| `branchId` | Youth only |
+| `branchId` | Youth only — the STUDENT's home branch (ownership key, used for Branch Head read access). Not the collection location. |
+| `paidAt` | Map: `{ type: "branch" \| "head_office", branchId?, branchName? }`. Required and immutable. When type is "branch", branchId and branchName are included. Records where the payment was physically collected. |
 | `type` | `admission` / `installment` / `exam` / `material` / `monthly` |
 | `semNumber`, `installmentNumber`, `periodMonth` | As applicable |
 | `amount` | Base amount (full, never partial) |
@@ -150,11 +151,15 @@ Corrected: fines are NOT a payment type. A fine is calculated on the fly and rec
 | `waiver` | `{ amount, reason, by, at }` — required when waived; also written to `audit` |
 | `totalReceived` | `amount + fineCharged` |
 | `mode` | `cash` / `upi` / `bank` |
-| `collectedBy` | `{ email, name }` |
+| `collectedBy` | Map: `{ email, name, role }`. Records who collected the payment. Branch Heads always record their own email/name/role (not editable). |
 | `collectedAt` | Server timestamp |
 | `receiptNo` | See OPEN-2 |
 
 Payments are immutable. Only Super Admin may delete (secure delete flow).
+
+**Reports and settlement:** Reports include the columns **Collected By** and **Collected At**. The report footer shows counts and totals grouped by **Collected At**, by **Collected By**, and by payment mode, plus counts of receipts, waivers and fines. A settlement view per branch separates "collected physically by the branch head" (`paidAt.type == "branch"` and `paidAt.branchId ==` the Branch Head's own `branchId` and `collectedBy.email ==` the Branch Head's email) from "collected by the Super Admin for their students" (`paidAt.type == "head_office"` or `paidAt.branchId !=` the Branch Head's own `branchId`).
+
+**Planned rules:** A Branch Head may create payments only for students of their own branch and only with `paidAt.type == "branch"` and `paidAt.branchId ==` their own `branchId`. The Super Admin may create payments for any student with any `paidAt`.
 
 ---
 

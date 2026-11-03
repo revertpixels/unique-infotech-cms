@@ -88,3 +88,31 @@ Decision: Super Admin is recognised by email+password provider and the locked em
 ## 15. Firestore Region Correction
 
 Decision: Firestore (default) database recreated in asia-south1 (Mumbai) because the original database had been created in nam5 (US multi-region) contrary to the Master Plan. Reasoning: a database location cannot be changed after creation; branch heads use mobile networks in West Bengal, so latency matters; only one bootstrap document existed so recreation cost nothing. Rules and the Super Admin users document were redeployed/recreated.
+
+## 16. Session and Login Design (Phase 1 Step 4)
+
+Decision: session persistence is per-tab (browserSessionPersistence) because branch PCs are shared; 30-minute inactivity logout; Super Admin = password method only, Heads = Google only, both checked in client AND rules; login page shows no organisation name because rules deny unauthenticated reads and nothing may be hardcoded; no-cache hosting headers because ES module imports are not covered by the ?v= query.
+
+## 17. Dashboard Shell Design (Phase 1 Step 5)
+
+Decision: single ROUTES table in router.js drives menu, titles and access; switcher shown to Super Admin only, heads locked to their section; client-side route checks are for usability only and Firestore rules remain the real enforcement; unbuilt pages show a neutral empty state instead of sample data; fragment HTML is injected via innerHTML only from our own static files, all data-derived text uses textContent; app version shown in the sidebar footer so the owner can confirm deployments; org name read from settings/org_config with a neutral fallback.
+
+Module URL rule: every module imported by more than one file must use an identical URL everywhere (including any ?v= query) because the browser treats different URLs as different module instances; app.js keeps ?v=<APP_VERSION> from index.html and sidebar.js; router.js, auth.js and firebase-config.js are imported WITHOUT a query string.
+
+## 18. Brand Palette and Logo Assets
+
+Decision: palette derived from the official client logo (sampled royal blue #323A85); the logo is kept as the untouched official JPG with white background (no transparency attempt); the UI uses resized copies inside a white tile; school teal darkened to #0F766E and text-mute darkened to #6B6B6B for readable contrast (white on the old teal was 3.74:1, old muted grey 3.45:1); the active sidebar item uses a soft glow plus an accent bar because the primary is dark against the sidebar.
+
+Reasoning: logo/UI colour harmony, accessibility, speed on mobile networks, no risk of damaging official artwork.
+
+## 19. Where-Collected Tracking
+
+Decision: every payment records where it was physically collected (paidAt = a branch or head_office) in addition to the student's home branch and who collected it. Branch Heads always record their own branch; the Super Admin chooses the location. Reports get a Collected At column and summary counts.
+
+Reasoning: the Super Admin can take payments for any branch's student, so branch heads' cash handover must be reconcilable.
+
+## 20. Session and Period Model (interim)
+
+Decision: the Youth session is a half-year (Jan-Jun or Jul-Dec) and the School period is a calendar month, both computed from today's date; this is an interim assumption pending client confirmation of the academic session format (pending input #7).
+
+Reasoning: date-based calculations for installments, dues, and fines require a defined period model; deferring to client confirmation avoids rework later.

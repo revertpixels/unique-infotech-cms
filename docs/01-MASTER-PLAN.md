@@ -157,6 +157,8 @@ Example: 6-month course starting January:
 
 Every payment MUST record **"Collected By"** (branch head name + email + timestamp).
 
+Every payment MUST also record **where it was physically collected** (`paidAt`): either a branch or `head_office`, in addition to the student's home branch and who collected it. Branch Heads always record their own branch (not editable). The Super Admin chooses the location (default Head Office, or any branch) when taking a payment for any student. Receipts print a "Collected At" line.
+
 #### Required Student Documents (upload during admission)
 | Document | Required | Max Size | Target Size (post-compression) |
 |---|---|---|---|
@@ -239,21 +241,22 @@ Every payment MUST record **"Collected By"** (branch head name + email + timesta
 Defined in `public/css/base/variables.css` — single source of truth.
 
 **Youth Context (default, `body[data-ctx="youth"]`):**
-- `--primary: #4F2DA3` (deep royal purple)
-- `--primary-hover: #3F2385`
-- `--primary-soft: #F3EFFB`
-- `--primary-light: #7C5CD4`
+- `--primary: #323A85` (royal blue, derived from the official client logo)
+- `--primary-hover: #262D6E`
+- `--primary-soft: #EEF0FA`
+- `--primary-light: #5B66C4`
 
 **School Context (`body[data-ctx="school"]`):**
-- `--primary: #0D9488` (teal)
-- `--primary-hover: #0F766E`
+- `--primary: #0F766E` (teal)
+- `--primary-hover: #0B5E58`
 - `--primary-soft: #E6F6F4`
 - `--primary-light: #2DD4BF`
 
 **Sidebar (always dark):**
-- `--sidebar-bg: #1A1530`
-- `--sidebar-text: #B4ADC9`
-- `--sidebar-hover: #2A2246`
+- `--sidebar-bg: #14163A`
+- `--sidebar-text: #B3B8D6`
+- `--sidebar-hover: #1F2352`
+- `--sidebar-border: #1F2352`
 
 **Surfaces:**
 - `--bg: #F6F6F8`
@@ -267,6 +270,8 @@ Defined in `public/css/base/variables.css` — single source of truth.
 - Danger `#DC2626` / soft `#FEF2F2`
 - Info `#2563EB` / soft `#EFF6FF`
 - Amber `#F59E0B` / soft `#FFFBEB`
+
+**Branding assets:** `logo.jpg` is the untouched official original (white background, kept as JPG by decision). The UI uses `logo-192.jpg` inside a white tile. PDF receipts and reports use `logo-512.jpg`.
 
 ### 6.3 Icon System
 - **Lucide Icons v0.344.0** via CDN
@@ -287,7 +292,7 @@ Defined in `public/css/base/variables.css` — single source of truth.
 ### 6.5 Design Philosophy (LOCKED)
 > **Hybrid: Classic Institutional Structure + Modern Clean SaaS UX.**
 > - High information density, scannable at a glance
-> - Deep purple / teal institutional tones
+> - Deep navy-indigo (from the official logo) / teal institutional tones
 > - Crisp borders, flat surfaces, zero drop-shadow fluff on data cards
 > - Serious, government-grade feel — NEVER generic AI "startup" template look
 > - No gradients on data surfaces (gradients only inside sidebar session card and chart fills)
@@ -408,7 +413,7 @@ Defined in `public/css/base/variables.css` — single source of truth.
 - School Payment History & Receipts
 
 ### Phase 6: Reports & Archives
-- Reports page (date-range + single-date filter)
+- Reports page (date-range + single-date filter). Reports have columns **Collected By** and **Collected At**. The report footer shows counts and totals grouped by **Collected At**, by **Collected By**, and by payment mode, plus counts of receipts, waivers and fines. A settlement view per branch separates cash physically collected by the branch head (`paidAt` = their branch and `collectedBy` = them) from payments the Super Admin collected for that branch's students (`paidAt` = head_office or another branch).
 - Excel export (SheetJS) — all data types
 - PDF export (html2pdf.js)
 - Archive module (Super Admin only):

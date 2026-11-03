@@ -4,57 +4,156 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Unique Infotech CMS</title>
-  <!-- TEMPORARY - real favicon added once the official PNG logo is received -->
-  <link rel="icon" href="data:,">
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/images/favicon-32.png">
+  <link rel="apple-touch-icon" href="/assets/images/apple-touch-icon.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/main.css">
-  <!-- TEMPORARY - removed when the real shell is built -->
   <style>
-    body {
-      min-height: 100vh;
-      display: grid;
-      place-items: center;
-      padding: 1rem;
-    }
-    .card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--r-lg);
-      padding: 2rem;
-      max-width: 420px;
-      width: 100%;
-      text-align: center;
-    }
-    .card svg {
-      color: var(--primary);
-      width: 40px;
-      height: 40px;
-      margin: 0 auto 0.75rem;
-    }
-    .card h1 {
-      color: var(--primary);
-      margin-bottom: 0.5rem;
-    }
-    #version-line {
-      color: var(--text-mute);
-      margin-top: 0.75rem;
+    body.auth-pending {
+      visibility: hidden;
     }
   </style>
   <script src="https://unpkg.com/lucide@0.344.0/dist/umd/lucide.min.js"></script>
 </head>
-<body data-ctx="youth">
-  <div class="card">
-    <i data-lucide="check-circle"></i>
-    <h1>Foundation check</h1>
-    <p>Design tokens, fonts and Firebase SDK loaded.</p>
-    <p id="version-line"></p>
+<body class="auth-pending" data-ctx="youth">
+  <div class="app" id="app">
+    <div class="sb-backdrop" id="sb-backdrop"></div>
+    <aside class="sidebar" id="sidebar" aria-label="Sidebar"></aside>
+    <div class="main">
+      <header class="topbar" id="topbar"></header>
+      <main class="view" id="view" tabindex="-1"></main>
+    </div>
   </div>
   <script type="module">
-    import { APP_VERSION } from './js/core/app.js?v=1.0.1';
-    document.getElementById('version-line').textContent = 'Version ' + APP_VERSION;
+    import { getContext, setContext, loadSavedContext } from './js/core/app.js?v=1.2.0';
+    import { requireSession, logout } from './js/core/guard.js?v=1.2.0';
+    import { startRouter } from './js/core/router.js';
+    import { renderSidebar, setActiveRoute, setCollapsed, toggleDrawer, closeDrawer, initSidebar } from './js/components/sidebar.js?v=1.2.0';
+    import { renderTopbar, setPageTitle, setSwitcherActive } from './js/components/topbar.js?v=1.2.0';
+    import { db } from './js/config/firebase-config.js';
+    import { doc, getDoc } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
+
+    (async () => {
+      const profile = await requireSession();
+
+      let startCtx;
+      if (profile.role === 'superadmin') {
+        startCtx = loadSavedContext() || 'youth';
+      } else if (profile.role === 'branch_head') {
+        startCtx = 'youth';
+      } else {
+        startCtx = 'school';
+      }
+      setContext(startCtx);
+
+      let currentRouteKey = null;
+
+      function applyContext(ctx) {
+        setContext(ctx);
+        renderSidebar({
+          profile,
+          ctx: getContext(),
+          orgName,
+          onNavigate: closeDrawer,
+          onLogout: () => logout('signedout')
+        });
+        setSwitcherActive(getContext());
+        setActiveRoute(currentRouteKey);
+      }
+
+      try {
+        const orgSnap = await getDoc(doc(db, 'settings/org_config'));
+        if (orgSnap.exists()) {
+          window.APP_CACHE.org = orgSnap.data();
+        }
+      } catch (e) {
+        // silent
+      }
+
+      try {
+        if (profile.role === 'branch_head' && profile.branchId) {
+          const brSnap = await getDoc(doc(db, 'branches', profile.branchId));
+          if (brSnap.exists()) {
+            profile.branchName = brSnap.data().name;
+            if (window.APP_CACHE) {
+              window.APP_CACHE.branches = [brSnap.data()];
+            }
+          }
+        }
+      } catch (e) {
+        // silent
+      }
+
+      const orgName = (window.APP_CACHE && window.APP_CACHE.org && window.APP_CACHE.org.orgName) ? window.APP_CACHE.org.orgName : null;
+
+      renderTopbar({
+        profile,
+        ctx: getContext(),
+        canSwitch: profile.role === 'superadmin',
+        onMenu: () => {
+          const app = document.getElementById('app');
+          if (window.innerWidth > 768) {
+            setCollapsed(!app.classList.contains('sb-collapsed'));
+          } else {
+            toggleDrawer();
+          }
+        },
+        onSwitch: (ctx) => {
+          applyContext(ctx);
+          if (location.hash !== '#/dashboard') {
+            location.hash = '#/dashboard';
+          }
+        }
+      });
+
+      renderSidebar({
+        profile,
+        ctx: getContext(),
+        orgName,
+        onNavigate: closeDrawer,
+        onLogout: () => logout('signedout')
+      });
+
+      initSidebar();
+      setSwitcherActive(getContext());
+
+      const backdrop = document.getElementById('sb-backdrop');
+      if (backdrop) {
+        backdrop.addEventListener('click', closeDrawer);
+      }
+
+      startRouter({
+        profile,
+        getContext,
+        setContext: applyContext,
+        onRouteChange: (key, route) => {
+          currentRouteKey = key;
+          setActiveRoute(key);
+          if (route) setPageTitle(route.title);
+          closeDrawer();
+        }
+      });
+
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+          closeDrawer();
+        }
+      });
+
+      window.addEventListener('resize', () => {
+        if (window.innerWidth > 768) {
+          closeDrawer();
+        }
+      });
+
+      document.body.classList.remove('auth-pending');
+      if (typeof lucide !== 'undefined') {
+        lucide.createIcons();
+      }
+    })();
   </script>
-  <script type="module" src="js/core/app.js?v=1.0.1"></script>
+  <script type="module" src="js/core/app.js?v=1.2.0"></script>
 </body>
 </html>

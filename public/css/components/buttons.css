@@ -1,0 +1,87 @@
+.btn {
+  font: inherit;
+  height: 40px;
+  padding: 0 16px;
+  border-radius: var(--r);
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  border: none;
+  position: relative;
+}
+
+.btn.full {
+  width: 100%;
+}
+
+.btn.pri {
+  background: var(--primary);
+  color: var(--surface);
+}
+
+.btn.pri:hover {
+  background: var(--primary-hover);
+}
+
+.btn.ghost {
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  color: var(--text);
+}
+
+.btn.ghost:hover {
+  background: var(--primary-soft);
+}
+
+.btn[disabled] {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn.loading {
+  color: transparent !important;
+}
+
+.btn.loading::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  margin: -8px 0 0 -8px;
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--primary-light);
+  border-top-color: var(--surface);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.btn.ghost.loading::after {
+  border: 2px solid var(--border-strong);
+  border-top-color: var(--primary);
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.icon-btn {
+  width: 36px;
+  height: 36px;
+  background: none;
+  border: none;
+  border-radius: var(--r);
+  color: var(--text-sec);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.icon-btn:hover {
+  color: var(--primary);
+}

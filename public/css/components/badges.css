@@ -1,0 +1,82 @@
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.pill svg {
+  width: 10px;
+  height: 10px;
+}
+
+.pill.up {
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.pill.down {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.pill.neutral {
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+
+.due-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.due-tag.overdue {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.due-tag.soon {
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+
+.due-tag.calm {
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.la-mode {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: var(--r);
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.la-mode.cash {
+  background: var(--info-soft);
+  color: var(--info);
+}
+
+.la-mode.upi {
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.la-mode.bank {
+  background: var(--primary-soft);
+  color: var(--primary);
+}

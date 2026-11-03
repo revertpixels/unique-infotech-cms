@@ -1,0 +1,72 @@
+.topbar {
+  height: var(--topbar-h);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 20px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 30;
+}
+
+#page-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-right: auto;
+}
+
+.ctx-switch {
+  display: inline-flex;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r);
+  overflow: hidden;
+}
+
+.ctx-switch button {
+  padding: 6px 12px;
+  font-weight: 600;
+  color: var(--text-sec);
+  background: none;
+  border: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.9rem;
+}
+
+.ctx-switch button svg {
+  width: 15px;
+  height: 15px;
+}
+
+.ctx-switch button[aria-pressed="true"] {
+  background: var(--primary);
+  color: var(--surface);
+}
+
+.user-chip {
+  text-align: right;
+}
+
+.chip-name {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.chip-role {
+  font-size: 0.8rem;
+  color: var(--text-mute);
+}
+
+@media (max-width: 768px) {
+  .user-chip .chip-name,
+  .ctx-switch span {
+    display: none;
+  }
+}

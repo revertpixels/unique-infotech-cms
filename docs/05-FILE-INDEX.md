@@ -25,13 +25,15 @@ unique-infotech-cms/
 └── public/
     ├── 404.html
     ├── index.html
+    ├── temp_ref_dashboard.html
     ├── assets/
     │   ├── icons/
     │   └── images/
-    │       ├── favicon.ico
+    │       ├── favicon-32.png
+    │       ├── apple-touch-icon.png
     │       ├── logo.jpg
-    │       ├── logo.png
-    │       └── logo-white.png
+    │       ├── logo-192.jpg
+    │       └── logo-512.jpg
     ├── css/
     │   ├── main.css
     │   ├── base/
@@ -67,7 +69,8 @@ unique-infotech-cms/
     │   ├── core/
     │   │   ├── app.js
     │   │   ├── auth.js
-    │   │   └── guard.js
+    │   │   ├── guard.js
+    │   │   └── router.js
     │   ├── pages/
     │   │   ├── admissions.page.js
     │   │   ├── archives.page.js
@@ -113,3 +116,6 @@ unique-infotech-cms/
         ├── school-fees.html
         ├── school-students.html
         └── students.html
+router.js is added to public/js/core/ as the single source of truth for dashboard routes, menu, titles and access control.
+
+**TEMPORARY:** `temp_ref_dashboard.html` at the project root — owner's visual reference containing demo data; not deployed; delete after Phase 2.

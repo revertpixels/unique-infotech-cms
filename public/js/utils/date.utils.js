@@ -1,71 +1,62 @@
-export function formatDate(date) {
-  if (!date) return '';
-  const d = new Date(date);
-  if (isNaN(d.getTime())) return '';
-  return d.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+// Youth session (half-year) and School period (calendar month) are an interim assumption (Decision 20, Known Issue ISS-006).
+
+function daysBetween(a, b) {
+  return Math.round((b - a) / 86400000);
 }
 
-export function formatDateShort(date) {
-  if (!date) return '';
-  const d = new Date(date);
-  if (isNaN(d.getTime())) return '';
-  return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+export function formatDayMonth(date) {
+  return date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
 }
 
-export function formatDateTime(date) {
-  if (!date) return '';
-  const d = new Date(date);
-  if (isNaN(d.getTime())) return '';
-  return d.toLocaleString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+export function getRunningPeriod(ctx, now = new Date()) {
+  const y = now.getFullYear();
+  const m = now.getMonth();
+  const today = new Date(y, m, now.getDate());
+  let start, end, name, kindLabel;
+  if (ctx === 'youth') {
+    if (m <= 5) { start = new Date(y, 0, 1); end = new Date(y, 5, 30); name = `Jan–Jun ${y}`; }
+    else { start = new Date(y, 6, 1); end = new Date(y, 11, 31); name = `Jul–Dec ${y}`; }
+    kindLabel = 'Running session';
+  } else {
+    start = new Date(y, m, 1);
+    end = new Date(y, m + 1, 0);
+    name = now.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+    kindLabel = 'Current month';
+  }
+  const totalDays = daysBetween(start, end) + 1;
+  const daysFromStartToToday = daysBetween(start, today);
+  let percent = Math.round((daysFromStartToToday + 1) / totalDays * 100);
+  if (percent < 0) percent = 0;
+  if (percent > 100) percent = 100;
+  const daysLeft = Math.max(0, daysBetween(today, end));
+  return { ctx, kindLabel, name, start, end, percent, daysLeft };
 }
 
-export function daysBetween(date1, date2) {
-  const d1 = new Date(date1);
-  const d2 = new Date(date2);
-  if (isNaN(d1.getTime()) || isNaN(d2.getTime())) return 0;
-  const diff = d2 - d1;
-  return Math.ceil(diff / (1000 * 60 * 60 * 24));
+export function getNextDueDate(now = new Date(), dueDay = 10) {
+  const d = Number.isInteger(dueDay) && dueDay >= 1 && dueDay <= 28 ? dueDay : 10;
+  const y = now.getFullYear();
+  const m = now.getMonth();
+  if (now.getDate() <= d) return new Date(y, m, d);
+  return new Date(y, m + 1, d);
 }
 
-export function isAfter10th(date) {
-  if (!date) return false;
-  const d = new Date(date);
-  if (isNaN(d.getTime())) return false;
-  return d.getDate() > 10;
-}
-
-export function calculateFine(dueDate, ratePerDay) {
-  if (!dueDate || !ratePerDay) return 0;
-  const due = new Date(dueDate);
-  if (isNaN(due.getTime())) return 0;
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  due.setHours(0, 0, 0, 0);
-  if (today <= due) return 0;
-  const daysLate = (today - due) / (1000 * 60 * 60 * 24);
-  return Math.max(0, Math.floor(daysLate) * ratePerDay);
-}
-
-export function addDays(date, days) {
-  const d = new Date(date);
-  d.setDate(d.getDate() + days);
-  return d;
-}
-
-export function isSameDay(date1, date2) {
-  const d1 = new Date(date1);
-  const d2 = new Date(date2);
-  if (isNaN(d1.getTime()) || isNaN(d2.getTime())) return false;
-  return d1.toDateString() === d2.toDateString();
-}
-
-export function parseDate(dateStr) {
-  if (!dateStr) return null;
-  const d = new Date(dateStr);
-  return isNaN(d.getTime()) ? null : d;
-}
-
-export function todayISO() {
-  const d = new Date();
-  return d.toISOString().split('T')[0];
+export function getPeriodOptions(ctx, now = new Date()) {
+  const isYouth = ctx === 'youth';
+  const count = isYouth ? 3 : 4;
+  const opts = [];
+  let cursor = now;
+  for (let i = 0; i < count; i++) {
+    const rp = getRunningPeriod(ctx, cursor);
+    opts.push({ label: rp.name, start: rp.start, end: rp.end, isCurrent: i === 0 });
+    // move cursor to a date in the previous period
+    if (isYouth) {
+      const m = cursor.getMonth();
+      const y = cursor.getFullYear();
+      if (m <= 5) cursor = new Date(y - 1, 8, 15); // previous Jul-Dec
+      else cursor = new Date(y, 2, 15); // previous Jan-Jun
+    } else {
+      cursor = new Date(cursor.getFullYear(), cursor.getMonth() - 1, cursor.getDate());
+    }
+  }
+  return opts;
 }

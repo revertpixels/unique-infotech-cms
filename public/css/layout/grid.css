@@ -1,20 +1,13 @@
 .app {
-  display: grid;
-  grid-template-columns: var(--sb-w) minmax(0, 1fr);
   min-height: 100vh;
-  transition: grid-template-columns 0.2s;
-}
-
-@media (min-width: 769px) {
-  .app.sb-collapsed {
-    grid-template-columns: var(--sb-w-collapsed) minmax(0, 1fr);
-  }
 }
 
 .main {
   min-width: 0;
   display: flex;
   flex-direction: column;
+  margin-left: var(--sb-w);
+  transition: margin-left .2s ease;
 }
 
 .view {
@@ -90,5 +83,14 @@
   }
   .view {
     padding: 14px;
+  }
+  .main {
+    margin-left: 0;
+  }
+}
+
+@media (min-width: 769px) {
+  .app.sb-collapsed .main {
+    margin-left: var(--sb-w-collapsed);
   }
 }

@@ -5,8 +5,6 @@
 
 ---
 
-## LOG ENTRY FORMAT (COPY THIS FOR EVERY NEW ENTRY)
-
 ```
 ---
 ### [YYYY-MM-DD HH:MM] Version X.Y.Z — Phase N · Step M
@@ -44,6 +42,162 @@
 ## ACTIVE LOG (NEWEST ON TOP)
 
 ---
+
+### [2026-11-03 14:52] Version 1.3.4 — Phase 1 · Step 5c-3e
+
+**What was built:**
+- topbar.js — bell dot hidden by default; new export setNotifCount(n) shows the dot and updates aria-label only when n > 0
+- topbar.css — .tb-dot[hidden] { display: none; }
+- APP_VERSION and all ?v= strings -> 1.3.4
+
+**Files touched:**
+- MODIFIED: public/js/components/topbar.js, public/css/layout/topbar.css, public/js/core/app.js, public/js/core/router.js, public/js/components/sidebar.js, public/index.html, public/pages/login.html, docs/02-PROGRESS-LOG.md
+
+**Firestore changes:** None.
+
+**Tested on:** Pending owner live test.
+
+---
+
+
+
+### [2026-11-03 14:51] Version 1.3.3 — Phase 1 · Step 5c-3d
+
+**What was built:**
+- topbar.js — global search removed from topbar (owner decision; search will live on the Students page)
+- topbar.css — .tb-search rules removed; title pushes controls right; completed density pass (38px controls, 13px text, 17px title, 34px avatar, 16–18px icons); responsive rules at 1100px / 768px
+- Note: 5c-3c only applied icon sizes; remaining sizes completed here
+- APP_VERSION and all ?v= strings -> 1.3.3
+
+**Files touched:**
+- MODIFIED: public/js/components/topbar.js, public/css/layout/topbar.css, public/js/core/app.js, public/js/core/router.js, public/js/components/sidebar.js, public/index.html, public/pages/login.html, docs/02-PROGRESS-LOG.md
+
+**Firestore changes:** None.
+
+**Tested on:** Pending owner live test.
+
+---
+
+
+
+### [2026-11-03 14:48] Version 1.3.2 — Phase 1 · Step 5c-3c
+
+**What was built:**
+- topbar.css — density pass: icons 18px (16px in search/session), controls 38px, text 13px, title 17px, avatar 34px; matches sidebar scale
+- All ?v= strings and APP_VERSION -> 1.3.2; verified single app.js module URL
+
+**Files touched:**
+- MODIFIED: public/css/layout/topbar.css, public/js/core/app.js, public/js/core/router.js, public/js/components/sidebar.js, public/js/components/topbar.js, public/index.html, public/pages/login.html, docs/02-PROGRESS-LOG.md
+
+**Firestore changes:** None.
+
+**Tested on:** Pending owner live test.
+
+---
+
+
+
+### [2026-11-03 14:44] Version 1.3.1 — Phase 1 · Step 5c-3b-fix
+
+**What was built:**
+- topbar.js — repaired: menu icon creation, single click listener per context button, single chip name/role inside .chip-text, session fields matched to date.utils return shape, brace balance
+- APP_VERSION and all ?v= strings 1.3.0 -> 1.3.1; main.css link now versioned
+- Rule adopted: every step that edits JS/CSS bumps the patch version (cache busting)
+
+**Files touched:**
+- MODIFIED: public/js/components/topbar.js, public/js/core/app.js, public/js/core/router.js, public/js/components/sidebar.js, public/index.html, public/pages/login.html, docs/02-PROGRESS-LOG.md
+
+**Firestore changes:** None.
+
+**Tested on:** Pending owner live test.
+
+---
+
+
+
+### [2026-11-03 14:42] Version 1.3.0 — Phase 1 · Step 5c-3b
+
+**What was built:**
+- topbar.js — full topbar: menu (aria-expanded), title, context switch (Super Admin only), search input (UI only), session selector with saved choice, notification bell with dot, user badge with initials
+- topbar.css — rewritten to match temp_ref_dashboard.html; responsive at 1100px and 768px
+- sidebar.css — thin visible nav scrollbar so lower menu items are discoverable
+
+**Files touched:**
+- MODIFIED: public/js/components/topbar.js, public/css/layout/topbar.css, public/css/layout/sidebar.css, docs/02-PROGRESS-LOG.md
+
+**Firestore changes:** None.
+
+**Tested on:** Pending owner live test.
+
+**Next task:** Owner retest (desktop, collapsed, mobile drawer); then Git commit of 5c-2c..5c-3b; then Step 5d.
+
+---
+
+
+
+### [2026-11-03 14:17] Version 1.2.0 — Phase 1 · Step 5c-2d
+
+**What was built:**
+- public/js/components/sidebar.js — added nav.className = 'sb-nav' so .sb-nav link styles apply (links were rendering as default blue underlined)
+- public/css/layout/grid.css — added .main { grid-column: 2; } inside desktop media block; fixed .sidebar is out of grid flow, so .main was landing in column 1 behind the sidebar (topbar and content were hidden)
+- docs/02-PROGRESS-LOG.md — moved 5c-2 entry under ACTIVE LOG, added 5c-2c and 5c-2d entries
+
+**Why:**
+- Bugs introduced in Step 5c-2 sidebar redesign; found during owner live test.
+
+**Files touched:**
+- MODIFIED: public/js/components/sidebar.js
+- MODIFIED: public/css/layout/grid.css
+- MODIFIED: docs/02-PROGRESS-LOG.md
+
+**Firestore changes:** None.
+
+**Tested on:** Pending owner live test.
+
+**Next task:** Owner retest; confirm mobile media rules; then Step 5c-3: topbar, dropdown component, boot script.
+
+---
+
+### [2026-11-03 14:05] Version 1.2.0 — Phase 1 · Step 5c-2c
+
+**What was built:**
+- Cache-busting: added ?v=1.2.0 to router.js import (index.html) and to router.js and date.utils.js imports (sidebar.js)
+- public/pages/login.html — login.page.js version string 1.1.0 -> 1.2.0
+- public/js/components/topbar.js — context buttons carry data-ctx; setSwitcherActive compares data-ctx instead of label text; indentation corrected
+- public/index.html — indentation fix on tagline line
+
+**Why:**
+- Prevent stale cached modules after deploy; make switcher highlight independent of label wording.
+
+**Files touched:**
+- MODIFIED: public/index.html
+- MODIFIED: public/pages/login.html
+- MODIFIED: public/js/components/sidebar.js
+- MODIFIED: public/js/components/topbar.js
+
+**Firestore changes:** None.
+
+**Tested on:** Console clean at v1.2.0 (owner). Layout bugs found -> fixed in 5c-2d.
+
+**Next task:** Step 5c-2d.
+
+---
+
+### [2026-11-03 08:54] Version 1.2.0 — Phase 1 · Step 5c-2 (date utilities and sidebar redesign)
+
+**What was built:**
+- public/js/utils/date.utils.js — replaced entirely with formatDayMonth, getRunningPeriod, getNextDueDate, getPeriodOptions
+- public/css/layout/sidebar.css — redesigned to match temp_ref_dashboard.html sidebar
+- public/js/components/sidebar.js — rebuilt sidebar markup, tooltip, session card, identity row
+- public/index.html — added tagline and passed to renderSidebar (both calls)
+
+**Tested on:** Not yet tested. Awaiting owner live test.
+
+**Next task:** Step 5c-2c doc fixes, then Step 5c-3: topbar, dropdown component, boot script.
+
+---
+
+
 
 ### [2026-11-03 08:30] Version 1.2.0 — Phase 1 · Step 5c-1
 

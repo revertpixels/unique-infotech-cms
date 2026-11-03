@@ -1,28 +1,70 @@
-<section class="page-head">
-  <h2>Organisation</h2>
-  <p class="text-mute">Institute details shown in the sidebar, receipts and reports.</p>
-</section>
-<div class="card org-card">
+<div class="org-wrap">
+  <section class="pg-head">
+    <div class="pg-crumbs">Administration / <span>Organisation</span></div>
+    <h2>Organisation</h2>
+    <p>Institute details shown in the sidebar, receipts and reports.</p>
+  </section>
+
   <form id="org-form" novalidate>
-    <div class="field">
-      <label for="org-name">Institute name <span aria-hidden="true">*</span></label>
-      <input id="org-name" type="text" maxlength="80" required autocomplete="off" class="input">
+    <div class="set-card">
+      <div class="set-side">
+        <h3>Identity</h3>
+        <p>Name and tagline appear in the sidebar, on receipts and on reports.</p>
+        <div class="brand-preview-label">Sidebar preview</div>
+        <div class="brand-preview">
+          <img src="/assets/images/logo-192.jpg" alt="">
+          <div><b id="pv-name">Unique Infotech</b><span id="pv-tagline"></span></div>
+        </div>
+      </div>
+      <div class="set-fields">
+        <div class="ui-field span-2">
+          <div class="ui-label-row"><label for="org-name">Institute name <em>*</em></label><span class="ui-count" data-for="org-name"></span></div>
+          <div class="ui-input-wrap"><i data-lucide="building-2"></i><input id="org-name" class="ui-input" type="text" maxlength="80" autocomplete="off" placeholder="e.g. Unique Infotech"></div>
+          <div class="ui-err" id="org-name-err"></div>
+        </div>
+        <div class="ui-field span-2">
+          <div class="ui-label-row"><label for="org-tagline">Tagline</label><span class="ui-count" data-for="org-tagline"></span></div>
+          <div class="ui-input-wrap"><i data-lucide="sparkles"></i><input id="org-tagline" class="ui-input" type="text" maxlength="120" autocomplete="off" placeholder="Short line under the name"></div>
+          <div class="ui-err" id="org-tagline-err"></div>
+        </div>
+      </div>
     </div>
-    <div class="field">
-      <label for="org-tagline">Tagline</label>
-      <input id="org-tagline" type="text" maxlength="120" autocomplete="off" class="input">
+
+    <div class="set-card">
+      <div class="set-side">
+        <h3>Contact details</h3>
+        <p>Printed on fee receipts so parents and students can reach you.</p>
+      </div>
+      <div class="set-fields">
+        <div class="ui-field">
+          <div class="ui-label-row"><label for="org-phone">Phone</label></div>
+          <div class="ui-input-wrap"><i data-lucide="phone"></i><input id="org-phone" class="ui-input" type="tel" maxlength="20" autocomplete="off" placeholder="e.g. 98765 43210"></div>
+          <div class="ui-err" id="org-phone-err"></div>
+        </div>
+        <div class="ui-field">
+          <div class="ui-label-row"><label for="org-email">Email</label></div>
+          <div class="ui-input-wrap"><i data-lucide="mail"></i><input id="org-email" class="ui-input" type="email" maxlength="100" autocomplete="off" placeholder="office@example.com"></div>
+          <div class="ui-err" id="org-email-err"></div>
+        </div>
+        <div class="ui-field span-2">
+          <div class="ui-label-row"><label for="org-website">Website</label></div>
+          <div class="ui-input-wrap"><i data-lucide="globe"></i><input id="org-website" class="ui-input" type="text" maxlength="100" autocomplete="off" placeholder="www.example.com"></div>
+          <div class="ui-err" id="org-website-err"></div>
+        </div>
+        <div class="ui-field span-2">
+          <div class="ui-label-row"><label for="org-address">Address</label><span class="ui-count" data-for="org-address"></span></div>
+          <div class="ui-input-wrap top"><i data-lucide="map-pin"></i><textarea id="org-address" class="ui-input" rows="3" maxlength="300" placeholder="Street, town, district, state"></textarea></div>
+          <div class="ui-err" id="org-address-err"></div>
+        </div>
+      </div>
     </div>
-    <div class="field">
-      <label for="org-phone">Phone</label>
-      <input id="org-phone" type="tel" maxlength="20" autocomplete="off" class="input">
+
+    <div class="save-bar">
+      <span id="org-state" class="save-state" role="status" aria-live="polite">All changes saved</span>
+      <div class="save-actions">
+        <button type="button" id="org-discard" class="ui-btn ghost" disabled><i data-lucide="rotate-ccw"></i>Discard</button>
+        <button type="submit" id="org-save" class="ui-btn primary" disabled><i data-lucide="save"></i>Save changes</button>
+      </div>
     </div>
-    <div class="field">
-      <label for="org-address">Address</label>
-      <textarea id="org-address" rows="3" maxlength="300" class="input"></textarea>
-    </div>
-    <p id="org-msg" class="org-msg" role="status" aria-live="polite"></p>
-    <button id="org-save" type="submit" class="btn pri">
-      <i data-lucide="save"></i><span>Save</span>
-    </button>
   </form>
 </div>

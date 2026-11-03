@@ -43,6 +43,55 @@
 
 ---
 
+### [2026-11-03 16:08] Version 1.4.0 — Phase 1 · Step 5d-2d-B
+
+**What was built:**
+- org-details.html — rebuilt with UI kit: Identity and Contact cards, icon fields, counters, live sidebar preview, sticky save bar
+- org-details.page.js — dirty tracking, validation (name, phone, email, website), Discard, Save
+- New fields saved: email, website
+- topbar.css — owner manually repaired #page-title rule and restored 768px media block
+
+**Firestore changes:**
+- settings/org_config: + email, website (merge)
+
+**Tested on:** Pending owner live test.
+
+---
+
+
+
+### [2026-11-03 15:18] Version 1.3.9 — Phase 1 · Step 5d-2d-A
+
+**What was built:**
+- CREATED css/components/ui-kit.css — shared modern UI kit
+- CREATED css/pages/settings.css — organisation brand preview styles
+- main.css — imports ui-kit.css and settings.css
+- topbar.css — nowrap on context switch, session button and title
+
+**Firestore changes:** None.
+
+**Tested on:** Pending owner live test.
+
+---
+
+
+
+### [2026-11-03 15:12] Version 1.3.9 — Phase 1 · Step 5d-2d
+
+**What was built:**
+- APP_VERSION and all ?v= strings -> 1.3.9
+
+**Files touched:**
+- MODIFIED: public/js/core/app.js, public/js/core/router.js, public/js/components/sidebar.js, public/js/components/topbar.js, public/index.html, public/pages/login.html, docs/02-PROGRESS-LOG.md
+
+**Firestore changes:** None.
+
+**Tested on:** Pending owner live test.
+
+---
+
+
+
 ### [2026-11-03 15:08] Version 1.3.8 — Phase 1 · Step 5d-2c
 
 **What was built:**

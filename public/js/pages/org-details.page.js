@@ -1,14 +1,60 @@
 import { db } from '../config/firebase-config.js';
 import { doc, getDoc, setDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
 
-function $(id) { return document.getElementById(id); }
+const KEYS = ['name', 'tagline', 'phone', 'email', 'website', 'address'];
+const DB_FIELD = { name: 'orgName', tagline: 'tagline', phone: 'phone', email: 'email', website: 'website', address: 'address' };
 
-function showMsg(text, isError) {
-  const el = $('org-msg');
-  if (!el) return;
-  el.textContent = text;
-  el.classList.toggle('is-error', !!isError);
-  el.classList.toggle('is-ok', !isError);
+function $(id) { return document.getElementById(id); }
+function input(k) { return $('org-' + k); }
+
+function readForm() {
+  const v = {};
+  KEYS.forEach((k) => { const el = input(k); v[k] = el ? el.value.trim() : ''; });
+  return v;
+}
+
+function fillForm(v) {
+  KEYS.forEach((k) => { const el = input(k); if (el) el.value = v[k] || ''; });
+}
+
+function validate(v) {
+  const err = {};
+  if (!v.name) err.name = 'Institute name is required.';
+  else if (v.name.length < 2) err.name = 'Name is too short.';
+  if (v.phone && !/^[0-9+\-\s()]{7,20}$/.test(v.phone)) err.phone = 'Use digits, spaces, + or - only.';
+  if (v.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.email)) err.email = 'Enter a valid email address.';
+  if (v.website && !/^(https?:\/\/)?[^\s.]+(\.[^\s.]+)+$/i.test(v.website)) err.website = 'Enter a valid website, e.g. www.example.com';
+  return err;
+}
+
+function showErrors(err) {
+  KEYS.forEach((k) => {
+    const box = $('org-' + k + '-err');
+    const el = input(k);
+    if (box) box.textContent = err[k] || '';
+    if (el && el.parentElement) el.parentElement.classList.toggle('is-invalid', !!err[k]);
+  });
+}
+
+function updateCounters() {
+  document.querySelectorAll('.ui-count[data-for]').forEach((c) => {
+    const el = $(c.dataset.for);
+    if (el) c.textContent = el.value.length + '/' + el.maxLength;
+  });
+}
+
+function updatePreview(v) {
+  const n = $('pv-name');
+  const t = $('pv-tagline');
+  if (n) n.textContent = v.name || 'Institute name';
+  if (t) t.textContent = v.tagline || '';
+}
+
+function setState(text, cls) {
+  const s = $('org-state');
+  if (!s) return;
+  s.textContent = text;
+  s.className = 'save-state' + (cls ? ' ' + cls : '');
 }
 
 function updateSidebarBrand(orgName, tagline) {
@@ -27,52 +73,85 @@ function updateSidebarBrand(orgName, tagline) {
 
 export async function mount({ profile }) {
   const form = $('org-form');
-  const btn = $('org-save');
-  if (!form || !btn) return;
+  const saveBtn = $('org-save');
+  const discardBtn = $('org-discard');
+  if (!form || !saveBtn || !discardBtn) return;
   const ref = doc(db, 'settings', 'org_config');
+  let saved = { name: '', tagline: '', phone: '', email: '', website: '', address: '' };
+  let saving = false;
+  let touched = false;
+
+  function isDirty(v) { return KEYS.some((k) => v[k] !== saved[k]); }
+
+  function refresh() {
+    const v = readForm();
+    const dirty = isDirty(v);
+    updateCounters();
+    updatePreview(v);
+    if (touched) showErrors(validate(v));
+    saveBtn.disabled = saving || !dirty;
+    discardBtn.disabled = saving || !dirty;
+    if (!saving) setState(dirty ? 'Unsaved changes' : 'All changes saved', dirty ? 'dirty' : '');
+  }
 
   try {
     const snap = await getDoc(ref);
     if (snap.exists()) {
       const d = snap.data();
-      $('org-name').value = d.orgName || '';
-      $('org-tagline').value = d.tagline || '';
-      $('org-phone').value = d.phone || '';
-      $('org-address').value = d.address || '';
+      KEYS.forEach((k) => { saved[k] = d[DB_FIELD[k]] || ''; });
     }
   } catch (e) {
     console.error('[org] load failed', e);
-    showMsg('Could not load organisation details (' + (e.code || 'error') + ').', true);
+    setState('Could not load details (' + (e.code || 'error') + ')', 'error');
   }
+  fillForm(saved);
+  refresh();
+
+  form.addEventListener('input', () => { touched = true; refresh(); });
+
+  discardBtn.addEventListener('click', () => {
+    fillForm(saved);
+    touched = false;
+    showErrors({});
+    refresh();
+  });
 
   form.addEventListener('submit', async (ev) => {
     ev.preventDefault();
-    const orgName = $('org-name').value.trim();
-    const tagline = $('org-tagline').value.trim();
-    const phone = $('org-phone').value.trim();
-    const address = $('org-address').value.trim();
-    if (!orgName) {
-      showMsg('Institute name is required.', true);
-      $('org-name').focus();
+    const v = readForm();
+    touched = true;
+    const err = validate(v);
+    showErrors(err);
+    const firstBad = KEYS.find((k) => err[k]);
+    if (firstBad) {
+      setState('Please fix the highlighted fields', 'error');
+      input(firstBad).focus();
       return;
     }
-    btn.disabled = true;
-    showMsg('Saving...', false);
+    saving = true;
+    saveBtn.disabled = true;
+    discardBtn.disabled = true;
+    setState('Saving...', 'dirty');
     try {
-      await setDoc(ref, {
-        orgName, tagline, phone, address,
-        updatedAt: serverTimestamp(),
-        updatedBy: (profile && profile.email) ? profile.email : ''
-      }, { merge: true });
+      const data = {};
+      KEYS.forEach((k) => { data[DB_FIELD[k]] = v[k]; });
+      data.updatedAt = serverTimestamp();
+      data.updatedBy = (profile && profile.email) ? profile.email : '';
+      await setDoc(ref, data, { merge: true });
+      saved = Object.assign({}, v);
       window.APP_CACHE = window.APP_CACHE || {};
-      window.APP_CACHE.org = Object.assign({}, window.APP_CACHE.org || {}, { orgName, tagline, phone, address });
-      updateSidebarBrand(orgName, tagline);
-      showMsg('Organisation saved.', false);
+      window.APP_CACHE.org = Object.assign({}, window.APP_CACHE.org || {}, {
+        orgName: v.name, tagline: v.tagline, phone: v.phone, email: v.email, website: v.website, address: v.address
+      });
+      updateSidebarBrand(v.name, v.tagline);
+      saving = false;
+      refresh();
+      setState('All changes saved', '');
     } catch (e) {
       console.error('[org] save failed', e);
-      showMsg('Save failed (' + (e.code || 'error') + ').', true);
-    } finally {
-      btn.disabled = false;
+      saving = false;
+      refresh();
+      setState('Save failed (' + (e.code || 'error') + ')', 'error');
     }
   });
 

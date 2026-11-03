@@ -212,3 +212,5 @@
     padding: 0 10px;
   }
 }
+
+.ctx-btn, .ctx-btn span, #session-btn, .tb-session-label { white-space: nowrap; }

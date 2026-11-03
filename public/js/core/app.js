@@ -1,6 +1,6 @@
 import { app } from '../config/firebase-config.js';
 
-export const APP_VERSION = '1.3.8';
+export const APP_VERSION = '1.4.0';
 
 export const APP_CACHE = {
   currentUser: null,

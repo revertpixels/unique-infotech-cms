@@ -1,0 +1,51 @@
+/* Shared UI kit — used by all app pages. Login page does NOT use these classes. */
+.pg-head { margin-bottom: 20px; }
+.pg-crumbs { font-size: 12px; font-weight: 600; color: var(--text-mute); letter-spacing: .02em; margin-bottom: 6px; }
+.pg-crumbs span { color: var(--text); }
+.pg-head h2 { font-size: 22px; font-weight: 800; letter-spacing: -.01em; margin: 0; color: var(--text); }
+.pg-head p { margin: 4px 0 0; font-size: 13.5px; color: var(--text-mute); }
+
+.set-card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 28px; padding: 24px; margin-bottom: 16px; box-shadow: 0 1px 2px rgba(16, 24, 40, .04); }
+.set-side h3 { font-size: 15px; font-weight: 700; margin: 0 0 4px; color: var(--text); }
+.set-side p { font-size: 13px; color: var(--text-mute); margin: 0; line-height: 1.5; }
+.set-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 16px 18px; }
+.set-fields .span-2 { grid-column: 1 / -1; }
+
+.ui-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.ui-label-row { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.ui-label-row label { font-size: 13px; font-weight: 600; color: var(--text); }
+.ui-label-row em { color: var(--danger); font-style: normal; }
+.ui-count { font-size: 11.5px; color: var(--text-mute); font-variant-numeric: tabular-nums; }
+.ui-input-wrap { position: relative; display: flex; align-items: center; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); transition: border-color .15s, box-shadow .15s; }
+.ui-input-wrap > svg.lucide { position: absolute; left: 12px; width: 16px; height: 16px; color: var(--text-mute); pointer-events: none; }
+.ui-input-wrap.top > svg.lucide { top: 12px; }
+.ui-input { width: 100%; border: 0; outline: 0; background: transparent; font: inherit; font-size: 13.5px; color: var(--text); height: 40px; padding: 0 12px 0 38px; border-radius: 10px; }
+textarea.ui-input { height: auto; min-height: 92px; padding: 10px 12px 10px 38px; resize: vertical; line-height: 1.5; }
+.ui-input::placeholder { color: var(--text-mute); opacity: .7; }
+.ui-input-wrap:focus-within { border-color: var(--primary); box-shadow: 0 0 0 4px color-mix(in srgb, var(--primary) 14%, transparent); }
+.ui-input-wrap.is-invalid { border-color: var(--danger); box-shadow: 0 0 0 4px color-mix(in srgb, var(--danger) 12%, transparent); }
+.ui-err { font-size: 12px; color: var(--danger); min-height: 0; }
+.ui-err:empty { display: none; }
+
+.ui-btn { display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 16px; border-radius: 10px; font: inherit; font-size: 13.5px; font-weight: 600; cursor: pointer; border: 1px solid transparent; transition: background .15s, opacity .15s, box-shadow .15s; white-space: nowrap; }
+.ui-btn svg.lucide { width: 16px; height: 16px; }
+.ui-btn.primary { background: var(--primary); color: #fff; box-shadow: 0 1px 2px rgba(16, 24, 40, .12); }
+.ui-btn.primary:hover:not(:disabled) { background: color-mix(in srgb, var(--primary) 88%, #000); }
+.ui-btn.ghost { background: var(--surface); color: var(--text); border-color: var(--border); }
+.ui-btn.ghost:hover:not(:disabled) { background: var(--bg); }
+.ui-btn:disabled { opacity: .5; cursor: not-allowed; }
+.ui-btn:focus-visible { outline: 0; box-shadow: 0 0 0 4px color-mix(in srgb, var(--primary) 22%, transparent); }
+
+.save-bar { position: sticky; bottom: 0; z-index: 20; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; margin-top: 8px; background: color-mix(in srgb, var(--surface) 92%, transparent); backdrop-filter: blur(6px); border: 1px solid var(--border); border-radius: 14px; box-shadow: 0 8px 24px rgba(16, 24, 40, .08); }
+.save-state { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: var(--text-mute); }
+.save-state::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--success, #15803D); }
+.save-state.dirty { color: var(--text); }
+.save-state.dirty::before { background: #F59E0B; }
+.save-state.error { color: var(--danger); }
+.save-state.error::before { background: var(--danger); }
+.save-actions { display: flex; gap: 8px; }
+
+@media (max-width: 900px) {
+  .set-card { grid-template-columns: 1fr; gap: 16px; padding: 18px; }
+  .set-fields { grid-template-columns: 1fr; }
+}

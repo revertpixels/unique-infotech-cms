@@ -1,4 +1,4 @@
-.org-wrap { max-width: 980px; }
+.org-wrap { width: 100%; }
 .brand-preview-label { margin-top: 14px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--text-mute); }
 .brand-preview { margin-top: 8px; display: flex; align-items: center; gap: 12px; padding: 14px; border-radius: 12px; background: var(--sidebar-bg, #14163A); color: #fff; min-width: 0; }
 .brand-preview img { width: 40px; height: 40px; border-radius: 10px; background: #fff; padding: 2px; object-fit: contain; flex-shrink: 0; }

@@ -1,0 +1,66 @@
+<div class="br-wrap">
+  <div class="br-head-row">
+    <section class="pg-head">
+      <div class="pg-crumbs">Administration / <span>Sessions</span></div>
+      <h2>Sessions</h2>
+      <p id="ss-sub">Academic sessions. Only one session can be running at a time.</p>
+    </section>
+    <button type="button" id="ss-add" class="ui-btn primary"><i data-lucide="plus"></i>Add session</button>
+  </div>
+
+  <p id="ss-note" class="br-note" role="status" aria-live="polite"></p>
+
+  <div class="br-table-card">
+    <div class="br-scroll">
+      <table class="br-table">
+        <thead>
+          <tr><th>Session</th><th>Start</th><th>End</th><th class="hide-sm">Length</th><th>Status</th><th class="br-actions">Actions</th></tr>
+        </thead>
+        <tbody id="ss-rows"></tbody>
+      </table>
+    </div>
+    <div id="ss-empty" class="br-empty" hidden>
+      <i data-lucide="calendar-clock"></i>
+      <b>No sessions yet</b>
+      <span>Click "Add session" to create the first one, e.g. Jul–Dec 2026.</span>
+    </div>
+  </div>
+
+  <form id="ss-form" novalidate hidden>
+    <div class="set-card">
+      <div class="set-side">
+        <h3 id="ss-form-title">New session</h3>
+        <p>Archived sessions are hidden from the session switcher in the top bar and appear only in Archives.</p>
+      </div>
+      <div class="set-fields">
+        <div class="ui-field span-2">
+          <div class="ui-label-row"><label for="ss-name">Session name <em>*</em></label><span class="ui-count" data-for="ss-name"></span></div>
+          <div class="ui-input-wrap"><i data-lucide="calendar-clock"></i><input id="ss-name" class="ui-input" type="text" maxlength="40" autocomplete="off" placeholder="e.g. Jul–Dec 2026"></div>
+          <div class="ui-err" id="ss-name-err"></div>
+        </div>
+        <div class="ui-field">
+          <div class="ui-label-row"><label for="ss-start">Start date <em>*</em></label></div>
+          <div class="ui-input-wrap"><i data-lucide="calendar"></i><input id="ss-start" class="ui-input" type="date"></div>
+          <div class="ui-err" id="ss-start-err"></div>
+        </div>
+        <div class="ui-field">
+          <div class="ui-label-row"><label for="ss-end">End date <em>*</em></label></div>
+          <div class="ui-input-wrap"><i data-lucide="calendar-check"></i><input id="ss-end" class="ui-input" type="date"></div>
+          <div class="ui-err" id="ss-end-err"></div>
+        </div>
+        <div class="ui-field span-2">
+          <div class="ui-label-row"><label>Status</label></div>
+          <div id="ss-status"></div>
+          <div class="ui-err" id="ss-status-err"></div>
+        </div>
+      </div>
+    </div>
+    <div class="save-bar">
+      <span id="ss-state" class="save-state" role="status" aria-live="polite">Fill in the details</span>
+      <div class="save-actions">
+        <button type="button" id="ss-cancel" class="ui-btn ghost"><i data-lucide="x"></i>Cancel</button>
+        <button type="submit" id="ss-save" class="ui-btn primary" disabled><i data-lucide="save"></i>Save session</button>
+      </div>
+    </div>
+  </form>
+</div>

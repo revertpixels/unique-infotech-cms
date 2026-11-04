@@ -2,6 +2,8 @@
 @import url('./base/variables.css');
 @import url('./components/ui-kit.css');
 @import url('./pages/settings.css');
+@import url('./pages/branches.css');
+@import url('./pages/sessions.css');
 @import url('./pages/dashboard.css');
 @import url('./base/typography.css');
 @import url('./components/buttons.css');

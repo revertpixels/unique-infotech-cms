@@ -116,3 +116,11 @@ Reasoning: the Super Admin can take payments for any branch's student, so branch
 Decision: the Youth session is a half-year (Jan-Jun or Jul-Dec) and the School period is a calendar month, both computed from today's date; this is an interim assumption pending client confirmation of the academic session format (pending input #7).
 
 Reasoning: date-based calculations for installments, dues, and fines require a defined period model; deferring to client confirmation avoids rework later.
+
+## 21. Branch Delete Policy (v1.4.2)
+
+- Deleting a branch NEVER cascades. Students, fees and payments are financial records and are never auto-deleted.
+- Delete is allowed only when nothing references the branch. Currently checked: users with role branch_head and this branchId.
+- When students, batches, fees or payments collections are built, their reference checks MUST be added to tryDelete() in branches.page.js.
+- A branch with history is closed by setting status = inactive.
+- UI rule: no native <select> in app pages; use createSelect() from js/components/ui-select.js (icon per option).

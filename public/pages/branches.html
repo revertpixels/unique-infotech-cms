@@ -1,0 +1,79 @@
+<div class="br-wrap">
+  <div class="br-head-row">
+    <section class="pg-head">
+      <div class="pg-crumbs">Academics / <span>Branches</span></div>
+      <h2>Branches</h2>
+      <p>Youth Centre branches. Branch heads see only their own branch.</p>
+    </section>
+    <button type="button" id="br-add" class="ui-btn primary"><i data-lucide="plus"></i>Add branch</button>
+  </div>
+
+  <p id="br-note" class="br-note" role="status" aria-live="polite"></p>
+
+  <div class="br-table-card">
+    <div class="br-scroll">
+      <table class="br-table">
+        <thead>
+          <tr>
+            <th>Branch</th>
+            <th>Code</th>
+            <th class="hide-sm">Branch head</th>
+            <th class="hide-sm">Phone</th>
+            <th class="hide-md">Address</th>
+            <th>Status</th>
+            <th class="br-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="br-rows"></tbody>
+      </table>
+    </div>
+    <div id="br-empty" class="br-empty" hidden>
+      <i data-lucide="git-branch"></i>
+      <b>No branches yet</b>
+      <span>Click "Add branch" to create the first one.</span>
+    </div>
+  </div>
+
+  <form id="br-form" novalidate hidden>
+    <div class="set-card">
+      <div class="set-side">
+        <h3 id="br-form-title">New branch</h3>
+        <p>The code is a short unique ID used on receipts, e.g. BNK or KND1. To close a branch that has history, set it to Inactive.</p>
+      </div>
+      <div class="set-fields">
+        <div class="ui-field">
+          <div class="ui-label-row"><label for="br-name">Branch name <em>*</em></label><span class="ui-count" data-for="br-name"></span></div>
+          <div class="ui-input-wrap"><i data-lucide="building"></i><input id="br-name" class="ui-input" type="text" maxlength="60" autocomplete="off" placeholder="e.g. Bankura Main"></div>
+          <div class="ui-err" id="br-name-err"></div>
+        </div>
+        <div class="ui-field">
+          <div class="ui-label-row"><label for="br-code">Code <em>*</em></label></div>
+          <div class="ui-input-wrap"><i data-lucide="hash"></i><input id="br-code" class="ui-input" type="text" maxlength="10" autocomplete="off" placeholder="e.g. BNK"></div>
+          <div class="ui-err" id="br-code-err"></div>
+        </div>
+        <div class="ui-field">
+          <div class="ui-label-row"><label for="br-phone">Phone</label></div>
+          <div class="ui-input-wrap"><i data-lucide="phone"></i><input id="br-phone" class="ui-input" type="tel" maxlength="20" autocomplete="off" placeholder="e.g. 98765 43210"></div>
+          <div class="ui-err" id="br-phone-err"></div>
+        </div>
+        <div class="ui-field">
+          <div class="ui-label-row"><label>Status</label></div>
+          <div id="br-status"></div>
+          <div class="ui-err" id="br-status-err"></div>
+        </div>
+        <div class="ui-field span-2">
+          <div class="ui-label-row"><label for="br-address">Address</label><span class="ui-count" data-for="br-address"></span></div>
+          <div class="ui-input-wrap top"><i data-lucide="map-pin"></i><textarea id="br-address" class="ui-input" rows="3" maxlength="300" placeholder="Street, town, district"></textarea></div>
+          <div class="ui-err" id="br-address-err"></div>
+        </div>
+      </div>
+    </div>
+    <div class="save-bar">
+      <span id="br-state" class="save-state" role="status" aria-live="polite">Fill in the details</span>
+      <div class="save-actions">
+        <button type="button" id="br-cancel" class="ui-btn ghost"><i data-lucide="x"></i>Cancel</button>
+        <button type="submit" id="br-save" class="ui-btn primary" disabled><i data-lucide="save"></i>Save branch</button>
+      </div>
+    </div>
+  </form>
+</div>

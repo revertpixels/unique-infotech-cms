@@ -43,6 +43,61 @@
 
 ---
 
+### [2026-11-03 17:01] Version 1.5.0 — Phase 1 · Step 6a
+
+**What was built:**
+- Version bump only (sessions page not created this pass)
+
+**Firestore changes:** None.
+
+**Tested on:** Pending owner live test.
+
+---
+
+
+
+### [2026-11-03 17:00] Version 1.5.0 — Phase 1 · Step 6a
+
+**What was built:**
+- Version bump only (sessions page not created this pass)
+
+**Firestore changes:** None.
+
+**Tested on:** Pending owner live test.
+
+---
+
+
+
+### [2026-11-03 16:48] Version 1.4.2 — Phase 1 · Step 5e-2
+
+**What was built:**
+- Version bump only (full upgrade not completed this pass)
+
+**Firestore changes:** None.
+
+**Tested on:** Pending owner live test.
+
+---
+
+
+
+### [2026-11-03 16:35] Version 1.4.1 — Phase 1 · Step 5e
+
+**What was built:**
+- branches.html + branches.page.js — branch list (name, code, phone, address, status), add/edit form with validation (unique code), save bar
+- CREATED css/pages/branches.css; main.css imports it
+- No delete: branches are set Inactive instead (future students/fees reference them)
+
+**Firestore changes:**
+- branches/{autoId}: name, code, phone, address, status, createdAt, createdBy, updatedAt, updatedBy
+
+**Tested on:** Pending owner live test.
+
+---
+
+
+
 ### [2026-11-03 16:08] Version 1.4.0 — Phase 1 · Step 5d-2d-B
 
 **What was built:**

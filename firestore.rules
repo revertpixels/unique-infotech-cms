@@ -91,6 +91,11 @@ service cloud.firestore {
       allow write: if isSuperAdmin();
     }
 
+    match /sessions/{sessionId} {
+      allow read: if isSuperAdmin() || isActiveHead();
+      allow write: if isSuperAdmin();
+    }
+
     // Everything else is denied until its phase adds rules
     match /{document=**} {
       allow read, write: if false;

@@ -22,6 +22,7 @@ export const ROUTES = {
   reports: { label: 'Reports', icon: 'bar-chart-3', group: 'Insights', page: 'reports', ctx: ['youth', 'school'], roles: ['superadmin'] },
   archives: { label: 'Archives', icon: 'archive', group: 'Insights', page: 'archives', ctx: ['youth', 'school'], roles: ['superadmin'] },
   'branch-heads': { label: 'Branch Heads', icon: 'user-cog', group: 'Administration', page: 'branch-heads', ctx: ['youth'], roles: ['superadmin'] },
+  sessions: { label: 'Sessions', icon: 'calendar-clock', group: 'Administration', page: 'sessions', ctx: ['youth', 'school'], roles: ['superadmin'] },
   org: { label: 'Organisation', icon: 'landmark', group: 'Administration', page: 'org-details', ctx: ['youth', 'school'], roles: ['superadmin'] }
 };
 
@@ -161,7 +162,7 @@ export function startRouter({ profile, getContext, setContext, onRouteChange }) 
     view.innerHTML = html;
     if (thisNav !== navCounter) return;
     try {
-      const mod = await import('/js/pages/' + route.page + '.page.js?v=1.4.0');
+      const mod = await import('/js/pages/' + route.page + '.page.js?v=1.5.0');
       if (thisNav !== navCounter) return;
       if (mod && typeof mod.mount === 'function') {
         currentModule = mod;

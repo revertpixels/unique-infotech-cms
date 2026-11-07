@@ -8,11 +8,16 @@
     <button type="button" id="ss-add" class="ui-btn primary"><i data-lucide="plus"></i>Add session</button>
   </div>
 
-  <p id="ss-note" class="br-note" role="status" aria-live="polite"></p>
+  <div id="ss-stats"></div>
+  <div id="ss-toolbar"></div>
 
-  <div class="br-table-card">
-    <div class="br-scroll">
-      <table class="br-table">
+  <div class="lp-card">
+    <div class="lp-card-head">
+      <div class="lp-card-title"><i data-lucide="calendar-range"></i><span>All sessions</span></div>
+      <span class="lp-count" id="ss-count">0 sessions</span>
+    </div>
+    <div class="lp-scroll">
+      <table class="lp-table">
         <thead>
           <tr><th>Session</th><th>Start</th><th>End</th><th class="hide-sm">Length</th><th>Status</th><th class="br-actions">Actions</th></tr>
         </thead>
@@ -24,6 +29,7 @@
       <b>No sessions yet</b>
       <span>Click "Add session" to create the first one, e.g. Jul–Dec 2026.</span>
     </div>
+    <div class="lp-card-foot" id="ss-foot" hidden></div>
   </div>
 
   <form id="ss-form" novalidate hidden>

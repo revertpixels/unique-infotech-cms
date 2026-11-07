@@ -3,6 +3,10 @@ import { collection, getDocs, doc, addDoc, updateDoc, deleteDoc, query, where, s
 import { createSelect } from '../components/ui-select.js';
 import { openMenu } from '../components/ui-menu.js';
 import { confirmDialog } from '../components/ui-confirm.js';
+import { showToast } from '../components/toast.js';
+import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.2';
+import { buildStats, buildToolbar } from '../components/list-page.js';
+import { notifySessionsChanged } from '../core/sessions.js';
 
 const TEXT_KEYS = ['name', 'start', 'end'];
 const KEYS = ['name', 'start', 'end', 'status'];
@@ -57,16 +61,33 @@ export async function mount({ profile, ctx }) {
   const statusSel = createSelect(statusHost, { options: STATUS_OPTIONS, value: 'upcoming', ariaLabel: 'Status' });
 
   let rows = [];
+  const stats = buildStats([
+    { label: 'Total sessions', value: 0, sub: 'All statuses', icon: 'calendar-range', tone: 'indigo' },
+    { label: 'Running now', value: '—', sub: 'None running', icon: 'play-circle', tone: 'green' },
+    { label: 'Upcoming', value: 0, sub: 'Not started yet', icon: 'clock', tone: 'sky' },
+    { label: 'Days left', value: '—', sub: 'In running session', icon: 'hourglass', tone: 'amber' }
+  ]);
+  const statsHost = $('ss-stats');
+  if (statsHost) statsHost.appendChild(stats.el);
+  const tb = buildToolbar({
+    placeholder: 'Search session name',
+    filters: [{ id: 'status', label: 'Status', options: [
+      { value: 'all', label: 'All statuses' }, { value: 'running', label: 'Running' },
+      { value: 'upcoming', label: 'Upcoming' }, { value: 'closed', label: 'Closed' }, { value: 'archived', label: 'Archived' }
+    ] }],
+    onChange: () => render(),
+    onRefresh: () => load()
+  });
+  const tbHost = $('ss-toolbar');
+  if (tbHost) tbHost.appendChild(tb.el);
   let editId = null;
   let saved = Object.assign({}, BLANK);
   let touched = false;
   let saving = false;
 
   function note(text, isError) {
-    const n = $('ss-note');
-    if (!n) return;
-    n.textContent = text || '';
-    n.classList.toggle('is-error', !!isError);
+    if (!text) return;
+    showToast({ type: isError ? 'error' : 'success', message: text });
   }
   function readForm() {
     const v = {};
@@ -124,7 +145,35 @@ export async function mount({ profile, ctx }) {
   function render() {
     tbody.textContent = '';
     if (empty) empty.hidden = rows.length > 0;
-    rows.forEach((r) => {
+    const f = tb.state;
+    const list = rows.filter((r) => (f.status === 'all' || (r.status || 'upcoming') === f.status) && (!f.q || (r.name || '').toLowerCase().includes(f.q)));
+    const run = rows.find((r) => r.status === 'running');
+    stats.update(0, rows.length, rows.length === 1 ? '1 session' : rows.length + ' sessions');
+    stats.update(1, run ? run.name : '—', run ? fmt(run.startDate) + ' – ' + fmt(run.endDate) : 'None running');
+    stats.update(2, rows.filter((r) => (r.status || 'upcoming') === 'upcoming').length, 'Not started yet');
+    if (run && toDate(run.endDate)) {
+      const now = new Date();
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const left = Math.max(0, Math.round((toDate(run.endDate) - today) / 86400000));
+      stats.update(3, left, 'Ends ' + fmt(run.endDate));
+    } else {
+      stats.update(3, '—', 'No running session');
+    }
+    const cnt = $('ss-count');
+    if (cnt) cnt.textContent = rows.length + ' sessions';
+    const foot = $('ss-foot');
+    if (foot) {
+      foot.hidden = rows.length === 0;
+      foot.textContent = list.length === rows.length ? 'Showing all ' + rows.length : 'Showing ' + list.length + ' of ' + rows.length;
+    }
+    if (rows.length && !list.length) {
+      const tr = mk('tr');
+      const td = mk('td', 'lp-empty', 'No sessions match your search or filter.');
+      td.colSpan = 6;
+      tr.appendChild(td);
+      tbody.appendChild(tr);
+    }
+    list.forEach((r) => {
       const tr = mk('tr');
       tr.appendChild(mk('td', 'br-name', r.name || '—'));
       tr.appendChild(mk('td', '', fmt(r.startDate)));
@@ -208,6 +257,7 @@ export async function mount({ profile, ctx }) {
       if (editId === r.id) closeForm();
       await load();
       note('Session "' + r.name + '" deleted.', false);
+      notifySessionsChanged();
     } catch (e) {
       console.error('[sessions] delete failed', e);
       note('Delete failed (' + (e.code || 'error') + ').', true);
@@ -215,7 +265,11 @@ export async function mount({ profile, ctx }) {
   }
 
   addBtn.addEventListener('click', () => openForm(null));
-  cancelBtn.addEventListener('click', closeForm);
+  cancelBtn.addEventListener('click', async () => {
+    if (!form.hidden && !saveBtn.disabled && !(await confirmLeave({ clear: false }))) return;
+    closeForm();
+  });
+  registerDirty(() => !form.hidden && !saveBtn.disabled && !saving);
   form.addEventListener('input', () => { touched = true; refresh(); });
   form.addEventListener('change', () => { touched = true; refresh(); });
 
@@ -250,6 +304,7 @@ export async function mount({ profile, ctx }) {
       closeForm();
       await load();
       note(wasEdit ? 'Session updated.' : 'Session added.', false);
+      notifySessionsChanged();
     } catch (e) {
       console.error('[sessions] save failed', e);
       saving = false;

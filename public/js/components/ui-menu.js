@@ -19,6 +19,7 @@ export function openMenu(anchor, items) {
   el.setAttribute('role', 'menu');
   items.forEach((it) => {
     if (it === 'sep') { el.appendChild(document.createElement('hr')); return; }
+    if (it && it.section) { const s = document.createElement('div'); s.className = 'ui-menu-sec'; s.textContent = it.section; el.appendChild(s); return; }
     const b = document.createElement('button');
     b.type = 'button';
     b.setAttribute('role', 'menuitem');

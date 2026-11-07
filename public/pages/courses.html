@@ -1,0 +1,185 @@
+<style>
+  .cs-code { display:inline-block; font-size:11.5px; font-weight:800; letter-spacing:.05em; color:#3730A3; background:#EEF0FB; border-radius:6px; padding:2px 7px; margin-bottom:4px; }
+  .cs-name { font-weight:700; color:var(--text); line-height:1.3; }
+  .cs-meta { font-size:12.5px; color:var(--text-mute); margin-top:3px; }
+  .cs-meta b { font-weight:700; color:#3730A3; }
+  .cs-lvl { display:inline-flex; align-items:center; font-size:12px; font-weight:700; border-radius:999px; padding:3px 10px; white-space:nowrap; }
+  .cs-lvl.l1 { color:#075985; background:#E0F2FE; }
+  .cs-lvl.l2 { color:#3730A3; background:#E0E7FF; }
+  .cs-lvl.l3 { color:#6B21A8; background:#F3E8FF; }
+  .cs-dur-sub { display:block; font-size:12px; color:var(--text-mute); margin-top:4px; }
+  .cs-feeline { font-size:13px; line-height:1.6; white-space:nowrap; color:var(--text); }
+  .cs-feeline span { color:var(--text-mute); }
+  .cs-total-cell { font-size:15px; font-weight:800; color:#166534; white-space:nowrap; }
+  .cs-total-cell small { display:block; font-size:11.5px; font-weight:600; color:var(--text-mute); }
+  .cs-topics-count { font-size:12.5px; font-weight:600; color:var(--text-mute); white-space:nowrap; }
+  .rs-prefix { padding-left:12px; font-weight:700; color:var(--text-mute); font-size:13px; }
+  .cs-lock { display:flex; align-items:center; gap:8px; height:40px; padding:0 12px; border:1px solid var(--border); border-radius:10px; background:#F8FAFC; color:var(--text); font-size:14px; font-weight:600; }
+  .cs-lock svg.lucide { width:16px; height:16px; color:var(--text-mute); }
+  .cs-lock small { margin-left:auto; font-size:12px; font-weight:500; color:var(--text-mute); }
+  .cs-empty-note { font-size:13px; color:#B45309; background:#FFFBEB; border:1px solid #FDE68A; border-radius:10px; padding:10px 12px; }
+  .cs-chain { grid-column:1 / -1; border:1px solid #DDE1F7; background:#F8F9FF; border-radius:12px; padding:12px 14px; }
+  .cs-chain-row { display:flex; flex-wrap:wrap; align-items:center; gap:8px; }
+  .cs-chain-step { font-size:13px; font-weight:700; color:#312E81; background:#fff; border:1px solid #DDE1F7; border-radius:8px; padding:5px 10px; }
+  .cs-chain-step span { font-weight:500; color:var(--text-mute); margin-left:4px; }
+  .cs-chain-step.cur { color:#fff; background:#4338CA; border-color:#4338CA; }
+  .cs-chain-step.cur span { color:#E0E7FF; }
+  .cs-chain-arrow { color:var(--text-mute); font-weight:700; }
+  .cs-chain-foot { display:flex; justify-content:space-between; align-items:center; margin-top:10px; font-size:13px; color:var(--text-mute); }
+  .cs-link-btn { font:inherit; font-size:12.5px; font-weight:600; color:#4338CA; background:none; border:0; cursor:pointer; padding:4px 8px; border-radius:6px; }
+  .cs-link-btn:hover { background:#EEF0FB; }
+  .cs-block { grid-column:1 / -1; border:1px solid var(--border); border-radius:12px; padding:14px 16px; background:#fff; }
+  .cs-block-head { display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:12px; }
+  .cs-block-title { font-size:14px; font-weight:800; color:var(--text); }
+  .cs-block-title span { font-weight:500; font-size:12.5px; color:var(--text-mute); margin-left:6px; }
+  .cs-fee-grid { display:grid; grid-template-columns:repeat(4, 1fr); gap:12px; }
+  .cs-sem-total { display:flex; justify-content:space-between; font-size:13px; color:var(--text-mute); border-top:1px dashed var(--border); margin-top:12px; padding-top:10px; }
+  .cs-sem-total b { color:#166534; font-weight:800; }
+  @media (max-width: 900px) { .cs-fee-grid { grid-template-columns:1fr 1fr; } }
+  .cs-topic-add { display:flex; gap:8px; }
+  .cs-topic-add .ui-input-wrap { flex:1; }
+  .cs-topics { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; padding:0; list-style:none; }
+  .cs-topics li { display:inline-flex; align-items:center; gap:6px; font-size:13px; font-weight:600; color:#1E293B; background:#F1F5F9; border-radius:8px; padding:5px 6px 5px 10px; }
+  .cs-topics li button { display:grid; place-items:center; width:22px; height:22px; border:0; border-radius:6px; background:none; color:#64748B; cursor:pointer; padding:0; }
+  .cs-topics li button:hover { background:#FEE2E2; color:#B91C1C; }
+  .cs-topics li button svg.lucide { width:14px; height:14px; }
+  .cs-topics-empty { font-size:13px; color:var(--text-mute); margin-top:10px; }
+  .cs-lock-banner { grid-column:1 / -1; font-size:13px; font-weight:600; color:#92400E; background:#FFFBEB; border:1px solid #FDE68A; border-radius:10px; padding:10px 12px; }
+  .ui-input-wrap.is-locked { background:#F8FAFC; }
+  .ui-input-wrap.is-locked input { color:var(--text-mute); cursor:not-allowed; }
+  .cs-sum { grid-column:1 / -1; display:flex; justify-content:space-between; align-items:center; border:1px solid #BBF7D0; border-radius:12px; padding:14px 16px; background:#F0FDF4; font-weight:800; font-size:16px; color:#166534; }
+  .cs-sum small { display:block; font-size:12px; font-weight:600; color:#15803D; margin-top:2px; }
+</style>
+<div class="br-wrap">
+  <div class="br-head-row">
+    <section class="pg-head">
+      <div class="pg-crumbs">Administration / <span id="cs-crumb">Courses &amp; Packages</span></div>
+      <h2 id="cs-title">Courses &amp; Packages</h2>
+      <p id="cs-sub">Base courses, combo courses and advanced courses.</p>
+    </section>
+    <button type="button" id="cs-add" class="ui-btn primary"><i data-lucide="plus"></i><span id="cs-add-label">Add Course</span></button>
+  </div>
+
+  <div id="cs-stats"></div>
+  <div id="cs-toolbar"></div>
+
+  <form id="cs-form" novalidate hidden>
+    <div class="set-card">
+      <div class="set-side">
+        <h3 id="cs-form-title">New course</h3>
+        <p id="cs-form-help">Every course is one 6-month semester. Semester 2 and 3 courses are linked to the course a student must complete first.</p>
+      </div>
+      <div class="set-fields">
+        <div class="ui-field" data-only="youth">
+          <div class="ui-label-row"><label>Course level <em>*</em></label></div>
+          <div id="cs-level"></div>
+        </div>
+        <div class="ui-field" data-only="youth">
+          <div class="ui-label-row"><label>Duration</label></div>
+          <div class="cs-lock"><i data-lucide="lock"></i><span id="cs-duration-text">6 Months</span><small id="cs-duration-note">Fixed by level</small></div>
+        </div>
+        <div class="ui-field" data-only="youth">
+          <div class="ui-label-row"><label for="cs-code">Course code <em>*</em></label></div>
+          <div class="ui-input-wrap"><i data-lucide="hash"></i><input id="cs-code" class="ui-input" type="text" maxlength="10" autocomplete="off" placeholder="e.g. CITA"></div>
+          <div class="ui-err" id="cs-code-err"></div>
+        </div>
+        <div class="ui-field">
+          <div class="ui-label-row"><label>Status</label></div>
+          <div id="cs-status"></div>
+        </div>
+        <div class="ui-field span-2">
+          <div class="ui-label-row"><label for="cs-name" id="cs-name-label">Course full name <em>*</em></label></div>
+          <div class="ui-input-wrap"><i data-lucide="book-open"></i><input id="cs-name" class="ui-input" type="text" maxlength="90" autocomplete="off" placeholder="e.g. Certificate in Information Technology Application"></div>
+          <div class="ui-err" id="cs-name-err"></div>
+        </div>
+
+        <div class="ui-field span-2" data-only="youth" id="cs-elig-text-wrap">
+          <div class="ui-label-row"><label for="cs-elig">Eligibility</label></div>
+          <div class="ui-input-wrap"><i data-lucide="graduation-cap"></i><input id="cs-elig" class="ui-input" type="text" maxlength="60" autocomplete="off" placeholder="e.g. Class VIII"></div>
+        </div>
+        <div class="ui-field span-2" data-only="youth" id="cs-elig-sel-wrap" hidden>
+          <div class="ui-label-row"><label id="cs-prereq-label">Eligibility - must have completed <em>*</em></label></div>
+          <div id="cs-prereq"></div>
+          <div id="cs-prereq-empty" class="cs-empty-note" hidden></div>
+          <div class="ui-err" id="cs-prereq-err"></div>
+        </div>
+        <div class="cs-chain" id="cs-chain" data-only="youth" hidden></div>
+
+        <div class="cs-lock-banner" id="cs-lock-banner" data-only="youth" hidden></div>
+        <div class="cs-block" data-only="youth">
+          <div class="cs-block-head">
+            <div class="cs-block-title" id="cs-fee-title">Semester 1 fees<span>6 months - 4 installments</span></div>
+            <button type="button" class="cs-link-btn" id="cs-copy-fees" hidden>Copy fees from linked course</button>
+          </div>
+          <div class="cs-fee-grid">
+            <div class="ui-field">
+              <div class="ui-label-row"><label for="cs-f-admission">Admission fee</label></div>
+              <div class="ui-input-wrap"><span class="rs-prefix">Rs</span><input id="cs-f-admission" class="ui-input" type="number" min="0" step="1" placeholder="0"></div>
+            </div>
+            <div class="ui-field">
+              <div class="ui-label-row"><label for="cs-f-installment">Installment (x4) <em>*</em></label></div>
+              <div class="ui-input-wrap"><span class="rs-prefix">Rs</span><input id="cs-f-installment" class="ui-input" type="number" min="0" step="1" placeholder="0"></div>
+            </div>
+            <div class="ui-field">
+              <div class="ui-label-row"><label for="cs-f-exam">Exam fee</label></div>
+              <div class="ui-input-wrap"><span class="rs-prefix">Rs</span><input id="cs-f-exam" class="ui-input" type="number" min="0" step="1" placeholder="0"></div>
+            </div>
+            <div class="ui-field">
+              <div class="ui-label-row"><label for="cs-f-material">Study material</label></div>
+              <div class="ui-input-wrap"><span class="rs-prefix">Rs</span><input id="cs-f-material" class="ui-input" type="number" min="0" step="1" placeholder="0"></div>
+            </div>
+          </div>
+          <div class="ui-err" id="cs-fees-err"></div>
+          <div class="cs-sem-total"><span id="cs-sem-calc">Rs 0 + Rs 0 x 4 + Rs 0 + Rs 0</span><b id="cs-sem-total">Rs 0</b></div>
+        </div>
+
+        <div class="cs-block">
+          <div class="cs-block-head">
+            <div class="cs-block-title">Curriculum / Topics<span id="cs-topic-count">0 topics</span></div>
+            <button type="button" class="cs-link-btn" id="cs-copy-topics" data-only="youth" hidden>Copy topics from linked course</button>
+          </div>
+          <div class="cs-topic-add">
+            <div class="ui-input-wrap"><i data-lucide="list-plus"></i><input id="cs-topic-input" class="ui-input" type="text" maxlength="80" autocomplete="off" placeholder="e.g. MS Word - press Enter or click Add Topic"></div>
+            <button type="button" id="cs-topic-add" class="ui-btn ghost"><i data-lucide="plus"></i>Add Topic</button>
+          </div>
+          <ul class="cs-topics" id="cs-topics"></ul>
+          <div class="cs-topics-empty" id="cs-topics-empty">No topics added yet.</div>
+        </div>
+
+        <div class="cs-sum" id="cs-sum" data-only="youth"></div>
+
+        <div class="ui-field" data-only="school">
+          <div class="ui-label-row"><label for="cs-admission">Admission fee <em>*</em></label></div>
+          <div class="ui-input-wrap"><span class="rs-prefix">Rs</span><input id="cs-admission" class="ui-input" type="number" min="0" step="1" placeholder="0"></div>
+          <div class="ui-err" id="cs-admission-err"></div>
+        </div>
+        <div class="ui-field" data-only="school">
+          <div class="ui-label-row"><label for="cs-monthly">Monthly fee <em>*</em></label></div>
+          <div class="ui-input-wrap"><span class="rs-prefix">Rs</span><input id="cs-monthly" class="ui-input" type="number" min="0" step="1" placeholder="0"></div>
+          <div class="ui-err" id="cs-monthly-err"></div>
+        </div>
+      </div>
+    </div>
+    <div class="save-bar">
+      <span id="cs-state" class="save-state" role="status" aria-live="polite">Fill in the details</span>
+      <div class="save-actions">
+        <button type="button" id="cs-cancel" class="ui-btn ghost"><i data-lucide="x"></i>Cancel</button>
+        <button type="submit" id="cs-save" class="ui-btn primary" disabled><i data-lucide="save"></i><span id="cs-save-label">Save</span></button>
+      </div>
+    </div>
+  </form>
+
+  <div class="lp-card">
+    <div class="lp-card-head">
+      <div class="lp-card-title"><i data-lucide="layers"></i><span id="cs-card-title">All courses</span></div>
+      <span class="lp-count" id="cs-count">0</span>
+    </div>
+    <div class="lp-scroll">
+      <table class="lp-table">
+        <thead id="cs-head"></thead>
+        <tbody id="cs-rows"></tbody>
+      </table>
+    </div>
+    <div class="lp-card-foot" id="cs-foot" hidden></div>
+  </div>
+</div>

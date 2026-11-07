@@ -8,17 +8,22 @@
     <button type="button" id="br-add" class="ui-btn primary"><i data-lucide="plus"></i>Add branch</button>
   </div>
 
-  <p id="br-note" class="br-note" role="status" aria-live="polite"></p>
+  <div id="br-stats"></div>
+  <div id="br-toolbar"></div>
 
-  <div class="br-table-card">
-    <div class="br-scroll">
-      <table class="br-table">
+  <div class="lp-card">
+    <div class="lp-card-head">
+      <div class="lp-card-title"><i data-lucide="git-branch"></i><span>All branches</span></div>
+      <span class="lp-count" id="br-count">0 branches</span>
+    </div>
+    <div class="lp-scroll">
+      <table class="lp-table">
         <thead>
           <tr>
             <th>Branch</th>
             <th>Code</th>
             <th class="hide-sm">Branch head</th>
-            <th class="hide-sm">Phone</th>
+            <th class="hide-sm">Contact</th>
             <th class="hide-md">Address</th>
             <th>Status</th>
             <th class="br-actions">Actions</th>
@@ -32,6 +37,7 @@
       <b>No branches yet</b>
       <span>Click "Add branch" to create the first one.</span>
     </div>
+    <div class="lp-card-foot" id="br-foot" hidden></div>
   </div>
 
   <form id="br-form" novalidate hidden>
@@ -52,9 +58,9 @@
           <div class="ui-err" id="br-code-err"></div>
         </div>
         <div class="ui-field">
-          <div class="ui-label-row"><label for="br-phone">Phone</label></div>
-          <div class="ui-input-wrap"><i data-lucide="phone"></i><input id="br-phone" class="ui-input" type="tel" maxlength="20" autocomplete="off" placeholder="e.g. 98765 43210"></div>
-          <div class="ui-err" id="br-phone-err"></div>
+          <div class="ui-label-row"><label for="br-email">Email</label></div>
+          <div class="ui-input-wrap"><i data-lucide="mail"></i><input id="br-email" class="ui-input" type="email" maxlength="80" autocomplete="off" placeholder="e.g. bankura@uniqueinfotech.in"></div>
+          <div class="ui-err" id="br-email-err"></div>
         </div>
         <div class="ui-field">
           <div class="ui-label-row"><label>Status</label></div>
@@ -62,9 +68,20 @@
           <div class="ui-err" id="br-status-err"></div>
         </div>
         <div class="ui-field span-2">
+          <div class="ui-label-row"><label>Phone numbers</label><span class="ui-count" id="br-phones-count">0/5</span></div>
+          <div id="br-phones" class="br-phones"></div>
+          <button type="button" id="br-phone-add" class="ui-btn ghost br-phone-add"><i data-lucide="plus"></i>Add number</button>
+          <div class="ui-err" id="br-phones-err"></div>
+        </div>
+        <div class="ui-field span-2">
           <div class="ui-label-row"><label for="br-address">Address</label><span class="ui-count" data-for="br-address"></span></div>
           <div class="ui-input-wrap top"><i data-lucide="map-pin"></i><textarea id="br-address" class="ui-input" rows="3" maxlength="300" placeholder="Street, town, district"></textarea></div>
           <div class="ui-err" id="br-address-err"></div>
+        </div>
+        <div class="ui-field span-2">
+          <div class="ui-label-row"><label for="br-mapUrl">Google Maps link</label></div>
+          <div class="ui-input-wrap"><i data-lucide="map"></i><input id="br-mapUrl" class="ui-input" type="url" maxlength="500" autocomplete="off" placeholder="Paste the Share link from Google Maps, e.g. https://maps.app.goo.gl/..."></div>
+          <div class="ui-err" id="br-mapUrl-err"></div>
         </div>
       </div>
     </div>

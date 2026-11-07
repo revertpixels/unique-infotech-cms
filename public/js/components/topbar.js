@@ -1,6 +1,8 @@
-import { getRunningPeriod, getPeriodOptions } from '../utils/date.utils.js?v=1.5.0';
+﻿import { getRunningPeriod, getPeriodOptions } from '../utils/date.utils.js?v=1.8.2';
+import { loadSessions, getSelectedSessionId, setSelectedSession } from '../core/sessions.js?v=1.8.2';
 
 let listenersRegistered = false;
+let sessionsListenerRegistered = false;
 
 function initials(profile) {
   const name = (profile && profile.name) ? profile.name.trim() : '';
@@ -99,8 +101,7 @@ export function renderTopbar({ profile, ctx, canSwitch, onMenu, onSwitch }) {
   sessionBtn.appendChild(calIcon);
   const sessionLabel = document.createElement('span');
   sessionLabel.className = 'tb-session-label';
-  const running = getRunningPeriod(ctx, new Date());
-  sessionLabel.textContent = 'Session ' + running.name;
+  sessionLabel.textContent = 'Session …';
   sessionBtn.appendChild(sessionLabel);
   const chevIcon = document.createElement('i');
   chevIcon.setAttribute('data-lucide', 'chevron-down');
@@ -110,29 +111,81 @@ export function renderTopbar({ profile, ctx, canSwitch, onMenu, onSwitch }) {
   const menu = document.createElement('ul');
   menu.className = 'tb-menu';
   menu.setAttribute('role', 'listbox');
-  const options = getPeriodOptions(ctx, new Date());
-  let saved = null;
-  try { saved = localStorage.getItem('uicms.session'); } catch (e) {}
-  let selectedValue = saved && options.some(o => o.label === saved) ? saved : (options[0] ? options[0].label : null);
-  if (selectedValue) sessionLabel.textContent = 'Session ' + selectedValue;
-  for (const opt of options) {
-    const li = document.createElement('li');
-    li.setAttribute('role', 'option');
-    li.textContent = opt.label;
-    li.dataset.value = opt.label;
-    if (opt.label === selectedValue) li.setAttribute('aria-selected', 'true');
-    li.addEventListener('click', () => {
-      selectedValue = opt.label;
-      sessionLabel.textContent = 'Session ' + opt.label;
-      try { localStorage.setItem('uicms.session', opt.label); } catch (e) {}
-      menu.querySelectorAll('li').forEach(x => x.removeAttribute('aria-selected'));
-      li.setAttribute('aria-selected', 'true');
-      sessionWrap.classList.remove('open');
-      sessionBtn.setAttribute('aria-expanded', 'false');
-    });
-    menu.appendChild(li);
-  }
   sessionWrap.appendChild(menu);
+
+  function closeSessionMenu() {
+    sessionWrap.classList.remove('open');
+    sessionBtn.setAttribute('aria-expanded', 'false');
+  }
+
+  async function fillSessions() {
+    const list = await loadSessions(ctx);
+    menu.textContent = '';
+    if (!list.length) {
+      sessionLabel.textContent = 'No session';
+      const li = document.createElement('li');
+      if (profile && profile.role === 'superadmin') {
+        const ic = document.createElement('i');
+        ic.setAttribute('data-lucide', 'plus');
+        li.appendChild(ic);
+        li.appendChild(document.createTextNode('Create a session'));
+        li.addEventListener('click', () => { closeSessionMenu(); location.hash = '#/sessions'; });
+      } else {
+        li.textContent = 'No sessions yet';
+        li.setAttribute('aria-disabled', 'true');
+      }
+      menu.appendChild(li);
+      setSelectedSession(ctx, null);
+      if (typeof lucide !== 'undefined') lucide.createIcons();
+      window.dispatchEvent(new Event('uic:sessions-loaded'));
+      return;
+    }
+    const savedId = getSelectedSessionId(ctx);
+    const running = list.find((s) => s.status === 'running');
+    let selected = list.find((s) => s.id === savedId) || running || list[0];
+
+    function pick(s) {
+      selected = s;
+      sessionLabel.textContent = 'Session ' + s.name;
+      menu.querySelectorAll('li').forEach((x) => {
+        if (x.dataset.id === s.id) x.setAttribute('aria-selected', 'true');
+        else x.removeAttribute('aria-selected');
+      });
+      setSelectedSession(ctx, s);
+    }
+
+    list.forEach((s) => {
+      const li = document.createElement('li');
+      li.setAttribute('role', 'option');
+      li.dataset.id = s.id;
+      const ic = document.createElement('i');
+      ic.setAttribute('data-lucide', s.status === 'running' ? 'play-circle' : 'calendar');
+      li.appendChild(ic);
+      const nm = document.createElement('span');
+      nm.textContent = s.name;
+      li.appendChild(nm);
+      if (s.status === 'running') {
+        const tag = document.createElement('span');
+        tag.className = 'tb-tag';
+        tag.textContent = 'Running';
+        li.appendChild(tag);
+      }
+      li.addEventListener('click', () => { pick(s); closeSessionMenu(); });
+      menu.appendChild(li);
+    });
+    pick(selected);
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+    window.dispatchEvent(new Event('uic:sessions-loaded'));
+  }
+
+  fillSessions();
+  window.__uicFillSessions = fillSessions;
+  if (!sessionsListenerRegistered) {
+    sessionsListenerRegistered = true;
+    window.addEventListener('uic:sessions-changed', () => {
+      if (window.__uicFillSessions) window.__uicFillSessions();
+    });
+  }
   sessionBtn.addEventListener('click', (e) => {
     e.stopPropagation();
     const open = !sessionWrap.classList.contains('open');

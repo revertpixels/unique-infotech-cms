@@ -1,6 +1,7 @@
-import { ROUTES, ROLE_LABELS } from '../core/router.js?v=1.5.0';
-import { APP_VERSION } from '../core/app.js?v=1.5.0';
-import { getRunningPeriod, getNextDueDate, formatDayMonth } from '../utils/date.utils.js?v=1.5.0';
+import { ROUTES, ROLE_LABELS } from '../core/router.js?v=1.8.2';
+import { APP_VERSION } from '../core/app.js?v=1.8.2';
+import { getRunningPeriod, getNextDueDate, formatDayMonth } from '../utils/date.utils.js?v=1.8.2';
+import { getRunningSession, toPeriod } from '../core/sessions.js?v=1.8.2';
 
 let drawerOpen = false;
 let tipEl = null;
@@ -18,8 +19,43 @@ function ensureTip() {
 
 function daysBetween(a, b) { return Math.round((b - a) / 86400000); }
 
+function buildNoSessionCard() {
+  const card = document.createElement('div');
+  card.className = 'sb-session';
+  const top = document.createElement('div');
+  top.className = 'ss-top';
+  const label = document.createElement('span');
+  label.className = 'sl-label';
+  label.textContent = 'Running session';
+  top.appendChild(label);
+  card.appendChild(top);
+  const name = document.createElement('div');
+  name.className = 'ss-name';
+  name.textContent = 'No running session';
+  card.appendChild(name);
+  const meta = document.createElement('div');
+  meta.className = 'ss-meta';
+  meta.textContent = 'Set a session to Running in Sessions';
+  card.appendChild(meta);
+  return card;
+}
+
+let sessionsLoadedListener = false;
+function listenSessionsLoaded() {
+  if (sessionsLoadedListener) return;
+  sessionsLoadedListener = true;
+  window.addEventListener('uic:sessions-loaded', () => {
+    refreshSessionCard(lastSessionCtx);
+  });
+}
+
+let lastSessionCtx = 'youth';
 function buildSessionCard(ctx, dueDay) {
-  const rp = getRunningPeriod(ctx, new Date());
+  lastSessionCtx = ctx;
+  listenSessionsLoaded();
+  const rs = getRunningSession(ctx);
+  if (!rs) return buildNoSessionCard();
+  const rp = toPeriod(rs);
   const card = document.createElement('div');
   card.className = 'sb-session';
   const top = document.createElement('div');

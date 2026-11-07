@@ -96,3 +96,33 @@ textarea.ui-input { height: auto; min-height: 92px; padding: 10px 12px 10px 38px
 .ui-modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
 @keyframes uiFade { from { opacity: 0; } to { opacity: 1; } }
 @keyframes uiPop { from { opacity: 0; transform: translateY(6px) scale(.98); } to { opacity: 1; transform: none; } }
+
+/* ===== tiled icons for dropdowns + 3-dot menus ===== */
+.ui-select-list, .ui-menu { padding: 6px; border-radius: 12px; border: 1px solid var(--border); box-shadow: 0 8px 24px rgba(16, 24, 40, .10); }
+.ui-menu { min-width: 210px; }
+.ui-select-opt, .ui-menu button { gap: 12px; padding: 7px 10px; border-radius: 9px; font-size: 14px; font-weight: 500; color: var(--text); }
+.ui-select-opt svg.lucide:first-child, .ui-menu button svg.lucide {
+  width: 30px; height: 30px; padding: 7px; box-sizing: border-box; flex-shrink: 0; border-radius: 8px;
+  color: #4338CA; background: color-mix(in srgb, currentColor 10%, #fff); border: 1px solid color-mix(in srgb, currentColor 22%, #fff); }
+.ui-select-opt:hover, .ui-select-opt:focus, .ui-menu button:hover, .ui-menu button:focus-visible { background: #F5F6FA; }
+.ui-select-opt[aria-selected="true"] { background: #EEF0FB; color: #312E81; font-weight: 600; }
+.ui-select-opt svg.ui-select-tick { width: 16px; height: 16px; color: #4338CA; }
+.ui-menu hr { margin: 6px -6px; border: 0; border-top: 1px solid var(--border); }
+.ui-menu-sec { padding: 8px 10px 4px; font-size: 11.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--text-mute); }
+.ui-menu button svg.lucide-pencil, .ui-menu button svg.lucide-edit { color: #4338CA; }
+.ui-menu button svg.lucide-eye, .ui-menu button svg.lucide-user { color: #6D28D9; }
+.ui-menu button svg.lucide-phone, .ui-menu button svg.lucide-message-circle { color: #15803D; }
+.ui-menu button svg.lucide-printer, .ui-menu button svg.lucide-copy { color: #475569; }
+.ui-menu button svg.lucide-archive { color: #B45309; }
+.ui-menu button.danger { color: #B91C1C; }
+.ui-menu button.danger svg.lucide { color: #DC2626; }
+.ui-menu button.danger:hover { background: #FEF2F2; }/* ===== v5 clean menus (1.7.0) - plain white, subtle shadow ===== */
+.ui-menu, .ui-select-list { background: #fff; border: 1px solid #E5E7EB; border-radius: 10px; padding: 4px; box-shadow: 0 4px 16px rgba(16, 24, 40, .08); }
+.ui-menu { min-width: 200px; }
+.ui-menu button, .ui-select-opt { gap: 10px; padding: 8px 10px; border-radius: 6px; font-size: 14px; font-weight: 500; color: #1F2937; background: transparent; border: 0; }
+.ui-menu button svg.lucide, .ui-select-opt svg.lucide:first-child { width: 16px; height: 16px; padding: 0; border: 0; border-radius: 0; background: none; color: #6B7280; }
+.ui-menu button:hover, .ui-menu button:focus-visible, .ui-select-opt:hover, .ui-select-opt:focus { background: #F3F4F6; }
+.ui-select-opt[aria-selected="true"] { background: #F3F4F6; color: #111827; font-weight: 600; }
+.ui-menu hr { margin: 4px -4px; border: 0; border-top: 1px solid #F1F1F4; }
+.ui-menu button.danger, .ui-menu button.danger svg.lucide { color: #DC2626; }
+.ui-menu button.danger:hover { background: #FEF2F2; }

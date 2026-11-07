@@ -42,6 +42,104 @@
 ## ACTIVE LOG (NEWEST ON TOP)
 
 ---
+### [2026-11-06 13:48] Version 1.8.2 — Phase 2 · Unsaved-changes guard everywhere
+- Branches wired to unsaved-guard: sidebar/topbar navigation, context switch, browser refresh/close,
+  Cancel / Add branch / Edit another row all ask before discarding typed data.
+- Audit of all form pages: branches (wired now), courses (already), sessions (already), org-details (already), login (n/a).
+- unsaved-guard.js imported with one identical versioned URL everywhere (shared dirty state).
+- Version 1.8.1 -> 1.8.2.
+- Tested on: Pending owner live test.
+
+
+### [2026-11-06 13:48] Version 1.8.1 — Phase 2 · Branches contact details
+- Branch form: up to 5 phone numbers (Add number / remove x, 0/5 counter, format check, duplicate check),
+  Email (format check), Google Maps link (must be maps.app.goo.gl / goo.gl/maps / google.*/maps).
+- Firestore `branches`: + phones [] (max 5), email, mapUrl. `phone` still saved = phones[0] for backward compatibility.
+  Old docs with only phone load as a single number.
+- Table: Contact column (first number, "+N more", email); Address shows "Open map" link.
+- Search also matches phones and email.
+- 3-dot menu: "Copy branch details" copies WhatsApp-ready text:
+    *Unique Infotech - <name>*
+    Branch Code: <code>
+    Call: <n1>, <n2>, ...
+    Email: ...
+    Address: ...
+    Map: ...
+  Empty fields are skipped. Clipboard API with textarea fallback.
+- Version 1.8.0 -> 1.8.1.
+- Tested on: Pending owner live test.
+
+---
+
+
+
+### [2026-11-06 13:13] Version 1.8.0 — Phase 2 · Business rules locked + unsaved guard + filter widths + Courses v2
+- docs/03-DECISIONS.md: added section 22 SYSTEM BUSINESS RULES (Rule 1 student delete/remove, Rule 2 course fee lock, Rule 3 unsaved changes, Rule 4 filter widths).
+- docs/04-DATABASE-MAP.md: courses fields (level, prerequisiteId, prerequisiteCode, eligibilityText, fees{}, curriculum[]), batches.lockedExamFee, students status 'left'.
+- NEW public/js/utils/unsaved-guard.js; router.js asks before hash navigation and clears registrations per page; index.html guards context switch + logout.
+- Branches, Sessions, Courses, Organisation pages register dirty state; Cancel asks when dirty.
+- list-page.css: Rule 4 block (search max 420px, filters min 220px, popup one-line).
+- Courses: linked progression kept; eligibilityText (Sem 1); Unique Kids levels now have curriculum list; fee lock helpers + banner (Rule 2 partial); table columns Code/Name/Level/Duration/Prerequisite/This-sem fee/Full package/Status; delete blocked if prerequisite or running batches.
+- TODO (Batch/Students pages): Rule 1 Delete Student + Remove Student; Rule 2 full lock (batches.courseId/status/lockedExamFee).
+- Version 1.7.0 -> 1.8.0.
+
+---
+### [2026-11-04 07:21] Version 1.7.0 — Phase 2 · Courses linked progression
+- Courses rebuilt as linked 6-month semesters: Level 1 Base (6m, text eligibility), Level 2 Combo (12m, eligibility = Sem 1 course dropdown),
+  Level 3 Advanced (18m, eligibility = Sem 2 course dropdown). Saved: level, durationMonths, prerequisiteId, prerequisiteCode,
+  fees {admission, installment, exam, material} for THIS semester only, curriculum [], status, ctx.
+- Package total = sum of chain (UI only). Every semester = 4 installments.
+- Form: level dropdown, locked duration, eligibility text/dropdown swap, chain preview, "Copy fees/topics from linked course",
+  curriculum builder (Enter or Add Topic, comma = multiple, remove with x, no duplicates).
+- Table: code/name, requires X, level badge, this-semester fees, package total with chain (CITA + DITA), topic count.
+- 3-dot: Edit, Duplicate, Create next-semester course from this, Mark inactive, Delete (blocked if other courses depend on it).
+- Editing a course code updates prerequisiteCode on dependent courses.
+- UI: flat stat icons (no gradient/shadow), clean white kebab menus and dropdown lists.
+- Unique Kids levels unchanged (flat admission + monthly).
+- Version -> 1.7.0.
+
+---
+### [2026-11-04 06:20] Version 1.6.1 — Phase 2 · Courses per-semester fees
+- Replaced flat fee model with per-semester fees (brochure: DITA Sem 1 = 1000 + 250x4, Sem 2 = 1000 + 500x4).
+- Youth `courses` doc: code, name, eligibility, durationMonths (6/12/18), totalSemesters (1/2/3),
+  semesters: [{ semNo, admissionFee, installmentAmount, examFee, materialFee }], status, ctx:'youth', createdAt, updatedAt.
+- Every semester = 4 installments. Sem total = admission + installment x 4 + exam + material. Package = sum of sems (UI only, not saved).
+- Form: duration dropdown renders 1/2/3 semester blocks dynamically; typed values kept when switching; "Copy from Sem N" button.
+- Table: per-semester lines "Sem 1: Adm 1000, Inst 250 x 4 = Rs 2,000".
+- Unique Kids (ctx 'school'): flat name, admissionFee, monthlyFee, status.
+- Old flat-field course docs (installmentAmount at top level) show "No semester fees saved - edit to add".
+- Version 1.6.0 -> 1.6.1.
+
+---
+### [2026-11-04 06:07] Version 1.6.0 — Phase 2 · Courses & Packages
+- Rebuilt pages/courses.html and js/pages/courses.page.js with package architecture.
+- Youth Centre (ctx 'youth'): 6m = 1 sem, 12m = 2 sem, 18m = 3 sem. Every semester = 4 installments + 1 exam fee.
+  Firestore `courses`: code, name, durationMonths, totalSemesters, admissionFee, installmentAmount,
+  examFeePerSem, materialFee, eligibility, status, ctx, createdAt, updatedAt.
+  UI-only totals: installments = sems x 4; exam total = examFeePerSem x sems;
+  package = admission + installment x sems x 4 + examFeePerSem x sems + materialFee.
+- Unique Kids (ctx 'school'): same page shows "School Levels" — name, admissionFee, monthlyFee, status, ctx.
+- Table shows code/name, duration badge, fee breakdown grid, highlighted package total; 3-dot menu Edit / Duplicate / Mark inactive / Delete (type code to confirm).
+- Form: custom dropdowns (duration, eligibility, status), live hint chips + package summary.
+- router.js: courses route ctx now ['youth','school'].
+- Version bumped 1.5.1 -> 1.6.0.
+
+---
+### [2026-11-04 HH:MM] Version 1.5.1 — Phase 1 · Step 6b
+
+**What was built:**
+- toast.js + css/components/toast.css — auto-dismiss toast (4s, pause on hover, close button, progress bar, success/error/warning/info icons)
+- Branches + Sessions pages use toasts instead of the inline message line (bug: message stayed until refresh)
+- CREATED js/core/sessions.js — shared session loader/cache, selected session per centre, running-period maths
+- Topbar session switcher reads Firestore sessions (archived hidden); empty state "No session" + "Create a session"; refreshes after save/delete
+- Sidebar running-session card uses the real Running session; empty state when none
+- Toast restyled: compact dark bar, bottom-centre, message only; sidebar card now refreshes after sessions load
+
+**Firestore changes:** None (reads sessions only; rules unchanged — no deploy).
+
+**Tested on:** Pending owner live test.
+
+---
 
 ### [2026-11-03 17:01] Version 1.5.0 — Phase 1 · Step 6a
 

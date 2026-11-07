@@ -1,3 +1,5 @@
+import { confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.2';
+
 export const ROLE_LABELS = {
   superadmin: 'Super Admin',
   branch_head: 'Branch Head',
@@ -7,7 +9,7 @@ export const ROLE_LABELS = {
 export const ROUTES = {
   dashboard: { label: 'Dashboard', icon: 'layout-dashboard', group: 'Main', page: 'dashboard', ctx: ['youth', 'school'], roles: ['superadmin', 'branch_head', 'school_head'] },
   branches: { label: 'Branches', icon: 'git-branch', group: 'Academics', page: 'branches', ctx: ['youth'], roles: ['superadmin'] },
-  courses: { label: 'Courses & Packages', icon: 'layers', group: 'Academics', page: 'courses', ctx: ['youth'], roles: ['superadmin'] },
+  courses: { label: 'Courses & Packages', icon: 'layers', group: 'Academics', page: 'courses', ctx: ['youth', 'school'], roles: ['superadmin'] },
   batches: { label: 'Batches', icon: 'calendar-range', group: 'Academics', page: 'batches', ctx: ['youth'], roles: ['superadmin'] },
   students: { label: 'All Students', icon: 'users', group: 'Students', page: 'students', ctx: ['youth'], roles: ['superadmin', 'branch_head'] },
   admissions: { label: 'Admissions', icon: 'user-plus', group: 'Students', page: 'admissions', ctx: ['youth'], roles: ['superadmin', 'branch_head'] },
@@ -71,6 +73,7 @@ export function startRouter({ profile, getContext, setContext, onRouteChange }) 
       // silent
     }
     currentModule = null;
+    clearDirty();
 
     const route = Object.prototype.hasOwnProperty.call(ROUTES, key) ? ROUTES[key] : null;
     const ctx = getContext();
@@ -162,7 +165,7 @@ export function startRouter({ profile, getContext, setContext, onRouteChange }) 
     view.innerHTML = html;
     if (thisNav !== navCounter) return;
     try {
-      const mod = await import('/js/pages/' + route.page + '.page.js?v=1.5.0');
+      const mod = await import('/js/pages/' + route.page + '.page.js?v=' + (window.__BUILD__ || Date.now()));
       if (thisNav !== navCounter) return;
       if (mod && typeof mod.mount === 'function') {
         currentModule = mod;
@@ -186,12 +189,24 @@ export function startRouter({ profile, getContext, setContext, onRouteChange }) 
     }
   }
 
-  function onHashChange() {
+  let lastHash = '';
+  let reverting = false;
+  async function onHashChange() {
+    if (reverting) { reverting = false; return; }
     const hash = location.hash;
     if (!hash || hash === '#' || hash === '#/') {
       location.replace('#/dashboard');
       return;
     }
+    if (lastHash && hash !== lastHash) {
+      const ok = await confirmLeave();
+      if (!ok) {
+        reverting = true;
+        location.hash = lastHash;
+        return;
+      }
+    }
+    lastHash = hash;
     const key = hash.slice(2);
     render(key);
   }

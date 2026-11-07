@@ -216,3 +216,10 @@ Planned, none needed yet:
 | OPEN-2 | Receipt number format (e.g. per-branch or global, yearly reset)? | Phase 4 |
 | OPEN-3 | Lateral entry (CITA to CFAS, 1,200 rupees) is in the Master Plan but not modelled. How should it appear in admission? | Phase 3 |
 | OPEN-4 | Which documents are required for Unique Kids students? | Phase 5 |
+---
+
+## 14. v1.8.0 field additions (see 03-DECISIONS section 22)
+- courses (youth): code, name, level (1|2|3), durationMonths (6|12|18), prerequisiteId (null for level 1), prerequisiteCode, eligibilityText (level 1 only), eligibility (display), fees { admission, installment, exam, material } for THIS 6-month block only, curriculum [string], status, ctx 'youth', createdAt, updatedAt.
+- courses (school levels): name, admissionFee, monthlyFee, curriculum [string], status, ctx 'school'.
+- atches (future): courseId, name, status (active/running/ended...), lockedExamFee (set when first exam-fee payment is collected).
+- students (future): status 'left' for Remove Student (Rule 1 B); Hard Delete erases everything and leaves one udit line.

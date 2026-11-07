@@ -214,3 +214,9 @@
 }
 
 .ctx-btn, .ctx-btn span, #session-btn, .tb-session-label { white-space: nowrap; }
+.tb-menu li { display: flex; align-items: center; gap: 8px; }
+.tb-menu li svg.lucide { width: 15px; height: 15px; flex-shrink: 0; color: var(--text-mute); }
+.tb-menu li[aria-selected="true"] svg.lucide { color: var(--primary); }
+.tb-menu li[aria-disabled="true"] { cursor: default; color: var(--text-mute); }
+.tb-menu li[aria-disabled="true"]:hover { background: none; }
+.tb-tag { margin-left: auto; font-size: 10.5px; font-weight: 700; color: #15803D; background: #F0FDF4; padding: 1px 7px; border-radius: 999px; }

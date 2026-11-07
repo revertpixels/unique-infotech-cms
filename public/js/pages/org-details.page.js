@@ -1,4 +1,5 @@
 import { db } from '../config/firebase-config.js';
+import { registerDirty } from '../utils/unsaved-guard.js?v=1.8.2';
 import { doc, getDoc, setDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
 
 const KEYS = ['name', 'tagline', 'phone', 'email', 'website', 'address'];
@@ -109,6 +110,7 @@ export async function mount({ profile }) {
 
   form.addEventListener('input', () => { touched = true; refresh(); });
 
+  registerDirty(() => !saveBtn.disabled && !saving);
   discardBtn.addEventListener('click', () => {
     fillForm(saved);
     touched = false;

@@ -124,3 +124,75 @@ Reasoning: date-based calculations for installments, dues, and fines require a d
 - When students, batches, fees or payments collections are built, their reference checks MUST be added to tryDelete() in branches.page.js.
 - A branch with history is closed by setting status = inactive.
 - UI rule: no native <select> in app pages; use createSelect() from js/components/ui-select.js (icon per option).
+
+---
+
+## 22. SYSTEM BUSINESS RULES (LOCKED v1.8.0 — owner-approved, do not change without owner)
+
+### RULE 1 — STUDENT DELETE / REMOVE
+(Applies on Batch page and All Students page. UI deferred — build when those pages are built.)
+
+Every student row must have TWO options in the 3-dot menu:
+
+OPTION A — "Delete Student (Hard Delete / Erase All)"
+- Permanently erases: profile, admission, all fees, all payments, all receipts, batch enrollment, uploaded docs.
+- After this, the student never existed in the system.
+- No refund is created or recorded.
+- Confirm by typing DELETE.
+- Keep a minimal admin audit line only (who/when/name/ID) in udit. Do not keep the student record.
+
+Business reason:
+There is no paid "Change Course" feature. Hard Delete is the intentional bypass: admin erases the student, then creates a fresh admission in the new course. Do not "fix" this later by building a transfer engine unless the client pays for it.
+
+OPTION B — "Remove Student (Mark as Left / Soft Remove)"
+- Status becomes "left" / "removed".
+- All history stays (payments, receipts, enrollment).
+- Student drops out of active lists, active batches, and pending fees.
+- Visible only under Archives / Left filter.
+- Future installments and fees are cancelled (not pending).
+- No refund. Institute policy: paid fees are not refunded.
+- Confirm by typing REMOVE.
+- Optional free-text reason. Audit: who/when/reason.
+
+Summary:
+- A = nuclear erase (course-change bypass, no refund)
+- B = soft leave (history kept, no refund)
+
+Status: DEFERRED — implement on Batch / Students pages.
+
+### RULE 2 — COURSE FEE EDIT LOCK
+(Partial now on Courses page; full lock when Batches page exists.)
+
+If a course has any batch with status active/running (not ended):
+- Admission Fee, Installment Amount, Material Fee = READ-ONLY.
+- Banner: "This course is locked for fee edits. {N} active batch(es) use this course. Edit fees only after those batches are closed."
+- Name, Code, Curriculum, Status, Eligibility stay editable.
+
+EXAM FEE EXCEPTION:
+- Exam fee is normally editable anytime (govt can revise it late).
+- Once the first exam-fee payment is collected in a batch, that batch freezes exam fee.
+- Freeze is per batch, not only on the course: copy value onto the batch as lockedExamFee when collection starts; students in that batch pay the frozen amount until the batch ends.
+- Other batches on the same course that have not started exam collection stay free to use an updated exam fee.
+- If admin tries to save a locked field: "Cannot change {field}. Batch {name} is running. Allowed only after batch ends."
+
+Status: lock helpers live in courses.page.js (reads atches where courseId == course id and status not in ended/closed/completed/archived/cancelled). With no batches they stay unlocked. Batches page must write courseId, status, and lockedExamFee (when exam collection starts).
+
+### RULE 3 — UNSAVED CHANGES WARNING (ALL form pages)
+- Track dirty state on every form (any field different from last saved).
+- On any leave attempt while dirty and not saving show modal:
+  "You have unsaved changes. If you leave now, your changes will be lost."
+  Buttons: [Stay on page] [Leave without saving]
+- Stay = cancel navigation. Leave = allow.
+- Covers: browser back/refresh/close (beforeunload), in-app router/sidebar/context switch/logout, and the form's own Cancel if dirty.
+- Implemented once in public/js/utils/unsaved-guard.js (registerDirty, confirmLeave, clearDirty, isAnyDirty).
+- Wired into: Branches, Sessions, Courses, Organisation. EVERY future form page must call registerDirty().
+
+Standing requirement: every new page with a form MUST be wired to unsaved-guard in the same step that builds it.
+Includes in-page Cancel / Add / Edit-other-row actions. No page is accepted without it.
+
+### RULE 4 — FILTER BAR / DROPDOWN WIDTH (all list pages)
+- Search: flex-grow with max-width ~420px.
+- Each filter dropdown: min-width 220px so the longest option fits on ONE line.
+- Open dropdown popup: auto width to content (max 380px), options never wrap.
+- Flex layout with controlled min-widths; filters are never squeezed.
+- Implemented in shared list-page.css, so Courses, Branches, Sessions and every future list page get it.

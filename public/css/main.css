@@ -5,6 +5,7 @@
 @import url('./components/list-page.css');
 @import url('./pages/settings.css');
 @import url('./pages/branches.css');
+@import url('./pages/batches.css');
 @import url('./pages/sessions.css');
 @import url('./pages/dashboard.css');
 @import url('./base/typography.css');

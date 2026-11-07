@@ -45,6 +45,7 @@ export function buildToolbar(opts) {
   bar.appendChild(s);
   let t = null;
   inp.addEventListener('input', () => { clearTimeout(t); t = setTimeout(() => { state.q = inp.value.trim().toLowerCase(); if (o.onChange) o.onChange(state); }, 150); });
+  const selects = {};
   (o.filters || []).forEach((f) => {
     const w = el('div', 'lp-filter');
     w.appendChild(el('span', 'lp-filter-label', f.label));
@@ -59,6 +60,7 @@ export function buildToolbar(opts) {
       ariaLabel: f.label,
       onChange: (v) => { state[f.id] = v; host.dataset.value = v; if (o.onChange) o.onChange(state); }
     });
+    selects[f.id] = sel;
     host.dataset.value = state[f.id];
     host.addEventListener('input', (e) => e.stopPropagation());
     void sel;
@@ -73,7 +75,8 @@ export function buildToolbar(opts) {
     bar.appendChild(r);
   }
   paint();
-  return { el: bar, state };
+  const api = { el: bar, state, setFilterOptions: (id, opts) => { if (selects[id]) selects[id].setOptions(opts); } };
+  return api;
 }
 
 // opts: { title, icon }

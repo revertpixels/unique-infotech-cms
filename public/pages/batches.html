@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Batches</title>
+  <link rel="stylesheet" href="../css/pages/batches.css?v=1.8.5">
+</head>
+<body>
+  <div class="page-shell">
+    <div class="bt-head-row">
+      <section class="pg-head">
+        <div class="crumbs">Academics / Batches</div>
+        <h2>Batches</h2>
+        <p id="bt-sub"></p>
+      </section>
+      <button id="bt-add" class="ui-btn primary" disabled title="Form arrives in Part 2"><i data-lucide="plus"></i> Add batch</button>
+    </div>
+    <div id="bt-stats"></div>
+    <div id="bt-toolbar"></div>
+    <div class="lp-card">
+      <div class="lp-card-head">
+        <div class="lp-card-title"><i data-lucide="users-round"></i><span>All batches</span></div>
+        <span id="bt-count" class="lp-count">0</span>
+      </div>
+      <div class="lp-scroll">
+        <table class="lp-table">
+          <thead><tr>
+            <th>Batch</th><th>Course</th><th class="hide-md">Prerequisite</th><th>Session</th><th class="hide-sm" id="bt-col-branch">Branch</th><th>Students</th><th>Status</th><th class="act">Actions</th>
+          </tr></thead>
+          <tbody id="bt-rows"></tbody>
+        </table>
+      </div>
+      <div class="bt-empty" id="bt-empty" hidden>
+        <i data-lucide="users-round"></i>
+        <b>No batches yet</b>
+        <span>Batches you create will appear here.</span>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

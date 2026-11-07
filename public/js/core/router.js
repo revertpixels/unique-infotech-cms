@@ -1,4 +1,4 @@
-import { confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.2';
+import { confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.5';
 
 export const ROLE_LABELS = {
   superadmin: 'Super Admin',
@@ -10,7 +10,7 @@ export const ROUTES = {
   dashboard: { label: 'Dashboard', icon: 'layout-dashboard', group: 'Main', page: 'dashboard', ctx: ['youth', 'school'], roles: ['superadmin', 'branch_head', 'school_head'] },
   branches: { label: 'Branches', icon: 'git-branch', group: 'Academics', page: 'branches', ctx: ['youth'], roles: ['superadmin'] },
   courses: { label: 'Courses & Packages', icon: 'layers', group: 'Academics', page: 'courses', ctx: ['youth', 'school'], roles: ['superadmin'] },
-  batches: { label: 'Batches', icon: 'calendar-range', group: 'Academics', page: 'batches', ctx: ['youth'], roles: ['superadmin'] },
+  batches: { label: 'Batches', icon: 'users-round', group: 'Academics', page: 'batches', ctx: ['youth', 'school'], roles: ['superadmin'] },
   students: { label: 'All Students', icon: 'users', group: 'Students', page: 'students', ctx: ['youth'], roles: ['superadmin', 'branch_head'] },
   admissions: { label: 'Admissions', icon: 'user-plus', group: 'Students', page: 'admissions', ctx: ['youth'], roles: ['superadmin', 'branch_head'] },
   'pay-fees': { label: 'Pay Fees', icon: 'wallet', group: 'Fees', page: 'pay-fees', ctx: ['youth'], roles: ['superadmin', 'branch_head'] },

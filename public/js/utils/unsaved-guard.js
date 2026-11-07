@@ -1,4 +1,4 @@
-// unsaved-guard.js — Rule 3 (v1.8.2): one shared "unsaved changes" guard for every form page.
+// unsaved-guard.js — Rule 3 (v1.8.5): one shared "unsaved changes" guard for every form page.
 // State lives on window so every import URL (with or without ?v=) shares the same registry.
 import { confirmDialog } from '../components/ui-confirm.js';
 

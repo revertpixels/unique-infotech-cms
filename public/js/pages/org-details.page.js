@@ -1,5 +1,5 @@
 import { db } from '../config/firebase-config.js';
-import { registerDirty } from '../utils/unsaved-guard.js?v=1.8.2';
+import { registerDirty } from '../utils/unsaved-guard.js?v=1.8.5';
 import { doc, getDoc, setDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
 
 const KEYS = ['name', 'tagline', 'phone', 'email', 'website', 'address'];

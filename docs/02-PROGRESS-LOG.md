@@ -42,6 +42,37 @@
 ## ACTIVE LOG (NEWEST ON TOP)
 
 ---
+### [2026-11-07 16:14] Version 1.8.5 — Phase 2 · index.html fix + search cursor
+- index.html: removed a <script> tag wrongly placed inside the module script (would blank the app);
+  window.__BUILD__ now set in its own classic <script> in <head>, before modules.
+- All list-page search bars: clear "x" shows hand cursor.
+- Version 1.8.4 -> 1.8.5.
+- Tested on: Pending owner live test.
+
+---
+
+### [2026-11-07 16:11] Version 1.8.4 — Phase 2 · Cache-bust
+- Version bump only so browsers load Batches Part 1b/1c/1d fixes (1.8.3 was kept across 3 fix rounds; cached copies were served).
+- Rule adopted: every Kilocode step that edits JS/CSS bumps the patch version, including small fixes.
+- Version 1.8.3 -> 1.8.4.
+- Tested on: Pending owner live test.
+
+---
+
+### [2026-11-07 15:44] Version 1.8.3 — Phase 2 · Filter-bar widths + Batches Part 1
+- Shared filter bar: dropdowns size to longest label on one line (closed + popup); search flex-fills remaining space.
+- Batches route (Academics, Super Admin, youth + school), pages/batches.html, css/pages/batches.css, batches.page.js:
+  stats, toolbar (status, session, branch [youth], level), table, empty state. Read only — form/save/delete in Part 2.
+- firestore.rules batches block unchanged (read superadmin + branch head, write superadmin). No deploy.
+- Part 1b: Batches stats cards + full toolbar wired; header/empty layout matched to Branches; filter CSS merged into one block, search uncapped.
+- Part 1c: filter popups open leftward inside page (no scrollbars); buildToolbar.setFilterOptions + select.setOptions;
+  Batches Session/Branch filters filled from shared loaders; empty state matches Branches.
+- Part 1d: Batches uses loadSessions(ctx); select.setOptions rebuilds popup; popups capped at 320px and open upward when needed; Rule 4 CSS de-duplicated; empty state matches Branches.
+- Version 1.8.2 -> 1.8.3.
+- Tested on: Pending owner live test.
+
+---
+
 ### [2026-11-06 13:48] Version 1.8.2 — Phase 2 · Unsaved-changes guard everywhere
 - Branches wired to unsaved-guard: sidebar/topbar navigation, context switch, browser refresh/close,
   Cancel / Add branch / Edit another row all ask before discarding typed data.

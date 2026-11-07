@@ -9,7 +9,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/main.css?v=1.8.2">
+  <link rel="stylesheet" href="css/main.css?v=1.8.5">
+  <script>window.__BUILD__ = '1.8.5';</script>
   <style>
     body.auth-pending {
       visibility: hidden;
@@ -27,12 +28,12 @@
     </div>
   </div>
   <script type="module">
-    import { getContext, setContext, loadSavedContext } from './js/core/app.js?v=1.8.2';
-    import { requireSession, logout } from './js/core/guard.js?v=1.8.2';
-    import { startRouter } from './js/core/router.js?v=1.8.2';
-    import { confirmLeave } from './js/utils/unsaved-guard.js?v=1.8.2';
-    import { renderSidebar, setActiveRoute, setCollapsed, toggleDrawer, closeDrawer, initSidebar } from './js/components/sidebar.js?v=1.8.2';
-    import { renderTopbar, setPageTitle, setSwitcherActive } from './js/components/topbar.js?v=1.8.2';
+    import { getContext, setContext, loadSavedContext } from './js/core/app.js?v=1.8.5';
+    import { requireSession, logout } from './js/core/guard.js?v=1.8.5';
+    import { startRouter } from './js/core/router.js?v=1.8.5';
+    import { confirmLeave } from './js/utils/unsaved-guard.js?v=1.8.5';
+    import { renderSidebar, setActiveRoute, setCollapsed, toggleDrawer, closeDrawer, initSidebar } from './js/components/sidebar.js?v=1.8.5';
+    import { renderTopbar, setPageTitle, setSwitcherActive } from './js/components/topbar.js?v=1.8.5';
     import { db } from './js/config/firebase-config.js';
     import { doc, getDoc } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
 
@@ -162,6 +163,6 @@ window.APP_CACHE = window.APP_CACHE || {};
       }
     })();
   </script>
-  <script type="module" src="js/core/app.js?v=1.8.2"></script>
+  <script type="module" src="js/core/app.js?v=1.8.5"></script>
 </body>
 </html>

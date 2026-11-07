@@ -12,7 +12,7 @@ function icon(name, cls) {
 }
 
 export function createSelect(host, opts) {
-  const options = (opts && opts.options) || [];
+  let options = (opts && opts.options) || [];
   let current = (opts && opts.value !== undefined) ? opts.value : (options[0] ? options[0].value : '');
   host.classList.add('ui-select');
   host.textContent = '';
@@ -56,6 +56,11 @@ export function createSelect(host, opts) {
     list.hidden = false;
     host.classList.add('open');
     btn.setAttribute('aria-expanded', 'true');
+    list.classList.remove('up');
+    const rect = btn.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const spaceAbove = rect.top;
+    if (spaceBelow < 200 && spaceAbove > spaceBelow) list.classList.add('up');
     const sel = list.querySelector('[aria-selected="true"]') || list.firstElementChild;
     if (sel) sel.focus();
     document.addEventListener('mousedown', onDown, true);
@@ -80,6 +85,29 @@ export function createSelect(host, opts) {
     }
   }
 
+  function rebuild() {
+    list.textContent = '';
+    options.forEach((o) => {
+      const li = mk('li', 'ui-select-opt');
+      li.setAttribute('role', 'option');
+      li.tabIndex = -1;
+      li.dataset.value = o.value;
+      li.appendChild(icon(o.icon || 'circle'));
+      li.appendChild(mk('span', '', o.label));
+      li.appendChild(icon('check', 'ui-select-tick'));
+      li.addEventListener('click', () => choose(o.value));
+      list.appendChild(li);
+    });
+    paint();
+  }
+  function setOptions(newOpts) {
+    const prev = current;
+    options = newOpts || [];
+    if (!options.some(o => o.value === prev)) current = options.length ? options[0].value : '';
+    else current = prev;
+    rebuild();
+  }
+
   btn.addEventListener('click', () => { if (list.hidden) open(); else close(false); });
   btn.addEventListener('keydown', (e) => {
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); open(); }
@@ -98,6 +126,7 @@ export function createSelect(host, opts) {
   return {
     get value() { return current; },
     set value(v) { current = v; paint(); },
+    setOptions,
     focus() { btn.focus(); }
   };
 }

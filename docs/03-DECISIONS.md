@@ -196,3 +196,10 @@ Includes in-page Cancel / Add / Edit-other-row actions. No page is accepted with
 - Open dropdown popup: auto width to content (max 380px), options never wrap.
 - Flex layout with controlled min-widths; filters are never squeezed.
 - Implemented in shared list-page.css, so Courses, Branches, Sessions and every future list page get it.
+
+## 16. Session status must match dates
+- Upcoming = start after today
+- Running = today within start..end
+- Closed = end before today
+- Archived = any
+No automatic status changes; mismatches flagged for Super Admin.

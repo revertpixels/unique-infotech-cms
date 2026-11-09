@@ -1,7 +1,7 @@
-import { ROUTES, ROLE_LABELS } from '../core/router.js?v=1.8.5';
-import { APP_VERSION } from '../core/app.js?v=1.8.5';
-import { getRunningPeriod, getNextDueDate, formatDayMonth } from '../utils/date.utils.js?v=1.8.5';
-import { getRunningSession, toPeriod } from '../core/sessions.js?v=1.8.5';
+import { ROUTES, ROLE_LABELS } from '../core/router.js?v=1.8.9';
+import { APP_VERSION } from '../core/app.js?v=1.8.9';
+import { getRunningPeriod, getNextDueDate, formatDayMonth } from '../utils/date.utils.js?v=1.8.9';
+import { getRunningSession, toPeriod, daysLeft, expectedStatus } from '../core/sessions.js?v=1.8.9';
 
 let drawerOpen = false;
 let tipEl = null;
@@ -80,9 +80,25 @@ function buildSessionCard(ctx, dueDay) {
   const meta = document.createElement('div');
   meta.className = 'ss-meta';
   if (ctx === 'youth') {
-    if (rp.daysLeft === 0) meta.textContent = 'Ends today';
-    else if (rp.daysLeft === 1) meta.textContent = 'Ends ' + formatDayMonth(rp.end) + ' · 1 day left';
-    else meta.textContent = 'Ends ' + formatDayMonth(rp.end) + ' · ' + rp.daysLeft + ' days left';
+    const start = rp.start;
+    const today = new Date(); today.setHours(0,0,0,0);
+    if (start && start > today) {
+      fill.style.width = '0%';
+      pct.textContent = '0%';
+      meta.textContent = 'Starts ' + formatDayMonth(start);
+    } else {
+      const d = daysLeft(rs.endDate);
+      if (d < 0) {
+        fill.style.width = '100%';
+        pct.textContent = '100%';
+        meta.textContent = 'Ended ' + rp.end.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) + ' – close this session';
+        meta.classList.add('sb-sess-overdue');
+      } else if (d === 0) {
+        meta.textContent = 'Ends today';
+      } else {
+        meta.textContent = 'Ends in ' + (d === 1 ? '1 day' : d + ' days');
+      }
+    }
   } else {
     meta.textContent = 'Next fee due ' + formatDayMonth(getNextDueDate(new Date(), dueDay));
   }

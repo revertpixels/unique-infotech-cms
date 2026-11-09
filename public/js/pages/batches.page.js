@@ -1,9 +1,9 @@
 import { db } from '../config/firebase-config.js';
 import { collection, getDocs, query, where } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.5';
-import { registerDirty } from '../utils/unsaved-guard.js?v=1.8.5';
-import { buildStats, buildToolbar } from '../components/list-page.js?v=1.8.5';
-import { loadSessions } from '../core/sessions.js?v=1.8.5';
+import { showToast } from '../components/toast.js?v=1.8.9';
+import { registerDirty } from '../utils/unsaved-guard.js?v=1.8.9';
+import { buildStats, buildToolbar } from '../components/list-page.js?v=1.8.9';
+import { loadSessions } from '../core/sessions.js?v=1.8.9';
 // Part 2: form + registerDirty
 
 function $(id) { return document.getElementById(id); }
@@ -53,7 +53,6 @@ export async function mount({ profile, ctx }) {
       const bSnap = await getDocs(query(collection(db, 'batches'), where('ctx', '==', ctx)));
       batches = bSnap.docs.map(d => Object.assign({ id: d.id }, d.data()));
       sessions = await loadSessions(ctx);
-      console.log('[batches] loaded', { ctx, sessions: sessions.length, branches: branches.length, batches: batches.length });
       if (youth) {
         const brSnap = await getDocs(collection(db, 'branches'));
         branches = brSnap.docs.map(d => Object.assign({ id: d.id }, d.data())).filter(b => (b.status || 'active') === 'active');
@@ -65,8 +64,8 @@ export async function mount({ profile, ctx }) {
       showToast('Could not load batches (' + (e.code || 'error') + ').', 'error');
       batches = []; sessions = []; branches = []; courses = [];
     }
-    tb.setFilterOptions('session', [{ value: 'all', label: 'All sessions' }].concat(sessions.map(s => ({ value: s.id, label: s.name || s.id }))));
-    if (youth) tb.setFilterOptions('branch', [{ value: 'all', label: 'All branches' }].concat(branches.map(b => ({ value: b.id, label: b.name || b.id }))));
+    tb.setFilterOptions('session', [{ value: 'all', label: 'All sessions', icon: 'calendar-range' }].concat(sessions.map(s => ({ value: s.id, label: s.name || s.id, icon: 'calendar-range' }))));
+    if (youth) tb.setFilterOptions('branch', [{ value: 'all', label: 'All branches', icon: 'git-branch' }].concat(branches.map(b => ({ value: b.id, label: b.name || b.id, icon: 'git-branch' }))));
     render();
   }
 

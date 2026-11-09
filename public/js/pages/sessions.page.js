@@ -4,9 +4,9 @@ import { createSelect } from '../components/ui-select.js';
 import { openMenu } from '../components/ui-menu.js';
 import { confirmDialog } from '../components/ui-confirm.js';
 import { showToast } from '../components/toast.js';
-import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.5';
+import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.9';
 import { buildStats, buildToolbar } from '../components/list-page.js';
-import { notifySessionsChanged } from '../core/sessions.js';
+import { notifySessionsChanged, todayISO, expectedStatus, statusMismatch, daysLeft } from '../core/sessions.js?v=1.8.9';
 
 const TEXT_KEYS = ['name', 'start', 'end'];
 const KEYS = ['name', 'start', 'end', 'status'];
@@ -106,6 +106,15 @@ export async function mount({ profile, ctx }) {
     if (!v.start) err.start = 'Start date is required.';
     if (!v.end) err.end = 'End date is required.';
     else if (v.start && v.end <= v.start) err.end = 'End date must be after the start date.';
+    if (v.start && v.end && v.status !== 'archived') {
+      const exp = expectedStatus(v.start, v.end);
+      if (v.status !== exp) {
+        if (v.status === 'upcoming') err.status = 'Start date has already passed. Choose Running or Closed, or change the dates.';
+        else if (v.status === 'running' && exp === 'upcoming') err.status = 'This session starts on ' + fmt(v.start) + '. Choose Upcoming, or change the dates.';
+        else if (v.status === 'running' && exp === 'closed') err.status = 'End date ' + fmt(v.end) + ' has passed. Choose Closed, or change the dates.';
+        else if (v.status === 'closed') err.status = 'End date has not passed yet. Choose ' + (exp === 'running' ? 'Running' : 'Upcoming') + '.';
+      }
+    }
     if (v.status === 'running') {
       const other = rows.find((r) => r.id !== editId && r.status === 'running');
       if (other) err.status = '"' + other.name + '" is already running. Set it to Closed first.';
@@ -152,10 +161,17 @@ export async function mount({ profile, ctx }) {
     stats.update(1, run ? run.name : '—', run ? fmt(run.startDate) + ' – ' + fmt(run.endDate) : 'None running');
     stats.update(2, rows.filter((r) => (r.status || 'upcoming') === 'upcoming').length, 'Not started yet');
     if (run && toDate(run.endDate)) {
-      const now = new Date();
-      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      const left = Math.max(0, Math.round((toDate(run.endDate) - today) / 86400000));
-      stats.update(3, left, 'Ends ' + fmt(run.endDate));
+      const sd = run.startDate, ed = run.endDate;
+      if (toDate(sd) && toDate(sd) > new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate())) {
+        stats.update(3, '—', 'Starts ' + fmt(sd));
+      } else {
+        const d = daysLeft(ed);
+        if (d < 0) { stats.update(3, 'Ended', 'Ended ' + fmt(ed) + ' – close this session'); }
+        else if (d === 0) stats.update(3, 0, 'Ends today');
+        else stats.update(3, d, 'Ends ' + fmt(ed));
+      }
+      const sub = stats.el.querySelectorAll('.lp-stat')[3]?.querySelector('.lp-stat-sub');
+      if (sub) sub.classList.toggle('ss-overdue', !!(run && daysLeft(run.endDate) < 0));
     } else {
       stats.update(3, '—', 'No running session');
     }
@@ -179,10 +195,24 @@ export async function mount({ profile, ctx }) {
       tr.appendChild(mk('td', '', fmt(r.startDate)));
       tr.appendChild(mk('td', '', fmt(r.endDate)));
       tr.appendChild(mk('td', 'hide-sm', lengthText(r.startDate, r.endDate)));
-      const tdSt = mk('td');
-      const st = r.status || 'upcoming';
-      tdSt.appendChild(mk('span', 'br-pill ' + (PILL[st] || 'off'), LABEL[st] || st));
-      tr.appendChild(tdSt);
+       const tdSt = mk('td');
+       const st = r.status || 'upcoming';
+       tdSt.appendChild(mk('span', 'br-pill ' + (PILL[st] || 'off'), LABEL[st] || st));
+       if (statusMismatch(r)) {
+         const exp = expectedStatus(r.startDate, r.endDate);
+         let title = '';
+         if (r.status === 'running' && exp === 'closed') title = 'Marked Running but ended ' + fmt(r.endDate);
+         else if (r.status === 'running' && exp === 'upcoming') title = 'Marked Running but starts ' + fmt(r.startDate);
+         else if (r.status === 'upcoming' && exp === 'running') title = 'Marked Upcoming but started ' + fmt(r.startDate);
+         else if (r.status === 'upcoming' && exp === 'closed') title = 'Marked Upcoming but ended ' + fmt(r.endDate);
+         else if (r.status === 'closed' && exp === 'running') title = 'Marked Closed but not ended yet';
+         else if (r.status === 'closed' && exp === 'upcoming') title = 'Marked Closed but not started yet';
+         else title = 'Dates don\'t match status';
+          const chip = mk('span', 'ss-mismatch', "Dates don't match status");
+          chip.title = title;
+          tdSt.appendChild(chip);
+       }
+       tr.appendChild(tdSt);
       const tdAct = mk('td', 'br-actions');
       const k = mk('button', 'ui-kebab');
       k.type = 'button';

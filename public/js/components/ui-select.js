@@ -44,6 +44,7 @@ export function createSelect(host, opts) {
     btn.appendChild(icon(o ? (o.icon || 'circle') : 'circle'));
     btn.appendChild(mk('span', 'ui-select-label', o ? o.label : ''));
     btn.appendChild(icon('chevron-down', 'ui-select-chev'));
+    btn.title = o ? (o.label || '') : '';
     list.querySelectorAll('.ui-select-opt').forEach((li) => {
       li.setAttribute('aria-selected', li.dataset.value === current ? 'true' : 'false');
     });

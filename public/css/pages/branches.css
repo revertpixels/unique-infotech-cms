@@ -38,7 +38,7 @@ td.br-actions { text-align: right; width: 1%; white-space: nowrap; }
   .br-head-row { flex-direction: column; align-items: stretch; }
 }
 
-/* 1.8.5 - multiple phones, email, map */
+/* 1.8.1 - multiple phones, email, map */
 .br-phones { display: flex; flex-direction: column; gap: 8px; }
 .br-phone-row { display: flex; gap: 8px; align-items: center; }
 .br-phone-row .ui-input-wrap { flex: 1; }

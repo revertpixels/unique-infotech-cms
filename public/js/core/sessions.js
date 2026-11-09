@@ -68,3 +68,26 @@ export function toPeriod(s) {
 export function notifySessionsChanged() {
   window.dispatchEvent(new Event('uic:sessions-changed'));
 }
+export function todayISO() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return y + '-' + m + '-' + day;
+}
+export function expectedStatus(start, end, today = todayISO()) {
+  if (start && start > today) return 'upcoming';
+  if (end && end < today) return 'closed';
+  return 'running';
+}
+export function statusMismatch(s, today = todayISO()) {
+  if (!s) return false;
+  if (s.status === 'archived') return false;
+  return s.status !== expectedStatus(s.startDate, s.endDate, today);
+}
+export function daysLeft(end, today = todayISO()) {
+  if (!end) return 0;
+  const a = new Date(today + 'T00:00:00');
+  const b = new Date(end + 'T00:00:00');
+  return Math.round((b - a) / 86400000);
+}

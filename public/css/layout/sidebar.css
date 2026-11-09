@@ -77,3 +77,4 @@
 }
 
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+.sb-sess-overdue { color: #F87171; font-weight: 600; }

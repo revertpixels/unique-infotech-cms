@@ -38,22 +38,13 @@ td.bt-actions { text-align: right; width: 1%; white-space: nowrap; }
   .bt-head-row { flex-direction: column; align-items: stretch; }
 }
 
-/* 1.8.5 - multiple phones, email, map */
-.bt-phones { display: flex; flex-direction: column; gap: 8px; }
-.bt-phone-row { display: flex; gap: 8px; align-items: center; }
-.bt-phone-row .ui-input-wrap { flex: 1; }
-.bt-phone-del { padding: 0 10px; min-width: 38px; height: 38px; }
-.bt-phone-add { margin-top: 8px; align-self: flex-start; }
-.bt-contact b { display: block; font-weight: 600; }
-.bt-contact .bt-muted { display: block; font-size: 12px; }
-.bt-map { display: inline-block; margin-top: 4px; font-size: 12px; font-weight: 600; color: var(--primary, #4f46e5); text-decoration: none; }
-.bt-map:hover { text-decoration: underline; }
-
-.bt-level { display:inline-block; margin-left:6px; padding:2px 8px; border-radius:999px; font-size:11px; font-weight:700; background:#EEF0FA; color:#323A85; }
-.bt-pill.upcoming { background:#E0F2FE; color:#0369A1; } .bt-pill.running { background:#DCFCE7; color:#15803D; }
-.bt-pill.completed { background:#F1F5F9; color:#475569; } .bt-pill.archived { background:#FEF3C7; color:#B45309; }
-
-.bt-empty { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 44px 16px; text-align: center; color: var(--text-mute); font-size: 13px; }
-.bt-empty[hidden] { display: none; }
-.bt-empty svg.lucide { width: 32px; height: 32px; margin-bottom: 6px; }
-.bt-empty b { font-size: 15px; color: var(--text); }
+/* Batches - level chip, status pills, empty state */
+.bt-level{display:inline-block;margin-left:6px;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700;background:#EEF0FA;color:#323A85}
+.bt-pill.upcoming{background:#E0F2FE;color:#0369A1}
+.bt-pill.running{background:#DCFCE7;color:#15803D}
+.bt-pill.completed{background:#F1F5F9;color:#475569}
+.bt-pill.archived{background:#FEF3C7;color:#B45309}
+.bt-empty{display:flex;flex-direction:column;align-items:center;gap:6px;padding:44px 16px;text-align:center;color:var(--text-mute);font-size:13px}
+.bt-empty[hidden]{display:none}
+.bt-empty svg.lucide{width:32px;height:32px;margin-bottom:6px}
+.bt-empty b{font-size:15px;color:var(--text)}

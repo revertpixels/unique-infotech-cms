@@ -42,6 +42,52 @@
 ## ACTIVE LOG (NEWEST ON TOP)
 
 ---
+### [2026-11-08 16:00] Version 1.8.8 — Phase 2 · Version bump only (session work NOT done — fixed in 1.8.9)
+- 1.8.7 added the helpers but did not wire them; now wired.
+- Sessions form: status must match dates (Upcoming/Running/Closed rule), clear message under Status, Save blocked.
+- Sessions table: red "Dates don't match status" chip with explanation on hover; no automatic status changes.
+- Days-left stat + sidebar card: no clamping; ended session shows "Ended DD Mon YYYY – close this session" in red; future start shows "Starts DD Mon YYYY".
+- Removed unused phone CSS copied into batches.css; version replace now touches only real version strings, not comments.
+- Version 1.8.7 -> 1.8.8.
+- Tested on: Pending owner live test.
+
+---
+
+### [2026-11-08 16:30] Version 1.8.9 — Phase 2 · Session date/status rules wired
+- Sessions form: status must match dates; message under Status; Save blocked.
+- Sessions table: red "Dates don't match status" chip with hover explanation. No automatic status changes.
+- Days-left stat: Ended (red) / Ends today / N days / Starts date.
+- Sidebar card: Starts / Ended (red) / Ends today; bar 0% before start, 100% after end.
+- batches.css: restored level chip, status pills, empty-state rules.
+- Fixed wrong version numbers in comments; removed duplicate decision.
+- Version 1.8.8 -> 1.8.9.
+- Tested on: Pending owner live test.
+
+---
+
+### [2026-11-08 11:00] Version 1.8.7 — Phase 2 · Dropdown rows + Session date/status bugs
+- Filter popups up to 520px; rows span full popup width (highlight + tick reach the end when scrolled).
+- BUG FIX: session status was a free choice. New rule: Upcoming = start after today; Running = today within start..end;
+  Closed = end before today; Archived = any. Save blocked on mismatch with clear message.
+- BUG FIX: days-left was clamped to 0, so an ended session showed "Ends today" / 100%. Now shows "Ended DD Mon YYYY – close this session" (red) in sidebar and Sessions stat.
+- Existing mismatched sessions flagged with "Dates don't match status" chip; no automatic status changes.
+- Shared helpers in core/sessions.js: todayISO, expectedStatus, statusMismatch, daysLeft.
+- Version 1.8.6 -> 1.8.7.
+- Tested on: Pending owner live test.
+
+---
+
+### [2026-11-07 16:33] Version 1.8.6 — Phase 2 · Filter dropdown polish
+- All dropdown popups: thin rounded scrollbar.
+- Filter boxes show selected label up to ~18 characters with "...", full name on hover; open list keeps full names; filter row stays on one line.
+- Batches Session/Branch filter options have icons (calendar-range / git-branch).
+- firebase.json: index.html and pages/** served with Cache-Control no-cache (no more stale app after updates).
+- Removed temporary [batches] debug log.
+- Version 1.8.5 -> 1.8.6.
+- Tested on: Pending owner live test.
+
+---
+
 ### [2026-11-07 16:14] Version 1.8.5 — Phase 2 · index.html fix + search cursor
 - index.html: removed a <script> tag wrongly placed inside the module script (would blank the app);
   window.__BUILD__ now set in its own classic <script> in <head>, before modules.

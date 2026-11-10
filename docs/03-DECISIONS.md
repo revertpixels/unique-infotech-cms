@@ -203,3 +203,14 @@ Includes in-page Cancel / Add / Edit-other-row actions. No page is accepted with
 - Closed = end before today
 - Archived = any
 No automatic status changes; mismatches flagged for Super Admin.
+
+## 23. Batch student capacity
+- capacity = maximum students who can enrol in a batch; empty = no limit.
+- Admissions must block enrolling into a full batch (to be built with Admissions).
+- A batch with students cannot be deleted; delete never cascades.
+
+## 24. Batches follow their session
+- Batch dates = session dates (not stored on the batch).
+- Batch status is derived: session Upcoming→Upcoming, Running→Running, Closed→Completed, Archived→Archived.
+- New batches only in Upcoming/Running sessions; each new session gets new batches.
+- Batches of a Closed/Archived session are read-only (Delete still allowed if no students).

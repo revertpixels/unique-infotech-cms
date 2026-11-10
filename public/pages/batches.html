@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <title>Batches</title>
-  <link rel="stylesheet" href="../css/pages/batches.css?v=1.8.9">
+  <link rel="stylesheet" href="../css/pages/batches.css?v=1.8.13">
 </head>
 <body>
   <div class="page-shell">
@@ -13,7 +13,7 @@
         <h2>Batches</h2>
         <p id="bt-sub"></p>
       </section>
-      <button id="bt-add" class="ui-btn primary" disabled title="Form arrives in Part 2"><i data-lucide="plus"></i> Add batch</button>
+      <button id="bt-add" class="ui-btn primary" type="button"><i data-lucide="plus"></i> Add batch</button>
     </div>
     <div id="bt-stats"></div>
     <div id="bt-toolbar"></div>
@@ -25,7 +25,7 @@
       <div class="lp-scroll">
         <table class="lp-table">
           <thead><tr>
-            <th>Batch</th><th>Course</th><th class="hide-md">Prerequisite</th><th>Session</th><th class="hide-sm" id="bt-col-branch">Branch</th><th>Students</th><th>Status</th><th class="act">Actions</th>
+            <th>Batch</th><th>Course</th><th>Session</th><th class="hide-sm" id="bt-col-branch">Branch</th><th>Students</th><th>Status</th><th class="act">Actions</th>
           </tr></thead>
           <tbody id="bt-rows"></tbody>
         </table>
@@ -36,6 +36,61 @@
         <span>Batches you create will appear here.</span>
       </div>
     </div>
+
+    <form id="bt-form" class="ui-card br-form bt-form" hidden novalidate>
+      <div class="ui-form-head">
+        <h3 id="bt-form-title">New batch</h3>
+        <p>Fill the batch details. Course details like prerequisite and exam fee come from the selected course.</p>
+        <div id="bt-readonly-note" class="bt-note is-error" hidden>This batch's session is closed. Batches of a closed session cannot be edited.</div>
+      </div>
+      <div id="bt-form-el">
+        <div class="bt-form-grid">
+          <div class="ui-field">
+            <div class="ui-label-row"><label class="ui-label" for="bt-name">Batch name <em>*</em></label><span class="ui-count" data-for="bt-name">0/40</span></div>
+            <div class="ui-input-wrap"><i data-lucide="users-round"></i><input class="ui-input has-count" id="bt-name" type="text" maxlength="40" autocomplete="off" placeholder="e.g. DITA Morning 2026"></div>
+            <div class="ui-err" id="bt-name-err"></div>
+          </div>
+          <div class="ui-field">
+            <div class="ui-label-row"><label class="ui-label" for="bt-code">Batch code</label><span class="ui-count" data-for="bt-code">0/16</span></div>
+            <div class="ui-input-wrap"><i data-lucide="hash"></i><input class="ui-input has-count" id="bt-code" type="text" maxlength="16" autocomplete="off" placeholder="Optional, e.g. DITA-M26"></div>
+            <div class="ui-help">Optional. Auto converted to UPPERCASE.</div>
+          </div>
+          <div class="ui-field">
+            <div class="ui-label-row"><label class="ui-label" for="bt-capacity">Student capacity</label></div>
+            <div class="ui-input-wrap"><i data-lucide="users"></i><input class="ui-input" id="bt-capacity" type="number" min="0" step="1" inputmode="numeric" placeholder="No limit"></div>
+            <div class="ui-help">Maximum students who can enrol. Leave empty for no limit.</div>
+            <div class="ui-err" id="bt-capacity-err"></div>
+          </div>
+          <div class="ui-field">
+            <div class="ui-label-row"><label class="ui-label">Course <em>*</em></label></div>
+            <div id="bt-course-host"></div>
+            <div id="bt-prereq" class="bt-course-info" hidden></div>
+            <div id="bt-examfee" class="bt-course-info" hidden></div>
+            <div id="bt-examfee-note" class="bt-course-note" hidden></div>
+            <div class="ui-err" id="bt-course-err"></div>
+          </div>
+          <div class="ui-field">
+            <div class="ui-label-row"><label class="ui-label">Session <em>*</em></label></div>
+            <div id="bt-session-host"></div>
+            <div id="bt-session-info" class="bt-course-info" hidden></div>
+            <div class="ui-err" id="bt-session-err"></div>
+          </div>
+          <div class="ui-field" id="bt-branch-field">
+            <div class="ui-label-row"><label class="ui-label">Branch <em>*</em></label></div>
+            <div id="bt-branch-host"></div>
+            <div id="bt-branch-fixed" class="bt-course-info" hidden>Head Office</div>
+            <div class="ui-err" id="bt-branch-err"></div>
+          </div>
+        </div>
+        <div class="save-bar">
+          <span class="save-state" id="bt-state">Fill in the details</span>
+          <div class="save-actions">
+            <button type="button" class="ui-btn ghost" id="bt-cancel"><i data-lucide="x"></i> Cancel</button>
+            <button type="submit" class="ui-btn primary" id="bt-save" disabled><i data-lucide="check"></i> <span id="bt-save-label">Add batch</span></button>
+          </div>
+        </div>
+      </div>
+    </form>
   </div>
 </body>
 </html>

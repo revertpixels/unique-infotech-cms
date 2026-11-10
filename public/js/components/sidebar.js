@@ -1,7 +1,7 @@
-import { ROUTES, ROLE_LABELS } from '../core/router.js?v=1.8.9';
-import { APP_VERSION } from '../core/app.js?v=1.8.9';
-import { getRunningPeriod, getNextDueDate, formatDayMonth } from '../utils/date.utils.js?v=1.8.9';
-import { getRunningSession, toPeriod, daysLeft, expectedStatus } from '../core/sessions.js?v=1.8.9';
+import { ROUTES, ROLE_LABELS } from '../core/router.js?v=1.8.13';
+import { APP_VERSION } from '../core/app.js?v=1.8.13';
+import { getRunningPeriod, getNextDueDate, formatDayMonth } from '../utils/date.utils.js?v=1.8.13';
+import { getRunningSession, toPeriod, daysLeft, expectedStatus } from '../core/sessions.js?v=1.8.13';
 
 let drawerOpen = false;
 let tipEl = null;

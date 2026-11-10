@@ -42,6 +42,46 @@
 ## ACTIVE LOG (NEWEST ON TOP)
 
 ---
+### [2026-11-09 16:45] Version 1.8.13 — Phase 2 · Batches follow their session
+- batches.html T1: removed Start date, End date and Status fields (inputs, labels, errors, validation, dirty-tracking keys). Under the Session select a read-only info line "Runs 01 Jul 2026 – 31 Dec 2026 · Running" (same chip style as the Prerequisite chip). Session select options limited to sessions with status upcoming or running (same ctx).
+- batches.page.js T2: added batchStatus(b) helper — looks up the session by b.sessionId in the loaded sessions list: upcoming→upcoming, running→running, closed→completed, archived→archived; session not found → completed. Used in the table pill, the Status filter and the Running/Upcoming stat cards. loadSessions now loads ALL sessions of the ctx (including closed/archived) for lookups; the upcoming/running-only list is only for the form select.
+- batches.page.js T3: save no longer writes startDate, endDate or status. On EDIT those legacy fields are removed from old docs with deleteField() (imported from firebase-firestore). sessionName stays denormalised. Everything else (studentCount, lockedExamFee, capacity, ...) unchanged.
+- batches.page.js T4: batches whose session is closed or archived are read-only. Row menu shows "View" instead of "Edit" (+ Delete as now). View opens the form with all inputs/selects disabled, Save hidden and a note at the top: "This batch's session is closed. Batches of a closed session cannot be edited." Delete rules unchanged (blocked if studentCount > 0; type DELETE; no cascade).
+- batches.html / batches.page.js T5: removed the "Prerequisite" column (header + cell). Kept the read-only Prerequisite chip in the form. Added a small grey line under the session name in the table: "01 Jul – 31 Dec 2026" (from the session dates).
+- docs/03-DECISIONS.md T6: added "## 24. Batches follow their session" (dates = session dates, status derived, new batches only in Upcoming/Running sessions, Closed/Archived batches read-only with Delete still allowed when no students).
+- Version 1.8.12 -> 1.8.13 (real strings only).
+- Tested on: Pending owner live test.
+
+### [2026-11-09 22:00] Version 1.8.12 — Phase 2 · Batches Part 2B: delete + student capacity
+- Row ⋮ menu: Edit + Delete (red, Branches/Sessions pattern). Delete: if studentCount > 0 show info dialog "This batch has N student(s). Move or remove them before deleting." (no delete). Else confirm "Delete batch?" with 
+equireText: 'DELETE' (red button disabled until exact match; ui-confirm already supported 
+equireText/input). On confirm: deleteDoc(doc(db,'batches',id)) only — no cascade. Toast "Batch deleted.", reload. Closes form if editing this batch; if form has unsaved changes on another batch, confirmLeave first.
+- Student capacity: form label "Student capacity", help "Maximum students who can enrol. Leave empty for no limit.", placeholder "No limit" (validation unchanged: empty or whole number ≥ 0). Table Students: studentCount / capacity when capacity set, else studentCount; red t-full pill when studentCount >= capacity and capacity set.
+- Polish: count badge "1 batch"/"N batches"; status pill text capitalised (data values remain lowercase); table exam-fee line uses ₹ not Rs; batch code maxlength/counter 12 → 16.
+- docs/03-DECISIONS.md: added ## 23. Batch student capacity (capacity semantics, admissions block full batch when built, batch with students cannot be deleted, no cascade).
+- Version 1.8.11 -> 1.8.12 (real strings).
+- Tested on: Pending owner live test.
+
+---
+### [2026-11-09 11:45] Version 1.8.11 — Phase 2 · Fix: batches.page.js duplicated (page did not load)
+- 1.8.10 left two copies of the module in atches.page.js (duplicate imports/definitions mid-file = SyntaxError); removed the broken first copy (kept everything from the second import { db } from '../config/firebase-config.js'; to EOF). C1–C5 verified (8 imports, 1 mount, 7 helpers once, 1 STATUSES, 
+ode --check clean).
+- Version 1.8.10 -> 1.8.11.
+- Tested on: Pending owner live test.
+
+---
+### [2026-11-09 11:30] Version 1.8.10 — Phase 2 · Batches Part 2A: add/edit form
+- Batches page: enabled "Add batch" and added Sessions-style form card (hidden until Add/Edit). Fields: Batch name* (40, counter), Batch code (12, optional, auto UPPERCASE), Course* (active courses createSelect) with read-only Prerequisite chip + read-only Exam fee "locked at ₹X" from course, Session* (non-archived sessions of same centre), Branch* (Youth: active branches createSelect; Unique Kids: read-only Head Office, branchId HO), Start date*, End date*, Capacity (optional whole number ≥ 0), Status (Upcoming/Running/Completed/Archived, default Upcoming).
+- Validation: required fields; end on/after start; capacity empty or whole number ≥ 0; Save blocked with per-field messages. Several batches may run at the same time.
+- Save to Firestore atches: name, code, ctx, courseId, courseName, courseCode, level, prerequisite (+ prerequisiteCourseCode for list), sessionId, sessionName, branchId, branchName, startDate, endDate, capacity (number/null), status, updatedAt, updatedBy. ADD only: studentCount: 0, lockedExamFee (from course exam fee or null), createdAt, createdBy. EDIT: never changes studentCount or lockedExamFee; if course changes, shows note "Exam fee stays locked at ₹X (set when the batch was created)".
+- Unsaved-guard: registerDirty + confirmLeave on Cancel, Add while editing, Edit another row. Row ⋮ menu: Edit (Delete in Part 2B).
+- sessions.page.js T6a: Days-left stat sub-line title set to full text on every update (hover shows whole sentence). sessions.css T6b: .ss-mismatch cursor:help; white-space:nowrap.
+- T0 field mapping (real): courses use 
+ame, code/courseCode, level, prerequisiteId/prerequisiteCode/eligibility (batches save prerequisite+prerequisiteCourseCode), semester fees ees.exam (locked as lockedExamFee), status. Batch list reads name, code, course via courseId, prerequisiteCourseCode, sessionId/sessionName, branchId/branchName, studentCount/capacity, status, courseLevel/lockedExamFee.
+- Version 1.8.9 -> 1.8.10 (APP_VERSION, __BUILD__, ?v= real strings).
+- Tested on: Pending owner live test.
+
+---
 ### [2026-11-08 16:00] Version 1.8.8 — Phase 2 · Version bump only (session work NOT done — fixed in 1.8.9)
 - 1.8.7 added the helpers but did not wire them; now wired.
 - Sessions form: status must match dates (Upcoming/Running/Closed rule), clear message under Status, Save blocked.

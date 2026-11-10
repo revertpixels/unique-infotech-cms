@@ -4,9 +4,9 @@ import { createSelect } from '../components/ui-select.js';
 import { openMenu } from '../components/ui-menu.js';
 import { confirmDialog } from '../components/ui-confirm.js';
 import { showToast } from '../components/toast.js';
-import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.9';
+import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.13';
 import { buildStats, buildToolbar } from '../components/list-page.js';
-import { notifySessionsChanged, todayISO, expectedStatus, statusMismatch, daysLeft } from '../core/sessions.js?v=1.8.9';
+import { notifySessionsChanged, todayISO, expectedStatus, statusMismatch, daysLeft } from '../core/sessions.js?v=1.8.13';
 
 const TEXT_KEYS = ['name', 'start', 'end'];
 const KEYS = ['name', 'start', 'end', 'status'];
@@ -170,10 +170,12 @@ export async function mount({ profile, ctx }) {
         else if (d === 0) stats.update(3, 0, 'Ends today');
         else stats.update(3, d, 'Ends ' + fmt(ed));
       }
-      const sub = stats.el.querySelectorAll('.lp-stat')[3]?.querySelector('.lp-stat-sub');
-      if (sub) sub.classList.toggle('ss-overdue', !!(run && daysLeft(run.endDate) < 0));
+      const daySub = stats.el.querySelectorAll('.lp-stat')[3]?.querySelector('.lp-stat-sub');
+      if (daySub) { daySub.title = daySub.textContent || ''; daySub.classList.toggle('ss-overdue', daysLeft(run.endDate) < 0); }
     } else {
       stats.update(3, '—', 'No running session');
+      const daySub = stats.el.querySelectorAll('.lp-stat')[3]?.querySelector('.lp-stat-sub');
+      if (daySub) { daySub.title = daySub.textContent || ''; daySub.classList.remove('ss-overdue'); }
     }
     const cnt = $('ss-count');
     if (cnt) cnt.textContent = rows.length + ' sessions';

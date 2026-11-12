@@ -1,0 +1,85 @@
+<div class="bh-wrap">
+  <div class="bh-head-row">
+    <section class="pg-head">
+      <div class="pg-crumbs">Administration / <span>Branch Heads</span></div>
+      <h2>Branch Heads</h2>
+      <p>People who manage a branch. They sign in with their Google account.</p>
+    </section>
+    <button type="button" id="bh-add" class="ui-btn primary"><i data-lucide="plus"></i>Add branch head</button>
+  </div>
+
+  <div id="bh-stats"></div>
+  <div id="bh-toolbar"></div>
+
+  <div class="lp-card">
+    <div class="lp-card-head">
+      <div class="lp-card-title"><i data-lucide="user-cog"></i><span>All branch heads</span></div>
+      <span class="lp-count" id="bh-count">0 heads</span>
+    </div>
+    <div class="lp-scroll">
+      <table class="bh-table">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th class="hide-sm">Phone</th>
+            <th>Branch</th>
+            <th class="hide-md">Status</th>
+            <th class="bh-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="bh-rows"></tbody>
+      </table>
+    </div>
+    <div id="bh-empty" class="bh-empty" hidden>
+      <i data-lucide="user-cog"></i>
+      <b>No branch heads yet</b>
+      <span>Branch heads you add will appear here.</span>
+    </div>
+    <div class="lp-card-foot" id="bh-foot" hidden></div>
+  </div>
+
+  <form id="bh-form" novalidate hidden>
+    <div class="set-card">
+      <div class="set-side">
+        <h3 id="bh-form-title">New branch head</h3>
+        <p>Add a person who will manage a branch. They sign in with their own Google account.</p>
+      </div>
+      <div class="set-fields">
+        <div class="ui-field">
+          <div class="ui-label-row"><label for="bh-name">Full name <em>*</em></label><span class="ui-count" data-for="bh-name"></span></div>
+          <div class="ui-input-wrap"><i data-lucide="user"></i><input id="bh-name" class="ui-input" type="text" maxlength="60" autocomplete="off" placeholder="e.g. Ravi Kumar"></div>
+          <div class="ui-err" id="bh-name-err"></div>
+        </div>
+        <div class="ui-field">
+          <div class="ui-label-row"><label for="bh-email">Google email <em>*</em></label></div>
+          <div class="ui-input-wrap"><i data-lucide="mail"></i><input id="bh-email" class="ui-input" type="email" maxlength="80" autocomplete="off" placeholder="e.g. ravi@uniqueinfotech.in"></div>
+          <div class="ui-help" id="bh-email-help">Must be the Google account they will sign in with.</div>
+          <div class="ui-err" id="bh-email-err"></div>
+        </div>
+        <div class="ui-field">
+          <div class="ui-label-row"><label for="bh-phone">Phone</label><span class="ui-count" data-for="bh-phone"></span></div>
+          <div class="ui-input-wrap"><i data-lucide="phone"></i><input id="bh-phone" class="ui-input" type="tel" maxlength="20" autocomplete="off" placeholder="e.g. 98765 43210"></div>
+          <div class="ui-err" id="bh-phone-err"></div>
+        </div>
+        <div class="ui-field">
+          <div class="ui-label-row"><label for="bh-branch">Branch <em>*</em></label></div>
+          <div id="bh-branch-host"></div>
+          <div class="ui-err" id="bh-branch-err"></div>
+        </div>
+        <div class="ui-field">
+          <div class="ui-label-row"><label for="bh-status">Status</label></div>
+          <div id="bh-status"></div>
+          <div class="ui-help" id="bh-status-help">Inactive heads cannot sign in until made Active again.</div>
+          <div class="ui-err" id="bh-status-err"></div>
+        </div>
+      </div>
+    </div>
+    <div class="save-bar">
+      <span id="bh-state" class="save-state" role="status" aria-live="polite">Fill in the details</span>
+      <div class="save-actions">
+        <button type="button" id="bh-cancel" class="ui-btn ghost"><i data-lucide="x"></i>Cancel</button>
+        <button type="submit" id="bh-save" class="ui-btn primary" disabled><i data-lucide="save"></i>Save branch head</button>
+      </div>
+    </div>
+  </form>
+</div>

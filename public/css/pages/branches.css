@@ -48,3 +48,5 @@ td.br-actions { text-align: right; width: 1%; white-space: nowrap; }
 .br-contact .br-muted { display: block; font-size: 12px; }
 .br-map { display: inline-block; margin-top: 4px; font-size: 12px; font-weight: 600; color: var(--primary, #4f46e5); text-decoration: none; }
 .br-map:hover { text-decoration: underline; }
+.br-head-name{display:flex;align-items:center;gap:6px}
+.br-dot-off{display:inline-block;flex:0 0 8px;width:8px;height:8px;border-radius:50%;background:#DC2626}

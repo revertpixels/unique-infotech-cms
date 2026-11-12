@@ -19,7 +19,7 @@
     <div class="lp-scroll">
       <table class="lp-table">
         <thead>
-          <tr><th>Session</th><th>Start</th><th>End</th><th class="hide-sm">Length</th><th>Status</th><th class="br-actions">Actions</th></tr>
+          <tr><th>Session</th><th>Start</th><th>End</th><th class="hide-sm">1st installment</th><th class="hide-sm">Length</th><th>Status</th><th class="br-actions">Actions</th></tr>
         </thead>
         <tbody id="ss-rows"></tbody>
       </table>
@@ -53,6 +53,12 @@
           <div class="ui-label-row"><label for="ss-end">End date <em>*</em></label></div>
           <div class="ui-input-wrap"><i data-lucide="calendar-check"></i><input id="ss-end" class="ui-input" type="date"></div>
           <div class="ui-err" id="ss-end-err"></div>
+        </div>
+        <div class="ui-field span-2" id="ss-inst-info" hidden>
+          <div class="adm-note info" id="ss-inst-info-text"></div>
+        </div>
+        <div class="ui-field span-2" id="ss-pattern-warn" hidden>
+          <div class="adm-note warn">Youth Centre sessions should be January-June or July-December.</div>
         </div>
         <div class="ui-field span-2">
           <div class="ui-label-row"><label>Status</label></div>

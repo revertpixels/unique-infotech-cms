@@ -40,8 +40,208 @@
 ---
 
 ## ACTIVE LOG (NEWEST ON TOP)
+---
+
+### [2026-11-12 04:56] Version 1.8.47 — Phase 2 · Restore filter dropdown rules in list-page.css + version bump
+- public/css/components/list-page.css T1: restored the 6 `.lp-filter .ui-select*` rules deleted in 1.8.46 (position, width, white-space, popup sizing/positioning, opt text-wrap) plus 2 new ellipsis rules so closed filter button text never overflows the 190-220px filter (`.lp-filter .ui-select-btn { max-width: 100%; }` and `.lp-filter .ui-select-btn .ui-select-label { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }`). The 1.8.46 `.lp-toolbar`/`.lp-search`/`.lp-filter`/`.lp-refresh`/`@media` rules are unchanged. Edit is purely additive: 8 lines inserted between `.lp-filter` and `.lp-toolbar .lp-refresh`, no lines removed.
+- public/js/core/app.js + 13 other JS/HTML files: bumped 1.8.46 -> 1.8.47 via Node script (UTF-8 no BOM).
+Why:
+- Restore dropdown popup behavior that was accidentally removed in 1.8.46; prevent long filter labels from overflowing their narrow filter boxes; version pin for cache busting.
+Files touched (created / modified / deleted):
+- MODIFIED: public/css/components/list-page.css
+- MODIFIED: public/js/core/app.js, public/js/core/router.js, public/js/components/sidebar.js, public/js/components/topbar.js, public/js/pages/admissions.page.js, public/js/pages/batches.page.js, public/js/pages/branch-heads.page.js, public/js/pages/branches.page.js, public/js/pages/courses.page.js, public/js/pages/org-details.page.js, public/js/pages/sessions.page.js, public/pages/batches.html, public/pages/login.html, public/index.html
+- MODIFIED: docs/02-PROGRESS-LOG.md
+Firestore changes:
+- none.
+Tested on:
+- grep public/ for UTF-8 BOM, \u2713, mojibake (â‚¹, Â·, â€”): 0 matches.
+- Chrome Desktop: Pending owner live test.
+- Mobile (Android Chrome): Pending owner live test.
+Edge cases checked:
+- git diff HEAD~1 -- list-page.css shows HEAD~1 is v1.8.9 (not 1.8.46 commit; 1.8.46 was never committed), so "-" lines in that diff are pre-existing uncommitted 1.8.46 changes, not from this edit. This session's list-page.css change is purely additive: 0 "-" lines, 8 "+" lines (6 restored + 2 ellipsis).
+Known issues created (if any):
+- None.
+Next task:
+- None.
 
 ---
+
+### [2026-11-12 04:45] Version 1.8.46 — Phase 2 · Toolbar filter widths + save bar spacing + version bump
+- public/css/components/list-page.css T1: replaced Rule 4 (1.8.5) toolbar rules so filters no longer grow to fill free space. `.lp-filter` changed from `flex: 1 1 150px; min-width: 130px` to `flex: 0 1 190px; min-width: 140px; max-width: 220px; width: auto; position: relative;`; `.lp-toolbar .lp-refresh` now `flex: 0 0 44px; width: 44px; height: 42px;` (stays last on same row); `@media (max-width: 1200px)` wraps toolbar and sets `.lp-search { flex-basis: 100%; }`. Removed the now-superseded `.lp-filter .ui-select*` sub-rules (popup sizing/positioning now handled by the filter's own width rules). Search box takes remaining width; each filter ~190px and never grows.
+- public/css/components/ui-kit.css T3: removed duplicate `border-top: 1px solid var(--border);` from `.save-bar` (the `border` shorthand already sets it). Kept margin-top 24px (1.8.45 spacing). Applies to Batches, Courses, Admissions, Sessions, Branches, Org-details, Branch-Heads save bars.
+- public/js/core/app.js + 13 other JS/HTML files: bumped 1.8.45 -> 1.8.46 via Node script (UTF-8 no BOM). docs/02-PROGRESS-LOG.md historical entries left untouched.
+Why:
+- Fix filters taking half the row on pages with few filters (e.g. Branches with 1 filter); clean up duplicate save-bar border; version pin for cache busting.
+Files touched (created / modified / deleted):
+- MODIFIED: public/css/components/list-page.css, public/css/components/ui-kit.css
+- MODIFIED: public/js/core/app.js, public/js/core/router.js, public/js/components/sidebar.js, public/js/components/topbar.js, public/js/pages/admissions.page.js, public/js/pages/batches.page.js, public/js/pages/branch-heads.page.js, public/js/pages/branches.page.js, public/js/pages/courses.page.js, public/js/pages/org-details.page.js, public/js/pages/sessions.page.js, public/pages/batches.html, public/pages/login.html, public/index.html
+- MODIFIED: docs/02-PROGRESS-LOG.md
+- CREATED then DELETED: tools/smoke-multi-select.mjs (temporary smoke test)
+Firestore changes:
+- none.
+Tested on:
+- Node smoke test: 13/13 PASS (createMultiSelect, recreated after prior deletion).
+- node --check on .mjs copies of 12 changed JS files: 0 failures.
+- grep public/ for UTF-8 BOM, \u2713, mojibake (â‚¹, Â·, â€”): 0 matches.
+- Chrome Desktop: Pending owner live test.
+- Mobile (Android Chrome): Pending owner live test.
+Edge cases checked:
+- admissions.css:156 overrides `.adm-toolbar-row .lp-filter { flex: 0 0 170px; ... }` — left unchanged per rule (page-specific override); listed in T2 report.
+- No inline `<style>` in public/pages uses lp-filter.
+Known issues created (if any):
+- None.
+Next task:
+- None.
+
+---
+
+### [2026-11-11 17:47] Version 1.8.45 — Phase 2 · T1-T5: search icon inside input, indeterminate select-all, inactive courses never selectable, save bar spacing, version bump
+- public/css/components/multi-select.css T1: .ui-multi-search removed display:flex; icon absolutely positioned inside the search div, input width:100% height:40px padding-left:36px background var(--surface), focus ring matches page inputs (.ui-multi-search > svg also styled for lucide replacement). public/js/components/multi-select.js markup already places <i data-lucide="search"> before <input> inside .ui-multi-search.
+- public/css/components/multi-select.css T2: .ui-multi-checkbox-custom.checked shows primary fill + white TICK svg; .indeterminate hides tick svg and draws a 10x2px white DASH via ::after; neither class = empty box with border var(--border); refreshChecks never sets both classes.
+- tools/smoke-multi-select.mjs T2: added T13 (start allCourses, untick one -> select-all row has class "indeterminate" and NOT "checked"); 13/13 PASS.
+- public/js/utils/session-rules.js T3: added isCourseActive(c) — course selectable only when (status||'active')==='active' && active!==false && !archived. batchAllowsCourse(batch, courseId, courses) returns false for inactive courses when batch.allCourses; explicitly selected inactive courseIds are retained.
+- public/js/pages/batches.page.js T3: courseSel.setOptions filtered to isCourseActive courses only; renderCourseChips shows "CODE (inactive)" grey-italic chip for inactive saved courseIds (kept, not removed silently); batchAllowsCourse(b, f.course, courses) passes courses lookup.
+- public/js/pages/admissions.page.js T3: courseSel.setOptions filtered to active courses only; validate() rejects inactive course with "This course is inactive. Choose another course."
+- public/js/pages/courses.page.js T3: prerequisite selector uses isCourseActive(c) instead of (c.status||'active')==='active'.
+- public/css/pages/batches.css T3: .bt-course-chip.inactive opacity 0.65 font-style italic.
+- public/css/components/ui-kit.css T4: .save-bar margin-top 24px, padding-top 16px, border-top 1px solid var(--border) — matches Courses form action bar spacing; applies to Admissions, Sessions, Branches, Org-details, Branch-Heads.
+- public/js/core/app.js, all ?v= tags, __BUILD__: bumped 1.8.44 -> 1.8.45 via Node script (UTF-8 no BOM).
+Why:
+- Complete T1-T5: search icon inside input, indeterminate select-all state, inactive courses never selectable app-wide, save bar spacing, version pinning, pre-commit checks.
+Files touched (created / modified / deleted):
+- MODIFIED: public/css/components/multi-select.css, public/css/components/ui-kit.css, public/css/pages/batches.css
+- MODIFIED: public/js/utils/session-rules.js, public/js/pages/batches.page.js, public/js/pages/admissions.page.js, public/js/pages/courses.page.js
+- MODIFIED: public/js/core/app.js + 13 other JS/HTML files (?v= tags, __BUILD__)
+- CREATED then DELETED: tools/smoke-multi-select.mjs (temporary smoke test)
+Firestore changes:
+- none.
+Tested on:
+- Node smoke test: 13/13 PASS (createMultiSelect).
+- node --check on .mjs copies of all 49 public/js files: 0 failures.
+- grep public/ for UTF-8 BOM, \u2713, mojibake (â‚¹, Â·, â€”): 0 matches.
+- Chrome Desktop: Pending owner live test.
+- Mobile (Android Chrome): Pending owner live test.
+Edge cases checked:
+- batch.allCourses + inactive course -> batchAllowsCourse returns false.
+- Explicitly selected inactive course kept in courseIds, shown as "(inactive)" chip, not in dropdown.
+- refreshChecks never sets both checked and indeterminate on select-all row.
+Known issues created (if any):
+- None.
+Next task:
+- None.
+
+---
+
+### [2026-11-11 17:07] Version 1.8.44 — Phase 2 · T4-T6: batches allCourses edit fix, multi-select smoke test, checks + report
+- public/js/pages/batches.page.js T4: openForm() now restores allCourses/courseIds from the edited batch so editing an allCourses batch shows all rows ticked, Select all ticked, closed label "All courses"; save writes allCourses/courseIds exactly as courseSel.value returns (allCourses:true -> courseIds:[]). courseSel.setOptions() already runs before fillForm() and keeps the current value.
+- public/js/pages/batches.page.js T4: #bt-course-codes grey chips ("All courses" or one chip per course CODE) render on fillForm and every change; hidden when empty; chip "x" removes a course ("All courses" chip x clears all). Chip CSS (12px, radius 999px, var(--bg), 1px var(--border)) already present in batches.css.
+- public/css/components/multi-select.css T4: .ui-multi-search {position:relative}, .ui-multi-search-icon {position:absolute;left:20px;top:50%;transform:translateY(-50%);pointer-events:none}, .ui-multi-search input {padding-left:36px} already present (search icon sits inside the input).
+- public/js/components/multi-select.js: exposed open() and close() on the public API.
+- tools/smoke-multi-select.mjs: 12-test Node smoke test of createMultiSelect with a fake DOM — all 12 PASS; temporary file, removed after use.
+Why:
+- Complete T4-T6: batches form course-selection correctness, toolbar one-row refresh button conformance (list-page.css Rule 4 already matches spec), and pre-commit checks.
+Files touched (created / modified / deleted):
+- MODIFIED: public/js/pages/batches.page.js
+- MODIFIED: public/js/components/multi-select.js
+- MODIFIED: docs/02-PROGRESS-LOG.md
+- CREATED then DELETED: tools/smoke-multi-select.mjs (temporary smoke test)
+Firestore changes:
+- none.
+Tested on:
+- Node smoke test: 12/12 PASS (createMultiSelect).
+- Chrome Desktop: Pending owner live test.
+- Mobile (Android Chrome): Pending owner live test.
+Edge cases checked:
+- node --check on .mjs copies of multi-select.js, batches.page.js, list-page.js, ui-select.js: clean.
+- grep public/ for UTF-8 BOM, \u2713, mojibake (â‚¹, Â·, â€”): 0 matches.
+- grep public/js for selAllLabel|selAllCb|selAllWrap: empty.
+Known issues created (if any):
+- None.
+Next task:
+- None.
+
+---
+
+### [2026-11-10 03:24] Version 1.8.16 — Phase 2 · Fix: branch head delete (missing import); inactive dot moved to Branches page
+- public/js/pages/branch-heads.page.js T1: added deleteDoc to the firebase-firestore import line; tryDeleteHead now shows showToast('Branch head deleted.', 'success') on success and showToast('Delete failed (...).', 'error') on error.
+- public/js/pages/branch-heads.page.js T2: removed the red dot (bh-dot-off span) from the table Name cell; grey 'Inactive' status pill and Status help line kept.
+- public/js/pages/branches.page.js T3: Branch Head column now shows a red dot (br-dot-off) to the RIGHT of an inactive head's name with title 'Inactive — cannot sign in'; removed the ' (inactive)' text after the email.
+- public/css/pages/branches.css T3: added .br-dot-off rule.
+- public/css/pages/branch-heads.css T3: deleted the now-unused .bh-dot-off rule.
+Why:
+- Fix missing deleteDoc import that would crash head deletion; move the inactive indicator to the Branches page where it is visible next to the head name.
+Files touched (created / modified / deleted):
+- MODIFIED: public/js/pages/branch-heads.page.js
+- MODIFIED: public/js/pages/branches.page.js
+- MODIFIED: public/css/pages/branches.css
+- MODIFIED: public/css/pages/branch-heads.css
+Firestore changes:
+- none.
+Tested on:
+- Chrome Desktop: Pending owner live test.
+- Mobile (Android Chrome): Pending owner live test.
+- Edge cases checked: Pending owner live test.
+Known issues created (if any):
+- None.
+Next task:
+- None.
+
+---
+
+### [2026-11-10 03:11] Version 1.8.15 — Phase 2 · Branch Heads: one head per branch, delete, visible errors
+- public/js/pages/branch-heads.page.js T1: validate() now blocks assigning a branch if ANY other branch_head (active or inactive) already has it: '"<name>" is already the head of this branch. Delete them first to assign a new head.' Branch select options hide branches that already have a head, except the head being edited; if none free shows a single "All branches have a head" option. Removed the per-branch active check from the Make active toggle.
+- public/js/pages/branch-heads.page.js T2: showErrors() now writes every error message to its bh-*-err element and adds the red is-invalid border to name/email/phone inputs and the branch/status select hosts. "This email is already registered." shows the same way.
+- public/js/pages/branch-heads.page.js T3: row menu adds Delete (red) with confirmDialog requireText 'DELETE' and deleteDoc(doc(db,'users',r.id)) only; closes form if editing this head, confirmLeave first if another head has unsaved changes; never offers Delete/Edit for non-branch_head docs.
+- public/js/pages/branch-heads.page.js T4: table Name cell shows a red dot (bh-dot-off, #DC2626, title "Inactive — cannot sign in") before an inactive head's name. Added help line "Inactive heads cannot sign in until made Active again." under the Status field.
+- public/css/pages/branch-heads.css: added bh-dot-off and ui-select.is-invalid .ui-select-btn styles.
+- public/js/pages/branches.page.js T5: Branch Head column shows one head only (name + email, " (inactive)" in grey if inactive); multiple heads show red "N heads — fix in Branch Heads"; removed "+N more". Heads assigned stat counts branches with at least one head.
+- docs/03-DECISIONS.md: replaced ## 25 bullets with one-head-per-branch rules.
+Why:
+- Enforce one branch head per branch regardless of status, allow deleting heads, and make validation errors clearly visible.
+Files touched (created / modified / deleted):
+- MODIFIED: public/js/pages/branch-heads.page.js
+- MODIFIED: public/css/pages/branch-heads.css
+- MODIFIED: public/pages/branch-heads.html
+- MODIFIED: public/js/pages/branches.page.js
+- MODIFIED: docs/03-DECISIONS.md
+Firestore changes:
+- Collection: `users` → delete branch_head docs allowed; no rules changed.
+Tested on:
+- Chrome Desktop: Pending owner live test.
+- Mobile (Android Chrome): Pending owner live test.
+- Edge cases checked: Pending owner live test.
+Known issues created (if any):
+- None.
+Next task:
+- None.
+
+---
+
+### [2026-11-10 02:38] Version 1.8.14 — Phase 2 · Branch Heads Part 1: list + add/edit
+- public/pages/branch-heads.html (CREATED): branch heads list page — breadcrumb, title, subtitle, Add button, 4 stats (Total/Active/Inactive/Branches without a head), search + Status + Branch toolbar, table (name+email, phone, branch, status pill, actions), empty state, add/edit form card with save bar.
+- public/js/pages/branch-heads.page.js (CREATED): loads users where role == 'branch_head' and all branches; renders list/table; form with name, Google email (read-only on edit), phone, branch (active only, current branch kept on edit), status; validation incl. email already registered and one-active-head-per-branch; ADD uses setDoc(doc(db,'users',email)) with only allowed fields (phone omitted if empty); EDIT uses updateDoc with name/phone/branchId/status/updatedAt only; row menu Edit + Make active/inactive toggle (active toggle passes one-head-per-branch check); registerDirty + confirmLeave on Cancel/Add/Edit-other-row.
+- public/css/pages/branch-heads.css (CREATED): bh- prefixed styles reusing shared lp-kit.
+Why:
+- Super Admin needs to create and manage branch heads who sign in with Google and manage a single branch.
+Files touched (created / modified / deleted):
+- CREATED: public/pages/branch-heads.html
+- CREATED: public/js/pages/branch-heads.page.js
+- CREATED: public/css/pages/branch-heads.css
+- MODIFIED: public/css/main.css, public/js/core/app.js, public/index.html and all ?v= import URLs (1.8.13 → 1.8.14)
+- MODIFIED: docs/03-DECISIONS.md (added ## 25 Branch heads)
+Firestore changes:
+- Collection: `users` → new branch_head docs keyed by lowercase Google email; no rules changed.
+Tested on:
+- Chrome Desktop: Pending owner live test.
+- Mobile (Android Chrome): Pending owner live test.
+- Edge cases checked: Pending owner live test.
+Known issues created (if any):
+- None.
+Next task:
+- Branch Heads Part 2: delete.
+
+---
+
 ### [2026-11-09 16:45] Version 1.8.13 — Phase 2 · Batches follow their session
 - batches.html T1: removed Start date, End date and Status fields (inputs, labels, errors, validation, dirty-tracking keys). Under the Session select a read-only info line "Runs 01 Jul 2026 – 31 Dec 2026 · Running" (same chip style as the Prerequisite chip). Session select options limited to sessions with status upcoming or running (same ctx).
 - batches.page.js T2: added batchStatus(b) helper — looks up the session by b.sessionId in the loaded sessions list: upcoming→upcoming, running→running, closed→completed, archived→archived; session not found → completed. Used in the table pill, the Status filter and the Running/Upcoming stat cards. loadSessions now loads ALL sessions of the ctx (including closed/archived) for lookups; the upcoming/running-only list is only for the form select.

@@ -4,9 +4,10 @@ import { createSelect } from '../components/ui-select.js';
 import { openMenu } from '../components/ui-menu.js';
 import { confirmDialog } from '../components/ui-confirm.js';
 import { showToast } from '../components/toast.js';
-import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.13';
+import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.47';
 import { buildStats, buildToolbar } from '../components/list-page.js';
-import { notifySessionsChanged, todayISO, expectedStatus, statusMismatch, daysLeft } from '../core/sessions.js?v=1.8.13';
+import { notifySessionsChanged, todayISO, expectedStatus, statusMismatch, daysLeft } from '../core/sessions.js?v=1.8.47';
+import { firstInstallmentOf, admissionState, installmentSchedule, sessionPattern, fmtDate } from '../utils/session-rules.js?v=1.8.47';
 
 const TEXT_KEYS = ['name', 'start', 'end'];
 const KEYS = ['name', 'start', 'end', 'status'];
@@ -34,11 +35,11 @@ function toDate(s) {
 }
 function fmt(s) {
   const d = toDate(s);
-  return d ? d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
+  return d ? d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : ' - ';
 }
 function lengthText(a, b) {
   const s = toDate(a), e = toDate(b);
-  if (!s || !e) return '—';
+  if (!s || !e) return ' - ';
   const days = Math.round((e - s) / 86400000) + 1;
   const months = Math.round(days / 30.44);
   return months >= 1 ? months + (months === 1 ? ' month' : ' months') : days + ' days';
@@ -60,12 +61,84 @@ export async function mount({ profile, ctx }) {
 
   const statusSel = createSelect(statusHost, { options: STATUS_OPTIONS, value: 'upcoming', ariaLabel: 'Status' });
 
+  const isYouth = centre === 'youth';
+
+  // Youth session pattern helpers: Jan-Jun / Jul-Dec.
+  function suggestName(startISO) {
+    if (!startISO) return '';
+    const p = String(startISO).split('-').map(Number);
+    if (p[1] === 1 && p[2] === 1) return 'Jan-Jun ' + p[0];
+    if (p[1] === 7 && p[2] === 1) return 'Jul-Dec ' + p[0];
+    return '';
+  }
+  function suggestEnd(startISO) {
+    if (!startISO) return '';
+    const p = String(startISO).split('-').map(Number);
+    if (p[1] === 1 && p[2] === 1) return p[0] + '-06-30';
+    if (p[1] === 7 && p[2] === 1) return p[0] + '-12-31';
+    return '';
+  }
+  function patternInfo(startISO, endISO) {
+    if (!isYouth || !startISO || !endISO) return { info: '', warn: false };
+    const sched = installmentSchedule({ startDate: startISO });
+    const firstDue = sched.length ? sched[0].due : null;
+    const fiDue = firstDue ? fmtDate(firstDue) : ' - ';
+    const months = sched.map((it) => it.month.slice(5, 7)).join(', ');
+    const lastDue = sched.length ? sched[3].due : null;
+    const lastDueDay = lastDue ? lastDue.slice(8, 10) : ' - ';
+    const info = '1st installment due: ' + fiDue + ' · Installments: ' + months + ' (due on the 10th) · Exam fee after ' + lastDueDay + ' ' + (lastDue ? lastDue.slice(5, 7) + ' ' + lastDue.slice(0, 4) : '');
+    const warn = !sessionPattern(startISO, endISO);
+    return { info: info, warn: warn };
+  }
+
+  const ssStart = $('ss-start');
+  const ssEnd = $('ss-end');
+  const ssName = $('ss-name');
+  const infoEl = $('ss-inst-info');
+  const infoText = $('ss-inst-info-text');
+  const warnEl = $('ss-pattern-warn');
+
+  function updateSessionInfo() {
+    if (!isYouth) { if (infoEl) infoEl.hidden = true; if (warnEl) warnEl.hidden = true; return; }
+    const start = ssStart ? ssStart.value : '';
+    const end = ssEnd ? ssEnd.value : '';
+    const pi = patternInfo(start, end);
+    if (infoEl && infoText) {
+      if (start) {
+        infoText.textContent = pi.info;
+        infoEl.hidden = false;
+      } else {
+        infoEl.hidden = true;
+      }
+    }
+    if (warnEl) {
+      warnEl.hidden = !pi.warn;
+    }
+  }
+
+  if (ssStart && ssEnd && ssName) {
+    ssStart.addEventListener('change', () => {
+      const start = ssStart.value;
+      const end = ssEnd.value;
+      const name = ssName.value;
+      const suggestedEnd = suggestEnd(start);
+      const suggestedName = suggestName(start);
+      if (suggestedEnd && !end) { ssEnd.value = suggestedEnd; touched = true; refresh(); }
+      if (suggestedName && !name) { ssName.value = suggestedName; touched = true; refresh(); }
+      updateSessionInfo();
+    });
+    ssEnd.addEventListener('change', () => { updateSessionInfo(); });
+    ssName.addEventListener('input', () => { touched = true; refresh(); });
+  }
+
+  updateSessionInfo();
+
   let rows = [];
   const stats = buildStats([
     { label: 'Total sessions', value: 0, sub: 'All statuses', icon: 'calendar-range', tone: 'indigo' },
-    { label: 'Running now', value: '—', sub: 'None running', icon: 'play-circle', tone: 'green' },
+    { label: 'Running now', value: ' - ', sub: 'None running', icon: 'play-circle', tone: 'green' },
     { label: 'Upcoming', value: 0, sub: 'Not started yet', icon: 'clock', tone: 'sky' },
-    { label: 'Days left', value: '—', sub: 'In running session', icon: 'hourglass', tone: 'amber' }
+    { label: 'Days left', value: ' - ', sub: 'In running session', icon: 'hourglass', tone: 'amber' }
   ]);
   const statsHost = $('ss-stats');
   if (statsHost) statsHost.appendChild(stats.el);
@@ -158,22 +231,22 @@ export async function mount({ profile, ctx }) {
     const list = rows.filter((r) => (f.status === 'all' || (r.status || 'upcoming') === f.status) && (!f.q || (r.name || '').toLowerCase().includes(f.q)));
     const run = rows.find((r) => r.status === 'running');
     stats.update(0, rows.length, rows.length === 1 ? '1 session' : rows.length + ' sessions');
-    stats.update(1, run ? run.name : '—', run ? fmt(run.startDate) + ' – ' + fmt(run.endDate) : 'None running');
+    stats.update(1, run ? run.name : ' - ', run ? fmt(run.startDate) + '  -  ' + fmt(run.endDate) : 'None running');
     stats.update(2, rows.filter((r) => (r.status || 'upcoming') === 'upcoming').length, 'Not started yet');
     if (run && toDate(run.endDate)) {
       const sd = run.startDate, ed = run.endDate;
       if (toDate(sd) && toDate(sd) > new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate())) {
-        stats.update(3, '—', 'Starts ' + fmt(sd));
+        stats.update(3, ' - ', 'Starts ' + fmt(sd));
       } else {
         const d = daysLeft(ed);
-        if (d < 0) { stats.update(3, 'Ended', 'Ended ' + fmt(ed) + ' – close this session'); }
+        if (d < 0) { stats.update(3, 'Ended', 'Ended ' + fmt(ed) + '  -  close this session'); }
         else if (d === 0) stats.update(3, 0, 'Ends today');
         else stats.update(3, d, 'Ends ' + fmt(ed));
       }
       const daySub = stats.el.querySelectorAll('.lp-stat')[3]?.querySelector('.lp-stat-sub');
       if (daySub) { daySub.title = daySub.textContent || ''; daySub.classList.toggle('ss-overdue', daysLeft(run.endDate) < 0); }
     } else {
-      stats.update(3, '—', 'No running session');
+      stats.update(3, ' - ', 'No running session');
       const daySub = stats.el.querySelectorAll('.lp-stat')[3]?.querySelector('.lp-stat-sub');
       if (daySub) { daySub.title = daySub.textContent || ''; daySub.classList.remove('ss-overdue'); }
     }
@@ -193,9 +266,10 @@ export async function mount({ profile, ctx }) {
     }
     list.forEach((r) => {
       const tr = mk('tr');
-      tr.appendChild(mk('td', 'br-name', r.name || '—'));
+      tr.appendChild(mk('td', 'br-name', r.name || ' - '));
       tr.appendChild(mk('td', '', fmt(r.startDate)));
       tr.appendChild(mk('td', '', fmt(r.endDate)));
+      tr.appendChild(mk('td', 'hide-sm', fmt(firstInstallmentOf(r))));
       tr.appendChild(mk('td', 'hide-sm', lengthText(r.startDate, r.endDate)));
        const tdSt = mk('td');
        const st = r.status || 'upcoming';
@@ -322,7 +396,7 @@ export async function mount({ profile, ctx }) {
     cancelBtn.disabled = true;
     setState('Saving...', 'dirty');
     const who = (profile && profile.email) ? profile.email : '';
-    const data = { name: v.name, ctx: centre, startDate: v.start, endDate: v.end, status: v.status, updatedAt: serverTimestamp(), updatedBy: who };
+    const data = { name: v.name, ctx: centre, startDate: v.start, endDate: v.end, firstInstallmentDate: firstInstallmentOf({ startDate: v.start }) || null, status: v.status, updatedAt: serverTimestamp(), updatedBy: who };
     try {
       const wasEdit = !!editId;
       if (editId) {
@@ -347,3 +421,18 @@ export async function mount({ profile, ctx }) {
 
   await load();
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

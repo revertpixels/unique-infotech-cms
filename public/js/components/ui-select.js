@@ -58,13 +58,12 @@ export function createSelect(host, opts) {
     host.classList.add('open');
     btn.setAttribute('aria-expanded', 'true');
     list.classList.remove('up');
-    const rect = btn.getBoundingClientRect();
-    const spaceBelow = window.innerHeight - rect.bottom;
-    const spaceAbove = rect.top;
-    if (spaceBelow < 200 && spaceAbove > spaceBelow) list.classList.add('up');
+    reposition();
     const sel = list.querySelector('[aria-selected="true"]') || list.firstElementChild;
     if (sel) sel.focus();
     document.addEventListener('mousedown', onDown, true);
+    window.addEventListener('resize', reposition, true);
+    window.addEventListener('scroll', reposition, true);
   }
 
   function close(focusBtn) {
@@ -72,7 +71,21 @@ export function createSelect(host, opts) {
     host.classList.remove('open');
     btn.setAttribute('aria-expanded', 'false');
     document.removeEventListener('mousedown', onDown, true);
+    window.removeEventListener('resize', reposition, true);
+    window.removeEventListener('scroll', reposition, true);
     if (focusBtn) btn.focus();
+  }
+
+  function reposition() {
+    try {
+      const rect = btn.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const spaceAbove = rect.top;
+      if (spaceBelow < 300 && spaceAbove > spaceBelow) list.classList.add('up');
+      else list.classList.remove('up');
+    } catch (e) {
+      // ignore reposition errors (e.g. element detached)
+    }
   }
 
   function choose(v) {

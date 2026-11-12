@@ -214,3 +214,19 @@ No automatic status changes; mismatches flagged for Super Admin.
 - Batch status is derived: session Upcoming→Upcoming, Running→Running, Closed→Completed, Archived→Archived.
 - New batches only in Upcoming/Running sessions; each new session gets new batches.
 - Batches of a Closed/Archived session are read-only (Delete still allowed if no students).
+
+## 25. Branch heads
+ - A branch head is a users doc (ID = lowercase Google email), role branch_head, one branchId.
+ - ONE head per branch, whether active or inactive. To change the head, delete the old one first.
+ - Inactive = cannot sign in (rules require status active); shown with a red dot.
+ - Email cannot be edited (it is the ID); delete and re-add instead.
+
+## 26. No blue info boxes unless they block an action
+
+Decision: no blue/grey info ("info note") boxes on any form unless the info blocks an action or prevents a mistake.
+Reasoning: blue info boxes under fields (e.g. "Prerequisite: ...", "Exam fee locked at ...") add visual noise without helping the user act. If information is needed for decisions, show it as an error/warning that blocks save, or as a read-only line in a summary, not as a decorative hint box.
+
+## 27. Only active courses are selectable anywhere
+
+Decision: a course is selectable (batch multi-select, admissions course dropdown, courses prerequisite selector) only when `isCourseActive(c)` returns true: `(c.status || 'active') === 'active' && c.active !== false && !c.archived`. Toolbar "Course" filters may list all courses for filtering old data. Editing an existing batch that references an inactive course keeps the id saved and shows a grey-italic "CODE (inactive)" chip, but the course is not in the dropdown list and is not removed silently. "All courses" batches (batchAllowsCourse with allCourses:true) return false for inactive courses. Admission save rejects an inactive course with "This course is inactive. Choose another course."
+Reasoning: inactive courses must not be available for new admissions or batch enrollment, but historical references must be preserved for data integrity.

@@ -9,8 +9,9 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/main.css?v=1.8.13">
-  <script>window.__BUILD__ = '1.8.13';</script>
+  <link rel="stylesheet" href="css/main.css?v=1.8.47">
+  <link rel="stylesheet" href="css/components/multi-select.css?v=1.8.47">
+  <script>window.__BUILD__ = '1.8.47';</script>
   <style>
     body.auth-pending {
       visibility: hidden;
@@ -28,12 +29,12 @@
     </div>
   </div>
   <script type="module">
-    import { getContext, setContext, loadSavedContext } from './js/core/app.js?v=1.8.13';
-    import { requireSession, logout } from './js/core/guard.js?v=1.8.13';
-    import { startRouter } from './js/core/router.js?v=1.8.13';
-    import { confirmLeave } from './js/utils/unsaved-guard.js?v=1.8.13';
-    import { renderSidebar, setActiveRoute, setCollapsed, toggleDrawer, closeDrawer, initSidebar } from './js/components/sidebar.js?v=1.8.13';
-    import { renderTopbar, setPageTitle, setSwitcherActive } from './js/components/topbar.js?v=1.8.13';
+    import { getContext, setContext, loadSavedContext } from './js/core/app.js?v=1.8.47';
+    import { requireSession, logout } from './js/core/guard.js?v=1.8.47';
+    import { startRouter } from './js/core/router.js?v=1.8.47';
+    import { confirmLeave } from './js/utils/unsaved-guard.js?v=1.8.47';
+    import { renderSidebar, setActiveRoute, setCollapsed, toggleDrawer, closeDrawer, initSidebar } from './js/components/sidebar.js?v=1.8.47';
+    import { renderTopbar, setPageTitle, setSwitcherActive } from './js/components/topbar.js?v=1.8.47';
     import { db } from './js/config/firebase-config.js';
     import { doc, getDoc } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
 
@@ -72,7 +73,7 @@ window.APP_CACHE = window.APP_CACHE || {};
         if (orgSnap.exists()) {
           window.APP_CACHE.org = orgSnap.data();
         } else {
-          console.warn('[boot] settings/org_config does not exist yet — using defaults');
+          console.warn('[boot] settings/org_config does not exist yet  -  using defaults');
         }
       } catch (e) {
         console.warn('[boot] org_config load failed:', e && e.code ? e.code : e);
@@ -163,6 +164,22 @@ window.APP_CACHE = window.APP_CACHE || {};
       }
     })();
   </script>
-  <script type="module" src="js/core/app.js?v=1.8.13"></script>
+  <script type="module" src="js/core/app.js?v=1.8.47"></script>
 </body>
 </html>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

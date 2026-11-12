@@ -108,16 +108,19 @@
 .ui-btn.primary { box-shadow: none; }
 
 /* ===== Rule 4 (1.8.5) - filter bar: dropdowns sized first, search fills the rest ===== */
-.lp-toolbar { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
-.lp-search { flex: 1 1 260px; min-width: 220px; max-width: none; }
-.lp-filter { flex: 0 0 auto; min-width: 170px; width: auto; position: relative; }
+.lp-toolbar { display: flex; flex-wrap: nowrap; align-items: flex-end; gap: 12px; }
+.lp-search  { flex: 1 1 260px; min-width: 200px; max-width: none; }
+.lp-filter  { flex: 0 1 190px; min-width: 140px; max-width: 220px; width: auto; position: relative; }
 .lp-filter .ui-select { position: relative; }
 .lp-filter .ui-select, .lp-filter .ui-select-btn { width: auto; min-width: 100%; }
 .lp-filter .ui-select-btn, .lp-filter .ui-select-btn span { white-space: nowrap; }
+.lp-filter .ui-select-btn { max-width: 100%; }
+.lp-filter .ui-select-btn .ui-select-label { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lp-filter .ui-select-list { left: auto; right: 0; min-width: 100%; width: max-content; max-width: min(420px, calc(100vw - 32px)); max-height: 320px; overflow-y: auto; }
 .lp-filter .ui-select-list.up { top: auto; bottom: calc(100% + 6px); }
 .lp-filter .ui-select-opt, .lp-filter .ui-select-opt span { white-space: nowrap; }
-.lp-toolbar .lp-refresh { flex: 0 0 auto; }
+.lp-toolbar .lp-refresh { flex: 0 0 44px; width: 44px; height: 42px; }
+@media (max-width: 1200px) { .lp-toolbar { flex-wrap: wrap; } .lp-search { flex-basis: 100%; } }
 @media (max-width: 640px) { .lp-search, .lp-filter { flex: 1 1 100%; min-width: 100%; } .lp-filter .ui-select-btn { width: 100%; } }
 
 /* 1.8.5 - search clear button shows hand cursor */

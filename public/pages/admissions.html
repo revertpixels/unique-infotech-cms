@@ -1,0 +1,214 @@
+<div class="adm-wrap">
+  <div class="adm-head-row">
+    <section class="pg-head">
+      <div class="pg-crumbs">Students / <span>Admissions</span></div>
+      <h2>Admissions</h2>
+      <p>Admit new students to courses and batches. Admission numbers are generated per branch and year.</p>
+    </section>
+    <button type="button" id="adm-add" class="ui-btn primary"><i data-lucide="user-plus"></i>New admission</button>
+  </div>
+
+  <div id="adm-stats"></div>
+  <div id="adm-toolbar"></div>
+
+  <div class="adm-table-card">
+    <div class="adm-scroll">
+      <table class="adm-table">
+        <thead>
+          <tr>
+            <th>Admission No</th>
+            <th>Student</th>
+            <th class="hide-sm">Phone</th>
+            <th>Course / Batch</th>
+            <th class="hide-sm">Admission Date</th>
+            <th class="hide-md">Status</th>
+            <th class="adm-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="adm-rows"></tbody>
+      </table>
+    </div>
+    <div id="adm-empty" class="adm-empty" hidden>
+      <i data-lucide="user-plus"></i>
+      <b>No admissions yet</b>
+      <span>Admitted students will appear here.</span>
+      <button type="button" id="adm-empty-add" class="ui-btn primary"><i data-lucide="user-plus"></i>New admission</button>
+    </div>
+    <div class="adm-card-foot" id="adm-foot" hidden></div>
+  </div>
+
+  <form id="adm-form" class="adm-form-card" novalidate hidden>
+    <header class="adm-form-head">
+      <h3 id="adm-form-title">New admission</h3>
+      <p>Fill the student details, choose the batch and upload the documents.</p>
+    </header>
+
+    <div class="adm-section">
+      <h4 class="adm-section-title">Student details</h4>
+      <div class="adm-grid">
+        <div class="ui-field">
+          <div class="ui-label-row"><label for="adm-name">Full name <em>*</em></label></div>
+          <div class="ui-input-wrap"><i data-lucide="user"></i><input id="adm-name" class="ui-input" type="text" maxlength="60" autocomplete="off" placeholder="e.g. Ravi Kumar"></div>
+          <div class="ui-err" id="adm-name-err"></div>
+        </div>
+        <div class="ui-field">
+          <div class="ui-label-row"><label for="adm-guardianName">Guardian name <em>*</em></label></div>
+          <div class="ui-input-wrap"><i data-lucide="user"></i><input id="adm-guardianName" class="ui-input" type="text" maxlength="60" autocomplete="off" placeholder="e.g. Suresh Kumar"></div>
+          <div class="ui-err" id="adm-guardianName-err"></div>
+        </div>
+        <div class="ui-field">
+          <div class="ui-label-row"><label for="adm-phone">Phone <em>*</em></label></div>
+          <div class="ui-input-wrap"><i data-lucide="phone"></i><input id="adm-phone" class="ui-input" type="tel" maxlength="20" autocomplete="off" placeholder="e.g. 98765 43210"></div>
+          <div class="ui-err" id="adm-phone-err"></div>
+        </div>
+        <div class="ui-field">
+          <div class="ui-label-row"><label for="adm-altPhone">Alt phone</label></div>
+          <div class="ui-input-wrap"><i data-lucide="phone"></i><input id="adm-altPhone" class="ui-input" type="tel" maxlength="20" autocomplete="off" placeholder="e.g. 98765 43210"></div>
+          <div class="ui-err" id="adm-altPhone-err"></div>
+        </div>
+        <div class="ui-field">
+          <div class="ui-label-row"><label for="adm-email">Email</label></div>
+          <div class="ui-input-wrap"><i data-lucide="mail"></i><input id="adm-email" class="ui-input" type="email" maxlength="80" autocomplete="off" placeholder="e.g. ravi@example.com"></div>
+          <div class="ui-err" id="adm-email-err"></div>
+        </div>
+        <div class="ui-field">
+          <div class="ui-label-row"><label for="adm-dob">Date of birth <em>*</em></label></div>
+          <div class="ui-input-wrap"><i data-lucide="calendar"></i><input id="adm-dob" class="ui-input" type="date"></div>
+          <div class="ui-err" id="adm-dob-err"></div>
+        </div>
+        <div class="ui-field">
+          <div class="ui-label-row"><label for="adm-gender">Gender <em>*</em></label></div>
+          <div id="adm-gender-host"></div>
+          <div class="ui-err" id="adm-gender-err"></div>
+        </div>
+        <div class="ui-field">
+          <div class="ui-label-row"><label for="adm-qualification">Highest qualification <em>*</em></label></div>
+          <div id="adm-qualification-host"></div>
+          <div class="ui-err" id="adm-qualification-err"></div>
+        </div>
+        <div class="ui-field span-2">
+          <div class="ui-label-row"><label for="adm-address">Address <em>*</em></label></div>
+          <div class="ui-input-wrap top"><i data-lucide="map-pin"></i><textarea id="adm-address" class="ui-input" rows="3" placeholder="Street, town, district"></textarea></div>
+          <div class="ui-err" id="adm-address-err"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="adm-section">
+      <h4 class="adm-section-title">Course & batch</h4>
+      <div class="adm-grid">
+        <div class="ui-field">
+          <div class="ui-label-row"><label for="adm-session">Session <em>*</em></label></div>
+          <div id="adm-session-host"></div>
+          <div class="ui-err" id="adm-session-err"></div>
+          <div id="adm-session-note" class="adm-note warn" hidden></div>
+        </div>
+        <div class="ui-field">
+          <div class="ui-label-row"><label for="adm-branch">Branch <em>*</em></label></div>
+          <div id="adm-branch-host"></div>
+          <div class="ui-err" id="adm-branch-err"></div>
+        </div>
+        <div class="ui-field">
+          <div class="ui-label-row"><label for="adm-course">Course <em>*</em></label></div>
+          <div id="adm-course-host"></div>
+          <div class="ui-err" id="adm-course-err"></div>
+        </div>
+        <div class="ui-field">
+          <div class="ui-label-row"><label for="adm-batch">Batch <em>*</em></label></div>
+          <div id="adm-batch-host"></div>
+          <div class="ui-err" id="adm-batch-err"></div>
+          <div id="adm-seats" class="adm-seats ok"></div>
+        </div>
+        <div class="ui-field">
+          <div class="ui-label-row"><label for="adm-admissionDate">Admission date <em>*</em></label></div>
+          <div class="ui-input-wrap"><i data-lucide="calendar"></i><input id="adm-admissionDate" class="ui-input" type="date"></div>
+          <div class="ui-err" id="adm-admissionDate-err"></div>
+        </div>
+        <div class="ui-field empty-cell"></div>
+        <div class="ui-field span-2">
+          <div id="adm-prereq" class="adm-note warn" hidden></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="adm-section">
+      <h4 class="adm-section-title">Documents</h4>
+      <div class="adm-doc-info">
+        Upload clear, recent images. Date of birth proof: Birth Certificate, Aadhaar Card or Madhyamik Admit Card.
+      </div>
+      <div class="adm-doc-grid">
+        <div class="adm-upload-card">
+          <label class="adm-doc-label">Date of birth proof <em style="color:var(--danger);font-style:normal;">*</em></label>
+          <div class="adm-upload" id="adm-dobProof-upload">
+            <div class="adm-upload-empty">
+              <i data-lucide="file-text"></i>
+              <div class="adm-upload-text"><strong>Click or drag</strong></div>
+              <div class="adm-upload-hint">JPG, PNG, WEBP · max 10 MB · compressed to under 100 KB</div>
+              <input type="file" id="adm-dobProof-file" class="adm-upload-input" accept="image/*">
+            </div>
+            <div class="adm-upload-preview" id="adm-dobProof-preview"></div>
+            <div class="adm-doc-size" id="adm-dobProof-size"></div>
+          </div>
+          <div class="adm-err" id="adm-dobProof-err"></div>
+        </div>
+        <div class="adm-upload-card">
+          <label class="adm-doc-label">Marksheet <em style="color:var(--danger);font-style:normal;">*</em></label>
+          <div class="adm-upload" id="adm-marksheet-upload">
+            <div class="adm-upload-empty">
+              <i data-lucide="file-text"></i>
+              <div class="adm-upload-text"><strong>Click or drag</strong></div>
+              <div class="adm-upload-hint">JPG, PNG, WEBP · max 10 MB · compressed to under 100 KB</div>
+              <input type="file" id="adm-marksheet-file" class="adm-upload-input" accept="image/*">
+            </div>
+            <div class="adm-upload-preview" id="adm-marksheet-preview"></div>
+            <div class="adm-doc-size" id="adm-marksheet-size"></div>
+          </div>
+          <div class="adm-err" id="adm-marksheet-err"></div>
+        </div>
+        <div class="adm-upload-card">
+          <label class="adm-doc-label">Photo (passport size) <em style="color:var(--danger);font-style:normal;">*</em></label>
+          <div class="adm-upload" id="adm-photo-upload">
+            <div class="adm-upload-empty">
+              <i data-lucide="image"></i>
+              <div class="adm-upload-text"><strong>Click or drag</strong></div>
+              <div class="adm-upload-hint">JPG, PNG, WEBP · max 10 MB · compressed to under 100 KB</div>
+              <input type="file" id="adm-photo-file" class="adm-upload-input" accept="image/*">
+            </div>
+            <div class="adm-upload-preview" id="adm-photo-preview"></div>
+            <div class="adm-doc-size" id="adm-photo-size"></div>
+          </div>
+          <div class="adm-err" id="adm-photo-err"></div>
+        </div>
+        <div class="adm-upload-card">
+          <label class="adm-doc-label">Signature <em style="color:var(--danger);font-style:normal;">*</em></label>
+          <div class="adm-upload" id="adm-signature-upload">
+            <div class="adm-upload-empty">
+              <i data-lucide="pen-line"></i>
+              <div class="adm-upload-text"><strong>Click or drag</strong></div>
+              <div class="adm-upload-hint">JPG, PNG, WEBP · max 10 MB · compressed to under 100 KB</div>
+              <input type="file" id="adm-signature-file" class="adm-upload-input" accept="image/*">
+            </div>
+            <div class="adm-upload-preview" id="adm-signature-preview"></div>
+            <div class="adm-doc-size" id="adm-signature-size"></div>
+          </div>
+          <div class="adm-err" id="adm-signature-err"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="adm-section">
+      <h4 class="adm-section-title">Fees</h4>
+      <div id="adm-fees">
+        <div class="adm-fee-grid" id="adm-fee-grid"></div>
+      </div>
+    </div>
+
+    <footer class="adm-savebar">
+      <span id="adm-state" class="save-state" role="status" aria-live="polite">Fill in the details</span>
+      <div class="save-actions">
+        <button type="button" id="adm-cancel" class="ui-btn ghost"><i data-lucide="x"></i>Cancel</button>
+        <button type="submit" id="adm-save" class="ui-btn primary" disabled><i data-lucide="save"></i><span id="adm-save-label">Save admission</span></button>
+      </div>
+    </footer>
+  </form>
+</div>

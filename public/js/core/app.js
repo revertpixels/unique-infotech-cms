@@ -1,6 +1,6 @@
 import { app } from '../config/firebase-config.js';
 
-export const APP_VERSION = '1.8.13';
+export const APP_VERSION = '1.8.47';
 
 export const APP_CACHE = {
   currentUser: null,
@@ -55,3 +55,18 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   console.info(`Unique Infotech CMS v${APP_VERSION} - Firebase initialized`);
 });
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

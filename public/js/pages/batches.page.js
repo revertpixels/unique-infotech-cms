@@ -1,16 +1,18 @@
 import { db } from '../config/firebase-config.js';
 import { collection, getDocs, query, where, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, deleteField } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.13';
-import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.13';
-import { buildStats, buildToolbar } from '../components/list-page.js?v=1.8.13';
-import { createSelect } from '../components/ui-select.js?v=1.8.13';
-import { openMenu } from '../components/ui-menu.js?v=1.8.13';
-import { confirmDialog } from '../components/ui-confirm.js?v=1.8.13';
-import { loadSessions } from '../core/sessions.js?v=1.8.13';
+import { showToast } from '../components/toast.js?v=1.8.47';
+import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.47';
+import { buildStats, buildToolbar } from '../components/list-page.js?v=1.8.47';
+import { createSelect } from '../components/ui-select.js?v=1.8.47';
+import { createMultiSelect } from '../components/multi-select.js?v=1.8.47';
+import { openMenu } from '../components/ui-menu.js?v=1.8.47';
+import { confirmDialog } from '../components/ui-confirm.js?v=1.8.47';
+import { loadSessions } from '../core/sessions.js?v=1.8.47';
+import { batchAllowsCourse, batchCourseLabel, batchCourseTooltip, isCourseActive } from '../utils/session-rules.js?v=1.8.47';
 // Batches Part 2A/2B: add/edit form, delete, student capacity
 
 const TEXT_KEYS = ['name', 'code', 'capacity'];
-const BLANK = { name: '', code: '', courseId: '', sessionId: '', branchId: '', capacity: '' };
+const BLANK = { name: '', code: '', capacity: '', allCourses: false, courseIds: [], sessionId: '', branchId: '' };
 
 function $(id) { return document.getElementById(id); }
 function mk(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; }
@@ -43,16 +45,7 @@ export async function mount({ profile, ctx }) {
   const cancelBtn = $('bt-cancel');
   if (!form || !addBtn || !saveBtn || !cancelBtn) return;
 
-  // Form selects
-  const courseSel = createSelect($('bt-course-host'), { options: [{ value: '', label: 'Select a course', icon: 'book-open' }], value: '', ariaLabel: 'Course', onChange: () => { paintCourseInfo(); touched = true; refresh(); } });
-  const sessionSel = createSelect($('bt-session-host'), { options: [{ value: '', label: 'Select a session', icon: 'calendar-range' }], value: '', ariaLabel: 'Session', onChange: () => { paintSessionInfo(); touched = true; refresh(); } });
-  let branchSel = null;
-  if (youth) {
-    branchSel = createSelect($('bt-branch-host'), { options: [{ value: '', label: 'Select a branch', icon: 'git-branch' }], value: '', ariaLabel: 'Branch', onChange: () => { touched = true; refresh(); } });
-  } else {
-    $('bt-branch-host').hidden = true;
-    $('bt-branch-fixed').hidden = false;
-  }
+  let courseSel, sessionSel, branchSel = null;
 
   const statsHost = $('bt-stats');
   const stats = buildStats([
@@ -63,6 +56,7 @@ export async function mount({ profile, ctx }) {
   ]);
   if (statsHost) statsHost.appendChild(stats.el);
 
+  try {
   const tbHost = $('bt-toolbar');
   const tb = buildToolbar({
     placeholder: 'Search batch, code or course',
@@ -74,6 +68,7 @@ export async function mount({ profile, ctx }) {
       ]},
       { id: 'session', label: 'Session', options: [{ value: 'all', label: 'All sessions' }] },
       ...(youth ? [{ id: 'branch', label: 'Branch', options: [{ value: 'all', label: 'All branches' }] }] : []),
+      { id: 'course', label: 'Course', options: [{ value: 'all', label: 'All courses', icon: 'book-open' }] },
       { id: 'level', label: 'Level', options: [
         { value: 'all', label: 'All levels' }, { value: '1', label: 'Semester 1 (Base Course)' },
         { value: '2', label: 'Semester 2 (Combo Course)' }, { value: '3', label: 'Semester 3 (Advanced Course)' }
@@ -83,6 +78,25 @@ export async function mount({ profile, ctx }) {
     onRefresh: () => load()
   });
   if (tbHost) tbHost.appendChild(tb.el);
+
+  // Form selects (inside try so a broken component doesn't blank the page)
+  try {
+    courseSel = createMultiSelect($('bt-course-host'), {
+      options: [], ariaLabel: 'Courses',
+      branchType: youth ? 'youth' : 'unique-kids',
+      onChange: () => { touched = true; refresh(); }
+    });
+    sessionSel = createSelect($('bt-session-host'), { options: [{ value: '', label: 'Select a session', icon: 'calendar-range' }], value: '', ariaLabel: 'Session', onChange: () => { paintSessionInfo(); touched = true; refresh(); } });
+    if (youth) {
+      branchSel = createSelect($('bt-branch-host'), { options: [{ value: '', label: 'Select a branch', icon: 'git-branch' }], value: '', ariaLabel: 'Branch', onChange: () => { touched = true; refresh(); } });
+    } else {
+      $('bt-branch-host').hidden = true;
+      $('bt-branch-fixed').hidden = false;
+    }
+  } catch (err) {
+    console.error('[batches] form init', err);
+    showToast("Batch form failed to load. Refresh the page.", 'error');
+  }
 
   let batches = [], sessions = [], branches = [], courses = [], coursesById = {};
   let editId = null, editRow = null, saved = Object.assign({}, BLANK), touched = false, saving = false;
@@ -105,21 +119,8 @@ export async function mount({ profile, ctx }) {
   function branchName(b) { if (!youth) return b.branchName || 'Head Office'; const br = branches.find(x => x.id === b.branchId); return br ? (br.name || br.id) : (b.branchName || ''); }
 
   function paintCourseInfo() {
-    const c = coursesById[courseSel.value];
-    const pre = $('bt-prereq');
-    const fee = $('bt-examfee');
-    const note = $('bt-examfee-note');
-    if (!c) { pre.hidden = true; fee.hidden = true; note.hidden = true; return; }
-    const p = coursePrereq(c, coursesById);
-    pre.textContent = 'Prerequisite: ' + (p || 'None');
-    pre.hidden = false;
-    const ef = courseExamFee(c);
-    fee.textContent = ef != null ? 'Exam fee locked at ₹' + Number(ef).toLocaleString('en-IN') : '';
-    fee.hidden = ef == null;
-    // Edit: if course changed from original, keep lockedExamFee but show note.
-    const changed = !!(editRow && editRow.courseId && editRow.courseId !== c.id);
-    note.textContent = changed && editRow.lockedExamFee != null ? 'Exam fee stays locked at ₹' + Number(editRow.lockedExamFee).toLocaleString('en-IN') + ' (set when the batch was created).' : '';
-    note.hidden = !changed || editRow.lockedExamFee == null;
+    // No blue info boxes under Course per UI rule (docs/03-DECISIONS.md).
+    // Prerequisite/exam fee data still computed and saved; only not shown.
   }
   function paintSessionInfo() {
     const info = $('bt-session-info');
@@ -151,7 +152,10 @@ export async function mount({ profile, ctx }) {
     const v = {};
     TEXT_KEYS.forEach((k) => { const e = $('bt-' + k); v[k] = e ? e.value.trim() : ''; });
     v.code = v.code.toUpperCase();
-    v.courseId = courseSel.value || '';
+    const cs = courseSel.value;
+    v.allCourses = !!cs.allCourses;
+    v.courseIds = cs.courseIds && cs.courseIds.length ? cs.courseIds.slice() : [];
+    v.courseId = v.allCourses ? null : (v.courseIds[0] || '');
     v.sessionId = sessionSel.value || '';
     v.branchId = youth ? (branchSel ? branchSel.value : '') : 'HO';
 
@@ -159,18 +163,52 @@ export async function mount({ profile, ctx }) {
   }
   function fillForm(v) {
     TEXT_KEYS.forEach((k) => { const e = $('bt-' + k); if (e) e.value = v[k] != null ? v[k] : ''; });
-    courseSel.value = v.courseId || '';
+    courseSel.value = { allCourses: !!v.allCourses, courseIds: v.courseIds && v.courseIds.length ? v.courseIds.slice() : (v.courseId ? [v.courseId] : []) };
     sessionSel.value = v.sessionId || '';
     if (youth && branchSel) branchSel.value = v.branchId || '';
     paintSessionInfo();
-    paintCourseInfo();
+    renderCourseChips();
   }
   function snapshot(v) { return JSON.stringify(v || readForm()); }
+
+  function renderCourseChips() {
+    const host = $('bt-course-codes');
+    if (!host) return;
+    host.innerHTML = '';
+    const cs = courseSel.value;
+    if (!cs || (!cs.allCourses && (!cs.courseIds || cs.courseIds.length === 0))) {
+      host.hidden = true;
+      return;
+    }
+    host.hidden = false;
+    if (cs.allCourses) {
+      const chip = mk('div', 'bt-course-chip');
+      chip.textContent = 'All courses';
+      const x = mk('span', 'bt-chip-x', '×');
+      x.title = 'Clear all';
+      x.addEventListener('click', (ev) => { ev.stopPropagation(); courseSel.value = { allCourses: false, courseIds: [] }; refresh(); });
+      chip.appendChild(x);
+      host.appendChild(chip);
+    } else {
+      cs.courseIds.forEach((id) => {
+        const c = coursesById[id];
+        const code = c ? (c.courseCode || c.code || id) : id;
+        const inactive = c && !isCourseActive(c);
+        const chip = mk('div', 'bt-course-chip' + (inactive ? ' inactive' : ''));
+        chip.textContent = code + (inactive ? ' (inactive)' : '');
+        const x = mk('span', 'bt-chip-x', '×');
+        x.title = 'Remove ' + code;
+        x.addEventListener('click', (ev) => { ev.stopPropagation(); courseSel.value = { allCourses: false, courseIds: cs.courseIds.filter((xid) => xid !== id) }; refresh(); });
+        chip.appendChild(x);
+        host.appendChild(chip);
+      });
+    }
+  }
 
   function validate(v) {
     const err = {};
     if (!v.name) err.name = 'Batch name is required.';
-    if (!v.courseId) err.course = 'Select a course.';
+    if (!v.allCourses && (!v.courseIds || v.courseIds.length === 0)) err.course = 'Select at least one course.';
     if (!v.sessionId) err.session = 'Select a session.';
     if (youth && !v.branchId) err.branch = 'Select a branch.';
     const rawCap = $('bt-capacity').value.trim();
@@ -196,11 +234,12 @@ export async function mount({ profile, ctx }) {
     saveBtn.disabled = saving || !dirty;
     cancelBtn.disabled = saving;
     if (!saving) noteState(dirty ? 'Unsaved changes' : (editId ? 'No changes yet' : 'Fill in the details'), dirty ? 'dirty' : '');
+    renderCourseChips();
   }
 
   function rebuildSelectOptions() {
     const activeSessions = sessions.filter(s => s.status === 'upcoming' || s.status === 'running');
-    courseSel.setOptions([{ value: '', label: 'Select a course', icon: 'book-open' }].concat(courses.map(c => ({ value: c.id, label: (courseCode(c) ? courseCode(c) + ' — ' : '') + (courseName(c) || c.id), icon: 'book-open' }))));
+    courseSel.setOptions(courses.filter(isCourseActive).map(c => ({ value: c.id, label: (courseCode(c) ? courseCode(c) + '  -  ' : '') + (c.name || c.id), icon: 'book-open' })));
     sessionSel.setOptions([{ value: '', label: 'Select a session', icon: 'calendar-range' }].concat(activeSessions.map(s => ({ value: s.id, label: s.name || s.id, icon: 'calendar-range' }))));
     if (youth && branchSel) {
       const activeBranches = branches.filter(b => (b.status || 'active') === 'active');
@@ -230,6 +269,7 @@ export async function mount({ profile, ctx }) {
     }
     tb.setFilterOptions('session', [{ value: 'all', label: 'All sessions', icon: 'calendar-range' }].concat(sessions.map(s => ({ value: s.id, label: s.name || s.id, icon: 'calendar-range' }))));
     if (youth) tb.setFilterOptions('branch', [{ value: 'all', label: 'All branches', icon: 'git-branch' }].concat(branches.map(b => ({ value: b.id, label: b.name || b.id, icon: 'git-branch' }))));
+    tb.setFilterOptions('course', [{ value: 'all', label: 'All courses', icon: 'book-open' }].concat(courses.map(c => ({ value: c.id, label: (courseCode(c) ? courseCode(c) + '  -  ' : '') + (c.name || c.id), icon: 'book-open' }))));
     rebuildSelectOptions();
     render();
   }
@@ -239,16 +279,18 @@ export async function mount({ profile, ctx }) {
     editRow = r || null;
     const v = r ? {
       name: r.name || '', code: r.code || '', courseId: r.courseId || '',
+      allCourses: !!r.allCourses, courseIds: r.courseIds && r.courseIds.slice(),
       sessionId: r.sessionId || '', branchId: youth ? (r.branchId || '') : 'HO',
       capacity: (r.capacity === 0 || r.capacity) ? String(r.capacity) : ''
     } : Object.assign({}, BLANK, { branchId: youth ? '' : 'HO' });
+    // T2: set course options before filling form so selection renders correctly. Only active courses are offered.
+    courseSel.setOptions(courses.filter(isCourseActive).map(c => ({ value: c.id, label: (courseCode(c) ? courseCode(c) + '  -  ' : '') + (c.name || c.id), icon: 'book-open' })));
     fillForm(v);
     $('bt-form-title').textContent = r ? 'Edit batch' : 'New batch';
     $('bt-save-label').textContent = r ? 'Save changes' : 'Add batch';
     form.hidden = false;
     touched = false;
     showErrors({});
-    paintCourseInfo();
     paintSessionInfo();
     if (readOnly) {
       form.querySelectorAll('input, select, textarea').forEach(el => { el.readOnly = true; el.disabled = true; });
@@ -292,6 +334,7 @@ export async function mount({ profile, ctx }) {
       if (f.status && f.status !== 'all' && batchStatus(b) !== f.status) return false;
       if (f.session && f.session !== 'all' && b.sessionId !== f.session) return false;
       if (youth && f.branch && f.branch !== 'all' && b.branchId !== f.branch) return false;
+      if (f.course && f.course !== 'all' && !batchAllowsCourse(b, f.course, courses)) return false;
       if (f.level && f.level !== 'all' && String(b.courseLevel || '') !== f.level) return false;
       if (q) {
         const c = courseOf(b);
@@ -338,18 +381,11 @@ export async function mount({ profile, ctx }) {
       tr.appendChild(tdBatch);
 
       const tdCourse = document.createElement('td');
-      tdCourse.textContent = (c.courseCode || c.code || '') + ' ';
-      const lvl = document.createElement('span');
-      lvl.className = 'bt-level';
-      lvl.textContent = 'Sem ' + (b.courseLevel || c.level || '');
-      tdCourse.appendChild(lvl);
-      if (b.lockedExamFee != null) {
-        const sub2 = document.createElement('span');
-        sub2.className = 'bt-muted';
-        sub2.textContent = 'Exam fee locked: ₹' + b.lockedExamFee;
-        tdCourse.appendChild(document.createElement('br'));
-        tdCourse.appendChild(sub2);
-      }
+      tdCourse.className = 'bt-course';
+      const label = batchCourseLabel(b, courses);
+      const tip = batchCourseTooltip(b, courses);
+      tdCourse.textContent = label;
+      if (tip) tdCourse.title = tip;
       tr.appendChild(tdCourse);
 
       const tdSess = document.createElement('td');
@@ -458,6 +494,8 @@ export async function mount({ profile, ctx }) {
       level: courseLevel(course),
       prerequisite: prereq || null,
       prerequisiteCourseCode: prereq || null,
+      allCourses: !!v.allCourses,
+      courseIds: v.courseIds,
       sessionId: v.sessionId,
       sessionName: session.name || session.id || v.sessionId,
       branchId: branch.id || v.branchId,
@@ -544,4 +582,15 @@ export async function mount({ profile, ctx }) {
   formEl.addEventListener('submit', (ev) => { ev.preventDefault(); save(); });
 
   await load();
+  } catch (err) {
+    console.error('[batches]', err);
+    showToast("Couldn't load batches. Refresh the page.", 'error');
+    const rowsHost = $('bt-rows');
+    const empty = $('bt-empty');
+    const countEl = $('bt-count');
+    if (rowsHost) rowsHost.innerHTML = '';
+    if (empty) empty.hidden = false;
+    if (countEl) countEl.textContent = '0 batches';
+  }
 }
+

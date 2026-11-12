@@ -1,7 +1,7 @@
-import { ROUTES, ROLE_LABELS } from '../core/router.js?v=1.8.13';
-import { APP_VERSION } from '../core/app.js?v=1.8.13';
-import { getRunningPeriod, getNextDueDate, formatDayMonth } from '../utils/date.utils.js?v=1.8.13';
-import { getRunningSession, toPeriod, daysLeft, expectedStatus } from '../core/sessions.js?v=1.8.13';
+import { ROUTES, ROLE_LABELS } from '../core/router.js?v=1.8.47';
+import { APP_VERSION } from '../core/app.js?v=1.8.47';
+import { getRunningPeriod, getNextDueDate, formatDayMonth } from '../utils/date.utils.js?v=1.8.47';
+import { getRunningSession, toPeriod, daysLeft, expectedStatus } from '../core/sessions.js?v=1.8.47';
 
 let drawerOpen = false;
 let tipEl = null;
@@ -91,7 +91,7 @@ function buildSessionCard(ctx, dueDay) {
       if (d < 0) {
         fill.style.width = '100%';
         pct.textContent = '100%';
-        meta.textContent = 'Ended ' + rp.end.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) + ' – close this session';
+        meta.textContent = 'Ended ' + rp.end.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) + '  -  close this session';
         meta.classList.add('sb-sess-overdue');
       } else if (d === 0) {
         meta.textContent = 'Ends today';
@@ -346,3 +346,18 @@ export function setNavCount(key, count, isAlert) {
     if (isAlert) pill.classList.add('alert'); else pill.classList.remove('alert');
   });
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

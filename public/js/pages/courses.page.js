@@ -1,13 +1,14 @@
 import { db } from '../config/firebase-config.js';
-import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.13';
+import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.47';
 import { collection, getDocs, doc, addDoc, updateDoc, deleteDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
 import { createSelect } from '../components/ui-select.js';
 import { openMenu } from '../components/ui-menu.js';
 import { confirmDialog } from '../components/ui-confirm.js';
 import { showToast } from '../components/toast.js';
 import { buildStats, buildToolbar } from '../components/list-page.js';
+import { INST_PER_SEM, feeTotal } from '../utils/fees.js?v=1.8.47';
+import { isCourseActive } from '../utils/session-rules.js?v=1.8.47';
 
-export const INST_PER_SEM = 4;
 const ENDED = ['ended', 'closed', 'completed', 'archived', 'cancelled'];
 const LOCK_FIELDS = { admission: 'Admission fee', installment: 'Installment amount', material: 'Material fee' };
 const LEVELS = [
@@ -28,11 +29,6 @@ function icon(name) { const i = document.createElement('i'); i.setAttribute('dat
 const num = (v) => { const n = Number(v); return Number.isFinite(n) && n > 0 ? Math.round(n) : 0; };
 const rs = (n) => 'Rs ' + (Number(n) || 0).toLocaleString('en-IN');
 const lvlOf = (c) => [1, 2, 3].includes(Number(c && c.level)) ? Number(c.level) : 1;
-
-export function feeTotal(fees) {
-  const f = fees || {};
-  return num(f.admission) + num(f.installment) * INST_PER_SEM + num(f.exam) + num(f.material);
-}
 
 export async function mount({ ctx }) {
   try {
@@ -139,7 +135,7 @@ export async function mount({ ctx }) {
         prereqId = '';
       } else {
         const need = lv - 1;
-        const opts = all.filter((c) => lvlOf(c) === need && c.id !== editId && (c.status || 'active') === 'active' || (lvlOf(c) === need && c.id === prereqId))
+        const opts = all.filter((c) => lvlOf(c) === need && c.id !== editId && isCourseActive(c) || (lvlOf(c) === need && c.id === prereqId && isCourseActive(c)))
           .map((c) => ({ value: c.id, label: c.code + ' - ' + (c.name || ''), icon: need === 1 ? 'layers' : 'git-merge' }));
         $('cs-prereq-label').innerHTML = 'Eligibility - must have completed a Semester ' + need + ' course <em>*</em>';
         const host = $('cs-prereq');
@@ -570,3 +566,18 @@ export async function mount({ ctx }) {
     showToast({ type: 'error', message: 'Courses page failed to load' });
   }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

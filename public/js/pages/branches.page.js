@@ -4,7 +4,7 @@ import { createSelect } from '../components/ui-select.js';
 import { openMenu } from '../components/ui-menu.js';
 import { confirmDialog } from '../components/ui-confirm.js';
 import { showToast } from '../components/toast.js';
-import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.13';
+import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.47';
 import { buildStats, buildToolbar } from '../components/list-page.js';
 
 const TEXT_KEYS = ['name', 'code', 'email', 'address', 'mapUrl'];
@@ -171,7 +171,7 @@ export async function mount({ profile }) {
     if (!v.name) err.name = 'Branch name is required.';
     else if (v.name.length < 2) err.name = 'Name is too short.';
     if (!v.code) err.code = 'Code is required.';
-    else if (!/^[A-Z0-9]{2,10}$/.test(v.code)) err.code = '2–10 letters or digits, no spaces.';
+    else if (!/^[A-Z0-9]{2,10}$/.test(v.code)) err.code = '2 - 10 letters or digits, no spaces.';
     else if (rows.some((r) => r.id !== editId && (r.code || '').toUpperCase() === v.code)) err.code = 'This code is already used by another branch.';
     const badIdx = [];
     phoneInputs().forEach((e, i) => { const p = e.value.trim(); if (p && !PHONE_RE.test(p)) badIdx.push(i); });
@@ -226,12 +226,26 @@ export async function mount({ profile }) {
       td.appendChild(mk('span', 'br-muted', 'Not assigned'));
       return td;
     }
+    if (list.length > 1) {
+      const warn = mk('span', '', list.length + ' heads \u2014 fix in Branch Heads');
+      warn.style.color = 'var(--danger)';
+      warn.style.fontWeight = '700';
+      td.appendChild(warn);
+      return td;
+    }
     const h = list[0];
     const box = mk('div', 'br-head');
     box.appendChild(mk('span', 'br-head-av', initials(h.name || h.email)));
     const txt = mk('div', 'br-head-txt');
-    txt.appendChild(mk('b', '', h.name || h.email));
-    txt.appendChild(mk('span', '', list.length > 1 ? (h.email + ' +' + (list.length - 1) + ' more') : (h.email || '')));
+    const nameRow = mk('div', 'br-head-name');
+    nameRow.appendChild(mk('b', '', h.name || h.email));
+    if ((h.status || 'active') !== 'active') {
+      const dot = mk('span', 'br-dot-off');
+      dot.setAttribute('title', 'Inactive \u2014 cannot sign in');
+      nameRow.appendChild(dot);
+    }
+    txt.appendChild(nameRow);
+    txt.appendChild(mk('span', '', h.email || ''));
     box.appendChild(txt);
     td.appendChild(box);
     return td;
@@ -264,19 +278,19 @@ export async function mount({ profile }) {
     }
     list.forEach((r) => {
       const tr = mk('tr');
-      tr.appendChild(mk('td', 'br-name', r.name || '—'));
+      tr.appendChild(mk('td', 'br-name', r.name || ' - '));
       const tdCode = mk('td');
-      tdCode.appendChild(mk('span', 'br-code', r.code || '—'));
+      tdCode.appendChild(mk('span', 'br-code', r.code || ' - '));
       tr.appendChild(tdCode);
       tr.appendChild(headCell(r));
       const tdC = mk('td', 'hide-sm br-contact');
       const ph = phonesOf(r);
-      tdC.appendChild(mk('b', '', ph[0] || '—'));
+      tdC.appendChild(mk('b', '', ph[0] || ' - '));
       if (ph.length > 1) tdC.appendChild(mk('span', 'br-muted', '+' + (ph.length - 1) + ' more'));
       if (r.email) tdC.appendChild(mk('span', 'br-muted', r.email));
       tr.appendChild(tdC);
       const tdA = mk('td', 'hide-md br-addr');
-      tdA.appendChild(mk('span', '', r.address || '—'));
+      tdA.appendChild(mk('span', '', r.address || ' - '));
       if (r.mapUrl) {
         const a = mk('a', 'br-map', 'Open map');
         a.href = r.mapUrl; a.target = '_blank'; a.rel = 'noopener noreferrer';
@@ -344,7 +358,7 @@ export async function mount({ profile }) {
       hs.docs.forEach((d) => {
         const u = d.data();
         if (!u.branchId) return;
-        (headsByBranch[u.branchId] = headsByBranch[u.branchId] || []).push({ name: u.name || '', email: u.email || d.id });
+        (headsByBranch[u.branchId] = headsByBranch[u.branchId] || []).push({ name: u.name || '', email: u.email || d.id, status: u.status });
       });
     } catch (e) {
       console.warn('[branches] branch heads load failed', e && e.code ? e.code : e);
@@ -462,3 +476,18 @@ export async function mount({ profile }) {
 
   await load();
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

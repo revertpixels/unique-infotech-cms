@@ -1,5 +1,5 @@
-import { getRunningPeriod, getPeriodOptions } from '../utils/date.utils.js?v=1.8.13';
-import { loadSessions, getSelectedSessionId, setSelectedSession } from '../core/sessions.js?v=1.8.13';
+import { getRunningPeriod, getPeriodOptions } from '../utils/date.utils.js?v=1.8.47';
+import { loadSessions, getSelectedSessionId, setSelectedSession } from '../core/sessions.js?v=1.8.47';
 
 let listenersRegistered = false;
 let sessionsListenerRegistered = false;
@@ -101,7 +101,7 @@ export function renderTopbar({ profile, ctx, canSwitch, onMenu, onSwitch }) {
   sessionBtn.appendChild(calIcon);
   const sessionLabel = document.createElement('span');
   sessionLabel.className = 'tb-session-label';
-  sessionLabel.textContent = 'Session …';
+  sessionLabel.textContent = 'Session ...';
   sessionBtn.appendChild(sessionLabel);
   const chevIcon = document.createElement('i');
   chevIcon.setAttribute('data-lucide', 'chevron-down');
@@ -274,3 +274,18 @@ export function setNotifCount(n) {
   if (dot) dot.hidden = count === 0;
   btn.setAttribute('aria-label', count > 0 ? 'Notifications (' + count + ' new)' : 'Notifications');
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

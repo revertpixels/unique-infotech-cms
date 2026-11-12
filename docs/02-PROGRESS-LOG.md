@@ -42,6 +42,70 @@
 ## ACTIVE LOG (NEWEST ON TOP)
 ---
 
+### [2026-11-12 06:24] Version 1.8.55 — Phase 2 · Prerequisite field names + DOM note rendering
+- public/js/pages/admissions.page.js T1: getPrereq() now uses the real field names written by courses.page.js — id: course.prerequisiteId (course.prereqId kept only as legacy fallback); code: course.prerequisiteCode || course.prerequisiteCourseCode || course.prerequisite. Removed the invented "prereqCode". Id match first, then code match (case-insensitive, trimmed).
+- public/js/pages/admissions.page.js T2: setPrereqNote() now builds the note with DOM nodes (document.createElement('b') + textContent) instead of innerHTML string concatenation. Same text and classes as before.
+- public/js/core/app.js + 13 other JS/HTML files: bumped 1.8.54 -> 1.8.55 via Node script (UTF-8 no BOM).
+Why:
+- Align prerequisite field names with what courses.page.js actually writes; avoid innerHTML for the prerequisite note.
+Files touched (created / modified / deleted):
+- MODIFIED: public/js/pages/admissions.page.js
+- MODIFIED: public/js/core/app.js, public/js/core/router.js, public/js/components/sidebar.js, public/js/components/topbar.js, public/js/pages/admissions.page.js, public/js/pages/batches.page.js, public/js/pages/branch-heads.page.js, public/js/pages/branches.page.js, public/js/pages/courses.page.js, public/js/pages/org-details.page.js, public/js/pages/sessions.page.js, public/pages/batches.html, public/pages/login.html, public/index.html
+- MODIFIED: docs/02-PROGRESS-LOG.md
+Firestore changes:
+- none.
+Tested on:
+- node --check on .mjs copy of admissions.page.js: 0 failures.
+- grep public/ for UTF-8 BOM, \u2713, mojibake (â‚¹, Â·, â€”): 0 matches.
+- Chrome Desktop: Pending owner live test.
+- Mobile (Android Chrome): Pending owner live test.
+Edge cases checked:
+- courses with no prerequisite (level 1) return null from getPrereq().
+- Legacy courses with only prereqId still resolve via the fallback.
+Known issues created (if any):
+- None.
+Next task:
+- None.
+
+---
+
+### [2026-11-12 06:13] Version 1.8.54 — Phase 2 · Prerequisite completion check on admissions
+STEP 0 (report, no changes):
+- (a) Course prerequisite on save (courses.page.js:295-298): prerequisiteId (course id; null if level 1), prerequisiteCode (course code; null if level 1), eligibility ('Completed ' + p.code), eligibilityText.
+- (b) admissions.status values: active, dropped, completed, archived, deleted. YES — 'completed' means the student completed the course. COMPLETED_STATUSES = ['completed'].
+- (c) confirmDialog: import { confirmDialog } from '../components/ui-confirm.js'; called as const ok = await confirmDialog({ title, message, confirmText, cancelText, danger, requireText, infoOnly, icon }).
+
+- public/js/pages/admissions.page.js T1: added getPrereq(course) — matches prereqId (course id) first, else prerequisiteCode/prerequisiteCourseCode/prerequisite (by course code, case-insensitive, trimmed). Returns {id, code, name} or null.
+- public/js/pages/admissions.page.js T2: added getStudentKey() — returning student via Find uses admissionNo; else name (trim, ci) + dob + phone (digits only), all three required; null if unavailable.
+- public/js/pages/admissions.page.js T3: added COMPLETED_STATUSES = ['completed'] at top (status set by a later feature; this file only reads it). completed = admission.status === 'completed'. Search: all sessions, skip archived/deleted, exclude the admission being edited.
+- public/js/pages/admissions.page.js T4: added runPrereqCheck() (debounce 400ms) triggered on course change and on name/dob/phone/lookup input. Course has no prerequisite → hide note, no check. Found completed → green note "Prerequisite <CODE> completed in <session name>." + prereqCheck {status:'auto', courseId, sourceSessionId, sourceAdmissionId}. Not found → existing confirm dialog "Prerequisite not found" / "Have you verified that the student completed <CODE> - <name>?" [Cancel] [Yes, verified]. Cancel → clear course + batch/fees, hide note. Yes → amber note "Prerequisite <CODE> verified manually." + prereqCheck {status:'manual', courseId, verifiedBy, verifiedAt}. Dialog not re-opened for same student+course. Changing course/student resets prereqCheck to null and re-runs.
+- public/js/pages/admissions.page.js T5: save blocked with "Prerequisite check pending." when selected course has a prerequisite and prereqCheck is null. prereqCheck saved on admission document (null when no prerequisite). Edit mode keeps saved prereqCheck unless course changed.
+- public/css/pages/admissions.css: added .adm-prereq-note.ok / .manual / .pending styles (green/amber/grey).
+- public/js/core/app.js + 13 other JS/HTML files: bumped 1.8.53 -> 1.8.54 via Node script (UTF-8 no BOM).
+Why:
+- Prevent saving an admission for a course whose prerequisite the student hasn't completed (or manually verified).
+Files touched (created / modified / deleted):
+- MODIFIED: public/js/pages/admissions.page.js, public/css/pages/admissions.css
+- MODIFIED: public/js/core/app.js, public/js/core/router.js, public/js/components/sidebar.js, public/js/components/topbar.js, public/js/pages/admissions.page.js, public/js/pages/batches.page.js, public/js/pages/branch-heads.page.js, public/js/pages/branches.page.js, public/js/pages/courses.page.js, public/js/pages/org-details.page.js, public/js/pages/sessions.page.js, public/pages/batches.html, public/pages/login.html, public/index.html
+- MODIFIED: docs/02-PROGRESS-LOG.md
+Firestore changes:
+- none (prereqCheck is a new field on the admission document; no rules change needed).
+Tested on:
+- node --check on .mjs copy of admissions.page.js: 0 failures.
+- grep public/ for UTF-8 BOM, \u2713, mojibake (â‚¹, Â·, â€”): 0 matches.
+- Chrome Desktop: Pending owner live test.
+- Mobile (Android Chrome): Pending owner live test.
+Edge cases checked:
+- Edit mode keeps saved prereqCheck unless course changed; new admission starts null.
+- Cancel on the dialog clears course selection and batch/fees.
+- Same student+course does not re-open the dialog.
+Known issues created (if any):
+- None.
+Next task:
+- None.
+
+---
+
 ### [2026-11-12 06:10] Version 1.8.53 — Phase 2 · Not-found lookup text clarified
 - public/js/pages/admissions.page.js T1: changed not-found text to "No student with this ID found. Older records may be archived." Search logic unchanged (all sessions; skip only status archived/deleted).
 - public/js/core/app.js + 13 other JS/HTML files: bumped 1.8.52 -> 1.8.53 via Node script (UTF-8 no BOM).

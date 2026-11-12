@@ -1,14 +1,14 @@
 import { db } from '../config/firebase-config.js';
 import { collection, getDocs, query, where, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, deleteField } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.53';
-import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.53';
-import { buildStats, buildToolbar } from '../components/list-page.js?v=1.8.53';
-import { createSelect } from '../components/ui-select.js?v=1.8.53';
-import { createMultiSelect } from '../components/multi-select.js?v=1.8.53';
-import { openMenu } from '../components/ui-menu.js?v=1.8.53';
-import { confirmDialog } from '../components/ui-confirm.js?v=1.8.53';
-import { loadSessions } from '../core/sessions.js?v=1.8.53';
-import { batchAllowsCourse, batchCourseLabel, batchCourseTooltip, isCourseActive } from '../utils/session-rules.js?v=1.8.53';
+import { showToast } from '../components/toast.js?v=1.8.55';
+import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.55';
+import { buildStats, buildToolbar } from '../components/list-page.js?v=1.8.55';
+import { createSelect } from '../components/ui-select.js?v=1.8.55';
+import { createMultiSelect } from '../components/multi-select.js?v=1.8.55';
+import { openMenu } from '../components/ui-menu.js?v=1.8.55';
+import { confirmDialog } from '../components/ui-confirm.js?v=1.8.55';
+import { loadSessions } from '../core/sessions.js?v=1.8.55';
+import { batchAllowsCourse, batchCourseLabel, batchCourseTooltip, isCourseActive } from '../utils/session-rules.js?v=1.8.55';
 // Batches Part 2A/2B: add/edit form, delete, student capacity
 
 const TEXT_KEYS = ['name', 'code', 'capacity'];

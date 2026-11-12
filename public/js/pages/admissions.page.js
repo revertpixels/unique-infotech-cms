@@ -1,18 +1,18 @@
 import { db } from '../config/firebase-config.js';
 import { collection, getDocs, query, where, doc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.53';
-import { registerDirty, confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.53';
-import { buildStats, buildToolbar } from '../components/list-page.js?v=1.8.53';
-import { createSelect } from '../components/ui-select.js?v=1.8.53';
-import { openMenu } from '../components/ui-menu.js?v=1.8.53';
-import { confirmDialog } from '../components/ui-confirm.js?v=1.8.53';
-import { getSelectedSessionId, getCachedSessions, loadSessions, todayISO } from '../core/sessions.js?v=1.8.53';
-import { firstInstallmentOf, admissionState, sessionLabel, installmentSchedule, batchAllowsCourse, batchCourseLabel, isCourseActive } from '../utils/session-rules.js?v=1.8.53';
-import { formatINR, formatDateIN, initials } from '../utils/formatter.js?v=1.8.53';
-import { validatePhone, validateEmail, validateDOB, validateName, validateRequired } from '../utils/validator.js?v=1.8.53';
-import { listStudentsRaw, checkDuplicatePhone, generateAdmissionNumber, createStudentWithDocs, updateStudentWithDocs, updateStudent, deleteStudent } from '../services/admission.service.js?v=1.8.53';
-import { feeTotal } from '../utils/fees.js?v=1.8.53';
-import { compressTo100KB, readAsDataURL, blobToDataURL, isImageFile, formatBytes } from '../utils/image-compress.js?v=1.8.53';
+import { showToast } from '../components/toast.js?v=1.8.55';
+import { registerDirty, confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.55';
+import { buildStats, buildToolbar } from '../components/list-page.js?v=1.8.55';
+import { createSelect } from '../components/ui-select.js?v=1.8.55';
+import { openMenu } from '../components/ui-menu.js?v=1.8.55';
+import { confirmDialog } from '../components/ui-confirm.js?v=1.8.55';
+import { getSelectedSessionId, getCachedSessions, loadSessions, todayISO } from '../core/sessions.js?v=1.8.55';
+import { firstInstallmentOf, admissionState, sessionLabel, installmentSchedule, batchAllowsCourse, batchCourseLabel, isCourseActive } from '../utils/session-rules.js?v=1.8.55';
+import { formatINR, formatDateIN, initials } from '../utils/formatter.js?v=1.8.55';
+import { validatePhone, validateEmail, validateDOB, validateName, validateRequired } from '../utils/validator.js?v=1.8.55';
+import { listStudentsRaw, checkDuplicatePhone, generateAdmissionNumber, createStudentWithDocs, updateStudentWithDocs, updateStudent, deleteStudent } from '../services/admission.service.js?v=1.8.55';
+import { feeTotal } from '../utils/fees.js?v=1.8.55';
+import { compressTo100KB, readAsDataURL, blobToDataURL, isImageFile, formatBytes } from '../utils/image-compress.js?v=1.8.55';
 
 const GENDERS = [
   { value: 'male', label: 'Male', icon: 'user' },
@@ -44,6 +44,15 @@ const DOC_LABELS = {
   marksheet: 'Marksheet (highest qualification)'
 };
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+
+// Completion rule (T3): a student is treated as "completed" a course when an active admission
+// has status === 'completed'. The status itself is set by a later feature; this file only reads it.
+const COMPLETED_STATUSES = ['completed'];
+
+// Prerequisite check state.
+let prereqCheck = null;          // {status:'auto'|'manual', courseId, sourceSessionId, sourceAdmissionId, verifiedBy, verifiedAt}
+let prereqKey = null;            // studentKey + '|' + courseId for which prereqCheck was computed
+let prereqTimer = null;          // debounce timer for T4
 
 function $(id) { const el = document.getElementById(id); if (!el) console.warn('[admissions] missing #' + id); return el; }
 function $t(id, text) { const el = $(id); if (el) el.textContent = text; }
@@ -473,6 +482,7 @@ function dueLabel(dueISO) {
     }
     updateFees(c, s);
     updateSeats();
+    runPrereqCheck();
   }
 
   function onBranchChange() {
@@ -486,6 +496,154 @@ function dueLabel(dueISO) {
     const br = branches.find((b) => b.id === branchId);
     const code = br ? (br.code || br.id || '') : '';
     if (lookupInp) lookupInp.placeholder = code ? 'e.g. ' + code + '-' + year + '-0001' : 'e.g. YC-' + year + '-0001';
+  }
+
+  // ---------- T1: resolve the prerequisite course ----------
+  // Match by prereqId (course id) first, else by course code (case-insensitive, trimmed).
+  // Admissions may store only courseId or only courseCode, so both are tried.
+  function getPrereq(course) {
+    if (!course) return null;
+    const id = course.prerequisiteId || course.prereqId; // prerequisiteId first; prereqId as legacy fallback
+    if (id) {
+      const p = courses.find((c) => c.id === id);
+      if (p) return { id: p.id, code: p.courseCode || p.code || '', name: p.name || '' };
+    }
+    const code = String(course.prerequisiteCode || course.prerequisiteCourseCode || course.prerequisite || '').trim();
+    if (code) {
+      const p = courses.find((c) => String(c.courseCode || c.code || '').trim().toLowerCase() === code.toLowerCase());
+      if (p) return { id: p.id, code: p.courseCode || p.code || '', name: p.name || '' };
+    }
+    return null;
+  }
+
+  // ---------- T2: who is the student ----------
+  // Returning student loaded via Find -> use its admissionNo.
+  // Else: exact name (trim, case-insensitive) + dob + phone (digits only). All three required.
+  function getStudentKey() {
+    if (returnDoc && returnDoc.admissionNo) return returnDoc.admissionNo;
+    const name = (document.getElementById('adm-name') && document.getElementById('adm-name').value || '').trim();
+    const dob = (document.getElementById('adm-dob') && document.getElementById('adm-dob').value || '').trim();
+    const phone = (document.getElementById('adm-phone') && document.getElementById('adm-phone').value || '').replace(/\D/g, '');
+    if (name && dob && phone) return name.toLowerCase() + '|' + dob + '|' + phone;
+    return null;
+  }
+
+  // ---------- T4: prerequisite check ----------
+  function setPrereqNote(html, cls) {
+    const el = $('adm-prereq');
+    if (!el) return;
+    el.textContent = '';
+    const tokens = html.split(/(<b>|<\/b>)/);
+    let bold = false;
+    tokens.forEach((t) => {
+      if (t === '<b>') { bold = true; return; }
+      if (t === '</b>') { bold = false; return; }
+      const node = bold ? document.createElement('b') : document.createTextNode(t);
+      if (bold) node.textContent = t;
+      el.appendChild(node);
+    });
+    el.className = cls || '';
+    el.hidden = false;
+  }
+  function hidePrereqNote() {
+    const el = $('adm-prereq');
+    if (el) el.hidden = true;
+  }
+
+  async function runPrereqCheck() {
+    if (prereqTimer) { clearTimeout(prereqTimer); prereqTimer = null; }
+    const courseId = courseSel ? courseSel.value : '';
+    if (!courseId) { prereqCheck = null; prereqKey = null; hidePrereqNote(); return; }
+    const c = courseOf(courseId);
+    const prereq = getPrereq(c);
+    if (!prereq) { prereqCheck = null; prereqKey = null; hidePrereqNote(); return; }
+
+    const studentKey = getStudentKey();
+    if (!studentKey) {
+      prereqCheck = null; prereqKey = null;
+      setPrereqNote('Enter student details or Find a returning student to check the prerequisite.', 'adm-prereq-note pending');
+      return;
+    }
+
+    const checkKey = studentKey + '|' + prereq.id;
+    // Don't re-run / re-open the dialog for the same student + course; just show the existing result.
+    if (prereqKey === checkKey && prereqCheck) {
+      showPrereqResult(prereq);
+      return;
+    }
+    prereqKey = checkKey;
+    prereqCheck = null;
+    hidePrereqNote();
+
+    prereqTimer = setTimeout(async () => {
+      prereqTimer = null;
+      try {
+        const q1 = query(collection(db, 'students'), where('courseId', '==', prereq.id));
+        const q2 = query(collection(db, 'students'), where('courseCode', '==', prereq.code));
+        const [s1, s2] = await Promise.all([getDocs(q1), getDocs(q2)]);
+        const seen = new Set();
+        let found = null;
+        const add = (snap) => {
+          snap.docs.forEach((d) => {
+            const a = Object.assign({ id: d.id }, d.data());
+            if (a.status === 'archived' || a.status === 'deleted') return;
+            if (editId && a.id === editId) return;
+            if (seen.has(a.id)) return;
+            seen.add(a.id);
+            if (COMPLETED_STATUSES.includes(a.status)) { found = a; return false; }
+          });
+        };
+        add(s1); add(s2);
+        if (found) {
+          prereqCheck = {
+            status: 'auto',
+            courseId: prereq.id,
+            sourceSessionId: found.sessionId,
+            sourceAdmissionId: found.id
+          };
+          setPrereqNote('Prerequisite <b>' + prereq.code + '</b> completed in <b>' + (found.sessionName || '') + '.</b>', 'adm-prereq-note ok');
+          return;
+        }
+        // Not found: ask the user to verify manually.
+        const ok = await confirmDialog({
+          title: 'Prerequisite not found',
+          message: 'This student is not eligible as per the data currently in the system. Older records may be archived. Have you verified that the student completed ' + prereq.code + ' - ' + prereq.name + '?',
+          confirmText: 'Yes, verified', cancelText: 'Cancel'
+        });
+        if (!ok) {
+          // Cancel -> clear the course selection (and batch/fees depending on it), hide the note.
+          courseSel.value = '';
+          batchSel.setOptions([{ value: '', label: 'Select a batch', icon: 'layers' }]);
+          batchSel.value = '';
+          updateFees(null, null);
+          updateSeats();
+          refreshForm();
+          hidePrereqNote();
+          prereqCheck = null; prereqKey = null;
+          return;
+        }
+        // Yes, verified -> amber note.
+        prereqCheck = {
+          status: 'manual',
+          courseId: prereq.id,
+          verifiedBy: (profile && profile.email) || '',
+          verifiedAt: serverTimestamp()
+        };
+        setPrereqNote('Prerequisite <b>' + prereq.code + '</b> verified manually.', 'adm-prereq-note manual');
+      } catch (e) {
+        console.error('[admissions] prereq check failed', e);
+      }
+    }, 400);
+  }
+
+  function showPrereqResult(prereq) {
+    if (!prereqCheck) { hidePrereqNote(); return; }
+    if (prereqCheck.status === 'auto') {
+      const s = sessions.find((x) => x.id === prereqCheck.sourceSessionId) || {};
+      setPrereqNote('Prerequisite <b>' + prereq.code + '</b> completed in <b>' + (s.name || '') + '.</b>', 'adm-prereq-note ok');
+    } else {
+      setPrereqNote('Prerequisite <b>' + prereq.code + '</b> verified manually.', 'adm-prereq-note manual');
+    }
   }
 
   function onBatchChange() {
@@ -593,7 +751,7 @@ function dueLabel(dueISO) {
     lookupStatus.textContent = '';
     lookupStatus.className = '';
     if (!studentId) { lookupStatus.textContent = 'Enter a student ID.'; lookupStatus.className = 'ui-err'; lookupInp.focus(); return; }
-    returnDoc = null; keptDocs = {}; docAction = {};
+    returnDoc = null; keptDocs = {}; docAction = {}; prereqCheck = null;
     clearReturnUI();
     try {
       const q = query(collection(db, 'students'), where('admissionNo', '==', studentId));
@@ -656,6 +814,7 @@ function dueLabel(dueISO) {
     lookupInp.value = '';
     lookupStatus.textContent = '';
     lookupStatus.className = '';
+    prereqCheck = null;
   }
 
   function renderReturnDocs() {
@@ -788,6 +947,12 @@ function dueLabel(dueISO) {
     if (branchSel) branchSel.value = v.branchId || '';
     courseSel.value = v.courseId || '';
     batchSel.value = v.batchId || '';
+    if (editId && v.prereqCheck) {
+      prereqCheck = Object.assign({}, v.prereqCheck);
+      const pc = getPrereq(courseOf(v.courseId));
+      prereqKey = (getStudentKey() || '') + '|' + (pc ? pc.id : '');
+      showPrereqResult(pc);
+    }
     onCourseChange();
     updateSeats();
 
@@ -1090,6 +1255,15 @@ function dueLabel(dueISO) {
       focusFirstError(err);
       return;
     }
+    // ---------- T5: block save while prerequisite check pending ----------
+    const cForSave = courseOf(v.courseId);
+    if (cForSave && getPrereq(cForSave) && !prereqCheck) {
+      $t('adm-state', 'Prerequisite check pending.');
+      const stateEl = $('adm-state');
+      if (stateEl) stateEl.className = 'save-state error';
+      showToast('Prerequisite check pending.', 'error');
+      return;
+    }
     const b = batchOf(v.batchId);
     if (b && b.capacity) {
       const cap = Number(b.capacity);
@@ -1206,7 +1380,8 @@ function dueLabel(dueISO) {
       createdAt: editId ? undefined : serverTimestamp(),
       createdBy: editId ? undefined : who,
       updatedAt: serverTimestamp(),
-      sourceAdmissionRef: sourceAdmissionRef
+      sourceAdmissionRef: sourceAdmissionRef,
+      prereqCheck: (c && getPrereq(c)) ? prereqCheck : null
     };
     DOC_KEYS.forEach((k) => { data.docs[k] = !!docs[k]; });
     if (!editId) {
@@ -1330,7 +1505,15 @@ function dueLabel(dueISO) {
     });
   }
   registerDirty(() => !form.hidden && !saveBtn.disabled && !saving);
-  form.addEventListener('input', () => { touched = true; refreshForm(); });
+  form.addEventListener('input', (ev) => {
+    touched = true;
+    refreshForm();
+    const id = ev.target && ev.target.id;
+    if (id === 'adm-name' || id === 'adm-dob' || id === 'adm-phone' || id === 'adm-student-id-lookup') {
+      prereqCheck = null;
+      runPrereqCheck();
+    }
+  });
   form.addEventListener('change', () => { touched = true; refreshForm(); });
   form.addEventListener('submit', (ev) => { ev.preventDefault(); save(); });
 

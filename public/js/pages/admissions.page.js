@@ -1,18 +1,18 @@
 import { db } from '../config/firebase-config.js';
 import { collection, getDocs, query, where, doc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.47';
-import { registerDirty, confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.47';
-import { buildStats, buildToolbar } from '../components/list-page.js?v=1.8.47';
-import { createSelect } from '../components/ui-select.js?v=1.8.47';
-import { openMenu } from '../components/ui-menu.js?v=1.8.47';
-import { confirmDialog } from '../components/ui-confirm.js?v=1.8.47';
-import { getSelectedSessionId, getCachedSessions, loadSessions, todayISO } from '../core/sessions.js?v=1.8.47';
-import { firstInstallmentOf, admissionState, sessionLabel, installmentSchedule, batchAllowsCourse, batchCourseLabel, isCourseActive } from '../utils/session-rules.js?v=1.8.47';
-import { formatINR, formatDateIN, initials } from '../utils/formatter.js?v=1.8.47';
-import { validatePhone, validateEmail, validateDOB, validateName, validateRequired } from '../utils/validator.js?v=1.8.47';
-import { listStudentsRaw, checkDuplicatePhone, generateAdmissionNumber, createStudentWithDocs, updateStudentWithDocs, updateStudent, deleteStudent } from '../services/admission.service.js?v=1.8.47';
-import { feeTotal } from '../utils/fees.js?v=1.8.47';
-import { compressTo100KB, readAsDataURL, blobToDataURL, isImageFile, formatBytes } from '../utils/image-compress.js?v=1.8.47';
+import { showToast } from '../components/toast.js?v=1.8.53';
+import { registerDirty, confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.53';
+import { buildStats, buildToolbar } from '../components/list-page.js?v=1.8.53';
+import { createSelect } from '../components/ui-select.js?v=1.8.53';
+import { openMenu } from '../components/ui-menu.js?v=1.8.53';
+import { confirmDialog } from '../components/ui-confirm.js?v=1.8.53';
+import { getSelectedSessionId, getCachedSessions, loadSessions, todayISO } from '../core/sessions.js?v=1.8.53';
+import { firstInstallmentOf, admissionState, sessionLabel, installmentSchedule, batchAllowsCourse, batchCourseLabel, isCourseActive } from '../utils/session-rules.js?v=1.8.53';
+import { formatINR, formatDateIN, initials } from '../utils/formatter.js?v=1.8.53';
+import { validatePhone, validateEmail, validateDOB, validateName, validateRequired } from '../utils/validator.js?v=1.8.53';
+import { listStudentsRaw, checkDuplicatePhone, generateAdmissionNumber, createStudentWithDocs, updateStudentWithDocs, updateStudent, deleteStudent } from '../services/admission.service.js?v=1.8.53';
+import { feeTotal } from '../utils/fees.js?v=1.8.53';
+import { compressTo100KB, readAsDataURL, blobToDataURL, isImageFile, formatBytes } from '../utils/image-compress.js?v=1.8.53';
 
 const GENDERS = [
   { value: 'male', label: 'Male', icon: 'user' },
@@ -71,6 +71,9 @@ export async function mount({ container, profile, ctx }) {
   const addBtn = $('adm-add');
   const saveBtn = $('adm-save');
   const cancelBtn = $('adm-cancel');
+  const lookupInp = $('adm-student-id-lookup');
+  const findBtn = $('adm-find-student');
+  const lookupStatus = $('adm-lookup-status');
   const rowsHost = $('adm-rows');
   const empty = $('adm-empty');
   const emptyAdd = $('adm-empty-add');
@@ -163,6 +166,9 @@ export async function mount({ container, profile, ctx }) {
   let students = [], courses = [], batches = [], branches = [], sessions = [];
   let editId = null, editRow = null, saved = {}, touched = false, saving = false, loading = false;
   let page = 1, filteredList = [];
+  let returnDoc = null;          // { id, sessionId, admissionNo, sessionName } of found returning student
+  let keptDocs = {};             // key -> old doc data { data (base64), name, sizeBytes, type, updatedAt }
+  let docAction = {};            // key -> 'keep' | 'replace' | 'remove'
 
   // ---------- document state ----------
   const docFiles = {}; // key -> { file, compressedBlob, dataUrl }
@@ -321,6 +327,7 @@ function dueLabel(dueISO) {
       if (branchSel) {
         branchSel.setOptions([{ value: '', label: 'Select a branch', icon: 'git-branch' }].concat(branches.map(b => ({ value: b.id, label: b.name || b.id, icon: 'git-branch' }))));
       }
+      updateLookupPlaceholder();
 
       courseSel.setOptions([{ value: '', label: 'Select a course', icon: 'book-open' }].concat(courses.filter(isCourseActive).map(c => ({ value: c.id, label: (c.courseCode || c.code || c.id) + ' - ' + (c.name || ''), icon: 'book-open' }))));
 
@@ -470,6 +477,15 @@ function dueLabel(dueISO) {
 
   function onBranchChange() {
     onCourseChange();
+    updateLookupPlaceholder();
+  }
+
+  function updateLookupPlaceholder() {
+    const year = new Date().getFullYear();
+    const branchId = branchSel ? branchSel.value : (fixedBranch || '');
+    const br = branches.find((b) => b.id === branchId);
+    const code = br ? (br.code || br.id || '') : '';
+    if (lookupInp) lookupInp.placeholder = code ? 'e.g. ' + code + '-' + year + '-0001' : 'e.g. YC-' + year + '-0001';
   }
 
   function onBatchChange() {
@@ -571,6 +587,105 @@ function dueLabel(dueISO) {
     if (filled >= cap) el.textContent += '  -  batch is full';
   }
 
+  // ---------- returning-student lookup (T1) ----------
+  async function findStudent() {
+    const studentId = (lookupInp.value || '').trim();
+    lookupStatus.textContent = '';
+    lookupStatus.className = '';
+    if (!studentId) { lookupStatus.textContent = 'Enter a student ID.'; lookupStatus.className = 'ui-err'; lookupInp.focus(); return; }
+    returnDoc = null; keptDocs = {}; docAction = {};
+    clearReturnUI();
+    try {
+      const q = query(collection(db, 'students'), where('admissionNo', '==', studentId));
+      const snap = await getDocs(q);
+      let candidates = snap.docs.map((d) => Object.assign({ id: d.id }, d.data()));
+      candidates = candidates.filter((s) => s.status !== 'archived' && s.status !== 'deleted');
+      if (candidates.length === 0) {
+        lookupStatus.textContent = 'No student with this ID found. Older records may be archived.';
+        lookupStatus.className = 'ui-err';
+        return;
+      }
+      candidates.sort((a, b) => (b.admissionDate || '').localeCompare(a.admissionDate || ''));
+      const src = candidates[0];
+      returnDoc = {
+        id: src.id,
+        sessionId: src.sessionId,
+        admissionNo: src.admissionNo,
+        sessionName: src.sessionName || ''
+      };
+      populateStudentFields(src);
+      try {
+        const docsSnap = await getDocs(query(collection(db, 'students', src.id, 'docs')));
+        docsSnap.docs.forEach((d) => { keptDocs[d.id] = d.data(); });
+      } catch (e) { /* non-fatal */ }
+      renderReturnDocs();
+      lookupStatus.textContent = 'Details loaded from ' + returnDoc.sessionName + '. You can edit anything.';
+      lookupStatus.className = 'ui-err found';
+      $t('adm-state', 'Returning student loaded. Fill batch & documents, then save.');
+    } catch (e) {
+      lookupStatus.textContent = 'Lookup failed: ' + (e.message || 'error');
+      lookupStatus.className = 'ui-err';
+      console.error('[admissions] findStudent failed', e);
+    }
+  }
+
+  function populateStudentFields(v) {
+    $v('adm-name', v.name || '');
+    $v('adm-guardianName', v.guardianName || '');
+    $v('adm-phone', v.phone || '');
+    $v('adm-altPhone', v.altPhone || '');
+    $v('adm-email', v.email || '');
+    $v('adm-dob', v.dob || '');
+    genderSel.value = v.gender || '';
+    qualificationSel.value = v.qualification || '';
+    $v('adm-address', v.address || '');
+    touched = true;
+    refreshForm();
+  }
+
+  function clearReturnUI() {
+    DOC_KEYS.forEach((k) => {
+      const el = $('adm-doc-action-' + k);
+      if (el) el.remove();
+    });
+  }
+
+  function clearReturnState() {
+    returnDoc = null; keptDocs = {}; docAction = {};
+    clearReturnUI();
+    lookupInp.value = '';
+    lookupStatus.textContent = '';
+    lookupStatus.className = '';
+  }
+
+  function renderReturnDocs() {
+    DOC_KEYS.forEach((k) => {
+      const old = keptDocs[k];
+      if (!old) { docAction[k] = docAction[k] || 'new'; return; }
+      if (!docAction[k]) docAction[k] = 'keep';
+      let action = $('adm-doc-action-' + k);
+      if (!action) {
+        action = mk('div', 'adm-doc-action');
+        action.id = 'adm-doc-action-' + k;
+        const host = $('adm-' + k + '-upload');
+        if (host && host.parentNode) host.parentNode.insertBefore(action, host.nextSibling);
+      }
+      const thumb = old.data ? ('data:image/jpeg;base64,' + old.data) : '';
+      action.innerHTML =
+        '<div class="adm-doc-action-row">' +
+        (thumb ? '<img src="' + thumb + '" class="adm-doc-thumb" alt="existing">' : '<div class="adm-doc-thumb empty" style="width:56px;height:56px;border:1px dashed var(--border);border-radius:6px;display:grid;place-items:center;color:var(--text-mute);font-size:10px;">-</div>') +
+        '<div class="adm-doc-action-opts">' +
+        '<label style="margin-right:10px;"><input type="radio" name="adm-doc-action-' + k + '" value="keep" ' + (docAction[k] === 'keep' ? 'checked' : '') + '> Keep</label>' +
+        '<label style="margin-right:10px;"><input type="radio" name="adm-doc-action-' + k + '" value="replace" ' + (docAction[k] === 'replace' ? 'checked' : '') + '> Replace</label>' +
+        '<label><input type="radio" name="adm-doc-action-' + k + '" value="remove" ' + (docAction[k] === 'remove' ? 'checked' : '') + '> Remove</label>' +
+        '</div>' +
+        '</div>';
+      action.querySelectorAll('input[type=radio]').forEach((rb) => {
+        rb.addEventListener('change', (ev) => { docAction[k] = ev.target.value; touched = true; refreshForm(); });
+      });
+    });
+  }
+
   // ---------- validation ----------
   function validate(v) {
     const err = {};
@@ -598,7 +713,9 @@ function dueLabel(dueISO) {
     if (!v.batchId) err.batch = 'Select a batch.';
     if (!v.sessionId) err.session = 'Select a session.';
     DOC_KEYS.forEach((k) => {
-      if (!docFiles[k]) err[k] = 'Upload ' + DOC_LABELS[k] + '.';
+      const hasNew = docFiles[k] && docFiles[k].compressedBlob;
+      const kept = returnDoc && docAction[k] === 'keep';
+      if (!hasNew && !kept) err[k] = 'Upload ' + DOC_LABELS[k] + '.';
     });
     return err;
   }
@@ -883,6 +1000,7 @@ function dueLabel(dueISO) {
   // ---------- form actions ----------
   async function openForm(r) {
     try {
+      clearReturnState();
       DOC_KEYS.forEach((k) => { docFiles[k] = null; docOriginals[k] = null; });
     DOC_KEYS.forEach((k) => { const p = $('adm-' + k + '-preview'); if (p) p.innerHTML = ''; });
     DOC_KEYS.forEach((k) => { const s = $('adm-' + k + '-size'); if (s) s.textContent = ''; });
@@ -934,6 +1052,7 @@ function dueLabel(dueISO) {
     form.hidden = true;
     editId = null;
     editRow = null;
+    clearReturnState();
     DOC_KEYS.forEach((k) => { docFiles[k] = null; docOriginals[k] = null; });
     DOC_KEYS.forEach((k) => {
       const preview = $('adm-' + k + '-preview');
@@ -1013,23 +1132,45 @@ function dueLabel(dueISO) {
 
     const branchCode = br.code || br.id || '';
     const year = today.slice(0, 4);
-    const admissionNo = editId ? (editRow && editRow.admissionNo ? editRow.admissionNo : '') : await generateAdmissionNumber(branchCode, year);
-
-    const docs = {};
-    const docsToUpload = {};
-    for (const k of DOC_KEYS) {
-      const df = docFiles[k];
-      if (!df) continue;
-      if (df.compressedBlob) {
-        docs[k] = { type: 'image/jpeg', mime: 'image/jpeg', name: df.file.name, sizeBytes: df.compressedBlob.size, data: '', updatedAt: serverTimestamp() };
-        docsToUpload[k] = df.compressedBlob;
-      } else if (docOriginals[k]) {
-        docs[k] = docOriginals[k];
-      }
+    let admissionNo;
+    const sourceAdmissionRef = returnDoc ? { sessionId: returnDoc.sessionId, admissionId: returnDoc.id } : null;
+    if (editId) {
+      admissionNo = (editRow && editRow.admissionNo ? editRow.admissionNo : '');
+    } else if (returnDoc) {
+      admissionNo = returnDoc.admissionNo; // T2: keep the same studentId, do not generate a new one
+    } else {
+      admissionNo = await generateAdmissionNumber(branchCode, year);
     }
-    for (const k of Object.keys(docsToUpload)) {
-      const blob = docsToUpload[k];
-      docs[k].data = await blobToDataURL(blob);
+
+    // ---------- documents (T1/T2/T3) ----------
+    const docs = {};
+    try {
+      await Promise.all(DOC_KEYS.map(async (k) => {
+        const action = docAction[k] || 'new';
+        const df = docFiles[k];
+        const old = keptDocs[k];
+        if (action === 'remove') { docs[k] = false; return; }
+        if (action === 'keep' && old) {
+          // T1: identical copy of the old doc into the new admission's docs subcollection (Firestore base64 only)
+          docs[k] = Object.assign({}, old, { updatedAt: serverTimestamp() });
+          return;
+        }
+        if (df && df.compressedBlob) {
+          docs[k] = {
+            type: 'image/jpeg',
+            mime: 'image/jpeg',
+            name: df.file.name,
+            sizeBytes: df.compressedBlob.size,
+            data: await blobToDataURL(df.compressedBlob),
+            updatedAt: serverTimestamp()
+          };
+          return;
+        }
+        docs[k] = false;
+      }));
+    } catch (e) {
+      // T1: any doc read/copy failure -> save nothing
+      throw e;
     }
 
     const data = {
@@ -1064,7 +1205,8 @@ function dueLabel(dueISO) {
       docs: {},
       createdAt: editId ? undefined : serverTimestamp(),
       createdBy: editId ? undefined : who,
-      updatedAt: serverTimestamp()
+      updatedAt: serverTimestamp(),
+      sourceAdmissionRef: sourceAdmissionRef
     };
     DOC_KEYS.forEach((k) => { data.docs[k] = !!docs[k]; });
     if (!editId) {
@@ -1174,6 +1316,9 @@ function dueLabel(dueISO) {
     if (!form.hidden && !saveBtn.disabled && !(await confirmLeave({ clear: false }))) return;
     openForm(null);
   });
+  findBtn.addEventListener('click', () => findStudent());
+  lookupInp.addEventListener('input', () => { lookupStatus.textContent = ''; lookupStatus.className = ''; });
+  lookupInp.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); findStudent(); } });
   cancelBtn.addEventListener('click', async () => {
     if (!form.hidden && !saveBtn.disabled && !(await confirmLeave({ clear: false }))) return;
     closeForm();

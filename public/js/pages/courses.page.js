@@ -1,13 +1,13 @@
 import { db } from '../config/firebase-config.js';
-import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.47';
+import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.53';
 import { collection, getDocs, doc, addDoc, updateDoc, deleteDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
 import { createSelect } from '../components/ui-select.js';
 import { openMenu } from '../components/ui-menu.js';
 import { confirmDialog } from '../components/ui-confirm.js';
 import { showToast } from '../components/toast.js';
 import { buildStats, buildToolbar } from '../components/list-page.js';
-import { INST_PER_SEM, feeTotal } from '../utils/fees.js?v=1.8.47';
-import { isCourseActive } from '../utils/session-rules.js?v=1.8.47';
+import { INST_PER_SEM, feeTotal } from '../utils/fees.js?v=1.8.53';
+import { isCourseActive } from '../utils/session-rules.js?v=1.8.53';
 
 const ENDED = ['ended', 'closed', 'completed', 'archived', 'cancelled'];
 const LOCK_FIELDS = { admission: 'Admission fee', installment: 'Installment amount', material: 'Material fee' };

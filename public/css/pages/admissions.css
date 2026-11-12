@@ -38,6 +38,18 @@
 .adm-form-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-card); padding: 24px 28px 120px 28px; margin-top: 16px; }
 .adm-form-head h3 { margin: 0 0 4px; font-size: 18px; }
 .adm-form-head p { margin: 0 0 8px; color: var(--text-mute); font-size: 13px; }
+.adm-form-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 12px; }
+.adm-form-head-left { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0; }
+.adm-form-head-lookup { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.adm-lookup-inputs { display: flex; align-items: center; gap: 8px; }
+.adm-lookup-inputs .ui-input-wrap { width: 240px; flex-shrink: 0; }
+.adm-lookup-status.found { color: var(--success, #16a34a); }
+@media (max-width: 900px) {
+  .adm-form-head { flex-direction: column; align-items: stretch; gap: 10px; }
+  .adm-form-head-lookup { flex-direction: row; align-items: center; width: 100%; }
+  .adm-lookup-inputs { width: 100%; }
+  .adm-lookup-inputs .ui-input-wrap { width: 100%; flex-shrink: 1; }
+}
 .adm-section { padding-top: 22px; margin-top: 22px; border-top: 1px solid color-mix(in srgb, var(--text) 12%, transparent); }
 .adm-section-title { margin: 0 0 14px; font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--text-mute); }
 .adm-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px 20px; }
@@ -93,6 +105,12 @@
 .adm-doc-size { font-size: 11px; color: var(--text-mute); margin-top: 4px; text-align: center; }
 .adm-doc-size.saved { color: #15803D; font-weight: 600; }
 .adm-err { font-size: 11px; color: var(--danger); margin-top: 4px; overflow-wrap: break-word; word-break: break-word; max-height: 44px; overflow: hidden; }
+
+/* Returning-student doc keep/replace/remove controls */
+.adm-doc-action { margin-top: 8px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.adm-doc-action-row { display: flex; align-items: center; gap: 8px; }
+.adm-doc-action-opts label { font-size: 12px; color: var(--text); display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.adm-doc-action-opts input[type=radio] { width: 14px; height: 14px; }
 
 @media (max-width: 1100px) {
   .adm-doc-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }

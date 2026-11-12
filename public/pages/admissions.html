@@ -39,8 +39,20 @@
 
   <form id="adm-form" class="adm-form-card" novalidate hidden>
     <header class="adm-form-head">
-      <h3 id="adm-form-title">New admission</h3>
-      <p>Fill the student details, choose the batch and upload the documents.</p>
+      <div class="adm-form-head-left">
+        <h3 id="adm-form-title">New admission</h3>
+        <p>Fill the student details, choose the batch and upload the documents.</p>
+      </div>
+      <div class="adm-form-head-lookup">
+        <div class="ui-field">
+          <div class="ui-label-row"><label for="adm-student-id-lookup">Returning student?</label></div>
+          <div class="adm-lookup-inputs">
+            <div class="ui-input-wrap"><i data-lucide="search"></i><input id="adm-student-id-lookup" class="ui-input" type="text" maxlength="30" autocomplete="off" placeholder="e.g. YC-2026-0001"></div>
+            <button type="button" id="adm-find-student" class="ui-btn ghost">Find</button>
+          </div>
+          <div id="adm-lookup-status" class="ui-err"></div>
+        </div>
+      </div>
     </header>
 
     <div class="adm-section">

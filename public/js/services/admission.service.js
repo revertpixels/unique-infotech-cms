@@ -64,25 +64,25 @@ export async function deleteStudent(id) {
 
 // ---------- student + docs (single writeBatch) ----------
 
-export async function createStudentWithDocs(data, docs) {
+export async function createStudentWithDocs(data, docs, studentRef) {
+  const ref = studentRef || doc(collection(db, COL));
   const batch = writeBatch(db);
-  const studentRef = doc(collection(db, COL));
   const payload = Object.assign({}, data, {
-    id: studentRef.id,
+    id: ref.id,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp()
   });
-  batch.set(studentRef, payload);
+  batch.set(ref, payload);
   if (docs) {
     Object.entries(docs).forEach(([key, docData]) => {
       if (docData) {
-        const docRef = doc(doc(studentRef, 'docs'), key);
+        const docRef = doc(doc(ref, 'docs'), key);
         batch.set(docRef, Object.assign({}, docData, { updatedAt: serverTimestamp() }));
       }
     });
   }
   await batch.commit();
-  return studentRef.id;
+  return ref.id;
 }
 
 export async function updateStudentWithDocs(id, data, docs) {

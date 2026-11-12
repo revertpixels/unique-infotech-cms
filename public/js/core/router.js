@@ -1,4 +1,4 @@
-import { confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.47';
+import { confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.53';
 
 export const ROLE_LABELS = {
   superadmin: 'Super Admin',

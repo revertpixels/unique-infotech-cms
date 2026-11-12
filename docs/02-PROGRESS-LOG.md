@@ -42,6 +42,185 @@
 ## ACTIVE LOG (NEWEST ON TOP)
 ---
 
+### [2026-11-12 06:10] Version 1.8.53 — Phase 2 · Not-found lookup text clarified
+- public/js/pages/admissions.page.js T1: changed not-found text to "No student with this ID found. Older records may be archived." Search logic unchanged (all sessions; skip only status archived/deleted).
+- public/js/core/app.js + 13 other JS/HTML files: bumped 1.8.52 -> 1.8.53 via Node script (UTF-8 no BOM).
+Why:
+- Clarify that older records may be archived rather than implying only active sessions are searched.
+Files touched (created / modified / deleted):
+- MODIFIED: public/js/pages/admissions.page.js
+- MODIFIED: public/js/core/app.js, public/js/core/router.js, public/js/components/sidebar.js, public/js/components/topbar.js, public/js/pages/admissions.page.js, public/js/pages/batches.page.js, public/js/pages/branch-heads.page.js, public/js/pages/branches.page.js, public/js/pages/courses.page.js, public/js/pages/org-details.page.js, public/js/pages/sessions.page.js, public/pages/batches.html, public/pages/login.html, public/index.html
+- MODIFIED: docs/02-PROGRESS-LOG.md
+Firestore changes:
+- none.
+Tested on:
+- node --check on .mjs copy of admissions.page.js: 0 failures.
+- grep public/ for UTF-8 BOM, \u2713, mojibake (â‚¹, Â·, â€”): 0 matches.
+- Chrome Desktop: Pending owner live test.
+- Mobile (Android Chrome): Pending owner live test.
+Edge cases checked:
+- Search logic unchanged: queries all sessions, filters out archived/deleted.
+Known issues created (if any):
+- None.
+Next task:
+- None.
+
+---
+
+### [2026-11-12 06:05] Version 1.8.52 — Phase 2 · Lookup status colours + button height
+- public/js/pages/admissions.page.js T1: findStudent() / clearReturnState() now set lookupStatus.className to '' (empty), 'ui-err' (error / not-found, existing red text + min-height:0), or 'ui-err found' (found). No longer uses the removed 'adm-lookup-status' class which had no CSS.
+- public/css/pages/admissions.css T1: removed fixed `height: 40px` from `.adm-lookup-inputs .ui-btn.ghost` (button now matches .ui-input-wrap computed height = 40px, same as ui-kit's .ui-input height). Added ONE rule `.adm-lookup-status.found { color: var(--success, #16a34a); }` — no existing success/ok text class exists in ui-kit.css (only `.ui-err` red exists), so this rule supplies the success colour using the existing `--success` var with #16a34a fallback.
+- public/js/core/app.js + 13 other JS/HTML files: bumped 1.8.51 -> 1.8.52 via Node script (UTF-8 no BOM).
+Why:
+- Make lookup status colours correct (error red via ui-err, found green) with no empty-state space; button height matches input exactly.
+Files touched (created / modified / deleted):
+- MODIFIED: public/css/pages/admissions.css, public/js/pages/admissions.page.js
+- MODIFIED: public/js/core/app.js, public/js/core/router.js, public/js/components/sidebar.js, public/js/components/topbar.js, public/js/pages/admissions.page.js, public/js/pages/batches.page.js, public/js/pages/branch-heads.page.js, public/js/pages/branches.page.js, public/js/pages/courses.page.js, public/js/pages/org-details.page.js, public/js/pages/sessions.page.js, public/pages/batches.html, public/pages/login.html, public/index.html
+- MODIFIED: docs/02-PROGRESS-LOG.md
+Firestore changes:
+- none.
+Tested on:
+- node --check on .mjs copy of admissions.page.js: 0 failures.
+- grep public/ for UTF-8 BOM, \u2713, mojibake (â‚¹, Â·, â€”): 0 matches.
+- Chrome Desktop: Pending owner live test.
+- Mobile (Android Chrome): Pending owner live test.
+Edge cases checked:
+- Empty state: textContent='' and className='' → no text, no extra space (ui-err has min-height:0).
+- Error / not-found → ui-err (red). Found → ui-err found (green via var(--success, #16a34a)).
+- Button class is ui-btn ghost, same as Cancel.
+Known issues created (if any):
+- None.
+Next task:
+- None.
+
+---
+
+### [2026-11-12 06:01] Version 1.8.51 — Phase 2 · Returning-student lookup styled like form fields
+- public/pages/admissions.html T1: replaced custom lookup markup with the standard form-field pattern: `<div class="ui-input-wrap"><i data-lucide="search"></i><input ...></div>` (same border, radius, height, padding, icon position and focus ring as Full name / Phone) + `ui-btn ghost` Find button (same height as input, 8px gap). Label "Returning student?" uses `ui-label-row` (same label style as other form labels, not uppercase small caps). Status message uses existing `ui-err` class. Vertically aligned with the "New admission" title via `adm-form-head` flex row. Under 900px the lookup stacks below the title full-width.
+- public/css/pages/admissions.css T1: deleted all custom lookup CSS added in 1.8.50 that duplicated ui-kit styles (.adm-lookup-label, .adm-lookup-wrap, .adm-lookup-status colors); kept only layout-only rules (.adm-form-head, .adm-form-head-left, .adm-form-head-lookup, .adm-lookup-inputs gap:8px, .adm-lookup-inputs .ui-input-wrap width:240px) plus the existing @media (max-width: 900px) stack.
+- public/js/pages/admissions.page.js T1: Enter key inside the lookup input triggers Find; status uses ui-err.
+- public/js/pages/admissions.page.js T2: placeholder now shows `e.g. <BRANCHCODE>-<YEAR>-0001` (e.g. `e.g. YC-2026-0001`) using the currently selected branch's code (`br.code || br.id || ''`, same field used in save()) and the current year; falls back to `e.g. YC-<YEAR>-0001` when there's no branch code. Recomputed on branch change and on load.
+- public/js/core/app.js + 13 other JS/HTML files: bumped 1.8.50 -> 1.8.51 via Node script (UTF-8 no BOM).
+Why:
+- Make the returning-student lookup look and behave exactly like the other form fields; show the real ID format in the placeholder.
+Files touched (created / modified / deleted):
+- MODIFIED: public/pages/admissions.html, public/css/pages/admissions.css, public/js/pages/admissions.page.js
+- MODIFIED: public/js/core/app.js, public/js/core/router.js, public/js/components/sidebar.js, public/js/components/topbar.js, public/js/pages/admissions.page.js, public/js/pages/batches.page.js, public/js/pages/branch-heads.page.js, public/js/pages/branches.page.js, public/js/pages/courses.page.js, public/js/pages/org-details.page.js, public/js/pages/sessions.page.js, public/pages/batches.html, public/pages/login.html, public/index.html
+- MODIFIED: docs/02-PROGRESS-LOG.md
+Firestore changes:
+- none.
+Tested on:
+- node --check on .mjs copy of admissions.page.js: 0 failures.
+- grep public/ for UTF-8 BOM, \u2713, mojibake (â‚¹, Â·, â€”): 0 matches.
+- Chrome Desktop: Pending owner live test.
+- Mobile (Android Chrome): Pending owner live test.
+Edge cases checked:
+- Placeholder updates when a different branch is selected; falls back to YC-<year>-0001 for head (fixed branch) with no code or before a branch is picked.
+- Branch code field used: `br.code || br.id || ''` (same as save()).
+Known issues created (if any):
+- None.
+Next task:
+- None.
+
+---
+
+### [2026-11-12 05:55] Version 1.8.50 — Phase 2 · Returning-student lookup moved to form header
+- public/pages/admissions.html T1: removed the full-width "Student ID (returning student)" row from the Student details block; added a compact lookup to the "New admission" header on the right (label "Returning student?" above a 240px input with search icon inside + Find button). Status message shows under the lookup, right-aligned, max-width 340px. Under 900px the lookup moves below the title and takes full width.
+- public/css/pages/admissions.css T1: added .adm-form-head (flex row), .adm-form-head-left, .adm-form-head-lookup, .adm-lookup-label, .adm-lookup-wrap, .adm-lookup-status styles; input width 240px same height as other inputs; @media (max-width: 900px) stacks lookup below title full-width.
+- public/js/pages/admissions.page.js T1: Enter key inside the lookup input triggers Find; lookup status uses .adm-lookup-status (replaced removed adm-lookup-note/adm-lookup-session/adm-student-id-lookup-err elements).
+- public/js/pages/admissions.page.js T2: "Enter a student ID." shows ONLY after Find is clicked with an empty input; cleared when the user types (input listener), when the form opens (openForm → clearReturnState), and on Cancel (closeForm → clearReturnState).
+- public/js/pages/admissions.page.js T3: restored sourceAdmissionRef {sessionId, admissionId} on a returning-student admission (traceability only, never used to read docs). Docs stay copied as in 1.8.49 via Firestore base64 (no Storage).
+- public/js/core/app.js + 13 other JS/HTML files: bumped 1.8.49 -> 1.8.50 via Node script (UTF-8 no BOM).
+Why:
+- Move the returning-student lookup into the form header as a compact control; keep lookup status transient (no error on load); preserve sourceAdmissionRef traceability.
+Files touched (created / modified / deleted):
+- MODIFIED: public/pages/admissions.html, public/css/pages/admissions.css, public/js/pages/admissions.page.js
+- MODIFIED: public/js/core/app.js, public/js/core/router.js, public/js/components/sidebar.js, public/js/components/topbar.js, public/js/pages/admissions.page.js, public/js/pages/batches.page.js, public/js/pages/branch-heads.page.js, public/js/pages/branches.page.js, public/js/pages/courses.page.js, public/js/pages/org-details.page.js, public/js/pages/sessions.page.js, public/pages/batches.html, public/pages/login.html, public/index.html
+- MODIFIED: docs/02-PROGRESS-LOG.md
+Firestore changes:
+- none.
+Tested on:
+- node --check on .mjs copy of admissions.page.js: 0 failures.
+- grep public/ for UTF-8 BOM, \u2713, mojibake (â‚¹, Â·, â€”): 0 matches.
+- Chrome Desktop: Pending owner live test.
+- Mobile (Android Chrome): Pending owner live test.
+Edge cases checked:
+- Empty input + Find shows "Enter a student ID." only (not on load); typing clears it; opening form / Cancel clears it.
+- Enter key in lookup input triggers Find.
+- sourceAdmissionRef saved only when returnDoc is set; old admission never mutated.
+- Kept docs copied identically into new admission's docs subcollection (Firestore base64).
+Known issues created (if any):
+- None.
+Next task:
+- None.
+
+---
+
+### [2026-11-12 05:49] Version 1.8.49 — Phase 2 · Returning-student docs via Firestore base64 only (no Storage)
+- public/js/pages/admissions.page.js T1: removed all Firebase Storage upload code (imports of storage, storageRef/uploadBytes/getDownloadURL, and dataURLToBlob). Kept docs are now read from students/{oldId}/docs/{key} and written as an identical COPY to students/{newId}/docs/{key} in the SAME writeBatch as the new admission. Replaced docs use the new compressed file (blobToDataURL). Removed docs are not copied. No references to the old admission's docs are saved. If any doc read/copy fails, an error is shown and nothing is saved (no half-saved admission).
+- public/js/pages/admissions.page.js: createStudentWithDocs write path for returning-student admissions now uses the same docs object as any new admission (all docs in one batch); sourceAdmissionRef no longer saved.
+- public/storage.rules: reverted to exactly the 1.8.47 deny-all version (diff vs HEAD = empty).
+- public/js/core/app.js + 13 other JS/HTML files: bumped 1.8.48 -> 1.8.49 via Node script (UTF-8 no BOM).
+Why:
+- Use a single document storage method (Firestore base64, as existing admissions do) so returning-student documents never go to Firebase Storage.
+Files touched (created / modified / deleted):
+- MODIFIED: public/js/pages/admissions.page.js, public/storage.rules
+- MODIFIED: public/js/core/app.js, public/js/core/router.js, public/js/components/sidebar.js, public/js/components/topbar.js, public/js/pages/admissions.page.js, public/js/pages/batches.page.js, public/js/pages/branch-heads.page.js, public/js/pages/branches.page.js, public/js/pages/courses.page.js, public/js/pages/org-details.page.js, public/js/pages/sessions.page.js, public/pages/batches.html, public/pages/login.html, public/index.html
+- MODIFIED: docs/02-PROGRESS-LOG.md
+Firestore changes:
+- none.
+Tested on:
+- node --check on .mjs copy of admissions.page.js: 0 failures.
+- grep public/js/pages/admissions.page.js for firebase/storage|uploadBytes|getDownloadURL|storageRef: 0 matches.
+- grep public/js for dataURLToBlob: only the unused definition remains in image-compress.js (not called anywhere); left untouched per change scope.
+- grep public/ for UTF-8 BOM, \u2713, mojibake (â‚¹, Â·, â€”): 0 matches.
+- Chrome Desktop: Pending owner live test.
+- Mobile (Android Chrome): Pending owner live test.
+Edge cases checked:
+- Kept/removed/replaced docs honored per key; keep copies old doc identically into new admission's docs subcollection.
+- Old admission is never mutated.
+- Any doc read/copy failure throws and aborts the save before any Firestore write.
+Known issues created (if any):
+- None.
+Next task:
+- None.
+
+---
+
+### [2026-11-12 05:40] Version 1.8.48 — Phase 2 · Returning-student admission lookup + document copy to Storage
+- public/pages/admissions.html T1: added "Student ID (returning student)" input + "Find" button as a full-width field at the top of the "Student details" block, plus an info note ("Details loaded from <session>. You can edit anything.") and an error area.
+- public/js/pages/admissions.page.js T1: findStudent() queries the `students` collection where admissionNo == entered ID, filters out status 'archived'/'deleted', takes the most recent match by admissionDate, and populates every student-details field (name, guardian, phone, alt phone, email, DOB, gender, qualification, address) without touching session/course/batch; shows the info note. Not found → "No student with this ID in active sessions.", form not blocked.
+- public/js/pages/admissions.page.js T2: saving a returning-student (new) admission keeps the SAME admissionNo (no generateAdmissionNumber), writes a full copy into THIS session's admission only, never updates the old admission, and saves sourceAdmissionRef {sessionId, admissionId} on the new doc.
+- public/js/pages/admissions.page.js T3: when a returning student is found, each document shows Keep / Replace / Remove (default Keep) with the existing thumbnail. On save, kept documents are uploaded (from their stored base64) and replaced/new documents are uploaded to Firebase Storage under admissions/{sessionId}/{newAdmissionId}/{key}.jpg; the new admission stores the new download URL + path (never the old session's file URLs). If any Storage copy fails, an error is shown and nothing is saved (no half-saved admission). validate() treats a 'keep' doc as satisfied.
+- public/js/services/admission.service.js: createStudentWithDocs() now accepts an optional studentRef so the new admission's id is known before Storage upload.
+- public/js/utils/image-compress.js: added dataURLToBlob() helper.
+- public/css/pages/admissions.css: added .adm-doc-action / .adm-doc-action-row / .adm-doc-action-opts styles for Keep/Replace/Remove radios.
+- storage.rules: changed from deny-all to allowing read/write on /admissions/{sessionId}/{admissionId}/{docKey} when request.auth != null; everything else still denied.
+- public/js/core/app.js + 13 other JS/HTML files: bumped 1.8.47 -> 1.8.48 via Node script (UTF-8 no BOM).
+Why:
+- Let staff re-admit a returning student by ID, copying their details and documents into the new session's admission without mutating the historical record.
+Files touched (created / modified / deleted):
+- MODIFIED: public/pages/admissions.html, public/js/pages/admissions.page.js, public/js/services/admission.service.js, public/js/utils/image-compress.js, public/css/pages/admissions.css, public/storage.rules
+- MODIFIED: public/js/core/app.js, public/js/core/router.js, public/js/components/sidebar.js, public/js/components/topbar.js, public/js/pages/batches.page.js, public/js/pages/branch-heads.page.js, public/js/pages/branches.page.js, public/js/pages/courses.page.js, public/js/pages/org-details.page.js, public/js/pages/sessions.page.js, public/pages/batches.html, public/pages/login.html, public/index.html
+- MODIFIED: docs/02-PROGRESS-LOG.md
+Firestore changes:
+- none (students create rule already permits any fields; docs subcollection write uses the same batch path as existing new admissions).
+Tested on:
+- node --check on .mjs copies of admissions.page.js, image-compress.js, admission.service.js: 0 failures.
+- grep public/ for UTF-8 BOM, \u2713, mojibake (â‚¹, Â·, â€”): 0 matches.
+- Chrome Desktop: Pending owner live test.
+- Mobile (Android Chrome): Pending owner live test.
+Edge cases checked:
+- Returning student lookup then Cancel/New clears return state (clearReturnState in openForm/closeForm/findStudent).
+- Old admission is never mutated; sourceAdmissionRef recorded for traceability.
+- Kept/removed/replaced docs honored per key; remove skips Storage upload and Firestore write for that key.
+Known issues created (if any):
+- storage.rules grants read/write on the admissions path to any authenticated user (no Firestore join possible from Storage rules); scope is limited to the admissions path.
+Next task:
+- None.
+
+---
+
 ### [2026-11-12 04:56] Version 1.8.47 — Phase 2 · Restore filter dropdown rules in list-page.css + version bump
 - public/css/components/list-page.css T1: restored the 6 `.lp-filter .ui-select*` rules deleted in 1.8.46 (position, width, white-space, popup sizing/positioning, opt text-wrap) plus 2 new ellipsis rules so closed filter button text never overflows the 190-220px filter (`.lp-filter .ui-select-btn { max-width: 100%; }` and `.lp-filter .ui-select-btn .ui-select-label { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }`). The 1.8.46 `.lp-toolbar`/`.lp-search`/`.lp-filter`/`.lp-refresh`/`@media` rules are unchanged. Edit is purely additive: 8 lines inserted between `.lp-filter` and `.lp-toolbar .lp-refresh`, no lines removed.
 - public/js/core/app.js + 13 other JS/HTML files: bumped 1.8.46 -> 1.8.47 via Node script (UTF-8 no BOM).

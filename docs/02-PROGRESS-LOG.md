@@ -42,6 +42,134 @@
 ## ACTIVE LOG (NEWEST ON TOP)
 ---
 
+### [2026-11-13 04:59] Version 1.8.65 — HOTFIX · View avatar photo key + x icon + date formatting
+T1: Wrong image in View avatar
+- Save code writes doc ids from DOC_KEYS = ['photo', 'signature', 'dobProof', 'marksheet'] to students/<id>/docs/<key>. Upload box mapping in save (each box saves under its own key):
+  - adm-photo-upload → key 'photo' → students/<id>/docs/photo
+  - adm-signature-upload → key 'signature' → students/<id>/docs/signature
+  - adm-dobProof-upload → key 'dobProof' → students/<id>/docs/dobProof
+  - adm-marksheet-upload → key 'marksheet' → students/<id>/docs/marksheet
+- View pop-up reads exactly key 'photo': getDoc(doc(db,'students',s.id,'docs','photo')) (admissions.page.js line ~1537).
+- Mapping is already correct — each upload box saves under its own key (dobProof, marksheet, photo, signature). No fix needed; no migration code written for already-saved test admissions.
+T2: x close icon
+- lucide x at 18px (width/height 18px), stroke-width 2, centred in the 40x40 button (justify-content: center on adm-view-close).
+- Same button style as View receipt (ui-btn ghost: border, radius, height 40).
+T3: Date formatting
+- 'Next due instalment' now uses formatDateIN(s.feeSchedule[0].due) || '-' instead of raw s.feeSchedule[0].due (YYYY-MM-DD).
+- Grep of viewStudent code: no other raw date (YYYY-MM-DD) output found; all dates already use formatDateIN.
+T4: Checks
+- node --check public/js/pages/admissions.page.js: empty output (pass).
+- grep public/ for UTF-8 BOM, \u2713, mojibake (â‚¹, Â·, â€”): 0 matches.
+- grep public/ for "?v=1.8.64": 0 matches (including receipt files).
+
+- public/js/pages/admissions.page.js: version tags -> 1.8.65; T2 xBtn innerHTML with stroke-width 2 + 18px icon; T3 nextDue formatDateIN.
+- public/css/pages/admissions.css: T2 adm-view-close justify-content center + icon sizing 18px.
+- public/js/core/app.js + 14 other JS/HTML files (INCLUDING admission-receipt.page.js, admission-receipt.html): bumped 1.8.64 -> 1.8.65 via Node script (UTF-8 no BOM).
+- docs/02-PROGRESS-LOG.md: added this entry.
+Why:
+- Fix View avatar reading correct photo key (mapping verified correct), centre x icon, format next due date.
+Files touched (created / modified / deleted):
+- MODIFIED: public/js/pages/admissions.page.js, public/css/pages/admissions.css
+- MODIFIED: public/js/core/app.js, public/js/core/router.js, public/js/components/sidebar.js, public/js/components/topbar.js, public/js/pages/admission-receipt.page.js, public/js/pages/admissions.page.js, public/js/pages/batches.page.js, public/js/pages/branch-heads.page.js, public/js/pages/branches.page.js, public/js/pages/courses.page.js, public/js/pages/org-details.page.js, public/js/pages/sessions.page.js, public/pages/admission-receipt.html, public/pages/batches.html, public/pages/login.html, public/index.html
+- MODIFIED: docs/02-PROGRESS-LOG.md
+Firestore changes:
+- none.
+Tested on:
+- node --check on admissions.page.js: 0 failures (empty output).
+- grep public/ for UTF-8 BOM, \u2713, mojibake (â‚¹, Â·, â€”): 0 matches.
+- grep public/ for "?v=1.8.64": 0 matches (including receipt files).
+Edge cases checked:
+- x button keeps ui-btn ghost styling (border, radius, height 40) consistent with View receipt/Edit buttons.
+- formatDateIN returns '' for empty input, so || '-' fallback preserves '-' for missing due dates.
+Known issues created (if any):
+- None.
+Next task:
+- None.
+
+---
+
+### [2026-11-13 04:51] Version 1.8.64 — HOTFIX · View pop-up photo + status dot + header refinements
+T1: Photo instead of initials
+- viewStudent() reads ONLY students/<id>/docs/photo via one getDoc(doc(db,'students',s.id,'docs','photo')), not the whole docs subcollection.
+- Avatar 72x72, border-radius 12px, object-fit: cover, 1px border var(--border). Shows initials while loading and as fallback if no photo or invalid data URL (isDataUrl() guard). Avatar box keeps same size in all states (no layout jump).
+T2: Status as dot next to name
+- Removed the "Active" pill from the right side completely.
+- Added 10px round dot directly after the student name (8px gap, vertically centred with name text), with title/aria-label = status text ("Active", "Dropped", "Completed").
+- Colours: Active = green (var(--success, #16a34a)), Completed = blue (var(--primary)), Dropped = grey (var(--text-mute)), any other status = grey.
+T3: Header buttons
+- Right side group = [View receipt] [Edit] [x] in ONE flex container (adm-view-actions) with gap: 8px, equal gaps, no margins on buttons.
+- All three buttons 40px height (ui-btn default); "x" is square 40x40 (adm-view-close class).
+T4: Spacing
+- Header margin-bottom: 20px so avatar never touches cards.
+- Header row: display flex, align-items center, gap 16px between avatar and name block.
+T5: Checks
+- node --check public/js/pages/admissions.page.js: empty output (pass).
+- grep public/ for UTF-8 BOM, \u2713, mojibake (â‚¹, Â·, â€”): 0 matches.
+- grep public/ for "?v=1.8.63": 0 matches (including receipt files).
+
+- public/js/pages/admissions.page.js: version tags -> 1.8.64; T1 photo getDoc + isDataUrl fallback; T2 status dot replacing pill; T3 buttons in one container + xBtn adm-view-close class; T4 spacing (no spacing changes in JS beyond layout structure).
+- public/css/pages/admissions.css: T1 avatar img styling; T2 adm-view-status-dot colours; T3 adm-view-actions gap/margin, adm-view-close width 40px; T4 adm-view-head margin-bottom 20px.
+- public/js/core/app.js + 14 other JS/HTML files (INCLUDING admission-receipt.page.js, admission-receipt.html): bumped 1.8.62/1.8.63 -> 1.8.64 via Node script (UTF-8 no BOM).
+- docs/02-PROGRESS-LOG.md: added this entry.
+Why:
+- Polish view-student pop-up: photo instead of initials, status dot beside name, unified header button group, tighter vertical spacing.
+Files touched (created / modified / deleted):
+- MODIFIED: public/js/pages/admissions.page.js, public/css/pages/admissions.css
+- MODIFIED: public/js/core/app.js, public/js/core/router.js, public/js/components/sidebar.js, public/js/components/topbar.js, public/js/pages/admission-receipt.page.js, public/js/pages/admissions.page.js, public/js/pages/batches.page.js, public/js/pages/branch-heads.page.js, public/js/pages/branches.page.js, public/js/pages/courses.page.js, public/js/pages/org-details.page.js, public/js/pages/sessions.page.js, public/pages/admission-receipt.html, public/pages/batches.html, public/pages/login.html, public/index.html
+- MODIFIED: docs/02-PROGRESS-LOG.md
+Firestore changes:
+- none.
+Tested on:
+- node --check on admissions.page.js: 0 failures (empty output).
+- grep public/ for UTF-8 BOM, \u2713, mojibake (â‚¹, Â·, â€”): 0 matches.
+- grep public/ for "?v=1.8.63": 0 matches (including receipt files).
+Edge cases checked:
+- Photo getDoc wrapped in try/catch; non-fatal, keeps initials on failure.
+- isDataUrl guard prevents setting img.src on invalid/incomplete data URLs.
+- Status dot gets title/aria-label for accessibility.
+Known issues created (if any):
+- None.
+Next task:
+- None.
+
+---
+
+### [2026-11-13 04:06] Version 1.8.63 — HOTFIX · View pop-up compact layout + doc image src fix
+T1: View pop-up - no inner scroll on desktop
+- Removed fixed height / max-height + overflow on pop-up body; pop-up grows to fit content (width 900px, max-width calc(100vw - 32px)), centred, 24px padding. Compact: card header 12px 16px, rows 6px vertical padding, 13px text, 16px gap so all 4 cards fit on 1080p without scrolling.
+- Only when pop-up is taller than viewport (small screens / mobile): the WHOLE overlay scrolls (ui-modal-back overflow-y: auto, pop-up margin 16px auto); never a scrollbar inside the pop-up.
+T2: Removed the bottom "Close" button and footer row completely; kept top-right "x", Esc and backdrop click.
+T3: Header: avatar (initials) | name (bold) + "Admission No: ..." on one line under it | status chip (adm-pill, same colours as Status column, capitalised "Active") | right side: [View receipt] [Edit] [x], vertically centred. Added .adm-pill.active/dropped/completed colours.
+T4: Rows: label column fixed 140px, nowrap, ellipsis; value wraps; 12px gap. Gender capitalised ("Male"). Dates via formatDateIN ("10 Mar 2027"), money via formatINR ("₹3,280"), empty values "-".
+T5: Fixed "Failed to load resource: data:image/jpeg;base64... net::ERR_INVALID_URL" (twice) — caused by renderReturnDocs() prepending "data:image/jpeg;base64," to old.data which is already a complete data URL (admissions.page.js renderReturnDocs). Added isDataUrl() helper; only set img.src when the value is a complete "data:image/...;base64,..." string, else show fallback (empty box). Document saving unchanged.
+T6: grep public/ for BOM, \u2713, mojibake (â‚¹, Â·, â€”): 0 matches. node --check on admissions.page.js: empty.
+
+- public/js/pages/admissions.page.js: version tags 1.8.62 -> 1.8.63; T1/T2/T3/T4/T5 viewStudent changes; T5 isDataUrl helper + img.src guards.
+- public/css/pages/admissions.css: T1 compact modal/layout, removed max-height/overflow/foot, T2 removed .adm-view-footer, T3 header/pill colours, T4 label/value row sizing.
+- public/js/core/app.js + 13 other JS/HTML files: bumped 1.8.62 -> 1.8.63 via Node script (UTF-8 no BOM).
+- docs/02-PROGRESS-LOG.md: added this entry.
+Why:
+- Polish view-student pop-up: compact non-scrolling desktop layout, overlay scroll only on small screens, no bottom Close button, clean header, fixed row sizing, fix broken doc image src.
+Files touched (created / modified / deleted):
+- MODIFIED: public/js/pages/admissions.page.js, public/css/pages/admissions.css
+- MODIFIED: public/js/core/app.js, public/js/core/router.js, public/js/components/sidebar.js, public/js/components/topbar.js, public/js/pages/admissions.page.js, public/js/pages/batches.page.js, public/js/pages/branch-heads.page.js, public/js/pages/branches.page.js, public/js/pages/courses.page.js, public/js/pages/org-details.page.js, public/js/pages/sessions.page.js, public/pages/batches.html, public/pages/login.html, public/index.html
+- MODIFIED: docs/02-PROGRESS-LOG.md
+Firestore changes:
+- none.
+Tested on:
+- node --check on admissions.page.js: 0 failures (empty output).
+- node dynamic import of admissions.page.js: no SyntaxError (only expected Firebase https URL runtime error outside browser).
+- grep public/ for UTF-8 BOM, \u2713, mojibake (â‚¹, Â·, â€”): 0 matches.
+Edge cases checked:
+- isDataUrl guard applied to all four doc img.src sites (setDocPreview, renderReturnDocs, fillForm docOriginals, handleFileSelect); saving path untouched.
+- Status chip capitalised ("Active") and colour-matched to list Status column.
+Known issues created (if any):
+- None.
+Next task:
+- None.
+
+---
+
 ### [2026-11-13 03:35] Version 1.8.62 — Phase 2 · View pop-up refinements + global scrollbars + edit mode locks
 T1: View pop-up
 - (a) Added "x" icon button (ui-btn ghost, aria-label "Close") at top-right of pop-up header, alongside bottom Close button. Esc and backdrop click also close.

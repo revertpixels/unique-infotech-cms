@@ -4,7 +4,7 @@ import { createSelect } from '../components/ui-select.js';
 import { openMenu } from '../components/ui-menu.js';
 import { confirmDialog } from '../components/ui-confirm.js';
 import { showToast } from '../components/toast.js';
-import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.62';
+import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.65';
 import { buildStats, buildToolbar } from '../components/list-page.js';
 
 const TEXT_KEYS = ['name', 'code', 'email', 'address', 'mapUrl'];

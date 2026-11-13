@@ -1,18 +1,18 @@
 import { db } from '../config/firebase-config.js';
 import { collection, getDocs, query, where, doc, getDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.62';
-import { registerDirty, confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.62';
-import { buildStats, buildToolbar } from '../components/list-page.js?v=1.8.62';
-import { createSelect } from '../components/ui-select.js?v=1.8.62';
-import { openMenu } from '../components/ui-menu.js?v=1.8.62';
-import { confirmDialog } from '../components/ui-confirm.js?v=1.8.62';
-import { getSelectedSessionId, getCachedSessions, loadSessions, todayISO } from '../core/sessions.js?v=1.8.62';
-import { firstInstallmentOf, admissionState, sessionLabel, installmentSchedule, batchAllowsCourse, batchCourseLabel, isCourseActive } from '../utils/session-rules.js?v=1.8.62';
-import { formatINR, formatDateIN, initials } from '../utils/formatter.js?v=1.8.62';
-import { validatePhone, validateEmail, validateDOB, validateName, validateRequired } from '../utils/validator.js?v=1.8.62';
-import { listStudentsRaw, checkDuplicatePhone, generateAdmissionNumber, createStudentWithDocs, updateStudentWithDocs, updateStudent, deleteStudent } from '../services/admission.service.js?v=1.8.62';
-import { feeTotal } from '../utils/fees.js?v=1.8.62';
-import { compressTo100KB, readAsDataURL, blobToDataURL, isImageFile, formatBytes } from '../utils/image-compress.js?v=1.8.62';
+import { showToast } from '../components/toast.js?v=1.8.65';
+import { registerDirty, confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.65';
+import { buildStats, buildToolbar } from '../components/list-page.js?v=1.8.65';
+import { createSelect } from '../components/ui-select.js?v=1.8.65';
+import { openMenu } from '../components/ui-menu.js?v=1.8.65';
+import { confirmDialog } from '../components/ui-confirm.js?v=1.8.65';
+import { getSelectedSessionId, getCachedSessions, loadSessions, todayISO } from '../core/sessions.js?v=1.8.65';
+import { firstInstallmentOf, admissionState, sessionLabel, installmentSchedule, batchAllowsCourse, batchCourseLabel, isCourseActive } from '../utils/session-rules.js?v=1.8.65';
+import { formatINR, formatDateIN, initials } from '../utils/formatter.js?v=1.8.65';
+import { validatePhone, validateEmail, validateDOB, validateName, validateRequired } from '../utils/validator.js?v=1.8.65';
+import { listStudentsRaw, checkDuplicatePhone, generateAdmissionNumber, createStudentWithDocs, updateStudentWithDocs, updateStudent, deleteStudent } from '../services/admission.service.js?v=1.8.65';
+import { feeTotal } from '../utils/fees.js?v=1.8.65';
+import { compressTo100KB, readAsDataURL, blobToDataURL, isImageFile, formatBytes } from '../utils/image-compress.js?v=1.8.65';
 
 const GENDERS = [
   { value: 'male', label: 'Male', icon: 'user' },
@@ -58,6 +58,7 @@ function $(id) { const el = document.getElementById(id); if (!el) console.warn('
 function $t(id, text) { const el = $(id); if (el) el.textContent = text; }
 function $v(id, value) { const el = $(id); if (el) el.value = value; }
 function mk(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; }
+function isDataUrl(v) { return typeof v === 'string' && /^data:image\/[^;]+;base64,/.test(v); }
 function num(v) { if (v === '' || v === null || v === undefined) return null; const n = Number(v); return Number.isFinite(n) ? n : null; }
 function toDate(s) {
   if (!s) return null;
@@ -219,6 +220,7 @@ export async function mount({ container, profile, ctx }) {
     }
     const df = docFiles[key];
     if (!df || !df.dataUrl) return;
+    if (!isDataUrl(df.dataUrl)) return;
     preview.style.display = 'flex';
     const box = mk('div', 'adm-doc-box');
     box.style.position = 'relative';
@@ -840,7 +842,7 @@ function dueLabel(dueISO) {
         if (host && host.parentNode) host.parentNode.insertBefore(action, host.nextSibling);
       }
       action.hidden = false;
-      const thumb = old.data ? ('data:image/jpeg;base64,' + old.data) : '';
+      const thumb = old.data && isDataUrl(old.data) ? old.data : '';
       action.innerHTML =
         '<div class="adm-doc-action-row">' +
         (thumb ? '<img src="' + thumb + '" class="adm-doc-thumb" alt="existing">' : '<div class="adm-doc-thumb empty" style="width:56px;height:56px;border:1px dashed var(--border);border-radius:6px;display:grid;place-items:center;color:var(--text-mute);font-size:10px;">-</div>') +
@@ -1010,10 +1012,12 @@ function dueLabel(dueISO) {
           box.style.position = 'relative';
           box.style.overflow = 'visible';
           const img = mk('img', 'adm-doc-thumb');
-          img.src = docOriginals[k].data;
-          img.style.objectFit = (k === 'photo') ? 'cover' : 'contain';
-          if (k === 'signature') img.style.background = '#FFFFFF';
-          box.appendChild(img);
+          if (isDataUrl(docOriginals[k].data)) {
+            img.src = docOriginals[k].data;
+            img.style.objectFit = (k === 'photo') ? 'cover' : 'contain';
+            if (k === 'signature') img.style.background = '#FFFFFF';
+            box.appendChild(img);
+          }
           const remove = mk('button', 'adm-doc-remove');
           remove.type = 'button';
           remove.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>';
@@ -1528,22 +1532,48 @@ function dueLabel(dueISO) {
     photo.textContent = initials(s.name || '');
     head.appendChild(photo);
 
+    // T1: load photo from students/<id>/docs/photo (one getDoc, not whole subcollection)
+    try {
+      const photoSnap = await getDoc(doc(db, 'students', s.id, 'docs', 'photo'));
+      if (photoSnap.exists()) {
+        const data = photoSnap.data();
+        const photoUrl = data && data.data ? data.data : null;
+        if (photoUrl && isDataUrl(photoUrl)) {
+          photo.textContent = '';
+          const img = document.createElement('img');
+          img.src = photoUrl;
+          img.style.width = '100%';
+          img.style.height = '100%';
+          img.style.objectFit = 'cover';
+          img.style.display = 'block';
+          photo.appendChild(img);
+        }
+      }
+    } catch (e) {
+      // non-fatal, keep initials
+    }
+
     const info = document.createElement('div');
     info.className = 'adm-view-info';
     const nameEl = document.createElement('h2');
     nameEl.className = 'adm-view-name';
     nameEl.textContent = s.name || ' - ';
+    // T2: status dot next to name
+    const stValue = (s.status || 'active');
+    const statusLabel = stValue.charAt(0).toUpperCase() + stValue.slice(1);
+    const nameDot = document.createElement('span');
+    nameDot.className = 'adm-view-status-dot ' + (stValue === 'active' ? 'active' : stValue === 'dropped' ? 'dropped' : 'completed');
+    nameDot.title = statusLabel;
+    nameDot.setAttribute('aria-label', statusLabel);
+    nameEl.appendChild(nameDot);
     const noEl = document.createElement('div');
     noEl.className = 'adm-view-no';
     noEl.textContent = 'Admission No: ' + (s.admissionNo || ' - ');
-    const stChip = document.createElement('span');
-    stChip.className = 'adm-pill ' + ((s.status || 'active') === 'active' ? 'active' : (s.status || 'active') === 'dropped' ? 'dropped' : 'completed');
-    stChip.textContent = (s.status || 'active');
     info.appendChild(nameEl);
     info.appendChild(noEl);
-    info.appendChild(stChip);
     head.appendChild(info);
 
+    // T3: header buttons in ONE flex container, equal gaps, no button margins
     const btns = document.createElement('div');
     btns.className = 'adm-view-actions';
     const viewRcpt = document.createElement('button');
@@ -1556,17 +1586,16 @@ function dueLabel(dueISO) {
     editBtn.className = 'ui-btn primary';
     editBtn.textContent = 'Edit';
     editBtn.addEventListener('click', (ev) => { ev.stopPropagation(); back.remove(); openForm(s); });
-    btns.appendChild(viewRcpt);
-    btns.appendChild(editBtn);
-    head.appendChild(btns);
-
     const xBtn = document.createElement('button');
     xBtn.type = 'button';
-    xBtn.className = 'ui-btn ghost';
+    xBtn.className = 'ui-btn ghost adm-view-close';
     xBtn.setAttribute('aria-label', 'Close');
-    xBtn.innerHTML = '<i data-lucide="x"></i>';
+    xBtn.innerHTML = '<i data-lucide="x" width="18" height="18" stroke-width="2"></i>';
     xBtn.addEventListener('click', (ev) => { ev.stopPropagation(); back.remove(); });
-    head.appendChild(xBtn);
+    btns.appendChild(viewRcpt);
+    btns.appendChild(editBtn);
+    btns.appendChild(xBtn);
+    head.appendChild(btns);
     box.appendChild(head);
 
     // Card grid sections
@@ -1583,13 +1612,13 @@ function dueLabel(dueISO) {
     const feeTotal = Number(s.feeTotal || 0);
     const paid = Number((s.dueAtAdmission && s.dueAtAdmission.total) || 0);
     const balance = feeTotal - paid;
-    const nextDue = (s.feeSchedule && Array.isArray(s.feeSchedule) && s.feeSchedule.length > 0) ? s.feeSchedule[0].due || '-' : '-';
+    const nextDue = (s.feeSchedule && Array.isArray(s.feeSchedule) && s.feeSchedule.length > 0) ? formatDateIN(s.feeSchedule[0].due) || '-' : '-';
 
     const sections = [
       { id: 'personal', icon: 'user', title: 'Personal', rows: [
         ['Guardian', s.guardianName || '-'],
         ['DOB', formatDateIN(s.dob)],
-        ['Gender', s.gender || '-'],
+        ['Gender', s.gender ? (s.gender.charAt(0).toUpperCase() + s.gender.slice(1)) : '-'],
         ['Highest qualification', s.qualification || '-']
       ]},
       { id: 'contact', icon: 'phone', title: 'Contact', rows: [
@@ -1651,16 +1680,6 @@ function dueLabel(dueISO) {
     });
     body.appendChild(grid);
     box.appendChild(body);
-
-    const foot = document.createElement('div');
-    foot.className = 'adm-view-footer';
-    const closeBtn = document.createElement('button');
-    closeBtn.type = 'button';
-    closeBtn.className = 'ui-btn ghost';
-    closeBtn.textContent = 'Close';
-    closeBtn.addEventListener('click', () => back.remove());
-    foot.appendChild(closeBtn);
-    box.appendChild(foot);
 
     back.appendChild(box);
     document.body.appendChild(back);
@@ -1797,10 +1816,12 @@ function dueLabel(dueISO) {
       box.style.position = 'relative';
       box.style.overflow = 'visible';
       const img = mk('img', 'adm-doc-thumb');
-      img.src = docFiles[k].dataUrl;
-      img.style.objectFit = (k === 'photo') ? 'cover' : 'contain';
-      if (k === 'signature') img.style.background = '#FFFFFF';
-      box.appendChild(img);
+      if (isDataUrl(docFiles[k].dataUrl)) {
+        img.src = docFiles[k].dataUrl;
+        img.style.objectFit = (k === 'photo') ? 'cover' : 'contain';
+        if (k === 'signature') img.style.background = '#FFFFFF';
+        box.appendChild(img);
+      }
       const remove = mk('button', 'adm-doc-remove');
       remove.type = 'button';
       remove.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>';

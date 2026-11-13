@@ -76,7 +76,7 @@ export async function createStudentWithDocs(data, docs, studentRef) {
   if (docs) {
     Object.entries(docs).forEach(([key, docData]) => {
       if (docData) {
-        const docRef = doc(doc(ref, 'docs'), key);
+        const docRef = doc(collection(ref, 'docs'), key);
         batch.set(docRef, Object.assign({}, docData, { updatedAt: serverTimestamp() }));
       }
     });
@@ -93,11 +93,11 @@ export async function updateStudentWithDocs(id, data, docs) {
   if (docs) {
     Object.entries(docs).forEach(([key, docData]) => {
       if (docData) {
-        const docRef = doc(doc(studentRef, 'docs'), key);
+        const docRef = doc(collection(studentRef, 'docs'), key);
         batch.set(docRef, Object.assign({}, docData, { updatedAt: serverTimestamp() }));
       } else {
         // Remove existing doc if data is null/false
-        const docRef = doc(doc(studentRef, 'docs'), key);
+        const docRef = doc(collection(studentRef, 'docs'), key);
         batch.delete(docRef);
       }
     });

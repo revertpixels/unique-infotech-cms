@@ -185,7 +185,6 @@
 
 /* ---------- amber note ---------- */
 .adm-note.warn { background: #FFFBEB; border: 1px solid var(--border); border-left: 4px solid #D97706; border-radius: var(--r-sm); padding: 8px 12px; font-size: 12.5px; color: #92400E; margin-top: 8px; }
-.adm-note.info { background: #EFF6FF; border: 1px solid var(--border); border-left: 4px solid #2563EB; border-radius: var(--r-sm); padding: 8px 12px; font-size: 12.5px; color: #1D4ED8; margin-top: 8px; }
 
 /* ---------- mobile cards view ---------- */
 @media (max-width: 900px) {
@@ -197,4 +196,144 @@
   .adm-table td:last-child { border-bottom: 0; }
   .adm-table td.adm-actions { padding-left: 14px; text-align: left; }
   .adm-head-row { flex-direction: column; align-items: stretch; }
+}
+
+/* ---------- View student pop-up (T3) ---------- */
+.view-student-modal {
+  max-width: 860px;
+  width: 100%;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+}
+.adm-view-head {
+  flex-shrink: 0;
+  position: sticky;
+  top: 0;
+  background: var(--surface);
+  z-index: 1;
+}
+.adm-view-body {
+  overflow-y: auto;
+  flex: 1;
+  padding: 0 24px 0 24px;
+}
+.adm-view-footer {
+  flex-shrink: 0;
+  padding-top: 16px;
+  padding-bottom: 24px;
+  text-align: right;
+}
+.adm-view-head {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 0;
+  padding-bottom: 0;
+  border-bottom: none;
+}
+.adm-view-photo {
+  width: 72px;
+  height: 72px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: #F3F4F7;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+.adm-view-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.adm-view-info { flex: 1; min-width: 0; }
+.adm-view-name { margin: 0 0 4px; font-size: 19px; font-weight: 700; color: var(--text); }
+.adm-view-no { font-size: 12.5px; color: var(--text-mute); margin: 0 0 8px; }
+.adm-view-actions { display: flex; gap: 8px; margin-left: auto; flex-shrink: 0; }
+.adm-view-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px;
+}
+.adm-view-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.adm-view-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: color-mix(in srgb, var(--bg) 60%, var(--surface));
+  border-bottom: 1px solid var(--border);
+}
+.adm-view-card-head i[data-lucide] { width: 16px; height: 16px; color: var(--primary); flex-shrink: 0; }
+.adm-view-card-title { font-size: 13px; font-weight: 700; color: var(--text); letter-spacing: .04em; text-transform: uppercase; }
+.adm-view-card-body { padding: 12px 14px; }
+.adm-view-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.adm-view-table td {
+  padding: 5px 0;
+  font-size: 13px;
+  border-bottom: 1px solid color-mix(in srgb, var(--text) 6%, transparent);
+  vertical-align: top;
+}
+.adm-view-table td:last-child { border-bottom: 0; }
+.adm-view-label {
+  width: 34%;
+  color: var(--text-mute);
+  font-size: 12px;
+  padding-right: 8px;
+}
+.adm-view-value { color: var(--text); font-size: 14px; }
+.adm-view-docs {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+}
+.adm-view-doc { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.adm-view-doc-thumb {
+  width: 64px; height: 64px; border: 1px solid var(--border);
+  border-radius: var(--r-sm); background: #F3F4F7;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.adm-view-doc-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.adm-view-doc-thumb.empty { color: var(--text-mute); font-size: 10px; }
+.adm-view-doc-label { font-size: 11px; color: var(--text-mute); text-align: center; line-height: 1.3; }
+
+@media (max-width: 760px) {
+  .view-student-modal { max-width: 95vw; padding: 16px; }
+  .adm-view-grid { grid-template-columns: 1fr; }
+  .adm-view-docs { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* ---------- Edit mode lock icons ---------- */
+.ui-select-btn[disabled] .ui-select-chev[data-lucide="lock"],
+.ui-input-lock,
+.ui-fee-lock {
+  width: 14px;
+  height: 14px;
+  color: var(--text-mute);
+}
+.ui-select-btn .ui-select-chev[data-lucide="lock"] {
+  margin-left: 8px;
+}
+.ui-input-wrap .ui-input-lock {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+.ui-fee-box .ui-fee-lock {
+  position: absolute;
+  right: 8px;
+  top: 8px;
+  pointer-events: none;
 }

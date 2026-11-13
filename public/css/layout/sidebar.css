@@ -5,9 +5,7 @@
 .brand-txt { white-space: nowrap; overflow: hidden; }
 .brand-txt h3 { font-family: var(--font-head); font-size: 14.5px; font-weight: 800; letter-spacing: -.01em; color: #fff; line-height: 1.2; }
 .brand-txt p { font-size: 11px; color: color-mix(in srgb, var(--sidebar-text) 80%, transparent); margin-top: 3px; font-weight: 500; }
-.sb-nav { flex: 1; padding: 6px 10px 12px; overflow-y: auto; overflow-x: hidden; scrollbar-width: thin; scrollbar-color: rgba(255,255,255,.18) transparent; }
-.sb-nav::-webkit-scrollbar { width: 6px; }
-.sb-nav::-webkit-scrollbar-thumb { background: rgba(255,255,255,.18); border-radius: 3px; }
+.sb-nav { flex: 1; padding: 6px 10px 12px; overflow-y: auto; overflow-x: hidden; }
 .sb-section { margin-bottom: 6px; }
 .sb-section-label { font-size: 10px; text-transform: uppercase; letter-spacing: .1em; color: #6E6690; font-weight: 700; padding: 14px 12px 6px; display: flex; align-items: center; gap: 10px; white-space: nowrap; }
 .sb-section-label::after { content: ""; flex: 1; height: 1px; background: var(--sidebar-border); }

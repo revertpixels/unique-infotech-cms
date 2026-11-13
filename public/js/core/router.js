@@ -1,4 +1,4 @@
-import { confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.55';
+import { confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.62';
 
 export const ROLE_LABELS = {
   superadmin: 'Super Admin',
@@ -38,6 +38,11 @@ let navCounter = 0;
 
 export function startRouter({ profile, getContext, setContext, onRouteChange }) {
   const view = document.getElementById('view');
+  const orgName = (window.APP_CACHE && window.APP_CACHE.org && window.APP_CACHE.org.orgName) ? window.APP_CACHE.org.orgName : 'Unique Infotech CMS';
+
+  function setTitle(text) {
+    document.title = text + ' - ' + orgName;
+  }
 
   function emptyState(iconName, heading, line) {
     const box = document.createElement('div');
@@ -63,6 +68,85 @@ export function startRouter({ profile, getContext, setContext, onRouteChange }) 
     }
   }
 
+  // T6: simple "coming soon" student profile card for #/students/<admissionNo>
+  function renderStudentProfile(admissionNo, routeKey) {
+    view.textContent = '';
+    const box = document.createElement('div');
+    box.className = 'empty-state';
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('data-lucide', 'user');
+    svg.setAttribute('aria-hidden', 'true');
+    box.appendChild(svg);
+    const h = document.createElement('h3');
+    h.textContent = 'Student profile - coming soon';
+    box.appendChild(h);
+    const p = document.createElement('p');
+    p.textContent = 'Admission No: ' + admissionNo;
+    box.appendChild(p);
+    const back = document.createElement('button');
+    back.type = 'button';
+    back.className = 'btn pri';
+    back.textContent = 'Back';
+    back.addEventListener('click', () => { location.hash = '#/admissions'; });
+    box.appendChild(back);
+    view.appendChild(box);
+    setTitle('Student profile');
+    if (typeof lucide !== 'undefined') {
+      lucide.createIcons();
+    }
+    if (onRouteChange) onRouteChange(routeKey, null);
+  }
+
+  async function renderAdmissionReceipt(key) {
+    const thisNav = ++navCounter;
+    try {
+      const resp = await fetch('/pages/admission-receipt.html', { cache: 'no-cache' });
+      if (thisNav !== navCounter) return;
+      if (!resp.ok) {
+        renderEmpty('inbox', "This page isn't available yet", 'The receipt page could not be loaded.');
+        setTitle('Admission Receipt');
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+        if (onRouteChange) onRouteChange(key, null);
+        return;
+      }
+      let html = await resp.text();
+      if (thisNav !== navCounter) return;
+      html = html.trim();
+      if (!html) {
+        renderEmpty('inbox', "This page isn't available yet", 'The receipt page has no content yet.');
+        setTitle('Admission Receipt');
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+        if (onRouteChange) onRouteChange(key, null);
+        return;
+      }
+      view.innerHTML = html;
+      if (thisNav !== navCounter) return;
+      try {
+        const mod = await import('/js/pages/admission-receipt.page.js?v=' + (window.__BUILD__ || Date.now()));
+        if (thisNav !== navCounter) return;
+        if (mod && typeof mod.mount === 'function') {
+          currentModule = mod;
+          await mod.mount({ container: document.getElementById('view'), profile, ctx: getContext() });
+        } else {
+          currentModule = null;
+        }
+      } catch (e) {
+        console.error(e);
+      }
+      if (thisNav !== navCounter) return;
+      const viewEl = document.getElementById('view');
+      if (viewEl) {
+        viewEl.focus();
+        viewEl.scrollTop = 0;
+      }
+      setTitle('Admission Receipt');
+      if (onRouteChange) onRouteChange(key, null);
+      if (typeof lucide !== 'undefined') lucide.createIcons();
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
   async function render(key) {
     const thisNav = ++navCounter;
     try {
@@ -77,10 +161,17 @@ export function startRouter({ profile, getContext, setContext, onRouteChange }) 
 
     const route = Object.prototype.hasOwnProperty.call(ROUTES, key) ? ROUTES[key] : null;
     const ctx = getContext();
-    const orgName = (window.APP_CACHE && window.APP_CACHE.org && window.APP_CACHE.org.orgName) ? window.APP_CACHE.org.orgName : 'Unique Infotech CMS';
 
-    function setTitle(text) {
-      document.title = text + ' - ' + orgName;
+    // T6: dynamic student profile route #/students/<admissionNo>
+    if (key.startsWith('students/') && key.length > 'students/'.length) {
+      renderStudentProfile(key.slice('students/'.length));
+      return;
+    }
+
+    // T1: dynamic admission receipt route #/admissions/<admissionId>/receipt
+    if (key.startsWith('admissions/') && key.endsWith('/receipt') && key.length > 'admissions/'.length + '/receipt'.length) {
+      renderAdmissionReceipt(key);
+      return;
     }
 
     if (!route) {

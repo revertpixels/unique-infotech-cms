@@ -42,6 +42,295 @@
 ## ACTIVE LOG (NEWEST ON TOP)
 ---
 
+### [2026-11-13 03:35] Version 1.8.62 — Phase 2 · View pop-up refinements + global scrollbars + edit mode locks
+T1: View pop-up
+- (a) Added "x" icon button (ui-btn ghost, aria-label "Close") at top-right of pop-up header, alongside bottom Close button. Esc and backdrop click also close.
+- (b) Header and footer fixed; only the card grid body scrolls (overflow-y: auto on .adm-view-body).
+- (c) Removed Documents section completely from view pop-up, and removed the docs subcollection read (getDocs query on students/{id}/docs). Printed removed lines below.
+Removed lines (admissions.page.js viewStudent):
+  const dSnap = await getDocs(query(collection(db, 'students', s.id, 'docs')));
+  dSnap.docs.forEach((d) => { docs[d.id] = d.data(); });
+  ...and the entire Documents section block (adm-view-docs grid with 4 doc thumbnails).
+
+T2: Scrollbars
+- Added ONE global scrollbar block in public/css/main.css:
+  * { scrollbar-width: thin; scrollbar-color: #C7CBE0 transparent; }
+  *::-webkit-scrollbar { width: 8px; height: 8px; }
+  *::-webkit-scrollbar-track { background: transparent; }
+  *::-webkit-scrollbar-thumb { background: #C7CBE0; border-radius: 999px; border: 2px solid transparent; background-clip: padding-box; }
+  *::-webkit-scrollbar-thumb:hover { background: #A5ABCB; background-clip: padding-box; }
+- Removed per-component duplicates:
+  - public/css/layout/sidebar.css: removed .sb-nav scrollbar rules (3 lines)
+  - public/css/components/list-page.css: removed .ui-select-list scrollbar rules (6 lines)
+  - public/css/components/multi-select.css: removed .ui-multi-options scrollbar rules (8 lines)
+
+T3: Edit mode locks
+- Removed "Course, batch and fees can't be changed after admission." note completely (HTML + JS + CSS).
+- In edit mode: Session, Branch, Course, Batch, Admission date disabled with lucide "lock" icon (14px, muted) at right end inside each field, replacing the chevron for ui-select components. Fee boxes also get lock icons.
+- New admission: no lock icons, everything normal.
+
+- public/js/pages/admissions.page.js T1/T3: viewStudent() no longer reads docs subcollection; no Documents section; header has x close button; header/footer fixed, body scrolls. fillForm() adds lock icons to disabled fields in edit mode.
+- public/css/pages/admissions.css T1/T3: view-student-modal uses flex column layout with fixed header/footer and scrollable body; added lock icon CSS rules; removed .adm-note.info class.
+- public/js/core/router.js: version tag bumped only (1.8.61 -> 1.8.62).
+- public/css/main.css T2: added global scrollbar block.
+- public/css/layout/sidebar.css T2: removed .sb-nav scrollbar rules.
+- public/css/components/list-page.css T2: removed .ui-select-list scrollbar rules.
+- public/css/components/multi-select.css T2: removed .ui-multi-options scrollbar rules.
+- public/js/core/app.js + 12 other JS/HTML files: bumped 1.8.61 -> 1.8.62 via Node script (UTF-8 no BOM).
+Why:
+- Polish admissions UX: cleaner view pop-up, consistent global scrollbars, clearer edit-mode field locks.
+Files touched (created / modified / deleted):
+- MODIFIED: public/js/pages/admissions.page.js, public/css/pages/admissions.css, public/css/main.css, public/css/layout/sidebar.css, public/css/components/list-page.css, public/css/components/multi-select.css
+- MODIFIED: public/js/core/app.js, public/js/core/router.js, public/js/components/sidebar.js, public/js/components/topbar.js, public/js/pages/admissions.page.js, public/js/pages/batches.page.js, public/js/pages/branch-heads.page.js, public/js/pages/branches.page.js, public/js/pages/courses.page.js, public/js/pages/org-details.page.js, public/js/pages/sessions.page.js, public/pages/batches.html, public/pages/login.html, public/index.html
+- MODIFIED: docs/02-PROGRESS-LOG.md
+Firestore changes:
+- none.
+Tested on:
+- node --check on admissions.page.js: 0 failures.
+- grep public/ for UTF-8 BOM, \u2713, mojibake (â‚¹, Â·, â€”): 0 matches.
+- grep public/js for html2canvas|html2pdf: 0 matches.
+- Chrome Desktop: Pending owner live test.
+- Mobile (Android Chrome): Pending owner live test.
+Edge cases checked:
+- Lock icons only added in edit mode (editId truthy); new admission forms have no lock icons.
+- Chevron icon replaced by lock icon in ui-select buttons when disabled.
+- Fee boxes get lock icons in edit mode.
+Known issues created (if any):
+- None.
+Next task:
+- None.
+
+---
+
+### [2026-11-12 07:51] Version 1.8.61 — Phase 2 · View pop-up redesign + edit rules + pagination
+STEP 0 (report, no changes):
+- (a) Session dropdown on Admissions page: form has sessionSel only; toolbar has status/course/batch/branch filters — no session dropdown. Session statuses: upcoming, running, closed, archived.
+- (b) Org details fields: KEYS = ['name','tagline','phone','email','website','address'] in doc(db,'settings','org_config'), cached in window.APP_CACHE.org. NO logo field exists.
+- (c) Fee fields saved on admission: feeSnapshot, feeTotal, feeSchedule, examFee, dueAtAdmission{admission,material,total}. No BZYCTC-2026-0006 example available.
+- (c) Payment mode / receipt no / received-by: none stored (grep → 0 matches).
+
+- public/js/pages/admissions.page.js T1-a: 'View admission receipt' menu item now navigates to '#/admissions/' + s.id + '/receipt'. Removed all references to openReceiptForAdmission (grep → 0).
+- public/js/pages/admissions.page.js T3: viewStudent() redesigned — wider modal (max-width 860px, scrollable) with header (photo 72x72, name, admission no, status chip, View receipt/Edit buttons) and card grid sections (Personal, Contact, Course & batch, Fees, Documents) as 2-column grid (1 column under 760px), lucide icons, label/value rows, empty values shown as '-'. Document thumbnails clickable to open full size.
+- public/js/pages/admissions.page.js T4: Edit mode disables Session, Branch, Course, Batch, Admission date (disabled attribute + ui-kit disabled style). Muted note "Course, batch and fees can't be changed after admission." shown above locked fields. Save only writes editable fields (student details + docs); locked fields not sent. admissionNo never changes. Prerequisite check skipped in edit mode.
+- public/js/pages/admissions.page.js T5: Pagination hides when totalPages <= 1; Prev disabled on page 1, Next disabled on last page.
+- public/js/pages/admission-receipt.page.js T2: Error state shows actual error message instead of spinning forever.
+- public/js/core/router.js T1-b: setTitle moved to startRouter top level (one definition, accessible by all route handlers). grep "function setTitle" → 1.
+- public/js/utils/admission-receipt.js T1-c: fmtMoney exported (added export keyword). grep shows fmtMoney exported + imported by admission-receipt.page.js.
+- public/js/core/app.js + 12 other JS/HTML files: bumped 1.8.60 -> 1.8.61 via Node script (UTF-8 no BOM).
+Why:
+- Improve admissions UX: wider view pop-up with card grid, edit rules that protect historical data, pagination that hides on single page, receipt page error state.
+Files touched (created / modified / deleted):
+- MODIFIED: public/js/pages/admissions.page.js, public/css/pages/admissions.css, public/js/core/router.js, public/js/pages/admission-receipt.page.js, public/js/utils/admission-receipt.js, public/pages/admissions.html
+- MODIFIED: public/js/core/app.js, public/js/core/router.js, public/js/components/sidebar.js, public/js/components/topbar.js, public/js/pages/admissions.page.js, public/js/pages/batches.page.js, public/js/pages/branch-heads.page.js, public/js/pages/branches.page.js, public/js/pages/courses.page.js, public/js/pages/org-details.page.js, public/js/pages/sessions.page.js, public/pages/batches.html, public/pages/login.html, public/index.html
+- MODIFIED: docs/02-PROGRESS-LOG.md
+Firestore changes:
+- none.
+Tested on:
+- node --check on admissions.page.js, admission-receipt.page.js, admission-receipt.js, router.js: 0 failures.
+- grep public/ for UTF-8 BOM, \u2713, mojibake (â‚¹, Â·, â€”): 0 matches.
+- grep public/js for html2canvas|html2pdf: 0 matches.
+- T1-d self-check: all imports resolve to exports; all router.js route handler identifiers defined in scope.
+- Chrome Desktop: Pending owner live test.
+- Mobile (Android Chrome): Pending owner live test.
+Edge cases checked:
+- Edit mode saves only editable fields; locked fields (session, branch, course, batch, admission date, fees) not sent.
+- Prerequisite check does not run in edit mode.
+- Pagination hidden when totalPages <= 1.
+Known issues created (if any):
+- None.
+Next task:
+- None.
+
+---
+
+### [2026-11-12 07:34] Version 1.8.60 — Phase 2 · Admission receipt page + PDF download
+STEP 0 (report, no changes):
+- (a) Org details fields: KEYS = ['name','tagline','phone','email','website','address'] (org-details.page.js:5). Stored in doc(db,'settings','org_config'), cached in window.APP_CACHE.org with orgName/tagline/phone/email/website/address. NO logo field exists in org details. Sidebar logo shows /assets/images/logo-192.jpg (sidebar.js:130), not from org details.
+- (b) Fee fields saved on admission: feeSnapshot (course fees object {admission, material, installment, exam}), feeTotal, feeSchedule (array of {no,month,opens,due,amount}), examFee, dueAtAdmission{admission,material,total}. No real example from BZYCTC-2026-0006 available (not queried from Firestore).
+- (c) Payment mode: NO. Receipt no: NO. Received-by: NO — none stored (grep public/js for paymentMode|receiptNo|receivedBy → 0 matches).
+
+- public/vendor/jspdf.umd.min.js: already vendored (364,463 bytes), stays in place, NOT moved.
+- public/js/utils/admission-receipt.js T1/T5: added getReceiptData(admission, docs, org) — shared normalized view model used by BOTH HTML sheet and PDF. buildReceipt/downloadReceipt/printReceipt now use getReceiptData. Removed inline data building. Added amountToWords helper.
+- public/js/pages/admission-receipt.page.js T2/T3: NEW FILE — mount() loads admission + docs + org from Firestore, renders the A4 sheet HTML via getReceiptData. Toolbar: Back to admissions / Download PDF / Print. Loading and not-found states.
+- public/css/pages/admission-receipt.css T2/T3: NEW FILE — A4 sheet (794x1123px), sticky toolbar (not printed), logo 64x64, org name 27px bold navy, design tokens --ink #1a1f2b / --muted #5d6574 / --line #c9ced8 / --navy #1b2a49 / --tint #f3f4f7, details table, photo 130x160 + signature, course section, fee structure table (built ONLY from saved fee fields), payment received section, summary box, note line, signature lines, footer. @media print hides toolbar, prints sheet at 100%.
+- public/js/pages/admissions.page.js T1: removed showReceiptView/loadReceiptModule dialog code; save() now navigates to location.hash = '#/admissions/' + admissionId + '/receipt'; openReceiptForAdmission() navigates to same route. Removed getDoc import (no longer used).
+- public/js/core/router.js T1: added renderAdmissionReceipt() handler for #/admissions/<id>/receipt route — fetches admission-receipt.html, imports admission-receipt.page.js, calls mount().
+- public/js/core/app.js + 12 other JS/HTML files: bumped 1.8.59 -> 1.8.60 via Node script (UTF-8 no BOM).
+Why:
+- Replace the "Admission saved" dialog with a dedicated receipt page (HTML + PDF) accessible via URL route.
+Files touched (created / modified / deleted):
+- CREATED: public/pages/admission-receipt.html, public/css/pages/admission-receipt.css, public/js/pages/admission-receipt.page.js
+- MODIFIED: public/js/utils/admission-receipt.js, public/js/pages/admissions.page.js, public/js/core/router.js
+- MODIFIED: public/js/core/app.js, public/js/core/router.js, public/js/components/sidebar.js, public/js/components/topbar.js, public/js/pages/admissions.page.js, public/js/pages/batches.page.js, public/js/pages/branch-heads.page.js, public/js/pages/branches.page.js, public/js/pages/courses.page.js, public/js/pages/org-details.page.js, public/js/pages/sessions.page.js, public/pages/batches.html, public/pages/login.html, public/index.html
+- MODIFIED: docs/02-PROGRESS-LOG.md
+Firestore changes:
+- none.
+Tested on:
+- node --check on admission-receipt.js, admission-receipt.page.js, admissions.page.js, router.js: 0 failures.
+- grep public/ for UTF-8 BOM, \u2713, mojibake (â‚¹, Â·, â€”): 0 matches.
+- grep public/js for html2canvas|html2pdf|null: 0 matches (null matches are legitimate JS null keyword).
+- grep admission-receipt.page.js for every $('id'): ar-sheet, ar-loading, ar-notfound, ar-receipt-content, ar-back, ar-download, ar-print, ar-nf-back — all exist in admission-receipt.html.
+- Chrome Desktop: Pending owner live test.
+- Mobile (Android Chrome): Pending owner live test.
+Edge cases checked:
+- Receipt route validates hash pattern #\/admissions\/<id>\/receipt$; not-found state shown for invalid/missing admissions.
+- getReceiptData is single source of truth for both HTML and PDF rendering.
+- Fee rows built ONLY from saved feeSnapshot/feeSchedule; skip zero-amount heads.
+- Payment mode line only shown if stored.
+Known issues created (if any):
+- None.
+Next task:
+- None.
+
+---
+
+### [2026-11-12 07:03] Version 1.8.59 — Phase 2 · Fix doc references, error toast, seats message
+STEP 0 (report, no changes):
+- admission.service.js `doc(doc(` patterns at lines 79, 96, 100 → all create references under students/<id>/docs/<key>.
+- admissions.page.js has no `doc(doc(` patterns; line 1526 already uses `doc(collection(db, 'students'), docId)` correctly.
+- Save error toast at admissions.page.js line 1464 already uses `'error'` variant.
+- Seats check at admissions.page.js line 1304-1312 shows `'This batch is full.'` under Batch field error.
+
+- public/js/services/admission.service.js T1: replaced all 3 `doc(doc(ref/studentRef, 'docs'), key)` with `doc(collection(ref/studentRef, 'docs'), key)` → students/<id>/docs/<key>. `collection` already imported. Covers new admission (createStudentWithDocs line 79), keep/replaced docs (updateStudentWithDocs line 96), and removed docs (updateStudentWithDocs line 100).
+- public/js/services/admission.service.js: `collection` import already present at line 4; no new imports needed.
+- public/js/pages/admissions.page.js T2: save error toast at line 1464 already uses showToast(..., 'error') — no change needed.
+- public/js/pages/admissions.page.js T3: changed batch full message from 'This batch is full.' to 'This batch is full (0 seats left).' (line 1309).
+- public/js/core/app.js + 12 other JS/HTML files: bumped 1.8.58 -> 1.8.59 via Node script (UTF-8 no BOM).
+Why:
+- Fix invalid nested doc() references so document writes target students/<id>/docs/<key> correctly; ensure save error toast uses error variant; clarify batch-full seats message.
+Files touched (created / modified / deleted):
+- MODIFIED: public/js/services/admission.service.js, public/js/pages/admissions.page.js
+- MODIFIED: public/js/core/app.js, public/js/core/router.js, public/js/components/sidebar.js, public/js/components/topbar.js, public/js/pages/admissions.page.js, public/js/pages/batches.page.js, public/js/pages/branch-heads.page.js, public/js/pages/branches.page.js, public/js/pages/courses.page.js, public/js/pages/org-details.page.js, public/js/pages/sessions.page.js, public/pages/batches.html, public/pages/login.html, public/index.html
+- MODIFIED: docs/02-PROGRESS-LOG.md
+Firestore changes:
+- none.
+Tested on:
+- node --check on admission.service.js: 0 failures.
+- node --check on admissions.page.js: 0 failures.
+- grep public/ for UTF-8 BOM, \u2713, mojibake (â‚¹, Â·, â€”): 0 matches.
+- Chrome Desktop: Pending owner live test.
+- Mobile (Android Chrome): Pending owner live test.
+Edge cases checked:
+- All 3 save paths (new admission, returning student keep/replace, edit admission) now use correct collection-based doc references.
+- Empty-seat check uses existing seats calculation logic, only changes the error message text.
+Known issues created (if any):
+- None.
+Next task:
+- None.
+
+---
+
+### [2026-11-12 06:54] Version 1.8.58 — Phase 2 · Admit-student label + returning-student doc Keep/Replace/Remove
+STEP 0 (report, no changes):
+- JS reads for doc-action controls: id `adm-doc-action-<key>` (admissions.page.js lines 810, 829, 832), radio name `adm-doc-action-<key>` (lines 841-843). DOC_KEYS = ['photo','signature','dobProof','marksheet'] (line 39).
+- All `$('adm-...')` ids referenced in JS exist in admissions.html except `adm-doc-action-*` (added by T2) and `adm-retry` (dynamically created via innerHTML at line 382).
+
+- public/js/pages/admissions.page.js T1: save button label for a new admission changed from "Add student" to "Admit student" (line 1194); edit keeps "Save changes". grep "Add student" → 0 matches.
+- public/js/pages/admissions.page.js T2: clearReturnUI() now hides adm-doc-action elements (el.hidden = true) instead of removing them; renderReturnDocs() sets action.hidden = false when populating a returning student's document. Controls hidden for new students, shown only after Find loads a returning student who has that document, hidden again on Cancel/new form.
+- public/pages/admissions.html T2: added static hidden <div class="adm-doc-action" id="adm-doc-action-<key>"> with radios (name adm-doc-action-<key>, values keep/replace/remove) directly after each doc's .adm-doc-size element, for photo, signature, dobProof, marksheet.
+- public/js/core/app.js + 12 other JS/HTML files: bumped 1.8.57 -> 1.8.58 via Node script (UTF-8 no BOM).
+Why:
+- Make the returning-student document keep/replace/remove controls HTML-backed instead of JS-created; fix new-admission button label to "Admit student".
+Files touched (created / modified / deleted):
+- MODIFIED: public/js/pages/admissions.page.js, public/pages/admissions.html
+- MODIFIED: public/js/core/app.js, public/js/core/router.js, public/js/components/sidebar.js, public/js/components/topbar.js, public/js/pages/admissions.page.js, public/js/pages/batches.page.js, public/js/pages/branch-heads.page.js, public/js/pages/branches.page.js, public/js/pages/courses.page.js, public/js/pages/org-details.page.js, public/js/pages/sessions.page.js, public/pages/batches.html, public/pages/login.html, public/index.html
+- MODIFIED: docs/02-PROGRESS-LOG.md
+Firestore changes:
+- none.
+Tested on:
+- node --check on .mjs copy of admissions.page.js: 0 failures.
+- grep public/ for UTF-8 BOM, \u2713, mojibake (â‚¹, Â·, â€”): 0 matches.
+- grep admissions.page.js for "Add student": 0 matches.
+- grep admissions.html for adm-doc-action-*: 4 ids present (dobProof, marksheet, photo, signature).
+- Chrome Desktop: Pending owner live test.
+- Mobile (Android Chrome): Pending owner live test.
+Edge cases checked:
+- clearReturnUI hides (not removes) so static HTML controls persist across lookups.
+- renderReturnDocs shows the found control and overwrites innerHTML with the correct checked state.
+- No adm- id referenced by JS is missing from HTML.
+Known issues created (if any):
+- None.
+Next task:
+- None.
+
+---
+
+### [2026-11-12 06:48] Version 1.8.57 — Phase 2 · Lazy-load vendored jsPDF for receipts
+STEP 0 (report, no changes):
+- (a) Session dropdown on Admissions page: form has sessionSel only; toolbar has status/course/batch/branch filters — no session dropdown. Session statuses: upcoming, running, closed, archived.
+- (b) Org details fields: name/tagline/phone/email/website/address in doc(db,'settings','org_config'), cached window.APP_CACHE.org. No logo / reg-ISO field exists yet.
+- (c) PDF library: none originally; jsPDF 2.5.1 vendored to public/vendor/jspdf.umd.min.js (364,463 bytes).
+- (d) Actions menu: kebab + openMenu(kebab, items); items {label, icon, onClick}, 'sep' separators.
+
+- public/js/utils/admission-receipt.js T1: removed static import of vendored jsPDF; added lazy loader loadJsPDF() that fetches ../../vendor/jspdf.umd.min.js via import.meta.url + script tag into window.jspdf, caches jsPDFCtor = window.jspdf.jsPDF. buildReceipt/downloadReceipt/printReceipt are now async and await loadJsPDF() first. Removed the only static vendor-file import.
+- public/js/pages/admissions.page.js T2: removed static import of admission-receipt.js; added async loadReceiptModule() doing dynamic import() with ?v=1.8.57 tag inside Download/Print/View admission receipt handlers only. On load failure shows existing toast "Could not load the PDF tool. Check your connection and retry." Admissions list/form work even if vendor file is missing. showReceiptView()/openReceiptForAdmission() are async and await loadReceiptModule().
+- public/js/core/app.js + 13 other JS/HTML files: bumped 1.8.56 -> 1.8.57 via Node script (UTF-8 no BOM).
+Why:
+- Load the PDF library lazily only when a receipt is actually needed; keep the Admissions page working without the vendor file.
+Files touched (created / modified / deleted):
+- MODIFIED: public/js/utils/admission-receipt.js, public/js/pages/admissions.page.js
+- MODIFIED: public/js/core/app.js, public/js/core/router.js, public/js/components/sidebar.js, public/js/components/topbar.js, public/js/pages/admissions.page.js, public/js/pages/batches.page.js, public/js/pages/branch-heads.page.js, public/js/pages/branches.page.js, public/js/pages/courses.page.js, public/js/pages/org-details.page.js, public/js/pages/sessions.page.js, public/pages/batches.html, public/pages/login.html, public/index.html
+- MODIFIED: docs/02-PROGRESS-LOG.md
+Firestore changes:
+- none.
+Tested on:
+- node --check on .mjs copies of admission-receipt.js and admissions.page.js: 0 failures.
+- grep public/ for UTF-8 BOM, \u2713, mojibake (â‚¹, Â·, â€”): 0 matches.
+- Chrome Desktop: Pending owner live test.
+- Mobile (Android Chrome): Pending owner live test.
+Edge cases checked:
+- Vendor script load failure -> toast shown, no crash; list/form still usable.
+- Repeated receipt builds reuse cached jsPDFCtor (no re-fetch).
+Known issues created (if any):
+- None.
+Next task:
+- None.
+
+---
+
+### [2026-11-12 06:32] Version 1.8.56 — Phase 2 · Admission receipt PDF + student profile route
+STEP 0 (report, no changes):
+- (a) Session dropdown on Admissions page: form has `sessionSel` (createSelect on adm-session-host). Toolbar (`buildToolbar`) has status/course/batch/branch filters — NO session dropdown. `getSelectedSessionId()` reads localStorage `uicms.session.<centre>`. Session status values: upcoming, running, closed, archived (sessions.js expectedStatus). The form already lists only upcoming/running; T1 switches the filter to `admissionState(s, today).open`.
+- (b) Org details fields: KEYS = ['name','tagline','phone','email','website','address'] (org-details.page.js:5). Stored in `doc(db,'settings','org_config')`, cached in `window.APP_CACHE.org`. DB fields: orgName, tagline, phone, email, website, address. NO logo field and NO reg/ISO text field currently exist.
+- (c) PDF library: NONE exists (no package.json, no public/vendor, no jspdf/html2canvas imports). jsPDF 2.5.1 vendored to public/vendor/jspdf.umd.min.js.
+- (d) Actions menu: `kebab` button (ui-kebab, more-vertical) + `openMenu(kebab, items)` (admissions.page.js). Items = {label, icon, onClick}, supports 'sep' separators. Currently: View (eye), Edit (pencil), then Change status & Delete if not isHead.
+
+- public/vendor/jspdf.umd.min.js T4: CREATED — jsPDF 2.5.1 vendored locally (364,463 bytes), no CDN at runtime.
+- public/js/utils/admission-receipt.js T4: CREATED — buildReceipt(admission, docs, org) -> jsPDF doc; downloadReceipt(...); printReceipt(...). One A4 portrait page, 15mm margins, Helvetica, black/grey, thin lines, no colour blocks. Header (logo/org/branch/address/phone/email), centred "ADMISSION RECEIPT" title, right column photo (35x45mm) + signature (35x15mm) boxes, left column label:value rows, Course section, Fees table (Rs. format, no ₹ glyph), two signature lines, footer. Images read from docs subcollection base64 via addImage. Filename Admission-<admissionNo>-<sessionName>.pdf. No html2canvas.
+- public/js/pages/admissions.page.js T1: session dropdown filter changed to `admissionState(s, today).open` so closed/ended/archived sessions are not listed; closed selected session opens with no selection. Toolbar session filter untouched (none exists).
+- public/js/pages/admissions.page.js T2: prerequisite check runs silently on course select — found → green note; not found → amber note "Prerequisite <CODE> not found in the system." + ghost "Verify manually" button that opens the existing confirm dialog (Yes → manual prereqCheck). On Admit click, if prereqCheck null for a course with a prerequisite → same dialog; Cancel stays on form (course NOT cleared); Yes → continue. Removed "Cancel clears the course" behaviour.
+- public/js/pages/admissions.page.js T3: "Save admission" button → "Admit student". Click → validate → confirm dialog "Confirm admission" with summary (name, course, batch, session, total fee, due now) [Back] [Admit] → save → show receipt view.
+- public/js/pages/admissions.page.js T5: showReceiptView() modal after admit — "Admission saved - <admissionNo>" + Download PDF / Print / Close buttons. Download → doc.save() direct download (iOS Safari fallback: open blob URL in new tab, detected via /iPad|iPhone|iPod/ && !window.MSStream). Print → PDF blob URL in hidden iframe + iframe.contentWindow.print(); mobile/iOS fallback → open blob URL in new tab. Close → back to list.
+- public/js/pages/admissions.page.js T6: Actions menu adds "View student" (icon user) → #/students/<admissionNo> and "View admission receipt" (icon file-text) → loads admission + docs + org, opens receipt view (no re-save).
+- public/js/core/router.js T6: dynamic route #/students/<admissionNo> renders simple card "Student profile - coming soon" with Back button.
+- public/js/core/app.js + 12 other JS/HTML files: bumped 1.8.55 -> 1.8.56 via Node script (UTF-8 no BOM).
+Why:
+- End-to-end admission receipt: confirm, save, view/download/print receipt, and view student/receipt from the list.
+Files touched (created / modified / deleted):
+- CREATED: public/vendor/jspdf.umd.min.js, public/js/utils/admission-receipt.js
+- MODIFIED: public/js/pages/admissions.page.js, public/js/core/router.js, public/css/pages/admissions.css
+- MODIFIED: public/js/core/app.js, public/js/core/router.js, public/js/components/sidebar.js, public/js/components/topbar.js, public/js/pages/admissions.page.js, public/js/pages/batches.page.js, public/js/pages/branch-heads.page.js, public/js/pages/branches.page.js, public/js/pages/courses.page.js, public/js/pages/org-details.page.js, public/js/pages/sessions.page.js, public/pages/batches.html, public/pages/login.html, public/index.html
+- MODIFIED: docs/02-PROGRESS-LOG.md
+Firestore changes:
+- none (prereqCheck already a field; receipt is client-side PDF).
+Tested on:
+- node --check on .mjs copies of all 12 changed/new JS files: 0 failures.
+- grep public/js/utils/admission-receipt.js for html2canvas: 0 matches.
+- grep public/ for UTF-8 BOM, \u2713, mojibake (â‚¹, Â·, â€”): 0 matches.
+- Chrome Desktop: Pending owner live test.
+- Mobile (Android Chrome): Pending owner live test.
+Edge cases checked:
+- iOS Safari download attribute unsupported → detected and falls back to opening blob URL in new tab.
+- iframe print fails on mobile → fallback to new tab.
+- Missing photo/signature → empty grey-bordered box.
+- Long address wraps; content clamped so it never exceeds one page.
+Known issues created (if any):
+- jsPDF vendored as UMD; admission-receipt.js falls back to window.jspdf if the ES-module namespace is empty.
+Next task:
+- None.
+
+---
+
 ### [2026-11-12 06:24] Version 1.8.55 — Phase 2 · Prerequisite field names + DOM note rendering
 - public/js/pages/admissions.page.js T1: getPrereq() now uses the real field names written by courses.page.js — id: course.prerequisiteId (course.prereqId kept only as legacy fallback); code: course.prerequisiteCode || course.prerequisiteCourseCode || course.prerequisite. Removed the invented "prereqCode". Id match first, then code match (case-insensitive, trimmed).
 - public/js/pages/admissions.page.js T2: setPrereqNote() now builds the note with DOM nodes (document.createElement('b') + textContent) instead of innerHTML string concatenation. Same text and classes as before.

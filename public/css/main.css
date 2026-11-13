@@ -20,3 +20,10 @@
 @import url('./components/dropdown.css');
 @import url('./components/badges.css');
 @import url('./components/tables.css');
+
+/* ---------- Global scrollbars ---------- */
+* { scrollbar-width: thin; scrollbar-color: #C7CBE0 transparent; }
+*::-webkit-scrollbar { width: 8px; height: 8px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb { background: #C7CBE0; border-radius: 999px; border: 2px solid transparent; background-clip: padding-box; }
+*::-webkit-scrollbar-thumb:hover { background: #A5ABCB; background-clip: padding-box; }

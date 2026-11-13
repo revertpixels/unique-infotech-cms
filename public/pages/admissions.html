@@ -160,6 +160,13 @@
             </div>
             <div class="adm-upload-preview" id="adm-dobProof-preview"></div>
             <div class="adm-doc-size" id="adm-dobProof-size"></div>
+            <div class="adm-doc-action" id="adm-doc-action-dobProof" hidden>
+              <div class="adm-doc-action-opts">
+                <label><input type="radio" name="adm-doc-action-dobProof" value="keep" checked> Keep</label>
+                <label><input type="radio" name="adm-doc-action-dobProof" value="replace"> Replace</label>
+                <label><input type="radio" name="adm-doc-action-dobProof" value="remove"> Remove</label>
+              </div>
+            </div>
           </div>
           <div class="adm-err" id="adm-dobProof-err"></div>
         </div>
@@ -174,6 +181,13 @@
             </div>
             <div class="adm-upload-preview" id="adm-marksheet-preview"></div>
             <div class="adm-doc-size" id="adm-marksheet-size"></div>
+            <div class="adm-doc-action" id="adm-doc-action-marksheet" hidden>
+              <div class="adm-doc-action-opts">
+                <label><input type="radio" name="adm-doc-action-marksheet" value="keep" checked> Keep</label>
+                <label><input type="radio" name="adm-doc-action-marksheet" value="replace"> Replace</label>
+                <label><input type="radio" name="adm-doc-action-marksheet" value="remove"> Remove</label>
+              </div>
+            </div>
           </div>
           <div class="adm-err" id="adm-marksheet-err"></div>
         </div>
@@ -188,6 +202,13 @@
             </div>
             <div class="adm-upload-preview" id="adm-photo-preview"></div>
             <div class="adm-doc-size" id="adm-photo-size"></div>
+            <div class="adm-doc-action" id="adm-doc-action-photo" hidden>
+              <div class="adm-doc-action-opts">
+                <label><input type="radio" name="adm-doc-action-photo" value="keep" checked> Keep</label>
+                <label><input type="radio" name="adm-doc-action-photo" value="replace"> Replace</label>
+                <label><input type="radio" name="adm-doc-action-photo" value="remove"> Remove</label>
+              </div>
+            </div>
           </div>
           <div class="adm-err" id="adm-photo-err"></div>
         </div>
@@ -202,6 +223,13 @@
             </div>
             <div class="adm-upload-preview" id="adm-signature-preview"></div>
             <div class="adm-doc-size" id="adm-signature-size"></div>
+            <div class="adm-doc-action" id="adm-doc-action-signature" hidden>
+              <div class="adm-doc-action-opts">
+                <label><input type="radio" name="adm-doc-action-signature" value="keep" checked> Keep</label>
+                <label><input type="radio" name="adm-doc-action-signature" value="replace"> Replace</label>
+                <label><input type="radio" name="adm-doc-action-signature" value="remove"> Remove</label>
+              </div>
+            </div>
           </div>
           <div class="adm-err" id="adm-signature-err"></div>
         </div>
@@ -219,7 +247,7 @@
       <span id="adm-state" class="save-state" role="status" aria-live="polite">Fill in the details</span>
       <div class="save-actions">
         <button type="button" id="adm-cancel" class="ui-btn ghost"><i data-lucide="x"></i>Cancel</button>
-        <button type="submit" id="adm-save" class="ui-btn primary" disabled><i data-lucide="save"></i><span id="adm-save-label">Save admission</span></button>
+        <button type="submit" id="adm-save" class="ui-btn primary" disabled><i data-lucide="save"></i><span id="adm-save-label">Admit student</span></button>
       </div>
     </footer>
   </form>

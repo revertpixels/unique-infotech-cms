@@ -1,18 +1,18 @@
 import { db } from '../config/firebase-config.js';
-import { collection, getDocs, query, where, doc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.55';
-import { registerDirty, confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.55';
-import { buildStats, buildToolbar } from '../components/list-page.js?v=1.8.55';
-import { createSelect } from '../components/ui-select.js?v=1.8.55';
-import { openMenu } from '../components/ui-menu.js?v=1.8.55';
-import { confirmDialog } from '../components/ui-confirm.js?v=1.8.55';
-import { getSelectedSessionId, getCachedSessions, loadSessions, todayISO } from '../core/sessions.js?v=1.8.55';
-import { firstInstallmentOf, admissionState, sessionLabel, installmentSchedule, batchAllowsCourse, batchCourseLabel, isCourseActive } from '../utils/session-rules.js?v=1.8.55';
-import { formatINR, formatDateIN, initials } from '../utils/formatter.js?v=1.8.55';
-import { validatePhone, validateEmail, validateDOB, validateName, validateRequired } from '../utils/validator.js?v=1.8.55';
-import { listStudentsRaw, checkDuplicatePhone, generateAdmissionNumber, createStudentWithDocs, updateStudentWithDocs, updateStudent, deleteStudent } from '../services/admission.service.js?v=1.8.55';
-import { feeTotal } from '../utils/fees.js?v=1.8.55';
-import { compressTo100KB, readAsDataURL, blobToDataURL, isImageFile, formatBytes } from '../utils/image-compress.js?v=1.8.55';
+import { collection, getDocs, query, where, doc, getDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
+import { showToast } from '../components/toast.js?v=1.8.62';
+import { registerDirty, confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.62';
+import { buildStats, buildToolbar } from '../components/list-page.js?v=1.8.62';
+import { createSelect } from '../components/ui-select.js?v=1.8.62';
+import { openMenu } from '../components/ui-menu.js?v=1.8.62';
+import { confirmDialog } from '../components/ui-confirm.js?v=1.8.62';
+import { getSelectedSessionId, getCachedSessions, loadSessions, todayISO } from '../core/sessions.js?v=1.8.62';
+import { firstInstallmentOf, admissionState, sessionLabel, installmentSchedule, batchAllowsCourse, batchCourseLabel, isCourseActive } from '../utils/session-rules.js?v=1.8.62';
+import { formatINR, formatDateIN, initials } from '../utils/formatter.js?v=1.8.62';
+import { validatePhone, validateEmail, validateDOB, validateName, validateRequired } from '../utils/validator.js?v=1.8.62';
+import { listStudentsRaw, checkDuplicatePhone, generateAdmissionNumber, createStudentWithDocs, updateStudentWithDocs, updateStudent, deleteStudent } from '../services/admission.service.js?v=1.8.62';
+import { feeTotal } from '../utils/fees.js?v=1.8.62';
+import { compressTo100KB, readAsDataURL, blobToDataURL, isImageFile, formatBytes } from '../utils/image-compress.js?v=1.8.62';
 
 const GENDERS = [
   { value: 'male', label: 'Male', icon: 'user' },
@@ -343,20 +343,13 @@ function dueLabel(dueISO) {
       // ---------- session options ----------
       const today = todayISO();
       const sessOpts = [];
-      sessions.filter(s => (s.status || 'upcoming') === 'upcoming' || (s.status || 'upcoming') === 'running')
+      // T1: list only sessions that are open for admission (reuse admissionState helper;
+      // closed/ended/archived sessions are not listed at all).
+      sessions.filter(s => admissionState(s, today).open)
         .sort((a, b) => (a.startDate || '').localeCompare(b.startDate || ''))
         .forEach((s) => {
-          const st = s.status || 'upcoming';
-          let disabled = false;
-          let label = sessionLabel(s);
-          if (st === 'running') {
-            const fi = firstInstallmentOf(s);
-            if (fi && today > fi) {
-              disabled = true;
-              label = s.name + ' · Closed for admission (1st installment ' + formatDateIN(fi) + ' passed)';
-            }
-          }
-          sessOpts.push({ value: s.id, label: label, icon: 'calendar-clock', disabled: disabled });
+          const label = sessionLabel(s);
+          sessOpts.push({ value: s.id, label: label, icon: 'calendar-clock' });
         });
       sessionSel.setOptions([{ value: '', label: 'Select a session', icon: 'calendar-clock' }].concat(sessOpts));
 
@@ -604,36 +597,47 @@ function dueLabel(dueISO) {
           setPrereqNote('Prerequisite <b>' + prereq.code + '</b> completed in <b>' + (found.sessionName || '') + '.</b>', 'adm-prereq-note ok');
           return;
         }
-        // Not found: ask the user to verify manually.
-        const ok = await confirmDialog({
-          title: 'Prerequisite not found',
-          message: 'This student is not eligible as per the data currently in the system. Older records may be archived. Have you verified that the student completed ' + prereq.code + ' - ' + prereq.name + '?',
-          confirmText: 'Yes, verified', cancelText: 'Cancel'
-        });
-        if (!ok) {
-          // Cancel -> clear the course selection (and batch/fees depending on it), hide the note.
-          courseSel.value = '';
-          batchSel.setOptions([{ value: '', label: 'Select a batch', icon: 'layers' }]);
-          batchSel.value = '';
-          updateFees(null, null);
-          updateSeats();
-          refreshForm();
-          hidePrereqNote();
-          prereqCheck = null; prereqKey = null;
-          return;
-        }
-        // Yes, verified -> amber note.
-        prereqCheck = {
-          status: 'manual',
-          courseId: prereq.id,
-          verifiedBy: (profile && profile.email) || '',
-          verifiedAt: serverTimestamp()
-        };
-        setPrereqNote('Prerequisite <b>' + prereq.code + '</b> verified manually.', 'adm-prereq-note manual');
+        // Not found: silent amber note + "Verify manually" button (no dialog yet).
+        showPrereqNotFound(prereq);
+        return;
       } catch (e) {
         console.error('[admissions] prereq check failed', e);
       }
     }, 400);
+  }
+
+  function showPrereqNotFound(prereq) {
+    const el = $('adm-prereq');
+    if (!el) return;
+    el.textContent = '';
+    const t1 = document.createTextNode('Prerequisite ');
+    const b = document.createElement('b');
+    b.textContent = prereq.code;
+    const t2 = document.createTextNode(' not found in the system. ');
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'ui-btn ghost';
+    btn.textContent = 'Verify manually';
+    btn.addEventListener('click', (ev) => { ev.stopPropagation(); verifyManually(prereq); });
+    el.appendChild(t1, b, t2, btn);
+    el.className = 'adm-prereq-note pending';
+    el.hidden = false;
+  }
+
+  async function verifyManually(prereq) {
+    const ok = await confirmDialog({
+      title: 'Prerequisite not found',
+      message: 'This student is not eligible as per the data currently in the system. Older records may be archived. Have you verified that the student completed ' + prereq.code + ' - ' + prereq.name + '?',
+      confirmText: 'Yes, verified', cancelText: 'Cancel'
+    });
+    if (!ok) return; // Cancel -> stay on form, do not clear course
+    prereqCheck = {
+      status: 'manual',
+      courseId: prereq.id,
+      verifiedBy: (profile && profile.email) || '',
+      verifiedAt: serverTimestamp()
+    };
+    setPrereqNote('Prerequisite <b>' + prereq.code + '</b> verified manually.', 'adm-prereq-note manual');
   }
 
   function showPrereqResult(prereq) {
@@ -680,6 +684,12 @@ function dueLabel(dueISO) {
       }
       div.appendChild(mk('div', 'adm-fee-amt' + (c ? '' : ' muted'), val));
       host.appendChild(div);
+      if (editId) {
+        const lock = document.createElement('i');
+        lock.setAttribute('data-lucide', 'lock');
+        lock.className = 'ui-fee-lock';
+        div.appendChild(lock);
+      }
     });
 
     const f = c ? c.fees || {} : {};
@@ -804,7 +814,7 @@ function dueLabel(dueISO) {
   function clearReturnUI() {
     DOC_KEYS.forEach((k) => {
       const el = $('adm-doc-action-' + k);
-      if (el) el.remove();
+      if (el) el.hidden = true;
     });
   }
 
@@ -829,6 +839,7 @@ function dueLabel(dueISO) {
         const host = $('adm-' + k + '-upload');
         if (host && host.parentNode) host.parentNode.insertBefore(action, host.nextSibling);
       }
+      action.hidden = false;
       const thumb = old.data ? ('data:image/jpeg;base64,' + old.data) : '';
       action.innerHTML =
         '<div class="adm-doc-action-row">' +
@@ -944,9 +955,40 @@ function dueLabel(dueISO) {
       sessionSel.value = v.sessionId || '';
       sessionSel.disabled = !!editId;
     }
-    if (branchSel) branchSel.value = v.branchId || '';
+    if (branchSel) {
+      branchSel.value = v.branchId || '';
+      branchSel.disabled = !!editId;
+    }
     courseSel.value = v.courseId || '';
+    courseSel.disabled = !!editId;
     batchSel.value = v.batchId || '';
+    batchSel.disabled = !!editId;
+    const admDateEl = $('adm-admissionDate');
+    if (admDateEl) admDateEl.disabled = !!editId;
+    if (editId) {
+      ['adm-session-host', 'adm-branch-host', 'adm-course-host', 'adm-batch-host'].forEach((hostId) => {
+        const host = $(hostId);
+        if (!host) return;
+        const btn = host.querySelector('.ui-select-btn');
+        if (btn) {
+          btn.disabled = true;
+          const chev = btn.querySelector('.ui-select-chev');
+          if (chev && !btn.querySelector('[data-lucide="lock"]')) {
+            chev.setAttribute('data-lucide', 'lock');
+            chev.className = 'ui-select-chev';
+          }
+        }
+      });
+      if (admDateEl) {
+        const wrap = admDateEl.closest('.ui-input-wrap');
+        if (wrap && !wrap.querySelector('[data-lucide="lock"]')) {
+          const lock = document.createElement('i');
+          lock.setAttribute('data-lucide', 'lock');
+          lock.className = 'ui-input-lock';
+          wrap.appendChild(lock);
+        }
+      }
+    }
     if (editId && v.prereqCheck) {
       prereqCheck = Object.assign({}, v.prereqCheck);
       const pc = getPrereq(courseOf(v.courseId));
@@ -1132,6 +1174,8 @@ function dueLabel(dueISO) {
         kebab.appendChild(ki);
         const items = [
           { label: 'View', icon: 'eye', onClick: () => viewStudent(s) },
+          { label: 'View student', icon: 'user', onClick: () => { location.hash = '#/students/' + s.admissionNo; } },
+          { label: 'View admission receipt', icon: 'file-text', onClick: () => { location.hash = '#/admissions/' + s.id + '/receipt'; } },
           { label: 'Edit', icon: 'pencil', onClick: async () => {
             if (!form.hidden && !saveBtn.disabled && !(await confirmLeave({ clear: false }))) return;
             openForm(s);
@@ -1148,14 +1192,18 @@ function dueLabel(dueISO) {
       });
 
       if (footEl) {
-        footEl.hidden = false;
-        const showingFrom = start + 1;
-        const showingTo = Math.min(start + pageList.length, list.length);
-        footEl.textContent = 'Showing ' + showingFrom + '-' + showingTo + ' of ' + list.length;
-        footEl.innerHTML += ' <div style="display:inline-flex;gap:6px;align-items:center;margin-left:16px;">' +
-          '<button type="button" id="adm-prev" class="ui-btn ghost' + (page <= 1 ? ' disabled' : '') + '">Prev</button>' +
-          '<button type="button" id="adm-next" class="ui-btn ghost' + (page >= totalPages ? ' disabled' : '') + '">Next</button>' +
-          '</div>';
+        if (totalPages <= 1) {
+          footEl.hidden = true;
+        } else {
+          footEl.hidden = false;
+          const showingFrom = start + 1;
+          const showingTo = Math.min(start + pageList.length, list.length);
+          footEl.textContent = 'Showing ' + showingFrom + '-' + showingTo + ' of ' + list.length;
+          footEl.innerHTML += ' <div style="display:inline-flex;gap:6px;align-items:center;margin-left:16px;">' +
+            '<button type="button" id="adm-prev" class="ui-btn ghost' + (page <= 1 ? ' disabled' : '') + '">Prev</button>' +
+            '<button type="button" id="adm-next" class="ui-btn ghost' + (page >= totalPages ? ' disabled' : '') + '">Next</button>' +
+            '</div>';
+        }
       }
     }
 
@@ -1185,7 +1233,7 @@ function dueLabel(dueISO) {
     };
     fillForm(v);
     $t('adm-form-title', r ? 'Edit admission' : 'New admission');
-    $t('adm-save-label', r ? 'Save changes' : 'Add student');
+    $t('adm-save-label', r ? 'Save changes' : 'Admit student');
     form.hidden = false;
     touched = false;
     showErrors({});
@@ -1255,21 +1303,53 @@ function dueLabel(dueISO) {
       focusFirstError(err);
       return;
     }
-    // ---------- T5: block save while prerequisite check pending ----------
-    const cForSave = courseOf(v.courseId);
-    if (cForSave && getPrereq(cForSave) && !prereqCheck) {
-      $t('adm-state', 'Prerequisite check pending.');
-      const stateEl = $('adm-state');
-      if (stateEl) stateEl.className = 'save-state error';
-      showToast('Prerequisite check pending.', 'error');
-      return;
+    // ---------- T2/T5: prerequisite gate on Admit (new admissions only) ----------
+    if (!editId) {
+      const cForSave = courseOf(v.courseId);
+      if (cForSave && getPrereq(cForSave) && !prereqCheck) {
+        const p = getPrereq(cForSave);
+        const ok = await confirmDialog({
+          title: 'Prerequisite not found',
+          message: 'This student is not eligible as per the data currently in the system. Older records may be archived. Have you verified that the student completed ' + p.code + ' - ' + p.name + '?',
+          confirmText: 'Yes, verify', cancelText: 'Cancel'
+        });
+        if (!ok) return; // Cancel -> stay on form, do not clear course
+        prereqCheck = {
+          status: 'manual',
+          courseId: p.id,
+          verifiedBy: (profile && profile.email) || '',
+          verifiedAt: serverTimestamp()
+        };
+      }
+    }
+    // ---------- T3: confirm admission before saving (new admissions) ----------
+    if (!editId) {
+      const cc = courseOf(v.courseId);
+      const bb = batchOf(v.batchId);
+      const ss = sessions.find(s => s.id === v.sessionId);
+      const totalFee = feeTotal(cc.fees || {});
+      const ff = cc ? cc.fees || {} : {};
+      const dueNow = Number(ff.admission || 0) + Number(ff.material || 0);
+      const summary =
+        'Student: ' + v.name + '\n' +
+        'Course: ' + (cc.courseCode || cc.code || '') + ' - ' + (cc.name || '') + '\n' +
+        'Batch: ' + (bb.name || '-') + '\n' +
+        'Session: ' + (ss ? ss.name : '-') + '\n' +
+        'Total fee: Rs. ' + formatINR(totalFee) + '\n' +
+        'Due now: Rs. ' + formatINR(dueNow);
+      const ok = await confirmDialog({
+        title: 'Confirm admission',
+        message: summary,
+        confirmText: 'Admit', cancelText: 'Back'
+      });
+      if (!ok) return; // Back -> stay on form
     }
     const b = batchOf(v.batchId);
     if (b && b.capacity) {
       const cap = Number(b.capacity);
       const filled = students.filter(s => s.batchId === b.id && s.status === 'active' && s.id !== editId).length;
       if (filled >= cap) {
-        $t('adm-batch-err', 'This batch is full.');
+        $t('adm-batch-err', 'This batch is full (0 seats left).');
         batchSel.focus();
         return;
       }
@@ -1355,39 +1435,39 @@ function dueLabel(dueISO) {
       altPhone: v.altPhone || '',
       email: v.email || '',
       dob: v.dob,
-      admissionDate: v.admissionDate || today,
       gender: v.gender,
       qualification: v.qualification,
       address: v.address,
       ctx: 'youth',
-      branchId: v.branchId,
-      branchName: branchNameOf(v.branchId),
-      branchCode: branchCode,
-      courseId: v.courseId,
-      courseCode: c.courseCode || c.code || '',
-      courseName: c.name || '',
-      batchId: v.batchId,
-      batchName: bObj.name || '',
-      sessionId: v.sessionId,
-      sessionName: selS ? (selS.name || '') : '',
-      feeSnapshot: c.fees || {},
-      feeTotal: feeTotal(c.fees || {}),
-      feeSchedule: sched.map(function (it) { return { no: it.no, month: it.month, opens: it.opens, due: it.due, amount: f.installment || 0 }; }),
-      examFee: f.exam || 0,
-      dueAtAdmission: { admission: Number(f.admission || 0), material: Number(f.material || 0), total: Number(f.admission || 0) + Number(f.material || 0) },
       status: 'active',
       docs: {},
       createdAt: editId ? undefined : serverTimestamp(),
       createdBy: editId ? undefined : who,
       updatedAt: serverTimestamp(),
-      sourceAdmissionRef: sourceAdmissionRef,
       prereqCheck: (c && getPrereq(c)) ? prereqCheck : null
     };
-    DOC_KEYS.forEach((k) => { data.docs[k] = !!docs[k]; });
     if (!editId) {
-      data.createdAt = serverTimestamp();
-      data.createdBy = who;
+      Object.assign(data, {
+        admissionDate: v.admissionDate || today,
+        branchId: v.branchId,
+        branchName: branchNameOf(v.branchId),
+        branchCode: branchCode,
+        courseId: v.courseId,
+        courseCode: c.courseCode || c.code || '',
+        courseName: c.name || '',
+        batchId: v.batchId,
+        batchName: bObj.name || '',
+        sessionId: v.sessionId,
+        sessionName: selS ? (selS.name || '') : '',
+        feeSnapshot: c.fees || {},
+        feeTotal: feeTotal(c.fees || {}),
+        feeSchedule: sched.map(function (it) { return { no: it.no, month: it.month, opens: it.opens, due: it.due, amount: f.installment || 0 }; }),
+        examFee: f.exam || 0,
+        dueAtAdmission: { admission: Number(f.admission || 0), material: Number(f.material || 0), total: Number(f.admission || 0) + Number(f.material || 0) },
+        sourceAdmissionRef: sourceAdmissionRef
+      });
     }
+    DOC_KEYS.forEach((k) => { data.docs[k] = !!docs[k]; });
 
     saving = true;
     saveBtn.disabled = true;
@@ -1401,15 +1481,21 @@ function dueLabel(dueISO) {
 
     try {
       const wasEdit = !!editId;
+      let admissionId = editId;
       if (wasEdit) {
         await updateStudentWithDocs(editId, data, docs);
       } else {
-        await createStudentWithDocs(data, docs);
+        admissionId = await createStudentWithDocs(data, docs);
       }
       saving = false;
-      closeForm();
-      await load();
-      showToast('Admission saved - ' + admissionNo, 'success');
+      if (!editId) {
+        // T1: navigate to receipt route instead of showing a dialog
+        location.hash = '#/admissions/' + admissionId + '/receipt';
+      } else {
+        closeForm();
+        await load();
+        showToast('Admission saved - ' + admissionNo, 'success');
+      }
     } catch (e) {
       console.error('[admissions] save failed', e);
       saving = false;
@@ -1426,28 +1512,160 @@ function dueLabel(dueISO) {
   async function viewStudent(s) {
     const c = courseOf(s.courseId);
     const b = batchOf(s.batchId);
-    const msg = [
-      'Admission No: ' + (s.admissionNo || ' - '),
-      'Student: ' + (s.name || ' - '),
-      'Guardian: ' + (s.guardianName || ' - '),
-      'Phone: ' + (s.phone || ' - '),
-      'Email: ' + (s.email || ' - '),
-      'DOB: ' + formatDateIN(s.dob),
-      'Admission date: ' + formatDateIN(s.admissionDate),
-      'Gender: ' + (s.gender || ' - '),
-      'Qualification: ' + (s.qualification || ' - '),
-      'Address: ' + (s.address || ' - '),
-      'Course: ' + ((c.courseCode || c.code || '') + '  -  ' + (c.name || '')),
-      'Batch: ' + (b.name || ' - '),
-      'Session: ' + (s.sessionName || ' - '),
-      'Status: ' + (s.status || 'active'),
-      'Fees: ' + formatINR(s.feeTotal || 0)
-    ].join('\n');
-    await confirmDialog({
-      title: 'Student details',
-      message: msg,
-      confirmText: 'OK', infoOnly: true, icon: 'user'
+    const selS = sessions.find(x => x.id === s.sessionId) || {};
+    const back = document.createElement('div');
+    back.className = 'ui-modal-back';
+    const box = document.createElement('div');
+    box.className = 'ui-modal view-student-modal';
+    box.setAttribute('role', 'dialog');
+    box.setAttribute('aria-modal', 'true');
+
+    // Header row
+    const head = document.createElement('div');
+    head.className = 'adm-view-head';
+    const photo = document.createElement('div');
+    photo.className = 'adm-view-photo';
+    photo.textContent = initials(s.name || '');
+    head.appendChild(photo);
+
+    const info = document.createElement('div');
+    info.className = 'adm-view-info';
+    const nameEl = document.createElement('h2');
+    nameEl.className = 'adm-view-name';
+    nameEl.textContent = s.name || ' - ';
+    const noEl = document.createElement('div');
+    noEl.className = 'adm-view-no';
+    noEl.textContent = 'Admission No: ' + (s.admissionNo || ' - ');
+    const stChip = document.createElement('span');
+    stChip.className = 'adm-pill ' + ((s.status || 'active') === 'active' ? 'active' : (s.status || 'active') === 'dropped' ? 'dropped' : 'completed');
+    stChip.textContent = (s.status || 'active');
+    info.appendChild(nameEl);
+    info.appendChild(noEl);
+    info.appendChild(stChip);
+    head.appendChild(info);
+
+    const btns = document.createElement('div');
+    btns.className = 'adm-view-actions';
+    const viewRcpt = document.createElement('button');
+    viewRcpt.type = 'button';
+    viewRcpt.className = 'ui-btn ghost';
+    viewRcpt.textContent = 'View receipt';
+    viewRcpt.addEventListener('click', (ev) => { ev.stopPropagation(); back.remove(); location.hash = '#/admissions/' + s.id + '/receipt'; });
+    const editBtn = document.createElement('button');
+    editBtn.type = 'button';
+    editBtn.className = 'ui-btn primary';
+    editBtn.textContent = 'Edit';
+    editBtn.addEventListener('click', (ev) => { ev.stopPropagation(); back.remove(); openForm(s); });
+    btns.appendChild(viewRcpt);
+    btns.appendChild(editBtn);
+    head.appendChild(btns);
+
+    const xBtn = document.createElement('button');
+    xBtn.type = 'button';
+    xBtn.className = 'ui-btn ghost';
+    xBtn.setAttribute('aria-label', 'Close');
+    xBtn.innerHTML = '<i data-lucide="x"></i>';
+    xBtn.addEventListener('click', (ev) => { ev.stopPropagation(); back.remove(); });
+    head.appendChild(xBtn);
+    box.appendChild(head);
+
+    // Card grid sections
+    const body = document.createElement('div');
+    body.className = 'adm-view-body';
+    const grid = document.createElement('div');
+    grid.className = 'adm-view-grid';
+
+    const pc = s.prereqCheck || null;
+    let prereqText = 'Not required';
+    if (pc && pc.status === 'auto') prereqText = 'Verified automatically';
+    else if (pc && pc.status === 'manual') prereqText = 'Verified manually';
+
+    const feeTotal = Number(s.feeTotal || 0);
+    const paid = Number((s.dueAtAdmission && s.dueAtAdmission.total) || 0);
+    const balance = feeTotal - paid;
+    const nextDue = (s.feeSchedule && Array.isArray(s.feeSchedule) && s.feeSchedule.length > 0) ? s.feeSchedule[0].due || '-' : '-';
+
+    const sections = [
+      { id: 'personal', icon: 'user', title: 'Personal', rows: [
+        ['Guardian', s.guardianName || '-'],
+        ['DOB', formatDateIN(s.dob)],
+        ['Gender', s.gender || '-'],
+        ['Highest qualification', s.qualification || '-']
+      ]},
+      { id: 'contact', icon: 'phone', title: 'Contact', rows: [
+        ['Phone', s.phone || '-'],
+        ['Alt phone', s.altPhone || '-'],
+        ['Email', s.email || '-'],
+        ['Address', s.address || '-']
+      ]},
+      { id: 'course', icon: 'book-open', title: 'Course & batch', rows: [
+        ['Session', selS.name || '-'],
+        ['Branch', s.branchName || '-'],
+        ['Course', ((c.courseCode || c.code || '') + '  -  ' + (c.name || '')) || '-'],
+        ['Batch', b.name || '-'],
+        ['Admission date', formatDateIN(s.admissionDate)],
+        ['Prerequisite status', prereqText]
+      ]},
+      { id: 'fees', icon: 'wallet', title: 'Fees', rows: [
+        ['Total course fee', formatINR(feeTotal)],
+        ['Paid at admission', formatINR(paid)],
+        ['Balance', formatINR(balance)],
+        ['Next due instalment', nextDue]
+      ]}
+    ];
+
+    sections.forEach(sec => {
+      const card = document.createElement('div');
+      card.className = 'adm-view-card';
+      const ch = document.createElement('div');
+      ch.className = 'adm-view-card-head';
+      const ico = document.createElement('i');
+      ico.setAttribute('data-lucide', sec.icon);
+      const title = document.createElement('span');
+      title.className = 'adm-view-card-title';
+      title.textContent = sec.title;
+      ch.appendChild(ico);
+      ch.appendChild(title);
+      card.appendChild(ch);
+
+      const body = document.createElement('div');
+      body.className = 'adm-view-card-body';
+
+      const tbl = document.createElement('table');
+      tbl.className = 'adm-view-table';
+        sec.rows.forEach(([label, value]) => {
+          const tr = document.createElement('tr');
+          const tdL = document.createElement('td');
+          tdL.className = 'adm-view-label';
+          tdL.textContent = label;
+          const tdV = document.createElement('td');
+          tdV.className = 'adm-view-value';
+          tdV.textContent = value;
+          tr.appendChild(tdL);
+          tr.appendChild(tdV);
+          tbl.appendChild(tr);
+        });
+        body.appendChild(tbl);
+      card.appendChild(body);
+      grid.appendChild(card);
     });
+    body.appendChild(grid);
+    box.appendChild(body);
+
+    const foot = document.createElement('div');
+    foot.className = 'adm-view-footer';
+    const closeBtn = document.createElement('button');
+    closeBtn.type = 'button';
+    closeBtn.className = 'ui-btn ghost';
+    closeBtn.textContent = 'Close';
+    closeBtn.addEventListener('click', () => back.remove());
+    foot.appendChild(closeBtn);
+    box.appendChild(foot);
+
+    back.appendChild(box);
+    document.body.appendChild(back);
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+    back.addEventListener('click', (ev) => { if (ev.target === back) back.remove(); });
   }
 
   async function changeStatus(s) {

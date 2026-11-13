@@ -217,21 +217,4 @@
   border-radius: 9px;
 }
 
-/* Scrollbar */
-.ui-multi-options {
-  scrollbar-width: thin;
-  scrollbar-color: #C7CBE0 transparent;
-}
-.ui-multi-options::-webkit-scrollbar {
-  width: 6px;
-}
-.ui-multi-options::-webkit-scrollbar-track {
-  background: transparent;
-}
-.ui-multi-options::-webkit-scrollbar-thumb {
-  background: #C7CBE0;
-  border-radius: 999px;
-}
-.ui-multi-options::-webkit-scrollbar-thumb:hover {
-  background: #A5ABCB;
-}
+

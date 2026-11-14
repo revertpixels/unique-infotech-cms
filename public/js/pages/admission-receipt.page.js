@@ -3,7 +3,7 @@
 // Provides getReceiptData(admission, docs, org) shared by the HTML sheet and the PDF.
 import { db } from '../config/firebase-config.js';
 import { collection, getDocs, query, where, doc, getDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { getReceiptData, fmtMoney } from '../utils/admission-receipt.js?v=1.8.65';
+import { getReceiptData, fmtMoney } from '../utils/admission-receipt.js?v=1.8.66';
 
 const DOC_KEYS = ['photo', 'signature', 'dobProof', 'marksheet'];
 
@@ -94,7 +94,7 @@ function renderReceipt(admission, docs, org) {
     '</div>' +
     '<div class="ar-section">' +
     '<table class="ar-details-table">' +
-    '<tr><td class="ar-label">Admission no</td><td class="ar-value">' + escapeHtml(data.admissionNo) + '</td></tr>' +
+    '<tr><td class="ar-label">Receipt No</td><td class="ar-value">' + escapeHtml(data.receiptNo) + '</td></tr>' +
     '<tr><td class="ar-label">Student ID</td><td class="ar-value">' + escapeHtml(data.studentId) + '</td></tr>' +
     '<tr><td class="ar-label">Admission date</td><td class="ar-value">' + escapeHtml(data.admissionDate) + '</td></tr>' +
     '<tr><td class="ar-label">Session</td><td class="ar-value">' + escapeHtml(data.sessionName) + '</td></tr>' +
@@ -172,7 +172,7 @@ function renderReceipt(admission, docs, org) {
   if (backBtn) backBtn.addEventListener('click', function () { location.hash = '#/admissions'; });
   if (dlBtn) dlBtn.addEventListener('click', async function () {
     try {
-      const mod = await import('../utils/admission-receipt.js?v=1.8.65');
+      const mod = await import('../utils/admission-receipt.js?v=1.8.66');
       await mod.downloadReceipt(admission, docs, org);
     } catch (e) {
       console.error('[receipt] download failed', e);

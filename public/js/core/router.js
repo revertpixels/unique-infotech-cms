@@ -1,4 +1,4 @@
-import { confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.65';
+import { confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.66';
 
 export const ROLE_LABELS = {
   superadmin: 'Super Admin',
@@ -68,8 +68,8 @@ export function startRouter({ profile, getContext, setContext, onRouteChange }) 
     }
   }
 
-  // T6: simple "coming soon" student profile card for #/students/<admissionNo>
-  function renderStudentProfile(admissionNo, routeKey) {
+  // T6: simple "coming soon" student profile card for #/students/<studentId>
+  function renderStudentProfile(studentId, routeKey) {
     view.textContent = '';
     const box = document.createElement('div');
     box.className = 'empty-state';
@@ -81,7 +81,7 @@ export function startRouter({ profile, getContext, setContext, onRouteChange }) 
     h.textContent = 'Student profile - coming soon';
     box.appendChild(h);
     const p = document.createElement('p');
-    p.textContent = 'Admission No: ' + admissionNo;
+    p.textContent = 'Student ID: ' + studentId;
     box.appendChild(p);
     const back = document.createElement('button');
     back.type = 'button';
@@ -162,7 +162,7 @@ export function startRouter({ profile, getContext, setContext, onRouteChange }) 
     const route = Object.prototype.hasOwnProperty.call(ROUTES, key) ? ROUTES[key] : null;
     const ctx = getContext();
 
-    // T6: dynamic student profile route #/students/<admissionNo>
+    // T6: dynamic student profile route #/students/<studentId>
     if (key.startsWith('students/') && key.length > 'students/'.length) {
       renderStudentProfile(key.slice('students/'.length));
       return;

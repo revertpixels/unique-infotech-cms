@@ -28,18 +28,66 @@ export async function checkDuplicatePhone({ branchId, courseId, phone, excludeId
   return dup ? Object.assign({ id: dup.id }, dup.data()) : null;
 }
 
-// ---------- admission number (transaction-safe counter) ----------
-
-export async function generateAdmissionNumber(branchId, year) {
-  const counterId = 'admission_' + branchId + '_' + year;
+// ---------- T1: student id counter read (inside a runTransaction) ----------
+// Youth Centre: YYSSNNNN   YY = last 2 digits of session year, SS = course level 01/02/03,
+// NNNN = counter per (YY + SS), shared across ALL Youth Centre branches.
+// Counter doc: counters/sid_ui_<YY>_<SS>
+// Unique Kids: YYYYNNNN     YYYY = session year, NNNN = counter per year, shared across ALL Kids branches.
+// Counter doc: counters/sid_uk_<YYYY>
+// Throws if level missing or counter would exceed 9999. Does ONLY tx.get (no write).
+export function readStudentId(tx, { org, sessionYear, level }) {
+  let counterId, prefix;
+  if (org === 'youth') {
+    if (!level || ![1, 2, 3].includes(Number(level))) {
+      throw new Error('Set the course level first (Courses page).');
+    }
+    const yy = String(sessionYear).slice(-2);
+    const ss = String(level).padStart(2, '0');
+    counterId = 'sid_ui_' + yy + '_' + ss;
+    prefix = yy + ss;
+  } else {
+    const yyyy = String(sessionYear).slice(0, 4);
+    counterId = 'sid_uk_' + yyyy;
+    prefix = yyyy;
+  }
   const counterRef = doc(db, COUNTER_COL, counterId);
-  return runTransaction(db, async (tx) => {
-    const snap = await tx.get(counterRef);
+  return tx.get(counterRef).then((snap) => {
     const next = snap.exists() ? (Number(snap.data().seq || 0) + 1) : 1;
-    tx.set(counterRef, { seq: next, branchId, year, updatedAt: serverTimestamp() }, { merge: true });
+    if (next > 9999) {
+      throw new Error('Student ID counter exceeded 9999 for ' + counterId + '.');
+    }
     const seqStr = String(next).padStart(4, '0');
-    return branchId.toUpperCase() + '-' + year + '-' + seqStr;
+    return { ref: counterRef, next: next, studentId: prefix + seqStr };
   });
+}
+
+// ---------- T2: receipt number counter read (inside a runTransaction) ----------
+// Format: <ORG><YY><TYPE>-<BRANCHCODE>-<NNNN>
+//   ORG = UI (Youth Centre) / UK (Unique Kids)
+//   YY = last 2 digits of payment date year (admission date for admission receipt)
+//   TYPE = AD (admission payment) / IN (later instalment payment)
+//   NNNN = counter per org + year + type + BRANCH
+// Counter doc: counters/rcpt_<org>_<YY>_<type>_<branchCode>
+// Does ONLY tx.get (no write).
+export function readReceiptNo(tx, { org, type, branchCode, date }) {
+  const orgCode = org === 'youth' ? 'UI' : 'UK';
+  const yy = String(date).slice(2, 4);
+  const counterId = 'rcpt_' + orgCode + '_' + yy + '_' + type + '_' + branchCode;
+  const counterRef = doc(db, COUNTER_COL, counterId);
+  return tx.get(counterRef).then((snap) => {
+    const next = snap.exists() ? (Number(snap.data().seq || 0) + 1) : 1;
+    if (next > 9999) {
+      throw new Error('Receipt counter exceeded 9999 for ' + counterId + '.');
+    }
+    const seqStr = String(next).padStart(4, '0');
+    return { ref: counterRef, next: next, receiptNo: orgCode + yy + type + '-' + branchCode + '-' + seqStr };
+  });
+}
+
+// ---------- counter write (inside a runTransaction) ----------
+// Does ONLY tx.set (no read).
+export function writeCounter(tx, ref, next, extra) {
+  tx.set(ref, { seq: next, ...extra, updatedAt: serverTimestamp() }, { merge: true });
 }
 
 // ---------- writes ----------

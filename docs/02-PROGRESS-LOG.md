@@ -88,6 +88,82 @@ Next task:
 
 ---
 
+### [2026-11-14 05:09] Version 1.8.66 — HOTFIX · Student ID + Receipt number + Remove admissionNo
+STEP 0 answers (before editing):
+a) admissionNo usages: public/js/pages/admissions.page.js (16 refs); public/js/core/router.js (4 refs); public/js/utils/admission-receipt.js (6 refs); public/js/pages/admission-receipt.page.js (1 ref); firestore.rules (1 ref).
+b) Course level: field `level`, values 1/2/3. lvlOf() at courses.page.js:31. Required when saved: yes.
+c) Org on admission: field `ctx`, value 'youth' for Youth Centre.
+d) Session year: from session.startDate (YYYY-MM-DD), first 4 digits. Function: `selS.startDate.slice(0, 4)`.
+e) Branch code: field `code` on branch doc, validated /^[A-Z0-9]{2,10}$/, e.g. BZYCTC. Retrieved via `br.code || br.id || ''`.
+f) Counters: `counters/admission_<branchId>_<year>`; `generateAdmissionNumber()` at admission.service.js:33-43, called at admissions.page.js:1400. Returns `BRANCH-YEAR-0001`.
+
+T1: Student ID (field: studentId, STRING, exactly 8 digits, leading zeros kept).
+- Youth Centre: YYSSNNNN — YY = last 2 digits of session year, SS = course level 01/02/03, NNNN = counter per (YY+SS) shared across ALL Youth Centre branches. Counter doc: counters/sid_ui_<YY>_<SS>.
+- Unique Kids: YYYYNNNN — YYYY = session year, NNNN = counter per year shared across ALL Kids branches. Counter doc: counters/sid_uk_<YYYY>.
+- Course has no level -> block save: "Set the course level first (Courses page)."
+- Generated inside ONE Firestore runTransaction with admission write, docs writes, and receipt counter.
+- Counter above 9999 -> block with clear error.
+- Returning student (via Find): gets NEW studentId, saves previousStudentIds = [found.studentId, ...(found.previousStudentIds || [])] (no duplicates). Old admission never changed.
+- Find lookup: two queries (studentId == X, previousStudentIds array-contains X), merged, de-duplicated.
+
+T2: Receipt number (field: receiptNo on the admission).
+- Format: <ORG><YY><TYPE>-<BRANCHCODE>-<NNNN> e.g. UI26AD-BZYCTC-0001.
+- ORG = UI (Youth Centre) / UK (Unique Kids). YY = last 2 digits of payment date year (admission date for admission receipt).
+- TYPE = AD (admission payment) / IN (later instalment payment). NNNN = counter per org + year + type + branchCode.
+- Counter doc: counters/rcpt_<org>_<YY>_<type>_<branchCode>.
+- AD number created in same transaction as T1.
+- Export nextReceiptNo(tx, { org, type, branchCode, date }) from admission.service.js.
+
+T3: Remove admissionNo everywhere.
+- List column "Admission No" -> "Student ID"; search placeholder "Search name, student ID, phone or guardian".
+- View popup header: "Student ID: 27010001" and second muted line "Receipt: UI26AD-BZYCTC-0001".
+- Receipt data: studentId + receiptNo (layout unchanged). PDF filename: Admission-<studentId>-<session>.pdf.
+- Lookup placeholder: "e.g. 27010001". Route: #/students/<studentId>.
+- Page subtitle: "Admit new students to courses and batches. Student IDs are generated per session year and course level."
+- Deleted generateAdmissionNumber() and its counter usage. admissionNo appears 0 times in public/.
+- firestore.rules: allow signed-in users to read/write counters/sid_* and counters/rcpt_*.
+- No composite index needed (single-field queries only).
+
+T4: Checks
+- node --check on every changed .js (as .mjs): empty output (all pass).
+- Unit formatting: Youth L1 2027 #1 -> 27010001; Youth L3 2027 #12 -> 27030012; Kids 2027 #5 -> 20270005; UI 2026 AD BZYCTC #1 -> UI26AD-BZYCTC-0001; UK 2027 IN KIDS01 #37 -> UK27IN-KIDS01-0037.
+- grep public/ for BOM, \u2713, mojibake: 0 hits. grep public/ for "?v=1.8.65": 0 hits (including receipt files).
+
+- public/js/services/admission.service.js: Replaced generateAdmissionNumber() with generateStudentId() and nextReceiptNo().
+- public/js/pages/admissions.page.js: All admissionNo references replaced with studentId/receiptNo. Save wrapped in runTransaction. Find queries studentId OR previousStudentIds. View popup shows Student ID + Receipt.
+- public/js/utils/admission-receipt.js: getReceiptData returns studentId + receiptNo. PDF filename uses studentId.
+- public/js/pages/admission-receipt.page.js: Table row "Admission no" -> "Receipt No".
+- public/js/core/router.js: renderStudentProfile(admissionNo) -> renderStudentProfile(studentId).
+- public/pages/admissions.html: Subtitle, table header, lookup placeholder updated.
+- firestore.rules: students update rule uses studentId. counters rule allows sid_* and rcpt_*.
+- All version-bump files: 1.8.65 -> 1.8.66 via Node script (UTF-8 no BOM).
+- docs/02-PROGRESS-LOG.md: added this entry.
+Why:
+- Replace admissionNo with studentId (8-digit, per session year + course level) and receiptNo (per org/year/type/branch). Remove all admissionNo references.
+Files touched:
+- MODIFIED: public/js/services/admission.service.js, public/js/pages/admissions.page.js, public/js/utils/admission-receipt.js, public/js/pages/admission-receipt.page.js, public/js/core/router.js, public/pages/admissions.html, firestore.rules
+- MODIFIED: version-bump files: public/js/core/app.js, public/js/core/router.js, public/js/components/sidebar.js, public/js/components/topbar.js, public/js/pages/admission-receipt.page.js, public/js/pages/admissions.page.js, public/js/pages/batches.page.js, public/js/pages/branch-heads.page.js, public/js/pages/branches.page.js, public/js/pages/courses.page.js, public/js/pages/org-details.page.js, public/js/pages/sessions.page.js, public/pages/admission-receipt.html, public/pages/batches.html, public/pages/login.html, public/index.html
+- MODIFIED: docs/02-PROGRESS-LOG.md
+Firestore changes:
+- counters/sid_ui_<YY>_<SS> and counters/sid_uk_<YYYY> for student IDs
+- counters/rcpt_<org>_<YY>_<type>_<branchCode> for receipt numbers
+- students collection: admissionNo field removed, studentId + receiptNo + previousStudentIds added
+Tested on:
+- node --check on all changed .js files (as .mjs): 0 failures (empty output).
+- Unit formatting: all 5 test cases match expected values.
+- grep public/ for UTF-8 BOM, \u2713, mojibake: 0 matches.
+- grep public/ for "?v=1.8.65": 0 matches (including receipt files).
+Edge cases checked:
+- Course level missing -> generateStudentId throws "Set the course level first (Courses page)."
+- Counter above 9999 -> clear error thrown.
+- Returning student: previousStudentIds de-duplicated, old admission untouched.
+Known issues created (if any):
+- None.
+Next task:
+- None.
+
+---
+
 ### [2026-11-13 04:51] Version 1.8.64 — HOTFIX · View pop-up photo + status dot + header refinements
 T1: Photo instead of initials
 - viewStudent() reads ONLY students/<id>/docs/photo via one getDoc(doc(db,'students',s.id,'docs','photo')), not the whole docs subcollection.

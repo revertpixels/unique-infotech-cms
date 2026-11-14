@@ -115,8 +115,8 @@ export function getReceiptData(admission, docs, org) {
   const sigD = (docs && docs.signature) ? docs.signature : null;
 
   return {
-    admissionNo: admission.admissionNo || '-',
-    studentId: admission.admissionNo || '-',
+    studentId: admission.studentId || '-',
+    receiptNo: admission.receiptNo || '-',
     admissionDate: admission.admissionDate || '-',
     sessionName: admission.sessionName || '-',
     branchName: branchName,
@@ -143,7 +143,7 @@ export function getReceiptData(admission, docs, org) {
     photoFmt: photoD ? imageFormat(photoD) : null,
     sigData: sigD ? (sigD.data || sigD.Data || sigD.url || sigD.path || null) : null,
     sigFmt: sigD ? imageFormat(sigD) : null,
-    receiptNo: (admission.admissionNo || '-') + '-R1',
+    receiptNo: admission.receiptNo || '-',
     receiptDate: admission.admissionDate || '-',
     feeRows: buildFeeRows(feeSnapshot, feeSchedule),
     feeTotal: feeTotal,
@@ -216,7 +216,7 @@ export async function buildReceipt(admission, docs, org) {
   const ctor = await loadJsPDF();
   const doc = new ctor({ unit: 'mm', format: 'a4' });
   doc.setProperties({
-    title: 'Admission Receipt - ' + (admission.admissionNo || ''),
+    title: 'Admission Receipt - ' + (admission.studentId || ''),
     author: (org && org.orgName) || 'Unique Infotech CMS'
   });
 
@@ -291,7 +291,7 @@ export async function buildReceipt(admission, docs, org) {
 
   // Label:value rows
   const rows = [
-    ['Admission no', data.admissionNo],
+    ['Receipt No', data.receiptNo],
     ['Student ID', data.studentId],
     ['Admission date', data.admissionDate],
     ['Session', data.sessionName],
@@ -500,7 +500,7 @@ export async function buildReceipt(admission, docs, org) {
 export async function downloadReceipt(admission, docs, org) {
   const doc = await buildReceipt(admission, docs, org);
   const sessionName = (admission.sessionName || 'session').replace(/[\s\/]+/g, '-');
-  const fileName = 'Admission-' + (admission.admissionNo || 'admission') + '-' + sessionName + '.pdf';
+  const fileName = 'Admission-' + (admission.studentId || 'admission') + '-' + sessionName + '.pdf';
   doc.save(fileName);
 }
 

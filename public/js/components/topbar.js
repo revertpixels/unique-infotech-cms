@@ -1,5 +1,5 @@
-import { getRunningPeriod, getPeriodOptions } from '../utils/date.utils.js?v=1.8.65';
-import { loadSessions, getSelectedSessionId, setSelectedSession } from '../core/sessions.js?v=1.8.65';
+import { getRunningPeriod, getPeriodOptions } from '../utils/date.utils.js?v=1.8.66';
+import { loadSessions, getSelectedSessionId, setSelectedSession } from '../core/sessions.js?v=1.8.66';
 
 let listenersRegistered = false;
 let sessionsListenerRegistered = false;

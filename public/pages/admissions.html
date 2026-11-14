@@ -3,7 +3,7 @@
     <section class="pg-head">
       <div class="pg-crumbs">Students / <span>Admissions</span></div>
       <h2>Admissions</h2>
-      <p>Admit new students to courses and batches. Admission numbers are generated per branch and year.</p>
+      <p>Admit new students to courses and batches. Student IDs are generated per session year and course level.</p>
     </section>
     <button type="button" id="adm-add" class="ui-btn primary"><i data-lucide="user-plus"></i>New admission</button>
   </div>
@@ -16,7 +16,7 @@
       <table class="adm-table">
         <thead>
           <tr>
-            <th>Admission No</th>
+             <th>Student ID</th>
             <th>Student</th>
             <th class="hide-sm">Phone</th>
             <th>Course / Batch</th>
@@ -47,7 +47,7 @@
         <div class="ui-field">
           <div class="ui-label-row"><label for="adm-student-id-lookup">Returning student?</label></div>
           <div class="adm-lookup-inputs">
-            <div class="ui-input-wrap"><i data-lucide="search"></i><input id="adm-student-id-lookup" class="ui-input" type="text" maxlength="30" autocomplete="off" placeholder="e.g. YC-2026-0001"></div>
+             <div class="ui-input-wrap"><i data-lucide="search"></i><input id="adm-student-id-lookup" class="ui-input" type="text" maxlength="30" autocomplete="off" placeholder="e.g. 27010001"></div>
             <button type="button" id="adm-find-student" class="ui-btn ghost">Find</button>
           </div>
           <div id="adm-lookup-status" class="ui-err"></div>

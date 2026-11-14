@@ -1,18 +1,20 @@
 import { db } from '../config/firebase-config.js';
-import { collection, getDocs, query, where, doc, getDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.65';
-import { registerDirty, confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.65';
-import { buildStats, buildToolbar } from '../components/list-page.js?v=1.8.65';
-import { createSelect } from '../components/ui-select.js?v=1.8.65';
-import { openMenu } from '../components/ui-menu.js?v=1.8.65';
-import { confirmDialog } from '../components/ui-confirm.js?v=1.8.65';
-import { getSelectedSessionId, getCachedSessions, loadSessions, todayISO } from '../core/sessions.js?v=1.8.65';
-import { firstInstallmentOf, admissionState, sessionLabel, installmentSchedule, batchAllowsCourse, batchCourseLabel, isCourseActive } from '../utils/session-rules.js?v=1.8.65';
-import { formatINR, formatDateIN, initials } from '../utils/formatter.js?v=1.8.65';
-import { validatePhone, validateEmail, validateDOB, validateName, validateRequired } from '../utils/validator.js?v=1.8.65';
-import { listStudentsRaw, checkDuplicatePhone, generateAdmissionNumber, createStudentWithDocs, updateStudentWithDocs, updateStudent, deleteStudent } from '../services/admission.service.js?v=1.8.65';
-import { feeTotal } from '../utils/fees.js?v=1.8.65';
-import { compressTo100KB, readAsDataURL, blobToDataURL, isImageFile, formatBytes } from '../utils/image-compress.js?v=1.8.65';
+import { collection, getDocs, query, where, doc, getDoc, serverTimestamp, runTransaction } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
+import { showToast } from '../components/toast.js?v=1.8.66';
+import { registerDirty, confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.66';
+import { buildStats, buildToolbar } from '../components/list-page.js?v=1.8.66';
+import { createSelect } from '../components/ui-select.js?v=1.8.66';
+import { openMenu } from '../components/ui-menu.js?v=1.8.66';
+import { confirmDialog } from '../components/ui-confirm.js?v=1.8.66';
+import { getSelectedSessionId, getCachedSessions, loadSessions, todayISO } from '../core/sessions.js?v=1.8.66';
+import { firstInstallmentOf, admissionState, sessionLabel, installmentSchedule, batchAllowsCourse, batchCourseLabel, isCourseActive } from '../utils/session-rules.js?v=1.8.66';
+import { formatINR, formatDateIN, initials } from '../utils/formatter.js?v=1.8.66';
+import { validatePhone, validateEmail, validateDOB, validateName, validateRequired } from '../utils/validator.js?v=1.8.66';
+import { listStudentsRaw, checkDuplicatePhone, readStudentId, readReceiptNo, writeCounter, createStudentWithDocs, updateStudentWithDocs, updateStudent, deleteStudent } from '../services/admission.service.js?v=1.8.66';
+import { feeTotal } from '../utils/fees.js?v=1.8.66';
+import { compressTo100KB, readAsDataURL, blobToDataURL, isImageFile, formatBytes } from '../utils/image-compress.js?v=1.8.66';
+
+const COL = 'students';
 
 const GENDERS = [
   { value: 'male', label: 'Male', icon: 'user' },
@@ -176,7 +178,7 @@ export async function mount({ container, profile, ctx }) {
   let students = [], courses = [], batches = [], branches = [], sessions = [];
   let editId = null, editRow = null, saved = {}, touched = false, saving = false, loading = false;
   let page = 1, filteredList = [];
-  let returnDoc = null;          // { id, sessionId, admissionNo, sessionName } of found returning student
+  let returnDoc = null;          // { id, sessionId, studentId, sessionName, previousStudentIds } of found returning student
   let keptDocs = {};             // key -> old doc data { data (base64), name, sizeBytes, type, updatedAt }
   let docAction = {};            // key -> 'keep' | 'replace' | 'remove'
 
@@ -512,10 +514,10 @@ function dueLabel(dueISO) {
   }
 
   // ---------- T2: who is the student ----------
-  // Returning student loaded via Find -> use its admissionNo.
+  // Returning student loaded via Find -> use its studentId.
   // Else: exact name (trim, case-insensitive) + dob + phone (digits only). All three required.
   function getStudentKey() {
-    if (returnDoc && returnDoc.admissionNo) return returnDoc.admissionNo;
+    if (returnDoc && returnDoc.studentId) return returnDoc.studentId;
     const name = (document.getElementById('adm-name') && document.getElementById('adm-name').value || '').trim();
     const dob = (document.getElementById('adm-dob') && document.getElementById('adm-dob').value || '').trim();
     const phone = (document.getElementById('adm-phone') && document.getElementById('adm-phone').value || '').replace(/\D/g, '');
@@ -766,9 +768,14 @@ function dueLabel(dueISO) {
     returnDoc = null; keptDocs = {}; docAction = {}; prereqCheck = null;
     clearReturnUI();
     try {
-      const q = query(collection(db, 'students'), where('admissionNo', '==', studentId));
-      const snap = await getDocs(q);
-      let candidates = snap.docs.map((d) => Object.assign({ id: d.id }, d.data()));
+    const q1 = query(collection(db, 'students'), where('studentId', '==', studentId));
+    const q2 = query(collection(db, 'students'), where('previousStudentIds', 'array-contains', studentId));
+    const [snap1, snap2] = await Promise.all([getDocs(q1), getDocs(q2)]);
+    const byId = snap1.docs.map((d) => Object.assign({ id: d.id }, d.data()));
+    const byPrev = snap2.docs.map((d) => Object.assign({ id: d.id }, d.data()));
+    const seen = new Set();
+    let candidates = [];
+    [...byId, ...byPrev].forEach((c) => { if (!seen.has(c.id)) { seen.add(c.id); candidates.push(c); } });
       candidates = candidates.filter((s) => s.status !== 'archived' && s.status !== 'deleted');
       if (candidates.length === 0) {
         lookupStatus.textContent = 'No student with this ID found. Older records may be archived.';
@@ -780,8 +787,9 @@ function dueLabel(dueISO) {
       returnDoc = {
         id: src.id,
         sessionId: src.sessionId,
-        admissionNo: src.admissionNo,
-        sessionName: src.sessionName || ''
+        studentId: src.studentId,
+        sessionName: src.sessionName || '',
+        previousStudentIds: src.previousStudentIds || []
       };
       populateStudentFields(src);
       try {
@@ -1085,7 +1093,7 @@ function dueLabel(dueISO) {
       if (isSuper && f.branch && f.branch !== 'all' && s.branchId !== f.branch) return false;
       if (q) {
         const c = courseOf(s.courseId);
-        const hay = [s.name, s.admissionNo, s.phone, s.guardianName, c.courseCode || c.code, c.name, s.batchName || ''].map(x => (x || '').toLowerCase()).join(' ');
+        const hay = [s.name, s.studentId, s.phone, s.guardianName, c.courseCode || c.code, c.name, s.batchName || ''].map(x => (x || '').toLowerCase()).join(' ');
         if (!hay.includes(q)) return false;
       }
       return true;
@@ -1145,7 +1153,7 @@ function dueLabel(dueISO) {
         const b = batchOf(s.batchId);
         const st = STATUS_PILLS.find(x => x.value === s.status) || STATUS_PILLS[0];
 
-        tr.appendChild(mk('td', '', s.admissionNo || ' - '));
+        tr.appendChild(mk('td', '', s.studentId || ' - '));
 
         const tdSt = mk('td');
         tdSt.appendChild(mk('b', '', s.name || ' - '));
@@ -1178,7 +1186,7 @@ function dueLabel(dueISO) {
         kebab.appendChild(ki);
         const items = [
           { label: 'View', icon: 'eye', onClick: () => viewStudent(s) },
-          { label: 'View student', icon: 'user', onClick: () => { location.hash = '#/students/' + s.admissionNo; } },
+          { label: 'View student', icon: 'user', onClick: () => { location.hash = '#/students/' + s.studentId; } },
           { label: 'View admission receipt', icon: 'file-text', onClick: () => { location.hash = '#/admissions/' + s.id + '/receipt'; } },
           { label: 'Edit', icon: 'pencil', onClick: async () => {
             if (!form.hidden && !saveBtn.disabled && !(await confirmLeave({ clear: false }))) return;
@@ -1389,129 +1397,131 @@ function dueLabel(dueISO) {
     const today = new Date().toISOString().slice(0, 10);
 
     const branchCode = br.code || br.id || '';
-    const year = today.slice(0, 4);
-    let admissionNo;
+    const sessionYear = (selS && selS.startDate) ? selS.startDate.slice(0, 4) : today.slice(0, 4);
+    const courseLevel = c ? Number(c.level) : null;
+    let studentId, receiptNo, previousStudentIds, newStudentRefId;
     const sourceAdmissionRef = returnDoc ? { sessionId: returnDoc.sessionId, admissionId: returnDoc.id } : null;
-    if (editId) {
-      admissionNo = (editRow && editRow.admissionNo ? editRow.admissionNo : '');
-    } else if (returnDoc) {
-      admissionNo = returnDoc.admissionNo; // T2: keep the same studentId, do not generate a new one
-    } else {
-      admissionNo = await generateAdmissionNumber(branchCode, year);
-    }
 
-    // ---------- documents (T1/T2/T3) ----------
-    const docs = {};
     try {
-      await Promise.all(DOC_KEYS.map(async (k) => {
-        const action = docAction[k] || 'new';
-        const df = docFiles[k];
-        const old = keptDocs[k];
-        if (action === 'remove') { docs[k] = false; return; }
-        if (action === 'keep' && old) {
-          // T1: identical copy of the old doc into the new admission's docs subcollection (Firestore base64 only)
-          docs[k] = Object.assign({}, old, { updatedAt: serverTimestamp() });
-          return;
+      const saveResult = await runTransaction(db, async (tx) => {
+        // ALL reads first (counters), then ALL writes below
+        if (editId) {
+          studentId = (editRow && editRow.studentId ? editRow.studentId : '');
+          receiptNo = (editRow && editRow.receiptNo ? editRow.receiptNo : '');
+          previousStudentIds = (editRow && editRow.previousStudentIds) || [];
+        } else if (returnDoc) {
+          const sid = await readStudentId(tx, { org: 'youth', sessionYear, level: courseLevel });
+          const rc = await readReceiptNo(tx, { org: 'youth', type: 'AD', branchCode, date: v.admissionDate });
+          studentId = sid.studentId;
+          receiptNo = rc.receiptNo;
+          previousStudentIds = [returnDoc.studentId, ...(returnDoc.previousStudentIds || [])];
+          previousStudentIds = [...new Set(previousStudentIds)];
+          writeCounter(tx, sid.ref, sid.next, { org: 'youth', sessionYear, level: courseLevel });
+          writeCounter(tx, rc.ref, rc.next, { org: 'youth', type: 'AD', branchCode: branchCode, date: v.admissionDate });
+        } else {
+          const sid = await readStudentId(tx, { org: 'youth', sessionYear, level: courseLevel });
+          const rc = await readReceiptNo(tx, { org: 'youth', type: 'AD', branchCode, date: v.admissionDate });
+          studentId = sid.studentId;
+          receiptNo = rc.receiptNo;
+          previousStudentIds = undefined;
+          writeCounter(tx, sid.ref, sid.next, { org: 'youth', sessionYear, level: courseLevel });
+          writeCounter(tx, rc.ref, rc.next, { org: 'youth', type: 'AD', branchCode: branchCode, date: v.admissionDate });
         }
-        if (df && df.compressedBlob) {
-          docs[k] = {
-            type: 'image/jpeg',
-            mime: 'image/jpeg',
-            name: df.file.name,
-            sizeBytes: df.compressedBlob.size,
-            data: await blobToDataURL(df.compressedBlob),
-            updatedAt: serverTimestamp()
-          };
-          return;
-        }
-        docs[k] = false;
-      }));
-    } catch (e) {
-      // T1: any doc read/copy failure -> save nothing
-      throw e;
-    }
 
-    const data = {
-      admissionNo: admissionNo,
-      name: v.name,
-      guardianName: v.guardianName,
-      phone: v.phone,
-      altPhone: v.altPhone || '',
-      email: v.email || '',
-      dob: v.dob,
-      gender: v.gender,
-      qualification: v.qualification,
-      address: v.address,
-      ctx: 'youth',
-      status: 'active',
-      docs: {},
-      createdAt: editId ? undefined : serverTimestamp(),
-      createdBy: editId ? undefined : who,
-      updatedAt: serverTimestamp(),
-      prereqCheck: (c && getPrereq(c)) ? prereqCheck : null
-    };
-    if (!editId) {
-      Object.assign(data, {
-        admissionDate: v.admissionDate || today,
-        branchId: v.branchId,
-        branchName: branchNameOf(v.branchId),
-        branchCode: branchCode,
-        courseId: v.courseId,
-        courseCode: c.courseCode || c.code || '',
-        courseName: c.name || '',
-        batchId: v.batchId,
-        batchName: bObj.name || '',
-        sessionId: v.sessionId,
-        sessionName: selS ? (selS.name || '') : '',
-        feeSnapshot: c.fees || {},
-        feeTotal: feeTotal(c.fees || {}),
-        feeSchedule: sched.map(function (it) { return { no: it.no, month: it.month, opens: it.opens, due: it.due, amount: f.installment || 0 }; }),
-        examFee: f.exam || 0,
-        dueAtAdmission: { admission: Number(f.admission || 0), material: Number(f.material || 0), total: Number(f.admission || 0) + Number(f.material || 0) },
-        sourceAdmissionRef: sourceAdmissionRef
+        const data = {
+          studentId: studentId,
+          receiptNo: receiptNo,
+          name: v.name,
+          guardianName: v.guardianName,
+          phone: v.phone,
+          altPhone: v.altPhone || '',
+          email: v.email || '',
+          dob: v.dob,
+          gender: v.gender,
+          qualification: v.qualification,
+          address: v.address,
+          ctx: 'youth',
+          status: 'active',
+          docs: {},
+          createdAt: editId ? undefined : serverTimestamp(),
+          createdBy: editId ? undefined : who,
+          updatedAt: serverTimestamp(),
+          updatedBy: who,
+          branchId: v.branchId,
+          branchName: branchNameOf(v.branchId),
+          branchCode: branchCode,
+          courseId: v.courseId,
+          courseCode: c.courseCode || c.code || '',
+          courseName: c.name || '',
+          batchId: v.batchId,
+          batchName: bObj.name || '',
+          sessionId: v.sessionId,
+          sessionName: selS ? (selS.name || '') : '',
+          admissionDate: v.admissionDate || today,
+          feeTotal: feeTotal(c ? c.fees || {} : {}),
+          feeSnapshot: c ? c.fees || {} : {},
+          feeSchedule: sched.map(function (it) { return { no: it.no, month: it.month, opens: it.opens, due: it.due, amount: f.installment || 0 }; }),
+          examFee: f.exam || 0,
+          dueAtAdmission: { admission: Number(f.admission || 0), material: Number(f.material || 0), total: Number(f.admission || 0) + Number(f.material || 0) },
+          prereqCheck: (c && getPrereq(c)) ? prereqCheck : null,
+          ...(previousStudentIds !== undefined ? { previousStudentIds: previousStudentIds } : {}),
+          ...(sourceAdmissionRef ? { sourceAdmission: sourceAdmissionRef } : {})
+        };
+
+        // Remove undefined values (Firestore rejects undefined)
+        Object.keys(data).forEach((k) => { if (data[k] === undefined) delete data[k]; });
+
+        const studentRef = editId ? doc(db, COL, editId) : doc(collection(db, COL));
+        newStudentRefId = studentRef.id;
+        tx.set(studentRef, data, { merge: !!editId });
+
+        Object.entries(docs).forEach(([key, docData]) => {
+          if (docData) {
+            const docRef = doc(collection(studentRef, 'docs'), key);
+            tx.set(docRef, Object.assign({}, docData, { updatedAt: serverTimestamp() }));
+          } else {
+            const docRef = doc(collection(studentRef, 'docs'), key);
+            tx.delete(docRef);
+          }
+        });
+
+        return { studentId: studentId, receiptNo: receiptNo, id: newStudentRefId };
       });
-    }
-    DOC_KEYS.forEach((k) => { data.docs[k] = !!docs[k]; });
+    studentId = saveResult.studentId;
+    receiptNo = saveResult.receiptNo;
+    const admissionId = saveResult.id;
 
-    saving = true;
-    saveBtn.disabled = true;
-    cancelBtn.disabled = true;
+    saving = false;
+    saveBtn.disabled = false;
+    cancelBtn.disabled = false;
     const saveIcon = saveBtn.querySelector('i');
-    if (saveIcon) saveIcon.setAttribute('data-lucide', 'loader');
+    if (saveIcon) saveIcon.setAttribute('data-lucide', 'save');
     if (typeof lucide !== 'undefined') lucide.createIcons();
-    $t('adm-state', 'Saving...');
+    $t('adm-state', 'Saved.');
     const stateEl = $('adm-state');
-    if (stateEl) stateEl.className = 'save-state dirty';
+    if (stateEl) stateEl.className = 'save-state saved';
 
-    try {
-      const wasEdit = !!editId;
-      let admissionId = editId;
-      if (wasEdit) {
-        await updateStudentWithDocs(editId, data, docs);
-      } else {
-        admissionId = await createStudentWithDocs(data, docs);
-      }
-      saving = false;
-      if (!editId) {
-        // T1: navigate to receipt route instead of showing a dialog
-        location.hash = '#/admissions/' + admissionId + '/receipt';
-      } else {
-        closeForm();
-        await load();
-        showToast('Admission saved - ' + admissionNo, 'success');
-      }
-    } catch (e) {
-      console.error('[admissions] save failed', e);
-      saving = false;
-      refreshForm();
-      if (saveIcon) saveIcon.setAttribute('data-lucide', 'save');
-      if (typeof lucide !== 'undefined') lucide.createIcons();
-      $t('adm-state', 'Save failed (' + (e.code || 'error') + ')');
-      const stateEl2 = $('adm-state');
-      if (stateEl2) stateEl2.className = 'save-state error';
-      showToast('Save failed (' + (e.code || 'error') + ').', 'error');
+    if (!editId) {
+      // T1: navigate to receipt route instead of showing a dialog
+      location.hash = '#/admissions/' + admissionId + '/receipt';
+    } else {
+      closeForm();
+      await load();
+      showToast('Admission saved - ' + studentId, 'success');
     }
+  } catch (e) {
+    console.error('[admissions] save failed', e);
+    saving = false;
+    refreshForm();
+    const saveIcon2 = saveBtn.querySelector('i');
+    if (saveIcon2) saveIcon2.setAttribute('data-lucide', 'save');
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+    $t('adm-state', 'Save failed (' + (e.code || 'error') + ')');
+    const stateEl2 = $('adm-state');
+    if (stateEl2) stateEl2.className = 'save-state error';
+    showToast('Save failed (' + (e.code || 'error') + ').', 'error');
   }
+}
 
   async function viewStudent(s) {
     const c = courseOf(s.courseId);
@@ -1568,9 +1578,15 @@ function dueLabel(dueISO) {
     nameEl.appendChild(nameDot);
     const noEl = document.createElement('div');
     noEl.className = 'adm-view-no';
-    noEl.textContent = 'Admission No: ' + (s.admissionNo || ' - ');
+    noEl.textContent = 'Student ID: ' + (s.studentId || ' - ');
+    const rcptEl = document.createElement('div');
+    rcptEl.className = 'adm-view-no';
+    rcptEl.style.fontSize = '12px';
+    rcptEl.style.color = 'var(--text-mute)';
+    rcptEl.textContent = 'Receipt: ' + (s.receiptNo || ' - ');
     info.appendChild(nameEl);
     info.appendChild(noEl);
+    info.appendChild(rcptEl);
     head.appendChild(info);
 
     // T3: header buttons in ONE flex container, equal gaps, no button margins
@@ -1709,7 +1725,7 @@ function dueLabel(dueISO) {
     if (!form.hidden && !saveBtn.disabled && editId !== s.id && !(await confirmLeave({ clear: false }))) return;
     const ok = await confirmDialog({
       title: 'Delete admission?',
-      message: 'Delete "' + (s.name || 'this student') + '" (' + (s.admissionNo || '') + ')? This cannot be undone. Type DELETE to confirm.',
+      message: 'Delete "' + (s.name || 'this student') + '" (' + (s.studentId || '') + ')? This cannot be undone. Type DELETE to confirm.',
       confirmText: 'Delete', danger: true, requireText: 'DELETE'
     });
     if (!ok) return;

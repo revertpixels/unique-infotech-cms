@@ -1,0 +1,234 @@
+<div class="adm-wrap school-admissions">
+<div class="adm-head-row">
+<section class="pg-head">
+<div class="pg-crumbs">Students / <span>Kids Admissions</span></div>
+<h2>Kids Admissions</h2>
+<p>Admit new students to Unique Kids computer courses. Student IDs are generated per admission year.</p>
+</section>
+<button class="ui-btn primary" id="adm-add" type="button"><i data-lucide="user-plus"></i>New admission</button>
+</div>
+<div id="adm-stats"></div>
+<div id="adm-toolbar"></div>
+<div class="adm-table-card">
+<div class="adm-scroll">
+<div class="adm-empty" hidden="" id="adm-loading">
+<i data-lucide="loader-2"></i>
+<b>Loading admissions</b>
+<span>Please wait while admission records are loaded.</span>
+</div>
+<table class="adm-table">
+<thead>
+        <tr>
+        <th>Student ID</th>
+        <th>Student</th>
+        <th class="hide-sm">Phone</th>
+        <th>Level &amp; Batch</th>
+        <th class="hide-sm">Admission Date</th>
+        <th class="hide-md">Status</th>
+        <th class="adm-actions">Actions</th>
+        </tr>
+</thead>
+<tbody id="adm-rows"></tbody>
+</table>
+<div class="adm-empty" hidden="" id="adm-empty">
+<i data-lucide="user-plus"></i>
+<b>No admissions yet</b>
+<span>Admitted students will appear here.</span>
+<button class="ui-btn primary" id="adm-empty-add" type="button"><i data-lucide="user-plus"></i>New admission</button>
+</div>
+<div class="adm-empty" hidden="" id="adm-no-match">
+<i data-lucide="search"></i>
+<b>No matching records</b>
+<span>Try clearing your search or filters.</span>
+<button class="ui-btn ghost" id="adm-no-match-clear" type="button">Clear filters</button>
+</div>
+<div class="adm-empty" hidden="" id="adm-load-error">
+<i data-lucide="alert-circle"></i>
+<b>Could not load admissions</b>
+<span id="adm-load-error-msg"></span>
+<button class="ui-btn primary" id="adm-load-error-retry" type="button"><i data-lucide="refresh-cw"></i>Retry</button>
+<button class="ui-btn ghost" id="adm-load-error-back" type="button">Back</button>
+</div>
+<div class="adm-card-foot" hidden="" id="adm-foot"></div>
+</div>
+
+</div><form class="adm-form-card" hidden="" id="adm-form" novalidate="">
+<header class="adm-form-head">
+<div class="adm-form-head-left">
+<h3 id="adm-form-title">New admission</h3>
+<p>Fill the student details, choose the level and batch, and upload photo &amp; signature.</p>
+</div>
+</header>
+<div class="adm-section">
+<h4 class="adm-section-title">Student details</h4>
+<div class="adm-grid">
+<div class="ui-field span-2">
+<div class="ui-label-row"><label for="adm-name">Full name <em>*</em></label></div>
+<div class="ui-input-wrap"><i data-lucide="user"></i><input autocomplete="off" class="ui-input" id="adm-name" maxlength="60" placeholder="e.g. Arnab Das" type="text"/></div>
+<div class="ui-err" id="adm-name-err"></div>
+</div>
+<div class="ui-field">
+<div class="ui-label-row"><label for="adm-guardianName">Guardian name <em>*</em></label></div>
+<div class="ui-input-wrap"><i data-lucide="user"></i><input autocomplete="off" class="ui-input" id="adm-guardianName" maxlength="60" placeholder="e.g. Suresh Das" type="text"/></div>
+<div class="ui-err" id="adm-guardianName-err"></div>
+</div>
+<div class="ui-field">
+<div class="ui-label-row"><label for="adm-phone">Parent phone <em>*</em></label></div>
+<div class="ui-input-wrap"><i data-lucide="phone"></i><input autocomplete="off" class="ui-input" id="adm-phone" maxlength="20" placeholder="e.g. 98765 43210" type="tel"/></div>
+<div class="ui-err" id="adm-phone-err"></div>
+</div>
+<div class="ui-field">
+<div class="ui-label-row"><label for="adm-altPhone">Alt phone</label></div>
+<div class="ui-input-wrap"><i data-lucide="phone"></i><input autocomplete="off" class="ui-input" id="adm-altPhone" maxlength="20" placeholder="e.g. 98765 43210" type="tel"/></div>
+<div class="ui-err" id="adm-altPhone-err"></div>
+</div>
+<div class="ui-field">
+<div class="ui-label-row"><label for="adm-email">Email</label></div>
+<div class="ui-input-wrap"><i data-lucide="mail"></i><input autocomplete="off" class="ui-input" id="adm-email" maxlength="80" placeholder="e.g. ravi@example.com" type="email"/></div>
+<div class="ui-err" id="adm-email-err"></div>
+</div>
+<div class="ui-field">
+<div class="ui-label-row"><label for="adm-aadhaar">Aadhaar number <em>*</em></label></div>
+<div class="ui-input-wrap"><i data-lucide="user"></i><input autocomplete="off" class="ui-input" id="adm-aadhaar" maxlength="12" placeholder="12 digits" type="text"/></div>
+<div class="ui-err" id="adm-aadhaar-err"></div>
+
+</div>
+<div class="ui-field">
+<div class="ui-label-row"><label for="adm-dob">Date of birth <em>*</em></label></div>
+<div class="ui-input-wrap"><i data-lucide="calendar"></i><input class="ui-input" id="adm-dob" type="date"/></div>
+<div class="ui-err" id="adm-dob-err"></div>
+</div>
+<div class="ui-field">
+<div class="ui-label-row"><label for="adm-gender">Gender <em>*</em></label></div>
+<div id="adm-gender-host"></div>
+<div class="ui-err" id="adm-gender-err"></div>
+</div>
+<div class="ui-field">
+<div class="ui-label-row"><label for="adm-schoolClass">School class <em>*</em></label></div>
+<div class="ui-input-wrap"><i data-lucide="book-open"></i><input autocomplete="off" class="ui-input" id="adm-schoolClass" maxlength="20" placeholder="e.g. Nursery, KG, Class 1" type="text"/></div>
+<div class="ui-err" id="adm-schoolClass-err"></div>
+</div>
+<div class="ui-field span-2">
+<div class="ui-label-row"><label for="adm-address">Address <em>*</em></label></div>
+<div class="ui-input-wrap top"><i data-lucide="map-pin"></i><textarea class="ui-input" id="adm-address" placeholder="Street, town, district" rows="3"></textarea></div>
+<div class="ui-err" id="adm-address-err"></div>
+</div>
+</div>
+</div>
+<div class="adm-section">
+<h4 class="adm-section-title">Course &amp; batch</h4>
+<div class="adm-grid">
+<div class="ui-field">
+<div class="ui-label-row"><label for="adm-level">Level <em>*</em></label></div>
+<div id="adm-level-host"></div>
+<div class="ui-err" id="adm-level-err"></div>
+<div class="adm-note warn" hidden="" id="adm-level-note"></div>
+</div>
+<div class="ui-field">
+<div class="ui-label-row"><label for="adm-batch">Batch <em>*</em></label></div>
+<div id="adm-batch-host"></div>
+<div class="ui-err" id="adm-batch-err"></div>
+</div>
+<div class="ui-field">
+<div class="ui-label-row"><label for="adm-admissionDate">Admission date <em>*</em></label></div>
+<div class="ui-input-wrap"><i data-lucide="calendar"></i><input class="ui-input" id="adm-admissionDate" type="date"/></div>
+<div class="ui-err" id="adm-admissionDate-err"></div>
+</div>
+</div>
+</div>
+<div class="adm-section">
+<h4 class="adm-section-title">Documents</h4>
+<div class="adm-doc-info">
+        Upload clear, recent images. Compressed to under 100 KB.
+      </div>
+<div class="adm-doc-grid">
+<div class="adm-upload-card">
+<label class="adm-doc-label">Student photo <em style="color:var(--danger);font-style:normal;">*</em></label>
+<div class="adm-upload" id="adm-photo-upload">
+<div class="adm-upload-empty">
+<i data-lucide="image"></i>
+<div class="adm-upload-text"><strong>Click or drag</strong></div>
+<div class="adm-upload-hint">JPG, PNG, WEBP · max 10 MB · compressed to under 100 KB</div>
+<input accept="image/*" class="adm-upload-input" id="adm-photo-file" type="file"/>
+</div>
+<div class="adm-upload-preview" id="adm-photo-preview"></div>
+<div class="adm-doc-size" id="adm-photo-size"></div>
+</div>
+<div class="adm-err" id="adm-photo-err"></div>
+</div>
+<div class="adm-upload-card">
+<label class="adm-doc-label">Student's signature <em style="color:var(--danger);font-style:normal;">*</em></label>
+<div class="adm-upload" id="adm-signature-upload">
+<div class="adm-upload-empty">
+<i data-lucide="pen-line"></i>
+<div class="adm-upload-text"><strong>Click or drag</strong></div>
+<div class="adm-upload-hint">JPG, PNG, WEBP · max 10 MB · compressed to under 100 KB</div>
+<input accept="image/*" class="adm-upload-input" id="adm-signature-file" type="file"/>
+</div>
+<div class="adm-upload-preview" id="adm-signature-preview"></div>
+<div class="adm-doc-size" id="adm-signature-size"></div>
+</div>
+<div class="adm-err" id="adm-signature-err"></div>
+</div>
+</div>
+</div>
+<section class="adm-section">
+<h4 class="adm-section-title">Admission &amp; payment</h4>
+<div id="adm-payment-modes">
+<div class="ui-label-row"><label>Payment mode <em>*</em></label></div>
+<div aria-label="Admission payment option" class="adm-mode-row" role="radiogroup">
+<div class="adm-mode-card adm-mode-card-full" id="adm-mode-card-full">
+<input aria-label="Full payment" checked="" id="adm-paymentMode-full" name="adm-paymentMode" type="radio" value="full"/><span aria-hidden="true" class="adm-mode-marker"></span>
+<label class="adm-mode-title" for="adm-paymentMode-full">Full payment</label>
+<div class="adm-mode-desc">Collect the admission fee in full.</div>
+<div class="adm-mode-note">Monthly fees are separate. No admission balance remains.</div>
+</div>
+<div class="adm-mode-card adm-mode-card-difference" id="adm-mode-card-difference">
+<input aria-label="Difference payment" disabled="" id="adm-paymentMode-difference" name="adm-paymentMode" type="radio" value="difference"/><span aria-hidden="true" class="adm-mode-marker"></span>
+<label class="adm-mode-title" for="adm-paymentMode-difference">Difference payment</label>
+<div class="adm-mode-desc">Collect the balance after verified prior payments.</div>
+<div class="adm-mode-hint">Requires an existing student and verified payment history.</div>
+</div>
+<div class="adm-mode-card adm-mode-card-none" id="adm-mode-card-none">
+<input aria-label="No payment" id="adm-paymentMode-none" name="adm-paymentMode" type="radio" value="none"/><span aria-hidden="true" class="adm-mode-marker"></span>
+<label class="adm-mode-title" for="adm-paymentMode-none">No payment</label>
+<div class="adm-mode-desc">No admission fee collected.</div>
+<div class="adm-none-reason-wrap" id="adm-no-payment-reason-wrap">
+<div class="ui-label-row"><span id="adm-reason-label">Reason for no payment <em>*</em></span></div>
+<div class="ui-input-wrap"><select aria-hidden="true" class="ui-input" hidden="" id="adm-noPaymentReason" tabindex="-1"><option value="">Select a reason</option><option value="migrated">Migrated / existing student</option><option value="returning">Returning after a long break</option><option value="rejoining">Rejoining after course ended</option><option value="previously-paid">Admission fee previously paid</option><option value="waiver">Approved fee waiver / scholarship</option><option value="other">Other approved reason</option></select><div class="adm-reason-custom" id="adm-reason-custom"></div></div>
+<div class="ui-err" id="adm-noPaymentReason-err"></div>
+<div class="adm-none-other-wrap" hidden="" id="adm-none-other-wrap">
+<div class="ui-label-row"><label for="adm-noPaymentOther">Explanation <em>*</em></label></div>
+<div class="ui-input-wrap"><input class="ui-input" id="adm-noPaymentOther" maxlength="200" placeholder="Please specify the reason" type="text"/></div>
+<div class="ui-err" id="adm-noPaymentOther-err"></div>
+<div class="ui-count" data-for="adm-noPaymentOther"></div>
+</div>
+</div>
+</div>
+</div>
+<div class="ui-err" id="adm-paymentMode-err"></div>
+</div>
+<div class="adm-payment-summary">
+<div class="adm-fee-breakdown" id="adm-fee-breakdown">
+<div class="ui-label-row"><label>Fee breakdown</label></div>
+<p class="adm-summary-placeholder" id="adm-fee-placeholder">Select a level to view the admission fee and the amount to collect.</p><div id="adm-fee-values"><div class="adm-fee-row"><span class="adm-fee-label">Configured admission fee</span><span class="adm-fee-amt" id="adm-fee-configured">—</span></div><div class="adm-fee-row"><span class="adm-fee-label">Previous eligible admission payments</span><span class="adm-fee-amt" id="adm-fee-prior">—</span></div><div class="adm-fee-row adm-fee-row-adj"><span class="adm-fee-label">Adjustment / amount not charged</span><span class="adm-fee-amt" id="adm-fee-adj">—</span></div><div class="adm-fee-divider"></div><div class="adm-fee-row adm-fee-row-total"><span class="adm-fee-label">Admission amount to receive now</span><span class="adm-fee-amt adm-fee-total" id="adm-fee-due">—</span></div></div></div>
+<section class="adm-monthly-panel">
+<h4 class="adm-section-title">Monthly billing</h4>
+<p class="adm-summary-placeholder" id="adm-monthly-placeholder">Select a level and admission date to preview monthly billing.</p><div id="adm-monthly-values"><div class="adm-monthly-grid">
+<div class="adm-monthly-row"><span class="adm-monthly-label">Monthly fee</span><span class="adm-monthly-amt" id="adm-monthly-fee">—</span><span class="adm-monthly-unit">/ month</span></div>
+<div class="adm-monthly-row"><span class="adm-monthly-label">First monthly billing month</span><span class="adm-monthly-amt" id="adm-first-monthly">—</span></div>
+<div class="adm-monthly-row"><span class="adm-monthly-label">Payment window</span><span class="adm-monthly-amt">1st–10th</span></div>
+</div></div></section>
+</div>
+<div class="adm-confirm-received-wrap" hidden="" id="adm-confirm-received-wrap"><label class="adm-confirm-label" for="adm-confirmReceived"><input id="adm-confirmReceived" type="checkbox"/> I confirm the displayed admission amount was received in full.</label><div class="ui-err" id="adm-confirmReceived-err"></div></div>
+<p class="adm-zero-note" hidden="" id="adm-no-payment-note" role="status">No admission payment collected. No admission balance will be created.</p>
+</section>
+<footer class="adm-savebar">
+<span aria-live="polite" class="save-state" id="adm-state" role="status">Fill in the details</span>
+<div class="save-actions">
+<button class="ui-btn ghost" id="adm-cancel" type="button"><i data-lucide="x"></i>Cancel</button>
+<button class="ui-btn primary" disabled="" id="adm-save" type="submit"><i data-lucide="save"></i><span id="adm-save-label">Admit student</span></button>
+</div>
+</footer>
+</form>
+</div>

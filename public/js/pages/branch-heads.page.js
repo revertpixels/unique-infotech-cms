@@ -1,11 +1,11 @@
 import { db } from '../config/firebase-config.js';
 import { collection, getDocs, doc, getDoc, setDoc, updateDoc, deleteDoc, query, where, serverTimestamp } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { createSelect } from '../components/ui-select.js?v=1.8.66';
-import { openMenu } from '../components/ui-menu.js?v=1.8.66';
-import { confirmDialog } from '../components/ui-confirm.js?v=1.8.66';
-import { showToast } from '../components/toast.js?v=1.8.66';
-import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.66';
-import { buildStats, buildToolbar } from '../components/list-page.js?v=1.8.66';
+import { createSelect } from '../components/ui-select.js?v=1.8.68';
+import { openMenu } from '../components/ui-menu.js?v=1.8.68';
+import { confirmDialog } from '../components/ui-confirm.js?v=1.8.68';
+import { showToast } from '../components/toast.js?v=1.8.68';
+import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.68';
+import { buildStats, buildToolbar } from '../components/list-page.js?v=1.8.68';
 
 const TEXT_KEYS = ['name', 'email', 'phone'];
 const KEYS = ['name', 'email', 'phone', 'branchId', 'status'];

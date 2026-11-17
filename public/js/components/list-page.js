@@ -101,3 +101,40 @@ export function buildTableCard(opts) {
     }
   };
 }
+
+// Renders a shared pagination footer into `container`.
+// opts: { page, pageSize, totalItems, onPageChange(page) }
+// Hides the container when there is only one page.
+export function renderPager(container, opts) {
+  const o = opts || {};
+  const page = Math.max(1, o.page || 1);
+  const pageSize = Math.max(1, o.pageSize || 10);
+  const totalItems = Math.max(0, o.totalItems || 0);
+  const onPageChange = o.onPageChange || (() => {});
+  const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+  container.innerHTML = '';
+  if (totalPages <= 1) { container.hidden = true; return; }
+  container.hidden = false;
+  const from = (page - 1) * pageSize + 1;
+  const to = Math.min(page * pageSize, totalItems);
+  container.appendChild(el('span', null, 'Showing ' + from + '-' + to + ' of ' + totalItems));
+  const wrap = el('div', 'adm-pager');
+  wrap.style.cssText = 'display:inline-flex;gap:6px;align-items:center;margin-left:16px;';
+  const prev = el('button', 'ui-btn ghost' + (page <= 1 ? ' disabled' : ''), 'Prev');
+  prev.type = 'button';
+  prev.disabled = page <= 1;
+  prev.addEventListener('click', () => { if (page > 1) onPageChange(page - 1); });
+  wrap.appendChild(prev);
+  for (let p = 1; p <= totalPages; p++) {
+    const b = el('button', 'ui-btn ghost' + (p === page ? ' active' : ''), String(p));
+    b.type = 'button';
+    b.addEventListener('click', () => { onPageChange(p); });
+    wrap.appendChild(b);
+  }
+  const next = el('button', 'ui-btn ghost' + (page >= totalPages ? ' disabled' : ''), 'Next');
+  next.type = 'button';
+  next.disabled = page >= totalPages;
+  next.addEventListener('click', () => { if (page < totalPages) onPageChange(page + 1); });
+  wrap.appendChild(next);
+  container.appendChild(wrap);
+}

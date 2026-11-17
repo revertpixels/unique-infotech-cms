@@ -1,14 +1,14 @@
 import { db } from '../config/firebase-config.js';
 import { collection, getDocs, query, where, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, deleteField } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.66';
-import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.66';
-import { buildStats, buildToolbar } from '../components/list-page.js?v=1.8.66';
-import { createSelect } from '../components/ui-select.js?v=1.8.66';
-import { createMultiSelect } from '../components/multi-select.js?v=1.8.66';
-import { openMenu } from '../components/ui-menu.js?v=1.8.66';
-import { confirmDialog } from '../components/ui-confirm.js?v=1.8.66';
-import { loadSessions } from '../core/sessions.js?v=1.8.66';
-import { batchAllowsCourse, batchCourseLabel, batchCourseTooltip, isCourseActive } from '../utils/session-rules.js?v=1.8.66';
+import { showToast } from '../components/toast.js?v=1.8.68';
+import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.68';
+import { buildStats, buildToolbar } from '../components/list-page.js?v=1.8.68';
+import { createSelect } from '../components/ui-select.js?v=1.8.68';
+import { createMultiSelect } from '../components/multi-select.js?v=1.8.68';
+import { openMenu } from '../components/ui-menu.js?v=1.8.68';
+import { confirmDialog } from '../components/ui-confirm.js?v=1.8.68';
+import { loadSessions } from '../core/sessions.js?v=1.8.68';
+import { batchAllowsCourse, batchCourseLabel, batchCourseTooltip, isCourseActive } from '../utils/session-rules.js?v=1.8.68';
 // Batches Part 2A/2B: add/edit form, delete, student capacity
 
 const TEXT_KEYS = ['name', 'code', 'capacity'];
@@ -50,8 +50,13 @@ export async function mount({ profile, ctx }) {
   const statsHost = $('bt-stats');
   const stats = buildStats([
     { label: 'Total batches', value: 0, sub: 'This centre', icon: 'users-round', tone: 'indigo' },
-    { label: 'Running', value: 0, sub: 'Classes in progress', icon: 'play-circle', tone: 'green' },
-    { label: 'Upcoming', value: 0, sub: 'Not started yet', icon: 'calendar-clock', tone: 'amber' },
+    ...(youth ? [
+      { label: 'Running', value: 0, sub: 'Classes in progress', icon: 'play-circle', tone: 'green' },
+      { label: 'Upcoming', value: 0, sub: 'Not started yet', icon: 'calendar-clock', tone: 'amber' }
+    ] : [
+      { label: 'Active', value: 0, sub: 'Active batches', icon: 'play-circle', tone: 'green' },
+      { label: 'Inactive', value: 0, sub: 'Inactive batches', icon: 'calendar-clock', tone: 'amber' }
+    ]),
     { label: 'Students', value: 0, sub: 'Across all batches', icon: 'graduation-cap', tone: 'violet' }
   ]);
   if (statsHost) statsHost.appendChild(stats.el);
@@ -60,15 +65,15 @@ export async function mount({ profile, ctx }) {
   const tbHost = $('bt-toolbar');
   const tb = buildToolbar({
     placeholder: 'Search batch, code or course',
-    filters: [
-      { id: 'status', label: 'Status', options: [
-        { value: 'all', label: 'All statuses' }, { value: 'upcoming', label: 'Upcoming' },
-        { value: 'running', label: 'Running' }, { value: 'completed', label: 'Completed' },
-        { value: 'archived', label: 'Archived' }
-      ]},
-      { id: 'session', label: 'Session', options: [{ value: 'all', label: 'All sessions' }] },
-      ...(youth ? [{ id: 'branch', label: 'Branch', options: [{ value: 'all', label: 'All branches' }] }] : []),
-      { id: 'course', label: 'Course', options: [{ value: 'all', label: 'All courses', icon: 'book-open' }] },
+      filters: [
+        { id: 'status', label: 'Status', options: [
+          { value: 'all', label: 'All statuses' }, { value: 'upcoming', label: 'Upcoming' },
+          { value: 'running', label: 'Running' }, { value: 'completed', label: 'Completed' },
+          { value: 'archived', label: 'Archived' }
+        ]},
+        ...(youth ? [{ id: 'session', label: 'Session', options: [{ value: 'all', label: 'All sessions' }] }] : []),
+        ...(youth ? [{ id: 'branch', label: 'Branch', options: [{ value: 'all', label: 'All branches' }] }] : []),
+        { id: 'course', label: 'Course', options: [{ value: 'all', label: 'All courses', icon: 'book-open' }] },
       { id: 'level', label: 'Level', options: [
         { value: 'all', label: 'All levels' }, { value: '1', label: 'Semester 1 (Base Course)' },
         { value: '2', label: 'Semester 2 (Combo Course)' }, { value: '3', label: 'Semester 3 (Advanced Course)' }
@@ -86,12 +91,12 @@ export async function mount({ profile, ctx }) {
       branchType: youth ? 'youth' : 'unique-kids',
       onChange: () => { touched = true; refresh(); }
     });
-    sessionSel = createSelect($('bt-session-host'), { options: [{ value: '', label: 'Select a session', icon: 'calendar-range' }], value: '', ariaLabel: 'Session', onChange: () => { paintSessionInfo(); touched = true; refresh(); } });
     if (youth) {
+      sessionSel = createSelect($('bt-session-host'), { options: [{ value: '', label: 'Select a session', icon: 'calendar-range' }], value: '', ariaLabel: 'Session', onChange: () => { paintSessionInfo(); touched = true; refresh(); } });
       branchSel = createSelect($('bt-branch-host'), { options: [{ value: '', label: 'Select a branch', icon: 'git-branch' }], value: '', ariaLabel: 'Branch', onChange: () => { touched = true; refresh(); } });
     } else {
-      $('bt-branch-host').hidden = true;
-      $('bt-branch-fixed').hidden = false;
+      $('bt-session-field').hidden = true;
+      $('bt-branch-field').hidden = true;
     }
   } catch (err) {
     console.error('[batches] form init', err);
@@ -105,8 +110,15 @@ export async function mount({ profile, ctx }) {
   function sessionName(b) { const s = sessions.find(x => x.id === b.sessionId); return s ? (s.name || s.id) : (b.sessionName || ''); }
   function sessionDates(b) { const s = sessions.find(x => x.id === b.sessionId); return s ? { startDate: s.startDate || '', endDate: s.endDate || '' } : null; }
   function isReadOnly(b) { const st = batchStatus(b); return st === 'completed' || st === 'archived'; }
-  // T2: batch status is DERIVED from its session (no stored status).
+  // T2: batch status for Youth is DERIVED from its session.
+  // For Kids (school), batches are session-independent: use stored status, default Active.
   function batchStatus(b) {
+    if (!youth) {
+      const st = b.status || 'active';
+      if (st === 'completed' || st === 'archived') return st;
+      if (st === 'inactive') return 'completed';
+      return 'active';
+    }
     const s = sessions.find(x => x.id === b.sessionId);
     if (!s) return 'completed';
     if (s.status === 'upcoming') return 'upcoming';
@@ -117,6 +129,16 @@ export async function mount({ profile, ctx }) {
   }
 
   function branchName(b) { if (!youth) return b.branchName || 'Head Office'; const br = branches.find(x => x.id === b.branchId); return br ? (br.name || br.id) : (b.branchName || ''); }
+  function resolveBatchBranch({ youth, existingBatch, selectedBranchId, branches }) {
+    if (!youth) {
+      const existingId = typeof existingBatch?.branchId === 'string' ? existingBatch.branchId.trim() : '';
+      const existingName = typeof existingBatch?.branchName === 'string' ? existingBatch.branchName.trim() : '';
+      return { branchId: existingId || 'HO', branchName: existingName || 'Head Office' };
+    }
+    const selected = branches.find(branch => branch.id === selectedBranchId);
+    if (!selected) { throw new Error('Select a valid branch.'); }
+    return { branchId: selected.id, branchName: selected.name || selected.id };
+  }
 
   function paintCourseInfo() {
     // No blue info boxes under Course per UI rule (docs/03-DECISIONS.md).
@@ -156,17 +178,16 @@ export async function mount({ profile, ctx }) {
     v.allCourses = !!cs.allCourses;
     v.courseIds = cs.courseIds && cs.courseIds.length ? cs.courseIds.slice() : [];
     v.courseId = v.allCourses ? null : (v.courseIds[0] || '');
-    v.sessionId = sessionSel.value || '';
-    v.branchId = youth ? (branchSel ? branchSel.value : '') : 'HO';
+    v.sessionId = youth ? (sessionSel.value || '') : '';
+    v.branchId = youth ? (branchSel ? branchSel.value : '') : (editRow && editRow.branchId ? editRow.branchId.trim() : 'HO');
 
     return v;
   }
   function fillForm(v) {
     TEXT_KEYS.forEach((k) => { const e = $('bt-' + k); if (e) e.value = v[k] != null ? v[k] : ''; });
     courseSel.value = { allCourses: !!v.allCourses, courseIds: v.courseIds && v.courseIds.length ? v.courseIds.slice() : (v.courseId ? [v.courseId] : []) };
-    sessionSel.value = v.sessionId || '';
-    if (youth && branchSel) branchSel.value = v.branchId || '';
-    paintSessionInfo();
+    if (youth) sessionSel.value = v.sessionId || '';
+    if (youth) paintSessionInfo();
     renderCourseChips();
   }
   function snapshot(v) { return JSON.stringify(v || readForm()); }
@@ -209,7 +230,7 @@ export async function mount({ profile, ctx }) {
     const err = {};
     if (!v.name) err.name = 'Batch name is required.';
     if (!v.allCourses && (!v.courseIds || v.courseIds.length === 0)) err.course = 'Select at least one course.';
-    if (!v.sessionId) err.session = 'Select a session.';
+    if (youth && !v.sessionId) err.session = 'Select a session.';
     if (youth && !v.branchId) err.branch = 'Select a branch.';
     const rawCap = $('bt-capacity').value.trim();
     if (rawCap !== '') {
@@ -219,7 +240,7 @@ export async function mount({ profile, ctx }) {
     return err;
   }
   function showErrors(err) {
-    ['name', 'course', 'session', 'branch', 'capacity'].forEach((k) => {
+    ['name', 'course', ...(youth ? ['session', 'branch'] : []), 'capacity'].forEach((k) => {
       const box = $('bt-' + k + '-err');
       if (box) box.textContent = err[k] || '';
       const el = $('bt-' + k);
@@ -240,7 +261,9 @@ export async function mount({ profile, ctx }) {
   function rebuildSelectOptions() {
     const activeSessions = sessions.filter(s => s.status === 'upcoming' || s.status === 'running');
     courseSel.setOptions(courses.filter(isCourseActive).map(c => ({ value: c.id, label: (courseCode(c) ? courseCode(c) + '  -  ' : '') + (c.name || c.id), icon: 'book-open' })));
-    sessionSel.setOptions([{ value: '', label: 'Select a session', icon: 'calendar-range' }].concat(activeSessions.map(s => ({ value: s.id, label: s.name || s.id, icon: 'calendar-range' }))));
+    if (youth) {
+      sessionSel.setOptions([{ value: '', label: 'Select a session', icon: 'calendar-range' }].concat(activeSessions.map(s => ({ value: s.id, label: s.name || s.id, icon: 'calendar-range' }))));
+    }
     if (youth && branchSel) {
       const activeBranches = branches.filter(b => (b.status || 'active') === 'active');
       branchSel.setOptions([{ value: '', label: 'Select a branch', icon: 'git-branch' }].concat(activeBranches.map(b => ({ value: b.id, label: b.name || b.id, icon: 'git-branch' }))));
@@ -251,13 +274,13 @@ export async function mount({ profile, ctx }) {
     try {
       const bSnap = await getDocs(query(collection(db, 'batches'), where('ctx', '==', ctx)));
       batches = bSnap.docs.map(d => Object.assign({ id: d.id }, d.data()));
-      // T2: load ALL sessions of this ctx (incl. closed/archived) for batchStatus lookups.
-      const sessSnap = await getDocs(query(collection(db, 'sessions'), where('ctx', '==', ctx)));
-      sessions = sessSnap.docs.map(d => Object.assign({ id: d.id }, d.data()));
       if (youth) {
-        const brSnap = await getDocs(collection(db, 'branches'));
-        branches = brSnap.docs.map(d => Object.assign({ id: d.id }, d.data())).filter(b => (b.status || 'active') === 'active');
+        // T2: load ALL sessions of this ctx (incl. closed/archived) for batchStatus lookups.
+        const sessSnap = await getDocs(query(collection(db, 'sessions'), where('ctx', '==', ctx)));
+        sessions = sessSnap.docs.map(d => Object.assign({ id: d.id }, d.data()));
       }
+      const brSnap = await getDocs(collection(db, 'branches'));
+      branches = brSnap.docs.map(d => Object.assign({ id: d.id }, d.data())).filter(b => (b.status || 'active') === 'active');
       const cSnap = await getDocs(query(collection(db, 'courses'), where('ctx', '==', ctx)));
       courses = cSnap.docs.map(d => Object.assign({ id: d.id }, d.data()));
       coursesById = {};
@@ -267,8 +290,10 @@ export async function mount({ profile, ctx }) {
       showToast('Could not load batches (' + (e.code || 'error') + ').', 'error');
       batches = []; sessions = []; branches = []; courses = []; coursesById = {};
     }
-    tb.setFilterOptions('session', [{ value: 'all', label: 'All sessions', icon: 'calendar-range' }].concat(sessions.map(s => ({ value: s.id, label: s.name || s.id, icon: 'calendar-range' }))));
-    if (youth) tb.setFilterOptions('branch', [{ value: 'all', label: 'All branches', icon: 'git-branch' }].concat(branches.map(b => ({ value: b.id, label: b.name || b.id, icon: 'git-branch' }))));
+    if (youth) {
+      tb.setFilterOptions('session', [{ value: 'all', label: 'All sessions', icon: 'calendar-range' }].concat(sessions.map(s => ({ value: s.id, label: s.name || s.id, icon: 'calendar-range' }))));
+      tb.setFilterOptions('branch', [{ value: 'all', label: 'All branches', icon: 'git-branch' }].concat(branches.map(b => ({ value: b.id, label: b.name || b.id, icon: 'git-branch' }))));
+    }
     tb.setFilterOptions('course', [{ value: 'all', label: 'All courses', icon: 'book-open' }].concat(courses.map(c => ({ value: c.id, label: (courseCode(c) ? courseCode(c) + '  -  ' : '') + (c.name || c.id), icon: 'book-open' }))));
     rebuildSelectOptions();
     render();
@@ -277,12 +302,14 @@ export async function mount({ profile, ctx }) {
   function openForm(r, readOnly) {
     editId = r ? r.id : null;
     editRow = r || null;
+    const branchInfo = resolveBatchBranch({ youth, existingBatch: r, selectedBranchId: null, branches });
     const v = r ? {
       name: r.name || '', code: r.code || '', courseId: r.courseId || '',
       allCourses: !!r.allCourses, courseIds: r.courseIds && r.courseIds.slice(),
-      sessionId: r.sessionId || '', branchId: youth ? (r.branchId || '') : 'HO',
+      sessionId: youth ? (r.sessionId || '') : '',
+      branchId: branchInfo.branchId,
       capacity: (r.capacity === 0 || r.capacity) ? String(r.capacity) : ''
-    } : Object.assign({}, BLANK, { branchId: youth ? '' : 'HO' });
+    } : Object.assign({}, BLANK, { branchId: youth ? '' : branchInfo.branchId });
     // T2: set course options before filling form so selection renders correctly. Only active courses are offered.
     courseSel.setOptions(courses.filter(isCourseActive).map(c => ({ value: c.id, label: (courseCode(c) ? courseCode(c) + '  -  ' : '') + (c.name || c.id), icon: 'book-open' })));
     fillForm(v);
@@ -291,7 +318,7 @@ export async function mount({ profile, ctx }) {
     form.hidden = false;
     touched = false;
     showErrors({});
-    paintSessionInfo();
+    if (youth) paintSessionInfo();
     if (readOnly) {
       form.querySelectorAll('input, select, textarea').forEach(el => { el.readOnly = true; el.disabled = true; });
       form.querySelectorAll('.ui-select-btn').forEach(b => { b.disabled = true; });
@@ -328,11 +355,17 @@ export async function mount({ profile, ctx }) {
   function render() {
     if (!rowsHost) return;
     rowsHost.innerHTML = '';
+
+    // T2: align header/body columns for Kids (no Session or Branch columns)
+    const sessHeader = document.getElementById('bt-col-session');
+    const branchHeader = document.getElementById('bt-col-branch');
+    if (sessHeader) sessHeader.hidden = !youth;
+    if (branchHeader) branchHeader.hidden = !youth;
     const f = tb.state || {};
     const q = (f.q || '').toLowerCase();
     const list = batches.filter(b => {
       if (f.status && f.status !== 'all' && batchStatus(b) !== f.status) return false;
-      if (f.session && f.session !== 'all' && b.sessionId !== f.session) return false;
+      if (youth && f.session && f.session !== 'all' && b.sessionId !== f.session) return false;
       if (youth && f.branch && f.branch !== 'all' && b.branchId !== f.branch) return false;
       if (f.course && f.course !== 'all' && !batchAllowsCourse(b, f.course, courses)) return false;
       if (f.level && f.level !== 'all' && String(b.courseLevel || '') !== f.level) return false;
@@ -345,13 +378,23 @@ export async function mount({ profile, ctx }) {
     });
 
     const total = batches.length;
-    const running = batches.filter(x => batchStatus(x) === 'running').length;
-    const upcoming = batches.filter(x => batchStatus(x) === 'upcoming').length;
-    const students = batches.reduce((a, b) => a + (b.studentCount || 0), 0);
-    stats.update(0, total, 'This centre');
-    stats.update(1, running, 'Classes in progress');
-    stats.update(2, upcoming, 'Not started yet');
-    stats.update(3, students, 'Across all batches');
+    if (youth) {
+      const running = batches.filter(x => batchStatus(x) === 'running').length;
+      const upcoming = batches.filter(x => batchStatus(x) === 'upcoming').length;
+      const students = batches.reduce((a, b) => a + (b.studentCount || 0), 0);
+      stats.update(0, total, 'This centre');
+      stats.update(1, running, 'Classes in progress');
+      stats.update(2, upcoming, 'Not started yet');
+      stats.update(3, students, 'Across all batches');
+    } else {
+      const active = batches.filter(x => batchStatus(x) === 'active').length;
+      const inactive = batches.filter(x => batchStatus(x) === 'completed' || batchStatus(x) === 'archived' || batchStatus(x) === 'inactive').length;
+      const students = batches.reduce((a, b) => a + (b.studentCount || 0), 0);
+      stats.update(0, total, 'This centre');
+      stats.update(1, active, 'Active batches');
+      stats.update(2, inactive, 'Inactive batches');
+      stats.update(3, students, 'Across all batches');
+    }
 
     if (countEl) countEl.textContent = batches.length + ' ' + (batches.length === 1 ? 'batch' : 'batches');
     if (empty) empty.hidden = batches.length > 0;
@@ -360,7 +403,7 @@ export async function mount({ profile, ctx }) {
       const tr = document.createElement('tr');
       const td = document.createElement('td');
       td.className = 'lp-empty';
-      td.colSpan = 7;
+      td.colSpan = youth ? 7 : 5;
       td.textContent = 'No batches match your search or filter.';
       tr.appendChild(td);
       rowsHost.appendChild(tr);
@@ -388,20 +431,22 @@ export async function mount({ profile, ctx }) {
       if (tip) tdCourse.title = tip;
       tr.appendChild(tdCourse);
 
-      const tdSess = document.createElement('td');
-      const s0 = sessions.find(x => x.id === b.sessionId);
-      const sessLine = document.createElement('div');
-      sessLine.className = 'bt-name';
-      sessLine.textContent = sessionName(b) || '\u2014';
-      tdSess.appendChild(sessLine);
-      if (s0 && (s0.startDate || s0.endDate)) {
-        const dline = document.createElement('div');
-        dline.className = 'bt-sess-dates';
-        const fmt = (iso) => { if (!iso) return ''; const p2 = iso.split('-').map(Number); const dt = new Date(p2[0], p2[1]-1, p2[2]); return dt.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }); };
-        dline.textContent = fmt(s0.startDate) + ' \u2013 ' + fmt(s0.endDate);
-        tdSess.appendChild(dline);
+      if (youth) {
+        const tdSess = document.createElement('td');
+        const s0 = sessions.find(x => x.id === b.sessionId);
+        const sessLine = document.createElement('div');
+        sessLine.className = 'bt-name';
+        sessLine.textContent = sessionName(b) || '\u2014';
+        tdSess.appendChild(sessLine);
+        if (s0 && (s0.startDate || s0.endDate)) {
+          const dline = document.createElement('div');
+          dline.className = 'bt-sess-dates';
+          const fmt = (iso) => { if (!iso) return ''; const p2 = iso.split('-').map(Number); const dt = new Date(p2[0], p2[1]-1, p2[2]); return dt.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }); };
+          dline.textContent = fmt(s0.startDate) + ' \u2013 ' + fmt(s0.endDate);
+          tdSess.appendChild(dline);
+        }
+        tr.appendChild(tdSess);
       }
-      tr.appendChild(tdSess);
 
       if (youth) {
         const tdBr = document.createElement('td');
@@ -460,25 +505,35 @@ export async function mount({ profile, ctx }) {
   function focusFirstError(err) {
     if (err.name) return $('bt-name').focus();
     if (err.course) return courseSel.focus();
-    if (err.session) return sessionSel.focus();
-    if (err.branch && youth && branchSel) return branchSel.focus();
+    if (youth && err.session) return sessionSel.focus();
+    if (youth && err.branch && branchSel) return branchSel.focus();
     if (err.capacity) return $('bt-capacity').focus();
   }
 
   async function save() {
+    if (saving) return;
+
     const v = readForm();
     touched = true;
     const err = validate(v);
     showErrors(err);
-    const firstBad = ['name', 'course', 'session', 'branch', 'start', 'end', 'capacity'].find(k => err[k]);
+    const checkKeys = youth ? ['name', 'course', 'session', 'branch', 'capacity'] : ['name', 'course', 'capacity'];
+    const firstBad = checkKeys.find(k => err[k]);
     if (firstBad) {
       noteState('Please fix the highlighted fields', 'error');
       focusFirstError(err);
       return;
     }
     const course = coursesById[v.courseId] || {};
-    const session = sessions.find(s => s.id === v.sessionId) || {};
-    const branch = youth ? (branches.find(b => b.id === v.branchId) || {}) : { id: 'HO', name: 'Head Office' };
+    const session = youth ? (sessions.find(s => s.id === v.sessionId) || {}) : {};
+    let branchInfo;
+    try {
+      branchInfo = resolveBatchBranch({ youth, existingBatch: editRow, selectedBranchId: v.branchId, branches });
+    } catch (e) {
+      noteState(e.message, 'error');
+      showToast(e.message, 'error');
+      return;
+    }
     const who = (profile && profile.email) ? profile.email : '';
     const capRaw = $('bt-capacity').value.trim();
     const capacity = capRaw === '' ? null : Number(capRaw);
@@ -496,10 +551,9 @@ export async function mount({ profile, ctx }) {
       prerequisiteCourseCode: prereq || null,
       allCourses: !!v.allCourses,
       courseIds: v.courseIds,
-      sessionId: v.sessionId,
-      sessionName: session.name || session.id || v.sessionId,
-      branchId: branch.id || v.branchId,
-      branchName: branch.name || (youth ? v.branchId : 'Head Office'),
+      ...(youth ? { sessionId: v.sessionId, sessionName: session.name || session.id || v.sessionId } : {}),
+      branchId: branchInfo.branchId,
+      branchName: branchInfo.branchName,
       capacity,
       updatedAt: serverTimestamp(),
       updatedBy: who
@@ -523,16 +577,18 @@ export async function mount({ profile, ctx }) {
       const wasEdit = !!editId;
       if (editId) await updateDoc(doc(db, 'batches', editId), data);
       else await addDoc(collection(db, 'batches'), data);
-      saving = false;
       closeForm();
       await load();
       showToast(wasEdit ? 'Batch updated.' : 'Batch added.', 'success');
     } catch (e) {
       console.error('[batches] save failed', e);
-      saving = false;
       refresh();
       noteState('Save failed (' + (e.code || 'error') + ')', 'error');
       showToast('Save failed (' + (e.code || 'error') + ').', 'error');
+    } finally {
+      saving = false;
+      saveBtn.disabled = false;
+      cancelBtn.disabled = false;
     }
   }
 

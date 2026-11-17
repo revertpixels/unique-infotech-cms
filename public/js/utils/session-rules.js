@@ -126,7 +126,7 @@ export function batchCourseLabel(batch, courses) {
   if (batch.allCourses) return 'All courses';
   const ids = batch.courseIds && batch.courseIds.length ? batch.courseIds : (batch.courseId ? [batch.courseId] : []);
   if (ids.length === 0) return ' - ';
-  const labels = ids.map((id) => { const c = courses.find((x) => x.id === id); return c ? (c.courseCode || c.code || c.id) : id; });
+  const labels = ids.map((id) => { const c = courses.find((x) => x.id === id); return c ? (c.name || c.courseCode || c.code || id) : id; });
   if (labels.length === 1) return labels[0];
   if (labels.length <= 3) return labels.join(', ');
   return labels.slice(0, 3).join(', ') + ' +' + (labels.length - 3);

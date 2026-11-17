@@ -1,18 +1,18 @@
 import { db } from '../config/firebase-config.js';
 import { collection, getDocs, query, where, doc, getDoc, serverTimestamp, runTransaction } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.66';
-import { registerDirty, confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.66';
-import { buildStats, buildToolbar } from '../components/list-page.js?v=1.8.66';
-import { createSelect } from '../components/ui-select.js?v=1.8.66';
-import { openMenu } from '../components/ui-menu.js?v=1.8.66';
-import { confirmDialog } from '../components/ui-confirm.js?v=1.8.66';
-import { getSelectedSessionId, getCachedSessions, loadSessions, todayISO } from '../core/sessions.js?v=1.8.66';
-import { firstInstallmentOf, admissionState, sessionLabel, installmentSchedule, batchAllowsCourse, batchCourseLabel, isCourseActive } from '../utils/session-rules.js?v=1.8.66';
-import { formatINR, formatDateIN, initials } from '../utils/formatter.js?v=1.8.66';
-import { validatePhone, validateEmail, validateDOB, validateName, validateRequired } from '../utils/validator.js?v=1.8.66';
-import { listStudentsRaw, checkDuplicatePhone, readStudentId, readReceiptNo, writeCounter, createStudentWithDocs, updateStudentWithDocs, updateStudent, deleteStudent } from '../services/admission.service.js?v=1.8.66';
-import { feeTotal } from '../utils/fees.js?v=1.8.66';
-import { compressTo100KB, readAsDataURL, blobToDataURL, isImageFile, formatBytes } from '../utils/image-compress.js?v=1.8.66';
+import { showToast } from '../components/toast.js?v=1.8.68';
+import { registerDirty, confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.68';
+import { buildStats, buildToolbar, renderPager } from '../components/list-page.js?v=1.8.68';
+import { createSelect } from '../components/ui-select.js?v=1.8.68';
+import { openMenu } from '../components/ui-menu.js?v=1.8.68';
+import { confirmDialog } from '../components/ui-confirm.js?v=1.8.68';
+import { getSelectedSessionId, getCachedSessions, loadSessions, todayISO } from '../core/sessions.js?v=1.8.68';
+import { firstInstallmentOf, admissionState, sessionLabel, installmentSchedule, batchAllowsCourse, batchCourseLabel, isCourseActive } from '../utils/session-rules.js?v=1.8.68';
+import { formatINR, formatDateIN, initials } from '../utils/formatter.js?v=1.8.68';
+import { validatePhone, validateEmail, validateDOB, validateName, validateRequired } from '../utils/validator.js?v=1.8.68';
+import { listStudentsRaw, checkDuplicatePhone, readStudentId, readReceiptNo, writeCounter, createStudentWithDocs, updateStudentWithDocs, updateStudent, deleteStudent } from '../services/admission.service.js?v=1.8.68';
+import { feeTotal } from '../utils/fees.js?v=1.8.68';
+import { compressTo100KB, readAsDataURL, blobToDataURL, isImageFile, formatBytes } from '../utils/image-compress.js?v=1.8.68';
 
 const COL = 'students';
 
@@ -36,7 +36,7 @@ const STATUS_PILLS = [
   { value: 'dropped', label: 'Dropped', cls: 'dropped' },
   { value: 'completed', label: 'Completed', cls: 'completed' }
 ];
-const PAGE_SIZE = 25;
+const PAGE_SIZE = 10;
 
 const DOC_KEYS = ['photo', 'signature', 'dobProof', 'marksheet'];
 const DOC_LABELS = {
@@ -149,7 +149,7 @@ export async function mount({ container, profile, ctx }) {
   const tb = buildToolbar({
     placeholder: 'Search name, student ID, phone or guardian',
     filters: tbFilters,
-    onChange: () => render(),
+    onChange: () => { page = 1; render(); },
     onRefresh: () => load()
   });
   const tbHost = $('adm-toolbar');
@@ -304,8 +304,9 @@ function dueLabel(dueISO) {
   async function load() {
     showSkeleton();
     try {
+      const ctxConstraint = where('ctx', '==', 'youth');
       const branchConstraint = isHead ? where('branchId', '==', fixedBranch) : null;
-      const q = branchConstraint ? query(collection(db, 'students'), branchConstraint) : collection(db, 'students');
+      const q = branchConstraint ? query(collection(db, 'students'), ctxConstraint, branchConstraint) : query(collection(db, 'students'), ctxConstraint);
       const sSnap = await getDocs(q);
       students = sSnap.docs.map((d) => Object.assign({ id: d.id }, d.data()));
 
@@ -1158,15 +1159,18 @@ function dueLabel(dueISO) {
         const tdSt = mk('td');
         tdSt.appendChild(mk('b', '', s.name || ' - '));
         tdSt.appendChild(mk('br'));
-        tdSt.appendChild(mk('span', '', (s.guardianName || '') + (s.guardianName ? '  ·  ' : '') + (c.courseCode || c.code || '')));
+        tdSt.appendChild(mk('span', 'adm-sub', s.guardianName || '-'));
         tr.appendChild(tdSt);
 
         tr.appendChild(mk('td', 'hide-sm', s.phone || ' - '));
 
         const tdCb = mk('td');
-        tdCb.appendChild(mk('b', '', (c.courseCode || c.code || '') + '  -  ' + (c.name || '')));
+        const code = c.courseCode || c.code || '';
+        const courseName = c.name || '';
+        const line1 = code && courseName ? (code + '  -  ' + courseName) : (code || courseName || '-');
+        tdCb.appendChild(mk('span', '', line1));
         tdCb.appendChild(mk('br'));
-        tdCb.appendChild(mk('span', '', b.name || ' - '));
+        tdCb.appendChild(mk('span', 'adm-sub', b.name || '-'));
         tr.appendChild(tdCb);
 
         tr.appendChild(mk('td', 'hide-sm', formatDateIN(s.admissionDate)));
@@ -1204,18 +1208,7 @@ function dueLabel(dueISO) {
       });
 
       if (footEl) {
-        if (totalPages <= 1) {
-          footEl.hidden = true;
-        } else {
-          footEl.hidden = false;
-          const showingFrom = start + 1;
-          const showingTo = Math.min(start + pageList.length, list.length);
-          footEl.textContent = 'Showing ' + showingFrom + '-' + showingTo + ' of ' + list.length;
-          footEl.innerHTML += ' <div style="display:inline-flex;gap:6px;align-items:center;margin-left:16px;">' +
-            '<button type="button" id="adm-prev" class="ui-btn ghost' + (page <= 1 ? ' disabled' : '') + '">Prev</button>' +
-            '<button type="button" id="adm-next" class="ui-btn ghost' + (page >= totalPages ? ' disabled' : '') + '">Next</button>' +
-            '</div>';
-        }
+        renderPager(footEl, { page, pageSize: PAGE_SIZE, totalItems: list.length, onPageChange: (p) => { page = p; render(); } });
       }
     }
 
@@ -1895,13 +1888,6 @@ function dueLabel(dueISO) {
       upload.classList.remove('compressing');
       if (spin && spin.parentNode === upload) upload.removeChild(spin);
     }
-  }
-
-  if (footEl) {
-    footEl.addEventListener('click', (ev) => {
-      if (ev.target.id === 'adm-prev' && page > 1) { page--; render(); }
-      if (ev.target.id === 'adm-next') { const tp = Math.max(1, Math.ceil(filteredList.length / PAGE_SIZE)); if (page < tp) { page++; render(); } }
-    });
   }
 
   await load();

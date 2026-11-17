@@ -50,3 +50,10 @@ td.br-actions { text-align: right; width: 1%; white-space: nowrap; }
 .br-map:hover { text-decoration: underline; }
 .br-head-name{display:flex;align-items:center;gap:6px}
 .br-dot-off{display:inline-block;flex:0 0 8px;width:8px;height:8px;border-radius:50%;background:#DC2626}
+
+/* 1.8.68 - organisation phone rows (max 3) */
+.org-phones { display: flex; flex-direction: column; gap: 8px; }
+.org-phone-row { display: flex; gap: 8px; align-items: center; }
+.org-phone-row .ui-input-wrap { flex: 1; }
+.org-phone-del { padding: 0 10px; min-width: 38px; height: 38px; }
+.org-phone-add { margin-top: 8px; align-self: flex-start; }

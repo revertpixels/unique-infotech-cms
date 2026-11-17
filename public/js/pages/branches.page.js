@@ -4,13 +4,13 @@ import { createSelect } from '../components/ui-select.js';
 import { openMenu } from '../components/ui-menu.js';
 import { confirmDialog } from '../components/ui-confirm.js';
 import { showToast } from '../components/toast.js';
-import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.66';
+import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.68';
 import { buildStats, buildToolbar } from '../components/list-page.js';
 
 const TEXT_KEYS = ['name', 'code', 'email', 'address', 'mapUrl'];
 const KEYS = ['name', 'code', 'phones', 'email', 'address', 'mapUrl', 'status'];
 const BLANK = { name: '', code: '', phones: [], email: '', address: '', mapUrl: '', status: 'active' };
-const MAX_PHONES = 5;
+const MAX_PHONES = 3;
 const PHONE_RE = /^[0-9+\-\s()]{7,20}$/;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const MAP_RE = /^https:\/\/(www\.)?(google\.[a-z.]+\/maps|maps\.google\.[a-z.]+|maps\.app\.goo\.gl|goo\.gl\/maps)\S*$/i;

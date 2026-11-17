@@ -36,10 +36,11 @@
         <p>Printed on fee receipts so parents and students can reach you.</p>
       </div>
       <div class="set-fields">
-        <div class="ui-field">
-          <div class="ui-label-row"><label for="org-phone">Phone</label></div>
-          <div class="ui-input-wrap"><i data-lucide="phone"></i><input id="org-phone" class="ui-input" type="tel" maxlength="20" autocomplete="off" placeholder="e.g. 98765 43210"></div>
-          <div class="ui-err" id="org-phone-err"></div>
+        <div class="ui-field span-2">
+          <div class="ui-label-row"><label>Phone numbers</label><span class="ui-count" id="org-phones-count">0/3</span></div>
+          <div id="org-phones" class="org-phones"></div>
+          <button type="button" id="org-phone-add" class="ui-btn ghost org-phone-add"><i data-lucide="plus"></i>Add number</button>
+          <div class="ui-err" id="org-phones-err"></div>
         </div>
         <div class="ui-field">
           <div class="ui-label-row"><label for="org-email">Email</label></div>
@@ -47,9 +48,15 @@
           <div class="ui-err" id="org-email-err"></div>
         </div>
         <div class="ui-field span-2">
-          <div class="ui-label-row"><label for="org-website">Website</label></div>
-          <div class="ui-input-wrap"><i data-lucide="globe"></i><input id="org-website" class="ui-input" type="text" maxlength="100" autocomplete="off" placeholder="www.example.com"></div>
-          <div class="ui-err" id="org-website-err"></div>
+          <div class="ui-label-row"><label for="org-email">Email</label></div>
+          <div class="ui-input-wrap"><i data-lucide="mail"></i><input id="org-email" class="ui-input" type="email" maxlength="100" autocomplete="off" placeholder="office@example.com"></div>
+          <div class="ui-err" id="org-email-err"></div>
+        </div>
+        <div class="ui-field span-2">
+          <div class="ui-label-row"><label for="org-receiptCode">Receipt code (Kids) <em>*</em></label></div>
+          <div class="ui-input-wrap"><i data-lucide="receipt"></i><input id="org-receiptCode" class="ui-input" type="text" maxlength="12" autocomplete="off" placeholder="e.g. BANKURA"></div>
+          <div class="ui-err" id="org-receiptCode-err"></div>
+          <div class="ui-help">Short uppercase code used in Kids admission receipt numbers.</div>
         </div>
         <div class="ui-field span-2">
           <div class="ui-label-row"><label for="org-address">Address</label><span class="ui-count" data-for="org-address"></span></div>

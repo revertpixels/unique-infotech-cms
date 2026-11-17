@@ -1,0 +1,59 @@
+<div class="sk-wrap uk-students-page">
+  <div class="sk-head-row">
+    <section class="pg-head">
+      <div class="pg-crumbs">Students / <span>All Students</span></div>
+      <h2>All Students</h2>
+      <p>Unique Kids admissions — ongoing, session-independent. Student IDs are permanent (YYYYNNNN).</p>
+    </section>
+    <button type="button" id="sk-add" class="ui-btn primary"><i data-lucide="user-plus"></i>New admission</button>
+  </div>
+
+  <div id="sk-stats"></div>
+  <div id="sk-toolbar"></div>
+
+  <div class="sk-table-card">
+    <div class="sk-scroll">
+      <div id="sk-loading" class="sk-empty" hidden>
+        <i data-lucide="loader-circle"></i>
+        <b>Loading students</b>
+        <span>Please wait while student records are loaded.</span>
+      </div>
+      <table class="sk-table">
+        <thead>
+          <tr>
+            <th>Student ID</th>
+            <th>Student</th>
+            <th class="hide-sm">Guardian</th>
+            <th class="hide-sm">Phone</th>
+            <th>Level</th>
+            <th>Batch</th>
+            <th class="hide-sm">Admission Date</th>
+            <th class="hide-md">Status</th>
+            <th class="sk-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="sk-rows"></tbody>
+      </table>
+      <div id="sk-empty" class="sk-empty" hidden>
+        <i data-lucide="user-plus"></i>
+        <b>No students yet</b>
+        <span>Admitted students will appear here.</span>
+        <button type="button" id="sk-empty-add" class="ui-btn primary"><i data-lucide="user-plus"></i>New admission</button>
+      </div>
+      <div id="sk-no-match" class="sk-empty" hidden>
+        <i data-lucide="search"></i>
+        <b>No matching records</b>
+        <span>Try clearing your search or filters.</span>
+        <button type="button" id="sk-no-match-clear" class="ui-btn ghost">Clear filters</button>
+      </div>
+      <div id="sk-load-error" class="sk-empty" hidden>
+        <i data-lucide="alert-circle"></i>
+        <b>Could not load students</b>
+        <span id="sk-load-error-msg"></span>
+        <button type="button" id="sk-load-error-retry" class="ui-btn primary"><i data-lucide="refresh-cw"></i>Retry</button>
+        <button type="button" id="sk-load-error-back" class="ui-btn ghost">Back</button>
+      </div>
+      <div class="sk-card-foot" id="sk-foot" hidden></div>
+    </div>
+  </div>
+</div>

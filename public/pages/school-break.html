@@ -1,0 +1,54 @@
+<div class="sk-wrap uk-break-page">
+  <div class="sk-head-row">
+    <section class="pg-head">
+      <div class="pg-crumbs">Students / <span>Break Management</span></div>
+      <h2>Break Management</h2>
+      <p>Approved break months: no classes, no monthly fee, not overdue. Store reason and approval history.</p>
+    </section>
+  </div>
+
+  <div id="skb-stats"></div>
+  <div id="skb-toolbar"></div>
+
+    <div class="sk-table-card">
+    <div class="sk-scroll">
+      <div id="skb-loading" class="sk-empty" hidden>
+        <i data-lucide="loader-circle"></i>
+        <b>Loading break requests</b>
+        <span>Please wait while break records are loaded.</span>
+      </div>
+      <table class="sk-table">
+        <thead>
+          <tr>
+            <th>Student ID</th>
+            <th>Student</th>
+            <th>Break period</th>
+            <th>Reason</th>
+            <th>Status</th>
+            <th>Requested by</th>
+            <th class="skb-actions">Action</th>
+          </tr>
+        </thead>
+        <tbody id="skb-rows"></tbody>
+      </table>
+      <div id="skb-empty" class="sk-empty" hidden>
+        <i data-lucide="pause-circle"></i>
+        <b>No break requests yet</b>
+        <span>Approved break requests will appear here.</span>
+      </div>
+      <div id="skb-no-match" class="sk-empty" hidden>
+        <i data-lucide="search"></i>
+        <b>No matching records</b>
+        <span>Try clearing your search or filters.</span>
+        <button type="button" id="skb-no-match-clear" class="ui-btn ghost">Clear filters</button>
+      </div>
+      <div id="skb-load-error" class="sk-empty" hidden>
+        <i data-lucide="alert-circle"></i>
+        <b>Could not load break requests</b>
+        <span id="skb-load-error-msg"></span>
+        <button type="button" id="skb-load-error-retry" class="ui-btn primary"><i data-lucide="refresh-cw"></i>Retry</button>
+        <button type="button" id="skb-load-error-back" class="ui-btn ghost">Back</button>
+      </div>
+      <div class="sk-card-foot" id="skb-foot" hidden></div>
+  </div>
+</div>

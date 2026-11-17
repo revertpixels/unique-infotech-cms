@@ -1,0 +1,113 @@
+/* Unique Kids admission receipt — scoped so it cannot restyle the host app. */
+.uk-receipt-page :root{--ink:#1d1a3a;--muted:#5b5f85;--line:#b9bfdc;--navy:#333b84;--deep:#291670;--gold:#151caa;--bg:#e4e6f0;--tint:#eceefa}
+.uk-receipt-page *{box-sizing:border-box}
+.uk-receipt-page body{margin:0;font-family:'IBM Plex Sans',system-ui,sans-serif;background:var(--bg);color:var(--ink)}
+.uk-receipt-page .uk-toolbar{position:sticky;top:0;z-index:5;display:flex;gap:10px;justify-content:center;padding:12px;background:#fff;border-bottom:1px solid var(--line)}
+.uk-receipt-page .btn{border:1px solid var(--navy);border-radius:3px;padding:9px 22px;font:600 14px 'IBM Plex Sans',sans-serif;cursor:pointer}
+.uk-receipt-page .btn.p{background:var(--navy);color:#fff}
+.uk-receipt-page .btn.s{background:#fff;color:var(--navy)}
+.uk-receipt-page .btn:focus-visible{outline:3px solid #888}
+.uk-receipt-page .uk-stage{overflow:auto;padding:24px 12px}
+.uk-receipt-page .uk-page{width:794px;height:1122px;margin:0 auto 24px;background:#fff;position:relative;overflow:hidden;border:1px solid var(--line);font-size:12.5px;color:var(--ink);padding:30px 46px}
+
+/* header */
+.uk-receipt-page .uk-hd{display:flex;align-items:center;gap:18px;padding-bottom:14px;border-bottom:3px solid var(--navy);position:relative}
+.uk-receipt-page .uk-hd:after{content:"";position:absolute;left:0;right:0;bottom:-7px;border-bottom:1px solid var(--gold)}
+.uk-receipt-page .uk-logo{width:68px;height:68px;background:var(--navy);color:#fff;display:grid;place-items:center;font:800 28px 'Libre Franklin',sans-serif;flex:none;border-bottom:4px solid var(--deep)}
+.uk-receipt-page .uk-hd h1{font:800 29px 'Libre Franklin',sans-serif;letter-spacing:-.015em;margin:0 0 3px;color:var(--deep)}
+.uk-receipt-page .uk-iso{font-size:13px;font-weight:600;color:var(--navy);margin-bottom:3px}
+.uk-receipt-page .uk-br{font-size:12.5px;font-weight:600;color:#2b2850;margin-bottom:3px}
+.uk-receipt-page .uk-ct{font-size:11.5px;color:#2b2850;line-height:1.55}
+.uk-receipt-page .uk-ct b{font-weight:600;color:var(--ink)}
+.uk-receipt-page .uk-mini{display:flex;align-items:center;justify-content:space-between;padding-bottom:10px;border-bottom:3px solid var(--navy);position:relative}
+.uk-receipt-page .uk-mini:after{content:"";position:absolute;left:0;right:0;bottom:-6px;border-bottom:1px solid var(--gold)}
+.uk-receipt-page .uk-mini .l{display:flex;align-items:center;gap:12px}
+.uk-receipt-page .uk-receipt-logo.img{background:none;border-bottom:0}
+.uk-receipt-page .uk-receipt-logo img{width:100%;height:100%;object-fit:contain;display:block}
+.uk-receipt-page .uk-mini .uk-logo{width:42px;height:42px;font-size:18px;border-bottom-width:3px}
+.uk-receipt-page .uk-mini b{font:800 18px 'Libre Franklin',sans-serif;color:var(--navy)}
+.uk-receipt-page .uk-mini span{display:block;font-size:11px;color:var(--muted)}
+.uk-receipt-page .uk-mini .r{text-align:right;font-size:11.5px;color:var(--muted);line-height:1.5}
+.uk-receipt-page .uk-mini .r b{font:600 12px 'IBM Plex Sans';color:var(--ink)}
+
+.uk-receipt-page .uk-title{text-align:center;margin:22px 0 3px;font:700 18px 'Libre Franklin',sans-serif;letter-spacing:.18em;text-transform:uppercase;color:var(--navy)}
+.uk-receipt-page .uk-rno{text-align:center;font-size:12px;color:var(--muted);margin-bottom:12px}
+
+/* student details */
+.uk-receipt-page table.uk-d{width:100%;border-collapse:collapse;border:1px solid var(--line)}
+.uk-receipt-page table.uk-d th{width:140px;text-align:left;font-weight:500;color:var(--muted);background:var(--tint);padding:3.5px 10px;border-bottom:1px solid var(--line)}
+.uk-receipt-page table.uk-d td{padding:3.5px 10px;font-weight:500;border-bottom:1px solid var(--line)}
+.uk-receipt-page table.uk-d td.uk-pc{width:150px;padding:6px;text-align:center;vertical-align:middle;border-left:1px solid var(--line);background:#fff}
+.uk-receipt-page .uk-photo{position:relative;width:130px;height:160px;margin:0 auto;border:1px solid var(--line);padding:3px;display:grid;place-items:center;color:var(--muted);font-size:12px;font-weight:400}
+.uk-receipt-page .uk-photo img{position:absolute;left:3px;top:3px;width:calc(100% - 6px);height:calc(100% - 6px);object-fit:cover;background:#fff}
+.uk-receipt-page .uk-sig{height:44px;display:grid;place-items:center;border-bottom:1px solid var(--line)}
+.uk-receipt-page .uk-sig img{max-width:100%;max-height:40px;object-fit:contain}
+.uk-receipt-page .uk-cap{font-size:11px;font-weight:400;color:var(--muted);margin-top:4px}
+
+/* sections */
+.uk-receipt-page .uk-sec{margin-top:16px}
+.uk-receipt-page .uk-sec h4{margin:0 0 7px;font:700 15px 'Libre Franklin',sans-serif;color:var(--navy);padding:0 0 4px;border-bottom:2px solid var(--navy);display:flex;justify-content:space-between;align-items:baseline}
+.uk-receipt-page .uk-sec h4 small{font:500 11.5px 'IBM Plex Sans';color:var(--muted)}
+.uk-receipt-page .uk-cname{position:relative;display:flex;justify-content:space-between;align-items:center;padding:9px 14px 9px 18px;background:var(--tint);border:1px solid var(--line);color:var(--ink)}
+.uk-receipt-page .uk-cname:before,.uk-receipt-page .uk-pwords:before,.uk-receipt-page .uk-imp:before{content:"";position:absolute;left:-1px;top:-1px;bottom:-1px;width:4px;background:var(--navy)}
+.uk-receipt-page .uk-cname b{font:700 15px 'Libre Franklin',sans-serif}
+.uk-receipt-page .uk-cname span{font-size:11.5px;border:1px solid var(--ink);color:var(--ink);padding:2px 9px;border-radius:2px;font-weight:600;background:#fff}
+.uk-receipt-page .uk-cgrid{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid var(--line);border-top:0}
+.uk-receipt-page .uk-cgrid div{padding:8px 12px;border-right:1px solid var(--line);border-bottom:1px solid var(--line)}
+.uk-receipt-page .uk-cgrid div:nth-child(4n){border-right:0}
+.uk-receipt-page .uk-cgrid div:nth-last-child(-n+4){border-bottom:0}
+.uk-receipt-page .uk-cgrid em{display:block;font-style:normal;font-size:11px;color:var(--muted);margin-bottom:2px}
+.uk-receipt-page .uk-cgrid b{font-weight:600;font-size:13px}
+.uk-receipt-page .uk-cgrid .uk-hl b{color:var(--navy);font:700 15px 'Libre Franklin',sans-serif}
+
+.uk-receipt-page table.uk-fe{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+.uk-receipt-page table.uk-fe th{background:var(--tint);text-align:left;padding:5px 10px;font-weight:600;font-size:12px;border-top:1px solid var(--line);border-bottom:1px solid var(--navy)}
+.uk-receipt-page table.uk-fe td{padding:4px 10px;border-bottom:1px solid var(--line)}
+.uk-receipt-page table.uk-fe th:last-child,.uk-receipt-page table.uk-fe td:last-child{text-align:right}
+.uk-receipt-page table.uk-fe tfoot td{font-weight:700;background:var(--tint);border-top:1px solid var(--navy);border-bottom:1px solid var(--line);padding:5px 10px}
+.uk-receipt-page .uk-imp:before{left:0;top:0;bottom:0}
+.uk-receipt-page .uk-sec.uk-sp1{margin-top:36px}
+.uk-receipt-page .uk-sec.uk-sp2{margin-top:30px}
+.uk-receipt-page .uk-ic{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.uk-receipt-page .uk-ic.uk-sm{width:13px;height:13px;margin-right:6px;vertical-align:-2px}
+.uk-receipt-page .uk-ht{display:inline-flex;align-items:center;gap:8px}
+.uk-receipt-page .uk-imp{display:flex;gap:10px;align-items:flex-start}
+.uk-receipt-page .uk-imp .uk-imi{width:18px;height:18px;margin-top:1px;color:var(--navy)}
+.uk-receipt-page .uk-pill{display:inline-block;font-size:10.5px;font-weight:600;padding:1px 8px;border-radius:9px;border:1px solid var(--ink);color:var(--ink);background:#fff}
+.uk-receipt-page .uk-pill.uk-due{border-style:dashed;font-weight:500}
+.uk-receipt-page .uk-imp{position:relative;margin-top:10px;padding:8px 12px 8px 16px;background:var(--tint);font-size:11.5px;line-height:1.55}
+.uk-receipt-page .uk-imp b{font-weight:600}
+
+.uk-receipt-page .uk-pbox{display:grid;grid-template-columns:1fr 1fr;margin-top:12px;border:1px solid var(--line)}
+.uk-receipt-page .uk-pcell{padding:8px 16px;font-variant-numeric:tabular-nums}
+.uk-receipt-page .uk-pcell em{display:block;font-style:normal;font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:2px}
+.uk-receipt-page .uk-pcell b{font:700 15px 'Libre Franklin',sans-serif}
+.uk-receipt-page .uk-pcell .w{display:inline;font-size:10px;font-weight:400;margin-left:6px;white-space:nowrap}
+.uk-receipt-page .uk-pcell.bal .w{color:#c5cbe1}
+.uk-receipt-page .uk-pcell:not(.uk-bal) .w{color:var(--muted)}
+.uk-receipt-page .uk-pcell.uk-bal{background:var(--navy);color:#fff}
+.uk-receipt-page .uk-pcell.uk-bal em{color:#c5cbe1}
+.uk-receipt-page .uk-pwords{position:relative;margin-top:8px;padding:10px 16px 10px 20px;border:1px solid var(--line);background:var(--tint)}
+.uk-receipt-page .uk-pwords em{display:block;font-style:normal;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px}
+.uk-receipt-page .uk-pwords b{font:600 14px 'IBM Plex Sans',sans-serif}
+
+.uk-receipt-page .uk-meta{display:grid;grid-template-columns:repeat(3,1fr);border:1px solid var(--line)}
+.uk-receipt-page .uk-meta div{padding:7px 12px;border-right:1px solid var(--line)}
+.uk-receipt-page .uk-meta div:last-child{border-right:0}
+.uk-receipt-page .uk-meta em{display:block;font-style:normal;font-size:11px;color:var(--muted);margin-bottom:2px}
+.uk-receipt-page .uk-meta b{font-weight:600}
+
+.uk-receipt-page .uk-mods{display:grid;grid-template-columns:1fr 1fr;gap:0 24px}
+.uk-receipt-page .uk-mods div{display:flex;gap:10px;padding:5px 0;border-bottom:1px solid var(--line)}
+.uk-receipt-page .uk-mods i{font-style:normal;color:var(--gold);font-weight:700;width:18px;flex:none}
+.uk-receipt-page .uk-mods span{color:var(--muted);margin-left:auto;white-space:nowrap}
+
+.uk-receipt-page .uk-terms{margin:0;padding-left:16px;font-size:11.5px;line-height:1.55;color:#2b2850}
+.uk-receipt-page .uk-terms li{margin-bottom:3px}
+
+.uk-receipt-page .uk-sigs{position:absolute;left:56px;right:46px;bottom:84px;display:flex;justify-content:space-between;gap:90px}
+.uk-receipt-page .uk-sigs div{flex:1;border-top:1px solid var(--ink);text-align:center;padding-top:6px;font-size:11.5px;color:var(--muted)}
+.uk-receipt-page .uk-note{position:absolute;left:56px;right:46px;bottom:56px;text-align:center;font-size:11px;color:var(--muted)}
+.uk-receipt-page .uk-ft{position:absolute;left:56px;right:46px;bottom:22px;display:flex;justify-content:space-between;font-size:11px;color:var(--muted);border-top:1px solid var(--line);padding-top:7px}
+
+@media print{.uk-receipt-page .uk-toolbar{display:none}body{background:#fff}.uk-receipt-page .uk-stage{padding:0;overflow:visible}.uk-receipt-page .uk-page{border:0;margin:0;page-break-after:always;break-after:page}.uk-receipt-page .uk-page:last-child{page-break-after:auto;break-after:auto}@page{size:A4;margin:0}}

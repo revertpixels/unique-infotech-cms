@@ -1,0 +1,56 @@
+<div class="sf-wrap uk-fees-page">
+  <div class="sk-head-row">
+    <section class="pg-head">
+      <div class="pg-crumbs">Students / <span>Collect Fees</span></div>
+      <h2>Collect Fees</h2>
+      <p>Monthly billing is ongoing (no sessions). Bills open on the 1st, due by the 10th, late fine ₹1/day from the 11th.</p>
+    </section>
+  </div>
+
+  <div id="sk-stats"></div>
+  <div id="sk-toolbar"></div>
+
+    <div class="sk-table-card">
+    <div class="sk-scroll">
+      <div id="sf-loading" class="sk-empty" hidden>
+        <i data-lucide="loader-circle"></i>
+        <b>Loading bills</b>
+        <span>Please wait while fee records are loaded.</span>
+      </div>
+      <table class="sk-table">
+        <thead>
+          <tr>
+            <th>Student ID</th>
+            <th>Student</th>
+            <th class="hide-sm">Phone</th>
+            <th>Level</th>
+            <th>Month</th>
+            <th>Fee</th>
+            <th>Status</th>
+            <th>Late Fine</th>
+            <th class="sk-actions">Pay</th>
+          </tr>
+        </thead>
+        <tbody id="sf-rows"></tbody>
+      </table>
+      <div id="sf-empty" class="sk-empty" hidden>
+        <i data-lucide="credit-card"></i>
+        <b>No bills yet</b>
+        <span>Monthly bills will appear here once admissions are saved.</span>
+      </div>
+      <div id="sf-no-match" class="sk-empty" hidden>
+        <i data-lucide="search"></i>
+        <b>No matching records</b>
+        <span>Try clearing your search or filters.</span>
+        <button type="button" id="sf-no-match-clear" class="ui-btn ghost">Clear filters</button>
+      </div>
+      <div id="sf-load-error" class="sk-empty" hidden>
+        <i data-lucide="alert-circle"></i>
+        <b>Could not load bills</b>
+        <span id="sf-load-error-msg"></span>
+        <button type="button" id="sf-load-error-retry" class="ui-btn primary"><i data-lucide="refresh-cw"></i>Retry</button>
+        <button type="button" id="sf-load-error-back" class="ui-btn ghost">Back</button>
+      </div>
+      <div class="sk-card-foot" id="sf-foot" hidden></div>
+  </div>
+</div>

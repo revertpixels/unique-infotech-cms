@@ -13,7 +13,8 @@
 .bt-table tbody tr:hover td { background: color-mix(in srgb, var(--primary) 4%, transparent); }
 .bt-table th.bt-actions { text-align: right; }
 .bt-name { font-weight: 700; }
-.bt-code { display: inline-block; font-size: 12px; font-weight: 700; letter-spacing: .04em; color: var(--primary); background: color-mix(in srgb, var(--primary) 10%, transparent); padding: 2px 8px; border-radius: 6px; }
+.bt-table .bt-code { margin-inline-start: 8px; }
+.bt-code { display: inline-flex; align-items: center; font-size: 12px; font-weight: 700; letter-spacing: .04em; color: var(--primary); background: color-mix(in srgb, var(--primary) 10%, transparent); padding: 1px 6px; border-radius: 6px; flex-grow: 0; width: auto; }
 .bt-head { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .bt-head-av { width: 30px; height: 30px; border-radius: 8px; background: color-mix(in srgb, var(--primary) 12%, transparent); color: var(--primary); font-size: 11.5px; font-weight: 800; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
 .bt-head-txt { display: flex; flex-direction: column; min-width: 0; }
@@ -42,6 +43,7 @@ td.bt-actions { text-align: right; width: 1%; white-space: nowrap; }
 .bt-level{display:inline-block;margin-left:6px;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700;background:#EEF0FA;color:#323A85}
 .bt-pill.upcoming{background:#E0F2FE;color:#0369A1}
 .bt-pill.running{background:#DCFCE7;color:#15803D}
+.bt-pill.active{background:#DCFCE7;color:#15803D}
 .bt-pill.completed{background:#F1F5F9;color:#475569}
 .bt-pill.archived{background:#FEF3C7;color:#B45309}
 .bt-empty{display:flex;flex-direction:column;align-items:center;gap:6px;padding:44px 16px;text-align:center;color:var(--text-mute);font-size:13px}
@@ -51,6 +53,7 @@ td.bt-actions { text-align: right; width: 1%; white-space: nowrap; }
 
 /* 1.8.10 - add/edit form */
 .bt-form[hidden]{display:none}
+.bt-form [hidden] { display: none !important; }
 .bt-form{margin-top:16px;padding:18px 18px 120px 18px;overflow:visible}
 .bt-form .ui-form-head{margin-bottom:14px}
 .bt-form .ui-form-head h3{margin:0 0 4px;font-size:17px;font-weight:800;color:var(--text)}
@@ -70,4 +73,9 @@ td.bt-actions { text-align: right; width: 1%; white-space: nowrap; }
 .bt-course-chip { font: 12px/1.2 var(--font-sans); padding: 2px 8px; border-radius: 999px; background: var(--bg); border: 1px solid var(--border); color: var(--text); white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; cursor: default; }
 .bt-course-chip .bt-chip-x { width: 14px; height: 14px; border-radius: 50%; border: 1px solid var(--border); background: var(--bg); color: var(--text-mute); font-size: 11px; font-weight: 700; line-height: 1; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; }
 .bt-course-chip .bt-chip-x:hover { color: var(--danger); border-color: var(--danger); }
+
+/* Separate the batch-code badge from the preceding batch name. */
+.bt-table .bt-code {
+  margin-inline-start: 8px;
+}
 .bt-course-chip.inactive { opacity: 0.65; font-style: italic; border-color: var(--border); }

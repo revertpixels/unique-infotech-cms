@@ -1,5 +1,5 @@
-import { getRunningPeriod, getPeriodOptions } from '../utils/date.utils.js?v=1.8.66';
-import { loadSessions, getSelectedSessionId, setSelectedSession } from '../core/sessions.js?v=1.8.66';
+import { getRunningPeriod, getPeriodOptions } from '../utils/date.utils.js?v=1.8.68';
+import { loadSessions, getSelectedSessionId, setSelectedSession } from '../core/sessions.js?v=1.8.68';
 
 let listenersRegistered = false;
 let sessionsListenerRegistered = false;
@@ -88,111 +88,118 @@ export function renderTopbar({ profile, ctx, canSwitch, onMenu, onSwitch }) {
     topbar.appendChild(group);
   }
 
-  // 5. session
-  const sessionWrap = document.createElement('div');
-  sessionWrap.className = 'tb-session';
-  const sessionBtn = document.createElement('button');
-  sessionBtn.type = 'button';
-  sessionBtn.id = 'session-btn';
-  sessionBtn.setAttribute('aria-haspopup', 'listbox');
-  sessionBtn.setAttribute('aria-expanded', 'false');
-  const calIcon = document.createElement('i');
-  calIcon.setAttribute('data-lucide', 'calendar');
-  sessionBtn.appendChild(calIcon);
-  const sessionLabel = document.createElement('span');
-  sessionLabel.className = 'tb-session-label';
-  sessionLabel.textContent = 'Session ...';
-  sessionBtn.appendChild(sessionLabel);
-  const chevIcon = document.createElement('i');
-  chevIcon.setAttribute('data-lucide', 'chevron-down');
-  sessionBtn.appendChild(chevIcon);
-  sessionWrap.appendChild(sessionBtn);
-
-  const menu = document.createElement('ul');
-  menu.className = 'tb-menu';
-  menu.setAttribute('role', 'listbox');
-  sessionWrap.appendChild(menu);
-
-  function closeSessionMenu() {
-    sessionWrap.classList.remove('open');
+  // 5. session (Youth Centre only)
+  if (ctx === 'youth') {
+    const sessionWrap = document.createElement('div');
+    sessionWrap.className = 'tb-session';
+    const sessionBtn = document.createElement('button');
+    sessionBtn.type = 'button';
+    sessionBtn.id = 'session-btn';
+    sessionBtn.setAttribute('aria-haspopup', 'listbox');
     sessionBtn.setAttribute('aria-expanded', 'false');
-  }
+    const calIcon = document.createElement('i');
+    calIcon.setAttribute('data-lucide', 'calendar');
+    sessionBtn.appendChild(calIcon);
+    const sessionLabel = document.createElement('span');
+    sessionLabel.className = 'tb-session-label';
+    sessionLabel.textContent = 'Session ...';
+    sessionBtn.appendChild(sessionLabel);
+    const chevIcon = document.createElement('i');
+    chevIcon.setAttribute('data-lucide', 'chevron-down');
+    sessionBtn.appendChild(chevIcon);
+    sessionWrap.appendChild(sessionBtn);
 
-  async function fillSessions() {
-    const list = await loadSessions(ctx);
-    menu.textContent = '';
-    if (!list.length) {
-      sessionLabel.textContent = 'No session';
-      const li = document.createElement('li');
-      if (profile && profile.role === 'superadmin') {
-        const ic = document.createElement('i');
-        ic.setAttribute('data-lucide', 'plus');
-        li.appendChild(ic);
-        li.appendChild(document.createTextNode('Create a session'));
-        li.addEventListener('click', () => { closeSessionMenu(); location.hash = '#/sessions'; });
-      } else {
-        li.textContent = 'No sessions yet';
-        li.setAttribute('aria-disabled', 'true');
+    const menu = document.createElement('ul');
+    menu.className = 'tb-menu';
+    menu.setAttribute('role', 'listbox');
+    sessionWrap.appendChild(menu);
+
+    function closeSessionMenu() {
+      sessionWrap.classList.remove('open');
+      sessionBtn.setAttribute('aria-expanded', 'false');
+    }
+
+    async function fillSessions() {
+      const list = await loadSessions(ctx);
+      menu.textContent = '';
+      if (!list.length) {
+        sessionLabel.textContent = 'No session';
+        const li = document.createElement('li');
+        if (profile && profile.role === 'superadmin') {
+          const ic = document.createElement('i');
+          ic.setAttribute('data-lucide', 'plus');
+          li.appendChild(ic);
+          li.appendChild(document.createTextNode('Create a session'));
+          li.addEventListener('click', () => { closeSessionMenu(); location.hash = '#/sessions'; });
+        } else {
+          li.textContent = 'No sessions yet';
+          li.setAttribute('aria-disabled', 'true');
+        }
+        menu.appendChild(li);
+        setSelectedSession(ctx, null);
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+        window.dispatchEvent(new Event('uic:sessions-loaded'));
+        return;
       }
-      menu.appendChild(li);
-      setSelectedSession(ctx, null);
+      const savedId = getSelectedSessionId(ctx);
+      const running = list.find((s) => s.status === 'running');
+      let selected = list.find((s) => s.id === savedId) || running || list[0];
+
+      function pick(s) {
+        selected = s;
+        sessionLabel.textContent = 'Session ' + s.name;
+        menu.querySelectorAll('li').forEach((x) => {
+          if (x.dataset.id === s.id) x.setAttribute('aria-selected', 'true');
+          else x.removeAttribute('aria-selected');
+        });
+        setSelectedSession(ctx, s);
+      }
+
+      list.forEach((s) => {
+        const li = document.createElement('li');
+        li.setAttribute('role', 'option');
+        li.dataset.id = s.id;
+        const ic = document.createElement('i');
+        ic.setAttribute('data-lucide', s.status === 'running' ? 'play-circle' : 'calendar');
+        li.appendChild(ic);
+        const nm = document.createElement('span');
+        nm.textContent = s.name;
+        li.appendChild(nm);
+        if (s.status === 'running') {
+          const tag = document.createElement('span');
+          tag.className = 'tb-tag';
+          tag.textContent = 'Running';
+          li.appendChild(tag);
+        }
+        li.addEventListener('click', () => { pick(s); closeSessionMenu(); });
+        menu.appendChild(li);
+      });
+      pick(selected);
       if (typeof lucide !== 'undefined') lucide.createIcons();
       window.dispatchEvent(new Event('uic:sessions-loaded'));
-      return;
     }
-    const savedId = getSelectedSessionId(ctx);
-    const running = list.find((s) => s.status === 'running');
-    let selected = list.find((s) => s.id === savedId) || running || list[0];
 
-    function pick(s) {
-      selected = s;
-      sessionLabel.textContent = 'Session ' + s.name;
-      menu.querySelectorAll('li').forEach((x) => {
-        if (x.dataset.id === s.id) x.setAttribute('aria-selected', 'true');
-        else x.removeAttribute('aria-selected');
+    fillSessions();
+    window.__uicFillSessions = fillSessions;
+    if (!sessionsListenerRegistered) {
+      sessionsListenerRegistered = true;
+      window.addEventListener('uic:sessions-changed', () => {
+        if (window.__uicFillSessions) window.__uicFillSessions();
       });
-      setSelectedSession(ctx, s);
     }
-
-    list.forEach((s) => {
-      const li = document.createElement('li');
-      li.setAttribute('role', 'option');
-      li.dataset.id = s.id;
-      const ic = document.createElement('i');
-      ic.setAttribute('data-lucide', s.status === 'running' ? 'play-circle' : 'calendar');
-      li.appendChild(ic);
-      const nm = document.createElement('span');
-      nm.textContent = s.name;
-      li.appendChild(nm);
-      if (s.status === 'running') {
-        const tag = document.createElement('span');
-        tag.className = 'tb-tag';
-        tag.textContent = 'Running';
-        li.appendChild(tag);
-      }
-      li.addEventListener('click', () => { pick(s); closeSessionMenu(); });
-      menu.appendChild(li);
+    sessionBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const open = !sessionWrap.classList.contains('open');
+      sessionWrap.classList.toggle('open', open);
+      sessionBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
     });
-    pick(selected);
-    if (typeof lucide !== 'undefined') lucide.createIcons();
-    window.dispatchEvent(new Event('uic:sessions-loaded'));
+    topbar.appendChild(sessionWrap);
+  } else {
+    // Kids context: clear stale session-filler reference so the shared
+    // uic:sessions-changed listener does not call a stale closure.
+    window.__uicFillSessions = null;
+    sessionsListenerRegistered = false;
   }
-
-  fillSessions();
-  window.__uicFillSessions = fillSessions;
-  if (!sessionsListenerRegistered) {
-    sessionsListenerRegistered = true;
-    window.addEventListener('uic:sessions-changed', () => {
-      if (window.__uicFillSessions) window.__uicFillSessions();
-    });
-  }
-  sessionBtn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    const open = !sessionWrap.classList.contains('open');
-    sessionWrap.classList.toggle('open', open);
-    sessionBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
-  });
-  topbar.appendChild(sessionWrap);
 
   // 6. bell
   const notifBtn = document.createElement('button');

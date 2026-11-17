@@ -42,6 +42,146 @@
 ## ACTIVE LOG (NEWEST ON TOP)
 ---
 
+### [2026-11-15 13:23] Version 1.8.68 — Unique Kids admission + approved Kids admission receipt
+T0: Preserved all 1.8.66/1.8.67/1.8.68 fixes (Organisation phones, batches MAX_PHONES=3, context switching, batch-code pills, status pills, summary cards, delete permissions). Version kept at 1.8.68 (no bump).
+
+T1: Dedicated Kids Admissions route (#/school-admissions)
+- ROUTES: added `school-admissions` { ctx: ['school'], roles: ['superadmin'], page: 'school-admissions' }. Appears in sidebar only in Kids context for Super Admin. Youth Admissions route unchanged (ctx: ['youth']).
+- Router: dynamic receipt route `#/school-admissions/<studentId>/receipt` renders school-admission-receipt.html + school-admission-receipt.page.js.
+
+T2: Admission form (school-admissions.page.js)
+- Fields: Full name, Guardian name, Parent/guardian phone (+alt), Email, Aadhaar (12 digits, stored privately), DOB (validateDOB: real calendar date, not future, age>=5), Gender, Address, Level (school course), Batch (school batch, batchAllowsCourse), Admission date, Student photo, Student's signature.
+- No session field/dependency, no branch selector/Head Office label, no qualification, no marksheet, no birth-proof upload, no fixed course end date, no instalment schedule.
+- Documents: photo + signature, compressed < 100 KB, read/compressed BEFORE the transaction.
+- Validation: trim strings; Aadhaar exactly 12 ASCII digits (format only); DOB real local date not future; project-standard phone/email validation; parent phone NOT a unique identity (no duplicate-phone block for Kids); level must belong to ctx='school' and be active; batch must belong to Kids, be active, allow selected course (batchAllowsCourse); clear message if no eligible level/batch.
+- Payment truthfulness: "Admission fee of Rs X has been received" checkbox, required when admissionFee > 0, not pre-checked.
+
+T3: Fees & payment start
+- Uses course.admissionFee and course.monthlyFee; snapshots level name + fees at admission.
+- Pure function firstMonthlyMonth(admissionISO): calendar +2 months (2027-01-15→2027-03, 2027-06-30→2027-08, 2027-11-20→2028-01, 2027-12-31→2028-02).
+- Preview: admission fee payable now, monthly fee, monthly fees start from month/year, payment window 1st-10th. No finite annual schedule, no monthly fee collected at admission, no material/exam charges.
+
+T4: Atomic save & identifiers (runTransaction)
+- Student ID: YYYYNNNN where YYYY = admission date year; counter counters/sid_uk_<YYYY> via readStudentId(org='school').
+- Receipt No: UK<YY>AD-<centreCode>-<NNNN> via readReceiptNo(org='school', type='AD'); centreCode from org_config.receiptCode (new config field).
+- ALL tx.get (counters) before ALL tx.set (counters, student, photo/signature docs, private aadhaar doc, payment record).
+- Counter >9999 blocked with clear error. merge: !!editId (boolean). No undefined values in payload.
+- Returning student (edit): keeps same studentId/receiptNo, no counter reads/writes.
+- New student: NEW studentId; old admission never changed.
+
+T5: Security & Youth isolation
+- firestore.rules: validStudentDoc() (ctx youth|school, studentId 8 digits, status, branchId, receiptNo string). students create/update require validStudentDoc(); branch_head create/update limited to ctx='youth' (Kids create = superadmin only). students/<id>/payment and /aadhaar: superadmin read/write. Youth lists exclude Kids (ctx='youth' filter in admissions.page.js load).
+- Youth Branch Heads cannot read/write Kids students (branchId='HO' != their branch).
+
+T6: Kids Admission Receipt (school-admission-receipt.page.js + .html + .css)
+- Source: reference-templates/uk.html (two-page structure, CSS, fonts, colours, borders, spacing, photo/signature positions, table, page breaks). UI kit CSS scoped under .uk-receipt-page so it cannot restyle the app.
+- Replaces: "Admission no" → Student ID; session rows → Monthly fees start / Monthly payment due / Programme: Ongoing; "Parent/guardian signature" → "Student's signature". Never shows full Aadhaar. Renders only saved fee heads.
+- Header reads org_config: orgName, phones[] (up to 3 joined), email; logo /assets/images/logo.jpg.
+- Filename: Admission-<studentId>.pdf. Preview/Print/Download PDF use same rendered template. Download PDF falls back to Print→Save as PDF if html2canvas/jsPDF unavailable (not installed in project).
+
+T7: Form lifecycle & error handling
+- mount-local state; registerDirty with normalized snapshot; initial load clean; edit dirty; undo clean; cancel confirms only when dirty; successful save clean before navigation; failed save retains input + dirty; error/success toast via showToast({type, message}); unmount removes only this page's listeners.
+
+T8: Version
+- APP_VERSION kept at 1.8.68 (no bump). All ?v=tags remain 1.8.68. Reference templates unchanged.
+
+Files added:
+- public/js/pages/school-admissions.page.js
+- public/js/pages/school-admission-receipt.page.js
+- public/js/utils/school-receipt.js
+- public/pages/school-admissions.html
+- public/pages/school-admission-receipt.html
+- public/css/pages/school-admissions.css
+- public/css/pages/school-admission-receipt.css
+
+Files modified:
+- public/js/core/router.js (school-admissions route + receipt dynamic route)
+- public/js/pages/admissions.page.js (students query filtered ctx='youth')
+- public/js/pages/org-details.page.js (receiptCode field + validation)
+- public/pages/org-details.html (receipt code input row)
+- public/js/core/app.js, public/index.html (APP_VERSION/__BUILD__ 1.8.69)
+- public/js/components/sidebar.js, topbar.js, admission-receipt.page.js, batches.page.js, branches.page.js, branch-heads.page.js, courses.page.js, sessions.page.js, admission-receipt.html, batches.html, login.html (version tags 1.8.68→1.8.69)
+- firestore.rules (validStudentDoc, students payment/aadhaar subcollections)
+- docs/02-PROGRESS-LOG.md (this entry)
+
+Centre receipt code: org-config previously had NO receipt code. Added validated config field `receiptCode` (2-12 uppercase letters/digits) to Organisation settings; school-admissions save blocks with a clear error if not configured. No value silently invented.
+
+Firestore changes: students ctx filtering (Youth excludes Kids), students/<id>/payment, students/<id>/aadhaar (superadmin-only), validStudentDoc on create/update.
+
+Tests (simulated, no browser/emulator):
+- firstMonthlyMonth: all four calendar cases pass.
+- Student ID YYYYNNNN for 2027 #1 → 20270001 (via readStudentId logic).
+- Counter >9999 blocked (readStudentId/readReceiptNo throw).
+- All transaction reads precede writes (readStudentId/readReceiptNo before any tx.set in save()).
+- Syntax check on every changed/added .js: exit 0.
+- BOM/mojibake/?v=1.8.68 scan: 0 hits.
+
+Unverified (no browser/emulator available): full UI behaviour, live Firestore rules, PDF download (html2canvas/jsPDF not installed — falls back to Print→Save as PDF), context-switch round-trip.
+
+---
+T1: Sessions route (router.js)
+- Changed `sessions` route ctx from `['youth', 'school']` to `['youth']` so Sessions is only available in Youth Centre.
+- Direct navigation to #/sessions in Kids follows existing unavailable-route behaviour (superadmin auto-switches to Youth; others get lock page).
+
+T2: Header session dropdown (topbar.js)
+- Session dropdown (`tb-session`) is only rendered when `ctx === 'youth'`.
+- In Kids, no session is loaded or selected from the header.
+- `window.__uicFillSessions` is cleared in Kids context so the shared `uic:sessions-changed` listener does not call a stale closure.
+- `sessionsListenerRegistered` is reset in Kids so it can be re-registered when switching back to Youth.
+- Context switcher, notification button, and account controls preserved.
+
+T3: Sidebar session card (sidebar.js)
+- `buildSessionCard()` returns `null` for `ctx === 'school'` — no session card in Kids sidebar.
+- `refreshSessionCard()` returns early for `ctx === 'school'`.
+- `renderSidebar()` only appends session card when it is non-null.
+- Session interval is cleared on every `renderSidebar()` call (context switch cleanup).
+- Youth session card and behaviour fully preserved.
+
+T4: Preserve existing data and functionality
+- No session documents deleted or migrated.
+- No changes to courses, batches, student records, or fee rules.
+- Shared session APIs (`loadSessions`, `getRunningSession`, etc.) unchanged — still used by Youth.
+- `batches.page.js` uses sessions for read-only filtering in Kids context (not session management); not modified.
+
+T5: Version bump
+- `APP_VERSION` and all `?v=1.8.67` tags bumped to `1.8.68` via Node script (UTF-8 no BOM).
+- `window.__BUILD__` updated to `1.8.68`.
+
+T6: Verification
+- All changed .js files pass `node --check` as ES modules.
+- `grep public/ for "?v=1.8.67"`: 0 matches.
+- `grep public/` for BOM/mojibake: 0 matches.
+
+- public/js/core/router.js: sessions route ctx -> ['youth'] only.
+- public/js/components/topbar.js: session dropdown rendered only in Youth; stale reference cleanup on context switch.
+- public/js/components/sidebar.js: session card suppressed in Kids; refreshSessionCard guarded; interval cleaned on context switch.
+- public/js/core/app.js: APP_VERSION '1.8.67' -> '1.8.68'.
+- public/index.html: __BUILD__ '1.8.67' -> '1.8.68'; all ?v= tags bumped.
+- 15 other files: ?v= tags bumped 1.8.67 -> 1.8.68.
+- docs/02-PROGRESS-LOG.md: added this entry.
+Why:
+- Unique Kids computer learning is ongoing, not session-bound. Youth Centre continues to use sessions unchanged.
+Files touched (created / modified / deleted):
+- MODIFIED: public/js/core/router.js, public/js/components/topbar.js, public/js/components/sidebar.js
+- MODIFIED: public/js/core/app.js, public/index.html
+- MODIFIED: public/css/pages/branches.css, public/js/pages/admission-receipt.page.js, public/js/pages/admissions.page.js, public/js/pages/batches.page.js, public/js/pages/branches.page.js, public/js/pages/branch-heads.page.js, public/js/pages/courses.page.js, public/js/pages/org-details.page.js, public/js/pages/sessions.page.js, public/pages/admission-receipt.html, public/pages/batches.html, public/pages/login.html (version tags only)
+- MODIFIED: docs/02-PROGRESS-LOG.md
+Firestore changes:
+- none.
+Tested on:
+- node --check on all changed .js files: 0 failures (empty output).
+- grep public/ for UTF-8 BOM, \u2713, mojibake: 0 matches.
+- grep public/ for "?v=1.8.67": 0 matches (including receipt files).
+Edge cases checked:
+- Youth -> Kids -> Youth switching: sidebar re-renders with session card restored; header re-renders with session dropdown restored.
+- Direct navigation to #/sessions in Kids: router blocks (ctx mismatch) per existing behaviour.
+Known issues created (if any):
+- None.
+Next task:
+- None.
+
+---
+
 ### [2026-11-13 04:59] Version 1.8.65 — HOTFIX · View avatar photo key + x icon + date formatting
 T1: Wrong image in View avatar
 - Save code writes doc ids from DOC_KEYS = ['photo', 'signature', 'dobProof', 'marksheet'] to students/<id>/docs/<key>. Upload box mapping in save (each box saves under its own key):
@@ -81,6 +221,61 @@ Tested on:
 Edge cases checked:
 - x button keeps ui-btn ghost styling (border, radius, height 40) consistent with View receipt/Edit buttons.
 - formatDateIN returns '' for empty input, so || '-' fallback preserves '-' for missing due dates.
+Known issues created (if any):
+- None.
+Next task:
+- None.
+
+---
+
+### [2026-11-14 10:38] Version 1.8.68 — HOTFIX · Organisation + Branch contact numbers (max 3)
+T1: Organisation contacts
+- Replaced single `phone` input with repeatable phone rows (max 3) matching existing branch phone controls.
+- Save `phones` array of trimmed, non-empty strings + `phone: phones[0] || ''` for existing consumers.
+- Load `phones` when available; otherwise load legacy `phone` as a single row (old records preserved).
+- Add number / Remove controls with count (1/3). Add disabled at 3. Max enforced in validation too.
+- Reuses branch phone-format (7-20 digits, spaces, + or -) and duplicate-number validation.
+- Empty optional rows not saved as empty array entries.
+- All other organisation fields unchanged. Form snapshots, dirty-state, validation, save and reload updated.
+- Firestore rules: no changes needed (settings write already restricted to superadmin).
+
+T2: Branch contacts
+- MAX_PHONES changed from 5 to 3 in branches.page.js.
+- branches.html count placeholder updated from 0/5 to 0/3.
+- Existing phones-array / first-phone compatibility behaviour preserved.
+
+T3: Version bump
+- APP_VERSION and all ?v= tags bumped from 1.8.66 to 1.8.68 via Node script (UTF-8 no BOM).
+- Receipt files received version-tag changes only; no layout changes.
+
+T4: Checks
+- node --check on every changed .js (as .mjs): empty output (all pass).
+- grep public/ for "?v=1.8.66": 0 matches.
+- grep public/ for UTF-8 BOM, \u2713, mojibake: 0 matches.
+
+- public/js/pages/org-details.page.js: Rewrote for phones array (max 3), Add/Remove controls, legacy phone migration, save/load/reload updated.
+- public/pages/org-details.html: Single phone input replaced with repeatable phone rows (org-phones, org-phone-add, org-phones-count).
+- public/js/pages/branches.page.js: MAX_PHONES 5 → 3.
+- public/pages/branches.html: br-phones-count 0/5 → 0/3.
+- public/css/pages/branches.css: Added .org-phones, .org-phone-row, .org-phone-del, .org-phone-add classes.
+- public/js/core/app.js + 15 other JS/HTML files: bumped 1.8.66 -> 1.8.68 via Node script (UTF-8 no BOM).
+- docs/02-PROGRESS-LOG.md: added this entry.
+Why:
+- Parent organisation allows up to 3 contact numbers; branches reduced from 5 to 3. First-number compatibility field keeps existing receipt consumers working.
+Files touched:
+- MODIFIED: public/js/pages/org-details.page.js, public/pages/org-details.html, public/js/pages/branches.page.js, public/pages/branches.html, public/css/pages/branches.css
+- MODIFIED: public/js/core/app.js, public/js/core/router.js, public/js/components/sidebar.js, public/js/components/topbar.js, public/js/pages/admission-receipt.page.js, public/js/pages/admissions.page.js, public/js/pages/batches.page.js, public/js/pages/branch-heads.page.js, public/js/pages/courses.page.js, public/js/pages/sessions.page.js, public/pages/admission-receipt.html, public/pages/batches.html, public/pages/login.html, public/index.html
+- MODIFIED: docs/02-PROGRESS-LOG.md
+Firestore changes:
+- None. Organisation settings document now stores `phones` array + `phone` compatibility field (no rule change needed).
+Tested on:
+- node --check on all changed .js files (as .mjs): 0 failures (empty output).
+- grep public/ for "?v=1.8.66": 0 matches (including receipt files).
+- grep public/ for UTF-8 BOM, \u2713, mojibake: 0 matches.
+Edge cases checked:
+- Old organisation record with single `phone` (no `phones` array): loaded as one phone row, not lost.
+- Empty phone rows: not saved as empty array entries.
+- Add button disabled at 3 rows; validation rejects >3 phones.
 Known issues created (if any):
 - None.
 Next task:

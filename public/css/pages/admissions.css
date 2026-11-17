@@ -304,9 +304,27 @@
   vertical-align: top;
 }
 .adm-view-value { color: var(--text); font-size: 13px; }
+.adm-pill {
+  display: inline-flex;
+  align-items: center;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 9px;
+  white-space: nowrap;
+}
 .adm-pill.active { background: #DCFCE7; color: #15803D; }
 .adm-pill.dropped { background: #FEE2E2; color: #B91C1C; }
 .adm-pill.completed { background: #F1F5F9; color: #475569; }
+.adm-pill.inactive { background: #F3F4F6; color: #4B5563; }
+.adm-pill.archived { background: #FEF3C7; color: #B45309; }
+.adm-pill.break { background: #FFFBEB; color: #D97706; }
+
+/* Secondary (muted) sub-line inside table cells - readable, same size on both pages. */
+.adm-sub { display: block; font-size: 12.5px; color: var(--text-mute); margin-top: 2px; }
+
+/* Pagination footer (shared by Youth and Kids admissions lists). */
+.adm-pager .ui-btn.active { background: var(--primary); color: #fff; border-color: var(--primary); }
 .adm-view-docs {
   display: grid;
   grid-template-columns: repeat(4, 1fr);

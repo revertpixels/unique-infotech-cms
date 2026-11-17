@@ -10,6 +10,15 @@
 @import url('./pages/batches.css');
 @import url('./pages/sessions.css');
 @import url('./pages/dashboard.css');
+@import url('./pages/school-admissions.css');
+@import url('./pages/school-admission-receipt.css');
+@import url('./pages/school-students.css');
+@import url('./pages/school-fees.css');
+@import url('./pages/school-fee-payment.css');
+@import url('./pages/school-transfer.css');
+@import url('./pages/school-end.css');
+@import url('./pages/school-break.css');
+@import url('./pages/school-delete.css');
 @import url('./base/typography.css');
 @import url('./components/buttons.css');
 @import url('./components/forms.css');

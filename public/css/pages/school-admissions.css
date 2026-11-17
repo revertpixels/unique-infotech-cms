@@ -1,0 +1,146 @@
+/* Kids admissions page (Unique Kids) — payment section polish. */
+/* Matches Youth fee breakdown tokens under .school-admissions scope. */
+
+.school-admissions.adm-wrap { width: 100%; max-width: none; margin: 0; min-width: 0; }
+
+.school-admissions .adm-doc-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+
+.school-admissions .ui-help { font-size: 12px; color: var(--text-mute); margin-top: 4px; }
+
+.school-admissions .adm-note.warn { background: #FFFBEB; border: 1px solid var(--border); border-left: 4px solid #D97706; border-radius: var(--r-sm); padding: 8px 12px; font-size: 12.5px; color: #92400E; margin-top: 8px; }
+
+/* Checkbox / radio / file inputs must not look like text inputs */
+.school-admissions .adm-form-card input[type="checkbox"],
+.school-admissions .adm-form-card input[type="radio"],
+.school-admissions .adm-form-card input[type="file"] {
+  width: auto;
+  height: auto;
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  margin: 0;
+  background: transparent;
+  border: none;
+  font-size: inherit;
+  color: inherit;
+  width: 18px;
+  height: 18px;
+}
+
+.school-admissions input.adm-upload-input[type="file"] { display: none; }
+.school-admissions .adm-upload:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
+
+/* Youth-aligned colour, modest radii, compact option cards. */
+.school-admissions [hidden] {display:none!important;}
+.school-admissions .adm-mode-row {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));align-items:stretch;gap:12px;margin-top:8px;}
+.school-admissions .adm-mode-card {--mode:#147d75;position:relative;display:grid;grid-template-columns:20px minmax(0,1fr);align-content:start;column-gap:10px;row-gap:5px;min-width:0;min-height:0;height:auto;padding:13px 15px;border:1px solid color-mix(in srgb,var(--mode) 22%,var(--border,#dce1e7));border-top:3px solid color-mix(in srgb,var(--mode) 65%,white);border-radius:7px;background:color-mix(in srgb,var(--mode) 3%,var(--surface,#fff));box-shadow:none;box-sizing:border-box;cursor:pointer;}
+.school-admissions .adm-mode-card-difference {--mode:#6951aa;}
+.school-admissions .adm-mode-card-none {--mode:#b77b17;}
+.school-admissions .adm-mode-card input[type=radio] {display:block;position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);opacity:0;pointer-events:none;}
+.school-admissions .adm-mode-marker {grid-column:1;grid-row:1;position:relative;display:block;width:19px;height:19px;box-sizing:border-box;margin-top:1px;border:1px solid color-mix(in srgb,var(--mode) 40%,white);border-radius:50%;background:var(--surface,#fff);}
+.school-admissions .adm-mode-title {grid-column:2;grid-row:1;margin:0;display:block;font-size:14px;font-weight:650;line-height:22px;color:var(--text,#172b3a);cursor:inherit;}
+.school-admissions .adm-mode-desc,.school-admissions .adm-mode-note,.school-admissions .adm-mode-hint {grid-column:2;margin:0;font-size:12px;line-height:1.45;color:var(--text-mute,#64748b);font-style:normal;}
+.school-admissions .adm-mode-note,.school-admissions .adm-mode-hint {font-size:11.5px;}
+.school-admissions .adm-mode-card.adm-mode-active {background:color-mix(in srgb,var(--mode) 7%,var(--surface,#fff));border-color:var(--mode);border-top-color:var(--mode);box-shadow:none;}
+.school-admissions .adm-mode-active .adm-mode-title {color:var(--mode);}
+.school-admissions .adm-mode-active .adm-mode-marker {background:var(--mode);border-color:var(--mode);}
+.school-admissions .adm-mode-active .adm-mode-marker::after {content:"";position:absolute;left:5px;top:3px;width:5px;height:8px;border:solid #fff;border-width:0 2px 2px 0;transform:rotate(45deg);}
+.school-admissions .adm-mode-card:has(input[type=radio]:focus-visible) {outline:2px solid var(--mode);outline-offset:3px;}
+.school-admissions .adm-mode-card:has(input:disabled):not(.adm-mode-active) {cursor:not-allowed;}
+.school-admissions .adm-mode-card:has(input:disabled):not(.adm-mode-active) .adm-mode-title {color:#7a748a;}
+.school-admissions .adm-none-reason-wrap {grid-column:1/-1;display:flex;align-items:center;flex-wrap:wrap;gap:5px 10px;width:100%;min-width:0;box-sizing:border-box;margin-top:4px;padding-top:9px;border-top:1px solid color-mix(in srgb,var(--mode) 18%,white);cursor:default;}
+.school-admissions .adm-none-reason-wrap>.ui-label-row {flex:0 0 auto;margin:0;}
+.school-admissions #adm-reason-label {font-size:11.5px;line-height:1.4;font-weight:600;}
+.school-admissions .adm-none-reason-wrap>.ui-input-wrap {position:relative;display:block;flex:1 1 170px;width:auto;min-width:0;padding:0;border:0;background:transparent;box-shadow:none;}
+.school-admissions .adm-none-reason-wrap>.ui-err {flex-basis:100%;margin:0;}
+.school-admissions .adm-none-reason-wrap>.ui-err:empty {display:none;}
+.school-admissions #adm-noPaymentReason {display:none!important;}
+.school-admissions .adm-reason-custom {position:relative;width:100%;min-width:0;}
+.school-admissions .adm-reason-custom .ui-select-btn {display:flex;align-items:center;gap:7px;width:100%;height:auto;min-height:36px;padding:7px 9px;border:1px solid var(--border,#dce1e7);border-radius:5px;background:var(--surface,#fff);color:var(--text,#172b3a);font-size:12px;text-align:left;box-sizing:border-box;cursor:pointer;}
+.school-admissions .adm-reason-custom .ui-select-btn:disabled {background:var(--bg,#f7f8fa);color:var(--text-mute,#64748b);cursor:not-allowed;}
+.school-admissions .adm-reason-custom .ui-select-label {flex:1;min-width:0;white-space:normal;line-height:1.4;}
+.school-admissions .adm-reason-custom svg {width:14px;height:14px;flex:0 0 14px;}
+.school-admissions .adm-reason-custom .ui-select-chev {margin-left:auto;}
+.school-admissions .adm-reason-custom .ui-select-list {position:absolute;left:0;right:0;top:calc(100% + 5px);bottom:auto;width:100%;box-sizing:border-box;max-height:240px;overflow:auto;margin:0;padding:4px;list-style:none;border:1px solid var(--border,#dce1e7);border-radius:6px;background:var(--surface,#fff);box-shadow:0 4px 14px #172b3a1a;z-index:100;}
+.school-admissions .adm-reason-custom .ui-select-list.up {top:auto;bottom:calc(100% + 5px);}
+.school-admissions .adm-reason-custom .ui-select-opt {display:flex;align-items:center;gap:7px;margin:0;padding:8px;border-radius:4px;font-size:12px;line-height:1.4;color:var(--text,#172b3a);cursor:pointer;}
+.school-admissions .adm-reason-custom .ui-select-opt>span {flex:1;min-width:0;white-space:normal;}
+.school-admissions .adm-reason-custom .ui-select-opt:is(:hover,:focus-visible),.school-admissions .adm-reason-custom .ui-select-opt[aria-selected=true] {background:color-mix(in srgb,var(--primary,#0f766e) 7%,var(--surface,#fff));color:var(--primary,#0f766e);outline:none;}
+.school-admissions .adm-reason-custom .ui-select-tick {opacity:0;margin-left:auto;}
+.school-admissions .adm-reason-custom [aria-selected=true] .ui-select-tick {opacity:1;}
+.school-admissions .adm-mode-card:has(.ui-select.open) {z-index:110;}
+.school-admissions .adm-none-other-wrap {flex-basis:100%;width:100%;padding-top:8px;border-top:1px solid var(--border,#dce1e7);}
+.school-admissions #adm-noPaymentOther {display:block;width:100%;height:36px;min-height:36px;padding:7px 9px;border-radius:5px;font-size:12px;box-sizing:border-box;}
+/* Two restrained coloured fee panels, using the Youth fee and total hierarchy. */
+.school-admissions .adm-payment-summary {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:stretch;gap:14px;margin-top:18px;padding:0;border:0;}
+.school-admissions .adm-fee-breakdown,.school-admissions .adm-monthly-panel {margin:0;padding:0;min-width:0;min-height:0;max-width:none;border:1px solid var(--border,#dce1e7);border-radius:7px;background:var(--surface,#fff);box-shadow:none;box-sizing:border-box;}
+.school-admissions .adm-fee-breakdown>.ui-label-row,.school-admissions .adm-monthly-panel>.adm-section-title {display:flex;align-items:center;margin:0;padding:10px 14px;border-bottom:1px solid var(--border,#e2e8f0);border-radius:6px 6px 0 0;color:var(--text,#172b3a);font-size:13px;line-height:1.5;font-weight:650;letter-spacing:0;text-transform:none;}
+.school-admissions .adm-fee-breakdown>.ui-label-row {background:color-mix(in srgb,var(--primary,#0f766e) 9%,var(--surface,#fff));}
+.school-admissions .adm-monthly-panel>.adm-section-title {background:color-mix(in srgb,var(--info,#3b82f6) 9%,var(--surface,#fff));}
+.school-admissions .adm-fee-breakdown>.ui-label-row label {margin:0;font:inherit;color:inherit;}
+.school-admissions .adm-summary-placeholder {margin:0;padding:16px 14px;min-height:0;height:auto;font-size:13px;line-height:1.6;color:var(--text-mute,#64748b);}
+.school-admissions #adm-fee-values {padding:2px 14px 0;}
+.school-admissions #adm-monthly-values {padding:2px 14px 12px;}
+.school-admissions .adm-fee-row {display:grid;grid-template-columns:minmax(0,1fr) max-content;gap:14px;align-items:baseline;padding:10px 0;border-bottom:1px solid var(--border,#e2e8f0);line-height:1.5;}
+.school-admissions .adm-fee-label {margin:0;font-size:13px;color:var(--text-mute,#64748b);}
+.school-admissions .adm-fee-amt {font-size:18px;font-weight:700;text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums;color:var(--text,#172b3a);}
+.school-admissions .adm-fee-row-adj .adm-fee-amt {font-size:16px;font-weight:600;color:#a66a12;}
+.school-admissions .adm-fee-divider {display:none;}
+.school-admissions .adm-fee-row-total {margin:8px -14px 0;padding:11px 14px;border:0;border-top:1px solid color-mix(in srgb,var(--primary,#0f766e) 25%,var(--border,#e2e8f0));border-radius:0 0 6px 6px;background:color-mix(in srgb,var(--primary,#0f766e) 8%,var(--surface,#fff));}
+.school-admissions .adm-fee-row-total .adm-fee-label {font-size:14px;font-weight:700;color:var(--text,#172b3a);}
+.school-admissions .adm-fee-total {font-size:26px;font-weight:800;color:var(--primary,#0f766e);line-height:1.2;}
+.school-admissions .adm-monthly-grid {display:grid;grid-template-columns:1fr;gap:0;}
+.school-admissions .adm-monthly-row {display:grid;grid-template-columns:minmax(0,1fr) max-content;gap:12px;align-items:baseline;padding:10px 0;border-bottom:1px solid var(--border,#e2e8f0);}
+.school-admissions .adm-monthly-label {font-size:13px;color:var(--text-mute,#64748b);}
+.school-admissions .adm-monthly-amt {font-size:14px;font-weight:600;white-space:nowrap;text-align:right;}
+.school-admissions #adm-monthly-fee {font-size:18px;font-weight:700;}
+.school-admissions .adm-monthly-row:has(.adm-monthly-unit) {grid-template-columns:minmax(0,1fr) max-content max-content;column-gap:6px;}
+.school-admissions .adm-monthly-unit {margin:0;font-size:12px;color:var(--text-mute,#64748b);}
+.school-admissions .adm-monthly-panel .ui-help {margin:10px 0 0;font-size:12px;line-height:1.5;}
+.school-admissions .adm-confirm-received-wrap {margin-top:14px;padding:0;border:0;background:transparent;}
+.school-admissions .adm-confirm-label {display:flex;align-items:flex-start;gap:9px;font-size:13px;line-height:1.5;}
+.school-admissions #adm-confirmReceived {flex:0 0 17px;width:17px;height:17px;margin-top:1px;accent-color:var(--primary,#0f766e);}
+.school-admissions .adm-zero-note {margin:12px 0 0;padding:9px 12px;border-left:3px solid var(--primary,#0f766e);border-radius:4px;background:color-mix(in srgb,var(--primary,#0f766e) 5%,var(--surface,#fff));color:var(--text-mute,#64748b);font-size:12px;line-height:1.5;}
+.school-admissions #adm-stats .lp-stats {grid-template-columns:repeat(3,minmax(0,1fr));}
+.school-admissions #adm-stats .lp-stats {display:grid;gap:14px;margin-bottom:16px;}
+.school-admissions .adm-table-card {margin-bottom:30px;}
+.school-admissions .adm-form-card {margin-top:0;}
+.school-admissions #adm-form {scroll-margin-top:80px;}
+@media(max-width:760px){.school-admissions .adm-mode-row,.school-admissions .adm-payment-summary{grid-template-columns:1fr;}.school-admissions .adm-mode-card{height:auto;}.school-admissions #adm-stats .lp-stats{grid-template-columns:1fr;}}
+
+/* Final payment polish: full-width reason dropdown and filled total footer. */
+.school-admissions .adm-none-reason-wrap > .ui-label-row {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+.school-admissions .adm-none-reason-wrap > .ui-input-wrap {
+  flex: 1 1 100%;
+  width: 100%;
+  min-width: 0;
+}
+.school-admissions .adm-fee-breakdown {
+  display: flex;
+  flex-direction: column;
+}
+.school-admissions #adm-fee-values {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  padding-bottom: 0;
+}
+.school-admissions .adm-fee-row-total {
+  flex: 1 0 auto;
+  align-content: end;
+  margin-bottom: 0;
+  border-radius: 0 0 6px 6px;
+}
+
+/* The form is a sibling of the table card, like Youth admissions. */
+.school-admissions .adm-table-card + #adm-form {margin-top:30px;}

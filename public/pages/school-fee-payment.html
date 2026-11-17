@@ -1,0 +1,51 @@
+<div class="sk-wrap uk-fee-payment-page">
+  <div class="sk-head-row">
+    <section class="pg-head">
+      <div class="pg-crumbs">Students / <span>Kids Fees</span> / <span>Record Payment</span></div>
+      <h2>Record Payment</h2>
+      <p>Record a monthly fee payment for the selected bill.</p>
+    </section>
+  </div>
+
+  <div class="sk-table-card">
+    <div class="sk-scroll">
+      <form id="sk-pay-form" class="sk-transfer-form" novalidate>
+        <div class="sk-field-row">
+          <div class="ui-field span-2">
+            <div class="ui-label-row"><label>Student ID</label></div>
+            <div class="ui-input-wrap"><span id="sk-pay-student-id"></span></div>
+          </div>
+          <div class="ui-field span-2">
+            <div class="ui-label-row"><label>Student name</label></div>
+            <div class="ui-input-wrap"><span id="sk-pay-student-name"></span></div>
+          </div>
+        </div>
+        <div class="ui-field span-2">
+          <div class="ui-label-row"><label>Billing month</label></div>
+          <div class="ui-input-wrap"><span id="sk-pay-month"></span></div>
+        </div>
+        <div class="ui-field span-2">
+          <div class="ui-label-row"><label>Monthly fee</label></div>
+          <div class="ui-input-wrap"><span id="sk-pay-monthly-fee"></span></div>
+        </div>
+        <div class="ui-field span-2">
+          <div class="ui-label-row"><label>Late fine</label></div>
+          <div class="ui-input-wrap"><span id="sk-pay-late-fee"></span></div>
+        </div>
+        <div class="ui-field span-2">
+          <div class="ui-label-row"><label>Total due</label></div>
+          <div class="ui-input-wrap"><span id="sk-pay-total-due"></span></div>
+        </div>
+        <div class="ui-field span-2">
+          <div class="ui-label-row"><label>Amount received <em>*</em></label></div>
+          <div class="ui-input-wrap"><input id="sk-pay-amount" class="ui-input" type="number" step="0.01" min="0"></div>
+          <div class="ui-err" id="sk-pay-amount-err"></div>
+        </div>
+        <div class="sk-savebar">
+          <button type="button" id="sk-pay-cancel" class="ui-btn ghost">Cancel</button>
+          <button type="submit" id="sk-pay-save" class="ui-btn primary">Record payment</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>

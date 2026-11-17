@@ -1,0 +1,61 @@
+<div class="sk-wrap uk-end-page">
+  <div class="sk-head-row">
+    <section class="pg-head">
+      <div class="pg-crumbs">Students / <span>End Course</span></div>
+      <h2>End Course</h2>
+      <p>End the student's current enrolment. Student ID, history, bills and payments are preserved. No future bills will be generated after the ending month.</p>
+    </section>
+  </div>
+
+  <div class="sk-table-card">
+    <div class="sk-scroll">
+      <div id="sk-end-empty" class="sk-empty" hidden>
+        <i data-lucide="user-plus"></i>
+        <b>Select a student from All Students to continue.</b>
+        <span>Open All Students and choose a student, then use End Course from their row.</span>
+        <button type="button" id="sk-end-empty-open" class="ui-btn primary"><i data-lucide="users"></i>Open All Students</button>
+      </div>
+      <form id="sk-end-form" class="sk-transfer-form" novalidate hidden>
+        <div class="sk-field-row">
+          <div class="ui-field span-2">
+            <div class="ui-label-row"><label>Student ID</label></div>
+            <div class="ui-input-wrap"><span id="sk-end-student-id"></span></div>
+          </div>
+          <div class="ui-field span-2">
+            <div class="ui-label-row"><label>Student name</label></div>
+            <div class="ui-input-wrap"><span id="sk-end-student-name"></span></div>
+          </div>
+        </div>
+        <div class="ui-field span-2">
+          <div class="ui-label-row"><label>Current batch</label></div>
+          <div class="ui-input-wrap"><span id="sk-end-current-batch"></span></div>
+        </div>
+        <div class="ui-field span-2">
+          <div class="ui-label-row"><label>Current level</label></div>
+          <div class="ui-input-wrap"><span id="sk-end-current-level"></span></div>
+        </div>
+        <div class="ui-field span-2">
+          <div class="ui-label-row"><label>Effective date <em>*</em></label></div>
+          <div class="ui-input-wrap"><i data-lucide="calendar"></i><input id="sk-end-effective" class="ui-input" type="date"></div>
+          <div class="ui-err" id="sk-end-effective-err"></div>
+        </div>
+        <div class="ui-field span-2">
+          <div class="ui-label-row"><label>Reason <em>*</em></label></div>
+          <div class="ui-input-wrap"><textarea id="sk-end-reason" class="ui-input" rows="2" placeholder="e.g. Family relocation, course completed"></textarea></div>
+          <div class="ui-err" id="sk-end-reason-err"></div>
+        </div>
+        <div class="ui-field span-2">
+          <div class="ui-label-row"><label>Outstanding monthly dues</label></div>
+          <div class="ui-input-wrap"><span id="sk-end-outstanding">–</span></div>
+          <div class="ui-help">Existing unpaid bills remain payable. Ending does not waive them.</div>
+        </div>
+        <div class="ui-help" style="color:var(--danger);font-size:12px;">This action cannot be undone. The student can be re-admitted later with the same Student ID.</div>
+        <div class="sk-savebar">
+          <button type="button" id="sk-end-cancel" class="ui-btn ghost">Cancel</button>
+          <button type="submit" id="sk-end-save" class="ui-btn primary">End course</button>
+        </div>
+      </form>
+      <div id="sk-end-error" class="sk-error" hidden></div>
+    </div>
+  </div>
+</div>

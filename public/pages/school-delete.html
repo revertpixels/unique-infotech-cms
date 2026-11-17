@@ -1,0 +1,42 @@
+<div class="sk-wrap uk-delete-page">
+  <div class="sk-head-row">
+    <section class="pg-head">
+      <div class="pg-crumbs">Students / <span>Permanent Delete</span></div>
+      <h2>Permanent Delete</h2>
+      <p>Irreversible. Removes personal details, private Aadhaar, documents, enrolments, bills, payments and receipts.</p>
+    </section>
+  </div>
+
+  <div class="sk-table-card">
+    <div class="sk-scroll">
+      <div id="sk-delete-empty" class="sk-empty" hidden>
+        <i data-lucide="user-plus"></i>
+        <b>Select a student from All Students to continue.</b>
+        <span>Open All Students and choose a student, then use Permanent Delete from their row.</span>
+        <button type="button" id="sk-delete-empty-open" class="ui-btn primary"><i data-lucide="users"></i>Open All Students</button>
+      </div>
+      <form id="sk-delete-form" class="sk-transfer-form" novalidate hidden>
+        <div class="sk-field-row">
+          <div class="ui-field span-2">
+            <div class="ui-label-row"><label>Student ID</label></div>
+            <div class="ui-input-wrap"><span id="sk-del-student-id"></span></div>
+          </div>
+          <div class="ui-field span-2">
+            <div class="ui-label-row"><label>Student name</label></div>
+            <div class="ui-input-wrap"><span id="sk-del-student-name"></span></div>
+          </div>
+        </div>
+        <div class="ui-field span-2">
+          <div class="ui-label-row"><label>Status</label></div>
+          <div class="ui-input-wrap"><span id="sk-delete-status">Permanent deletion is not available yet.</span></div>
+          <div class="ui-help" style="color:var(--danger);font-size:12px;">Recursive deletion of all related student records is not yet implemented. This action is disabled until a verified recursive deletion path is available.</div>
+        </div>
+        <div class="sk-savebar">
+          <button type="button" id="sk-delete-cancel" class="ui-btn ghost">Cancel</button>
+          <button type="submit" id="sk-delete-save" class="ui-btn danger" disabled>Permanently delete student</button>
+        </div>
+      </form>
+      <div id="sk-delete-error" class="sk-error" hidden></div>
+    </div>
+  </div>
+</div>

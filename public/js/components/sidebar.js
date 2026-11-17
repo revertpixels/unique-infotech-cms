@@ -1,7 +1,7 @@
-import { ROUTES, ROLE_LABELS } from '../core/router.js?v=1.8.66';
-import { APP_VERSION } from '../core/app.js?v=1.8.66';
-import { getRunningPeriod, getNextDueDate, formatDayMonth } from '../utils/date.utils.js?v=1.8.66';
-import { getRunningSession, toPeriod, daysLeft, expectedStatus } from '../core/sessions.js?v=1.8.66';
+import { ROUTES, ROLE_LABELS } from '../core/router.js?v=1.8.68';
+import { APP_VERSION } from '../core/app.js?v=1.8.68';
+import { getRunningPeriod, getNextDueDate, formatDayMonth } from '../utils/date.utils.js?v=1.8.68';
+import { getRunningSession, toPeriod, daysLeft, expectedStatus } from '../core/sessions.js?v=1.8.68';
 
 let drawerOpen = false;
 let tipEl = null;
@@ -51,6 +51,8 @@ function listenSessionsLoaded() {
 
 let lastSessionCtx = 'youth';
 function buildSessionCard(ctx, dueDay) {
+  // Kids (Unique Kids) is not session-bound: no session card at all.
+  if (ctx === 'school') return null;
   lastSessionCtx = ctx;
   listenSessionsLoaded();
   const rs = getRunningSession(ctx);
@@ -107,6 +109,8 @@ function buildSessionCard(ctx, dueDay) {
 }
 
 export function refreshSessionCard(ctx) {
+  // Kids (Unique Kids) is not session-bound: no session card to refresh.
+  if (ctx === 'school') return;
   const footer = document.querySelector('#sidebar .sb-footer');
   if (!footer) return;
   const old = footer.querySelector('.sb-session');
@@ -149,7 +153,7 @@ export function renderSidebar({ profile, ctx, orgName, tagline, onNavigate, onLo
   nav.className = 'sb-nav';
   nav.setAttribute('aria-label', 'Main navigation');
 
-  const filtered = Object.values(ROUTES).filter(r => r.ctx.includes(ctx) && r.roles.includes(profile.role));
+  const filtered = Object.values(ROUTES).filter(r => r.nav !== false && r.ctx.includes(ctx) && r.roles.includes(profile.role));
   const groups = {};
   const groupOrder = [];
   for (const r of filtered) {
@@ -195,7 +199,7 @@ export function renderSidebar({ profile, ctx, orgName, tagline, onNavigate, onLo
 
   const dueDay = (window.APP_CACHE && window.APP_CACHE.org && Number.isInteger(window.APP_CACHE.org.fineAfterDay)) ? window.APP_CACHE.org.fineAfterDay : 10;
   const sessionCard = buildSessionCard(ctx, dueDay);
-  footer.appendChild(sessionCard);
+  if (sessionCard) footer.appendChild(sessionCard);
 
   // temporary identity row
   const identity = document.createElement('div');

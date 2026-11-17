@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Unique Kids - Monthly Payment Receipt</title>
+<link href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+:root{--ink:#1d1a3a;--muted:#5b5f85;--line:#b9bfdc;--navy:#333b84;--deep:#291670;--gold:#151caa;--bg:#e4e6f0;--tint:#eceefa}
+*{box-sizing:border-box}
+body{margin:0;font-family:'IBM Plex Sans',system-ui,sans-serif;background:var(--bg);color:var(--ink)}
+.bar{position:sticky;top:0;z-index:5;display:flex;gap:10px;justify-content:center;padding:12px;background:#fff;border-bottom:1px solid var(--line)}
+.btn{border:1px solid var(--navy);border-radius:3px;padding:9px 22px;font:600 14px 'IBM Plex Sans',sans-serif;cursor:pointer}
+.btn.p{background:var(--navy);color:#fff}.btn.s{background:#fff;color:var(--navy)}
+.btn:focus-visible{outline:3px solid #888}
+.stage{overflow:auto;padding:24px 12px}
+.page{width:794px;height:1122px;margin:0 auto 24px;background:#fff;position:relative;overflow:hidden;border:1px solid var(--line);font-size:12.5px;color:var(--ink);padding:30px 46px}
+
+.hd{display:flex;align-items:center;gap:18px;padding-bottom:14px;border-bottom:3px solid var(--navy);position:relative}
+.hd:after{content:"";position:absolute;left:0;right:0;bottom:-7px;border-bottom:1px solid var(--gold)}
+.logo{width:68px;height:68px;background:var(--navy);color:#fff;display:grid;place-items:center;font:800 28px 'Libre Franklin',sans-serif;flex:none;border-bottom:4px solid var(--deep)}
+.logo.img{background:none;border-bottom:0}
+.logo img{width:100%;height:100%;object-fit:contain;display:block}
+.hd h1{font:800 29px 'Libre Franklin',sans-serif;letter-spacing:-.015em;margin:0 0 3px;color:var(--deep)}
+.iso{font-size:13px;font-weight:600;color:var(--navy);margin-bottom:3px}
+.br{font-size:12.5px;font-weight:600;color:#2b2850;margin-bottom:3px}
+.ct{font-size:11.5px;color:#2b2850;line-height:1.55}.ct b{font-weight:600;color:var(--ink)}
+@media print{*{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+
+.title{text-align:center;margin:24px 0 3px;font:700 18px 'Libre Franklin',sans-serif;letter-spacing:.18em;text-transform:uppercase;color:var(--navy)}
+.rno{text-align:center;font-size:12px;color:var(--muted);margin-bottom:14px}
+
+table.d{width:100%;border-collapse:collapse;border:1px solid var(--line)}
+table.d th{width:140px;text-align:left;font-weight:500;color:var(--muted);background:var(--tint);padding:4px 10px;border-bottom:1px solid var(--line)}
+table.d td{padding:4px 10px;font-weight:500;border-bottom:1px solid var(--line)}
+table.d td.pc{width:150px;padding:6px;text-align:center;vertical-align:middle;border-left:1px solid var(--line);background:#fff}
+.photo{position:relative;width:110px;height:130px;margin:0 auto;border:1px solid var(--line);padding:3px;display:grid;place-items:center;color:var(--muted);font-size:12px;font-weight:400}
+.photo img{position:absolute;left:3px;top:3px;width:calc(100% - 6px);height:calc(100% - 6px);object-fit:cover;background:#fff}
+
+.sec{margin-top:22px}
+.sec h4{margin:0 0 7px;font:700 15px 'Libre Franklin',sans-serif;color:var(--navy);padding:0 0 4px;border-bottom:2px solid var(--navy);display:flex;justify-content:space-between;align-items:baseline}
+.sec h4 small{font:500 11.5px 'IBM Plex Sans';color:var(--muted)}
+.ic{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.ht{display:inline-flex;align-items:center;gap:8px}
+
+table.fe{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+table.fe th{background:var(--tint);text-align:left;padding:5px 10px;font-weight:600;font-size:12px;border-top:1px solid var(--line);border-bottom:1px solid var(--navy)}
+table.fe td{padding:5px 10px;border-bottom:1px solid var(--line)}
+table.fe th:last-child,table.fe td:last-child{text-align:right}
+table.fe tr.cur td{background:var(--tint);font-weight:600}
+table.fe tfoot td{font-weight:700;background:var(--tint);border-top:1px solid var(--navy);padding:5px 10px}
+.pill{display:inline-block;font-size:10.5px;font-weight:600;padding:1px 8px;border-radius:9px;border:1px solid var(--ink);color:var(--ink);background:#fff}
+.pill.due{border-style:dashed;font-weight:500}
+
+.meta{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid var(--line)}
+.meta div{padding:7px 12px;border-right:1px solid var(--line)}
+.meta div:last-child{border-right:0}
+.meta em{display:block;font-style:normal;font-size:11px;color:var(--muted);margin-bottom:2px}.meta b{font-weight:600}
+
+.pbox{display:grid;grid-template-columns:1fr 1fr;margin-top:12px;border:1px solid var(--line)}
+.pcell{padding:8px 16px;font-variant-numeric:tabular-nums}
+.pcell em{display:block;font-style:normal;font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:2px}
+.pcell b{font:700 15px 'Libre Franklin',sans-serif}
+.pcell .w{display:inline;font-size:10px;font-weight:400;margin-left:6px;white-space:nowrap;color:var(--muted)}
+.pcell.bal{background:var(--navy);color:#fff}.pcell.bal em,.pcell.bal .w{color:#c5cbe1}
+.pwords{position:relative;margin-top:8px;padding:10px 16px 10px 20px;border:1px solid var(--line);background:var(--tint)}
+.pwords:before{content:"";position:absolute;left:-1px;top:-1px;bottom:-1px;width:4px;background:var(--navy)}
+.pwords em{display:block;font-style:normal;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px}
+.pwords b{font:600 14px 'IBM Plex Sans',sans-serif}
+
+.terms{margin:0;padding-left:16px;font-size:11.5px;line-height:1.55;color:#2b2850}
+.terms li{margin-bottom:3px}
+
+.sigs{position:absolute;left:56px;right:46px;bottom:70px;display:flex;justify-content:space-between;gap:90px}
+.sigs div{flex:1;border-top:1px solid var(--ink);text-align:center;padding-top:6px;font-size:11.5px;color:var(--muted)}
+.note{position:absolute;left:56px;right:46px;bottom:56px;text-align:center;font-size:11px;color:var(--muted)}
+.ft{position:absolute;left:56px;right:46px;bottom:22px;display:flex;justify-content:space-between;font-size:11px;color:var(--muted);border-top:1px solid var(--line);padding-top:7px}
+
+@media print{.bar{display:none}body{background:#fff}.stage{padding:0;overflow:visible}.page{border:0;margin:0}@page{size:A4;margin:0}}
+</style>
+</head>
+<body>
+<div class="bar"><button class="btn p" id="dl">Download PDF</button><button class="btn s" id="pr">Print</button></div>
+<div class="stage">
+
+<div class="page">
+ <div class="hd"><div class="logo"><span>UI</span><img src="images/logo.jpg" alt="Unique Infotech logo" onload="this.parentNode.classList.add('img');this.previousElementSibling.remove()" onerror="this.remove()"></div>
+  <div><h1>Unique Infotech</h1>
+   <div class="iso">An ISO 9001:2015 Certified Organisation</div>
+   <div class="br">SCHOOL COMPUTER PROGRAM (UNIQUE KIDS)</div>
+   <div class="ct"><b>Unique Infotech:</b> 9851771893, 9832147650, 8641209375 &nbsp;|&nbsp; <b>Email:</b> utpal.goutam@gmail.com</div></div></div>
+
+ <div class="title">Monthly Fee Payment Receipt</div>
+ <div class="rno">Receipt no: UK-2026-0004-R2 &nbsp;|&nbsp; Date: 10 Mar 2027</div>
+
+ <table class="d">
+  <tr><th>Student name</th><td>ARNAB DAS</td><td class="pc" rowspan="5"><div class="photo"><span>Photo</span><img src="images/photo.jpg" alt="Student photo" onload="this.previousElementSibling.remove()" onerror="this.remove()"></div></td></tr>
+  <tr><th>Parent / Guardian</th><td>SURESH DAS</td></tr>
+  <tr><th>Student ID</th><td>UK-2026-0004</td></tr>
+  <tr><th>Class / Level</th><td>Class 4 &nbsp;|&nbsp; Basic</td></tr>
+  <tr><th>Batch / Session</th><td>TEST &nbsp;|&nbsp; 1st Session - 2027</td></tr>
+ </table>
+
+ <div class="sec"><h4><span class="ht"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect width="20" height="12" x="2" y="6" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M6 12h.01M18 12h.01"/></svg>Payment details</span></h4>
+  <div class="meta">
+   <div><em>Paid for</em><b>Monthly fee - Mar 2027</b></div>
+   <div><em>Due date</em><b>10 Mar 2027</b></div>
+   <div><em>Date of payment</em><b>10 Mar 2027</b></div>
+   <div><em>Late fine</em><b>Rs. 0.00</b></div>
+  </div>
+  <div class="pbox">
+   <div class="pcell"><em>Amount received</em><b>Rs. 200.00</b><span class="w">(Rupees Two Hundred Only)</span></div>
+   <div class="pcell bal"><em>Next monthly fee</em><b>Rs. 200.00</b><span class="w">due by 10 Apr 2027</span></div>
+  </div></div>
+
+  <div class="sec"><ol class="terms">
+   <li>Fees once paid are not refundable or transferable.</li>
+   <li>Please keep this receipt safe. It is computer-generated and valid with the authorised signature.</li>
+  </ol></div>
+
+ <div class="sigs"><div>Parent / Guardian signature</div><div>Authorised signatory</div></div>
+ <div class="ft"><span>Unique Kids &nbsp;|&nbsp; Generated on 10 Mar 2027</span><span>Page 1 of 1</span></div>
+</div>
+
+</div>
+<script>
+document.getElementById('pr').onclick=()=>window.print();
+function collectWords(page){
+ const pr=page.getBoundingClientRect(),out=[];
+ const walker=document.createTreeWalker(page,NodeFilter.SHOW_TEXT);
+ let n;
+ while(n=walker.nextNode()){
+  const txt=n.nodeValue;if(!txt.trim())continue;
+  const el=n.parentElement,cs=getComputedStyle(el);
+  if(cs.visibility==='hidden'||cs.display==='none')continue;
+  const upper=cs.textTransform==='uppercase';
+  const size=parseFloat(cs.fontSize),bold=parseInt(cs.fontWeight,10)>=600;
+  const re=/\S+/g;let m;
+  while(m=re.exec(txt)){
+   const r=document.createRange();r.setStart(n,m.index);r.setEnd(n,m.index+m[0].length);
+   const b=r.getBoundingClientRect();if(!b.width||!b.height)continue;
+   let w=m[0].replace(/[^\x20-\xFF]/g,'?');if(upper)w=w.toUpperCase();
+   out.push({t:w,x:b.left-pr.left,y:b.top-pr.top,w:b.width,h:b.height,size,bold});
+  }
+ }
+ return out;
+}
+function addTextLayer(pdf,words){
+ const k=210/794;
+ words.forEach(o=>{
+  pdf.setFont('helvetica',o.bold?'bold':'normal');
+  pdf.setFontSize(o.size*0.75);
+  const target=o.w*k,natural=pdf.getTextWidth(o.t);
+  const cs=o.t.length>1?(target-natural)/(o.t.length-1):0;
+  pdf.text(o.t+' ',o.x*k,(o.y+o.h*0.78)*k,{renderingMode:'invisible',charSpace:Math.abs(cs)<2?cs:0});
+ });
+}
+document.getElementById('dl').onclick=async()=>{
+ const b=document.getElementById('dl');b.textContent='Preparing…';
+ try{
+  window.scrollTo(0,0);
+  if(location.protocol==='file:'&&document.querySelector('.photo img, .logo img')){
+   alert('Your photo/logo cannot be captured into the PDF when this page is opened as a file.\n\nThe Print dialog will open now - choose "Save as PDF" (margins: None, background graphics: on).');
+   b.textContent='Download PDF';window.print();return;
+  }
+  if(document.fonts&&document.fonts.ready)await document.fonts.ready;
+  const pdf=new window.jspdf.jsPDF({unit:'mm',format:'a4',orientation:'portrait',compress:true});
+  pdf.setProperties({title:'Monthly Payment Receipt',subject:'Monthly Payment Receipt',author:'Unique Infotech'});
+  const page=document.querySelector('.page');
+  const words=collectWords(page);
+  const canvas=await html2canvas(page,{
+   scale:4,backgroundColor:'#fff',scrollX:0,scrollY:0,windowWidth:1000,useCORS:true,
+   onclone:d=>{
+    d.querySelector('.bar').style.display='none';
+    d.querySelector('.stage').style.cssText='padding:0;overflow:visible';
+    d.querySelectorAll('.page').forEach(p=>{p.style.margin='0';p.style.border='0'});
+    d.body.style.background='#fff';
+   }});
+  pdf.addImage(canvas.toDataURL('image/png'),'PNG',0,0,210,297,undefined,'FAST');
+  addTextLayer(pdf,words);
+  pdf.save('Payment-Receipt-UK-2026-0004-R2.pdf');
+ }catch(err){alert('Could not create the PDF. Check your internet connection, or use Print and choose Save as PDF.')}
+ b.textContent='Download PDF';
+};
+</script>
+</body>
+</html>

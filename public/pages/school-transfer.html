@@ -1,0 +1,55 @@
+<div class="sk-wrap uk-transfer-page">
+  <div class="sk-head-row">
+    <section class="pg-head">
+      <div class="pg-crumbs">Students / <span>Change Batch</span></div>
+      <h2>Change Batch</h2>
+      <p>Batch-only transfer. Student ID, course/level, fees and billing dates are unchanged.</p>
+    </section>
+  </div>
+
+  <div class="sk-table-card">
+    <div class="sk-scroll">
+      <div id="sk-transfer-empty" class="sk-empty" hidden>
+        <i data-lucide="user-plus"></i>
+        <b>Select a student from All Students to continue.</b>
+        <span>Open All Students and choose a student, then use Change Batch from their row.</span>
+        <button type="button" id="sk-transfer-empty-open" class="ui-btn primary"><i data-lucide="users"></i>Open All Students</button>
+      </div>
+      <form id="sk-transfer-form" class="sk-transfer-form" novalidate hidden>
+        <div class="sk-field-row">
+          <div class="ui-field span-2">
+            <div class="ui-label-row"><label>Student ID</label></div>
+            <div class="ui-input-wrap"><span id="sk-transfer-student-id"></span></div>
+          </div>
+          <div class="ui-field span-2">
+            <div class="ui-label-row"><label>Student name</label></div>
+            <div class="ui-input-wrap"><span id="sk-transfer-student-name"></span></div>
+          </div>
+        </div>
+        <div class="ui-field span-2">
+          <div class="ui-label-row"><label>Current batch</label></div>
+          <div class="ui-input-wrap"><span id="sk-transfer-current-batch"></span></div>
+        </div>
+        <div class="ui-field span-2">
+          <div class="ui-label-row"><label>Course / Level</label></div>
+          <div class="ui-input-wrap"><span id="sk-transfer-current-course"></span> <span id="sk-transfer-level-sep" hidden>|</span> <span id="sk-transfer-current-level"></span></div>
+        </div>
+        <div class="ui-field span-2">
+          <div class="ui-label-row"><label>Destination batch <em>*</em></label></div>
+          <div id="sk-transfer-dest-host" class="ui-select"></div>
+          <div class="ui-err" id="sk-transfer-dest-err"></div>
+          <div class="ui-help">Only batches compatible with the current course/level are shown.</div>
+        </div>
+        <div class="ui-field span-2">
+          <div class="ui-label-row"><label>Note (optional)</label></div>
+          <div class="ui-input-wrap"><textarea id="sk-transfer-note" class="ui-input" rows="2" placeholder="Reason for transfer"></textarea></div>
+        </div>
+        <div class="sk-savebar">
+          <button type="button" id="sk-transfer-cancel" class="ui-btn ghost">Cancel</button>
+          <button type="submit" id="sk-transfer-save" class="ui-btn primary">Transfer batch</button>
+        </div>
+      </form>
+      <div id="sk-transfer-error" class="sk-error" hidden></div>
+    </div>
+  </div>
+</div>

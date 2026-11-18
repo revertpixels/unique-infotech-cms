@@ -4,10 +4,10 @@ import { createSelect } from '../components/ui-select.js';
 import { openMenu } from '../components/ui-menu.js';
 import { confirmDialog } from '../components/ui-confirm.js';
 import { showToast } from '../components/toast.js';
-import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.68';
+import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.71';
 import { buildStats, buildToolbar } from '../components/list-page.js';
-import { notifySessionsChanged, todayISO, expectedStatus, statusMismatch, daysLeft } from '../core/sessions.js?v=1.8.68';
-import { firstInstallmentOf, admissionState, installmentSchedule, sessionPattern, fmtDate } from '../utils/session-rules.js?v=1.8.68';
+import { notifySessionsChanged, todayISO, expectedStatus, statusMismatch, daysLeft } from '../core/sessions.js?v=1.8.71';
+import { firstInstallmentOf, admissionState, installmentSchedule, sessionPattern, fmtDate } from '../utils/session-rules.js?v=1.8.71';
 
 const TEXT_KEYS = ['name', 'start', 'end'];
 const KEYS = ['name', 'start', 'end', 'status'];
@@ -421,6 +421,7 @@ export async function mount({ profile, ctx }) {
 
   await load();
 }
+
 
 
 

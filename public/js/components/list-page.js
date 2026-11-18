@@ -34,24 +34,33 @@ export function buildStats(items) {
 // opts: { placeholder, filters: [{ id, label, options: [{ value, label, icon }] }], onChange(state), onRefresh() }
 export function buildToolbar(opts) {
   const o = opts || {};
+  const rowLayout = !!o.rowLayout;
   const bar = el('div', 'lp-toolbar');
+  if (rowLayout) bar.classList.add('lp-toolbar-oneline');
   const state = { q: '' };
+
+  // ---- Row 1: search alone, full width ----
+  const rowSearch = el('div', 'lp-toolbar-row-search');
   const s = el('div', 'lp-search');
   s.appendChild(icon('search'));
   const inp = el('input');
   inp.type = 'search';
   inp.placeholder = o.placeholder || 'Search';
   s.appendChild(inp);
-  bar.appendChild(s);
+  rowSearch.appendChild(s);
   let t = null;
   inp.addEventListener('input', () => { clearTimeout(t); t = setTimeout(() => { state.q = inp.value.trim().toLowerCase(); if (o.onChange) o.onChange(state); }, 150); });
+
+  // ---- Row 2: filters grid + refresh ----
+  const rowFilters = el('div', 'lp-toolbar-row-filters');
+  rowFilters.appendChild(rowSearch);
   const selects = {};
   (o.filters || []).forEach((f) => {
     const w = el('div', 'lp-filter');
     w.appendChild(el('span', 'lp-filter-label', f.label));
     const host = el('div', 'lp-filter-select');
     w.appendChild(host);
-    bar.appendChild(w);
+    rowFilters.appendChild(w);
     const options = f.options.map((op) => ({ value: op.value, label: op.label, icon: op.icon || OPT_ICONS[op.value] || 'circle' }));
     state[f.id] = options[0] ? options[0].value : '';
     const sel = createSelect(host, {
@@ -65,6 +74,13 @@ export function buildToolbar(opts) {
     host.addEventListener('input', (e) => e.stopPropagation());
     void sel;
   });
+  bar.appendChild(rowFilters);
+
+  // ---- Row 3: custom range (hidden by default) ----
+  const rowCustom = el('div', 'lp-toolbar-row-custom');
+  bar.appendChild(rowCustom);
+
+  let refreshBtn = null;
   if (o.onRefresh) {
     const r = el('button', 'lp-refresh');
     r.type = 'button';
@@ -72,10 +88,13 @@ export function buildToolbar(opts) {
     r.title = 'Refresh';
     r.appendChild(icon('refresh-cw'));
     r.addEventListener('click', () => { r.classList.remove('spin'); void r.offsetWidth; r.classList.add('spin'); o.onRefresh(); });
-    bar.appendChild(r);
+    rowFilters.appendChild(r);
+    refreshBtn = r;
   }
   paint();
-  const api = { el: bar, state, setFilterOptions: (id, opts) => { if (selects[id]) selects[id].setOptions(opts); } };
+  const api = { el: bar, state, setFilterOptions: (id, opts) => { if (selects[id]) selects[id].setOptions(opts); }, rowCustom, rowFilters,
+    // Insert an extra filter (e.g. Admission date) into the same row, before the refresh button.
+    addFilterEl: (node) => { if (refreshBtn) rowFilters.insertBefore(node, refreshBtn); else rowFilters.appendChild(node); } };
   return api;
 }
 

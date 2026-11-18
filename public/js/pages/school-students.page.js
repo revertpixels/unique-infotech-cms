@@ -4,15 +4,15 @@
 // permanent delete). Search by name, Student ID, or parent phone. Siblings may share phone.
 import { db } from '../config/firebase-config.js';
 import { collection, getDocs, query, where, doc, getDoc } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.69';
-import { registerDirty, confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.69';
-import { buildStats, buildToolbar } from '../components/list-page.js?v=1.8.69';
-import { createSelect } from '../components/ui-select.js?v=1.8.69';
-import { openMenu } from '../components/ui-menu.js?v=1.8.69';
-import { confirmDialog } from '../components/ui-confirm.js?v=1.8.69';
-import { formatINR, formatDateIN } from '../utils/formatter.js?v=1.8.69';
-import { isCourseActive } from '../utils/session-rules.js?v=1.8.69';
-import { localToday } from '../utils/school-lifecycle.js?v=1.8.69';
+import { showToast } from '../components/toast.js?v=1.8.71';
+import { registerDirty, confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.71';
+import { buildStats, buildToolbar } from '../components/list-page.js?v=1.8.71';
+import { createSelect } from '../components/ui-select.js?v=1.8.71';
+import { openMenu } from '../components/ui-menu.js?v=1.8.71';
+import { confirmDialog } from '../components/ui-confirm.js?v=1.8.71';
+import { formatINR, formatDateIN } from '../utils/formatter.js?v=1.8.71';
+import { isCourseActive } from '../utils/session-rules.js?v=1.8.71';
+import { localToday } from '../utils/school-lifecycle.js?v=1.8.71';
 
 const COL = 'students';
 const GENDER_LABELS = { male: 'Male', female: 'Female', other: 'Other' };
@@ -234,3 +234,4 @@ export async function mount({ container, profile, ctx }) {
     setError('Could not load students.');
   }
 }
+

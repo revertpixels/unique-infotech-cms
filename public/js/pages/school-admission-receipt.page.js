@@ -4,8 +4,8 @@
 // settings/org_config. Never shows full Aadhaar.
 import { db } from '../config/firebase-config.js';
 import { doc, getDoc, getDocs, collection, query, where } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.68';
-import { buildSchoolReceiptData } from '../utils/school-receipt.js?v=1.8.68';
+import { showToast } from '../components/toast.js?v=1.8.71';
+import { buildSchoolReceiptData } from '../utils/school-receipt.js?v=1.8.71';
 
 const COL = 'students';
 const DOC_KEYS = ['photo', 'signature'];
@@ -409,3 +409,4 @@ async function downloadPdf() {
     btn.textContent = original;
   }
 }
+

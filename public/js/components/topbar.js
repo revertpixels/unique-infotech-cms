@@ -1,5 +1,5 @@
-import { getRunningPeriod, getPeriodOptions } from '../utils/date.utils.js?v=1.8.68';
-import { loadSessions, getSelectedSessionId, setSelectedSession } from '../core/sessions.js?v=1.8.68';
+import { getRunningPeriod, getPeriodOptions } from '../utils/date.utils.js?v=1.8.71';
+import { loadSessions, getSelectedSessionId, setSelectedSession } from '../core/sessions.js?v=1.8.71';
 
 let listenersRegistered = false;
 let sessionsListenerRegistered = false;
@@ -281,6 +281,7 @@ export function setNotifCount(n) {
   if (dot) dot.hidden = count === 0;
   btn.setAttribute('aria-label', count > 0 ? 'Notifications (' + count + ' new)' : 'Notifications');
 }
+
 
 
 

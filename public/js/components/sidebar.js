@@ -1,7 +1,7 @@
-import { ROUTES, ROLE_LABELS } from '../core/router.js?v=1.8.68';
-import { APP_VERSION } from '../core/app.js?v=1.8.68';
-import { getRunningPeriod, getNextDueDate, formatDayMonth } from '../utils/date.utils.js?v=1.8.68';
-import { getRunningSession, toPeriod, daysLeft, expectedStatus } from '../core/sessions.js?v=1.8.68';
+import { ROUTES, ROLE_LABELS } from '../core/router.js?v=1.8.71';
+import { APP_VERSION } from '../core/app.js?v=1.8.71';
+import { getRunningPeriod, getNextDueDate, formatDayMonth } from '../utils/date.utils.js?v=1.8.71';
+import { getRunningSession, toPeriod, daysLeft, expectedStatus } from '../core/sessions.js?v=1.8.71';
 
 let drawerOpen = false;
 let tipEl = null;
@@ -350,6 +350,7 @@ export function setNavCount(key, count, isAlert) {
     if (isAlert) pill.classList.add('alert'); else pill.classList.remove('alert');
   });
 }
+
 
 
 

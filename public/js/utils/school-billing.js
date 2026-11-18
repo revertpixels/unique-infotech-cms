@@ -11,8 +11,8 @@ import {
   collection, getDocs, query, where, doc, getDoc, addDoc, updateDoc, serverTimestamp,
   runTransaction
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.69';
-import { localToday, monthSeq, nextMonth, previousMonth } from './school-lifecycle.js?v=1.8.69';
+import { showToast } from '../components/toast.js?v=1.8.71';
+import { localToday, monthSeq, nextMonth, previousMonth } from './school-lifecycle.js?v=1.8.71';
 
 const BILLS_COL = 'bills';
 const PAYMENTS_COL = 'payments';
@@ -185,3 +185,4 @@ export async function applyWaiver(tx, { studentId, billId, amount, reason, waive
   });
   return { waiverId: waiverRef.id, amount, remaining: rupees(outstanding - amount) };
 }
+

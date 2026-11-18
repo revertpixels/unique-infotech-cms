@@ -101,12 +101,12 @@
 .school-admissions .adm-confirm-label {display:flex;align-items:flex-start;gap:9px;font-size:13px;line-height:1.5;}
 .school-admissions #adm-confirmReceived {flex:0 0 17px;width:17px;height:17px;margin-top:1px;accent-color:var(--primary,#0f766e);}
 .school-admissions .adm-zero-note {margin:12px 0 0;padding:9px 12px;border-left:3px solid var(--primary,#0f766e);border-radius:4px;background:color-mix(in srgb,var(--primary,#0f766e) 5%,var(--surface,#fff));color:var(--text-mute,#64748b);font-size:12px;line-height:1.5;}
-.school-admissions #adm-stats .lp-stats {grid-template-columns:repeat(3,minmax(0,1fr));}
+.school-admissions #adm-stats .lp-stats {grid-template-columns:repeat(4,minmax(0,1fr));}
 .school-admissions #adm-stats .lp-stats {display:grid;gap:14px;margin-bottom:16px;}
 .school-admissions .adm-table-card {margin-bottom:30px;}
 .school-admissions .adm-form-card {margin-top:0;}
 .school-admissions #adm-form {scroll-margin-top:80px;}
-@media(max-width:760px){.school-admissions .adm-mode-row,.school-admissions .adm-payment-summary{grid-template-columns:1fr;}.school-admissions .adm-mode-card{height:auto;}.school-admissions #adm-stats .lp-stats{grid-template-columns:1fr;}}
+@media(max-width:760px){.school-admissions .adm-mode-row,.school-admissions .adm-payment-summary{grid-template-columns:1fr;}.school-admissions .adm-mode-card{height:auto;}.school-admissions #adm-stats .lp-stats{grid-template-columns:repeat(2,minmax(0,1fr));}}
 
 /* Final payment polish: full-width reason dropdown and filled total footer. */
 .school-admissions .adm-none-reason-wrap > .ui-label-row {

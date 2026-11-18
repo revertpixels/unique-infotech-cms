@@ -1,18 +1,18 @@
 import { db } from '../config/firebase-config.js';
 import { collection, getDocs, query, where, doc, getDoc, serverTimestamp, runTransaction } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.68';
-import { registerDirty, confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.68';
-import { buildStats, buildToolbar, renderPager } from '../components/list-page.js?v=1.8.68';
-import { createSelect } from '../components/ui-select.js?v=1.8.68';
-import { openMenu } from '../components/ui-menu.js?v=1.8.68';
-import { confirmDialog } from '../components/ui-confirm.js?v=1.8.68';
-import { getSelectedSessionId, getCachedSessions, loadSessions, todayISO } from '../core/sessions.js?v=1.8.68';
-import { firstInstallmentOf, admissionState, sessionLabel, installmentSchedule, batchAllowsCourse, batchCourseLabel, isCourseActive } from '../utils/session-rules.js?v=1.8.68';
-import { formatINR, formatDateIN, initials } from '../utils/formatter.js?v=1.8.68';
-import { validatePhone, validateEmail, validateDOB, validateName, validateRequired } from '../utils/validator.js?v=1.8.68';
-import { listStudentsRaw, checkDuplicatePhone, readStudentId, readReceiptNo, writeCounter, createStudentWithDocs, updateStudentWithDocs, updateStudent, deleteStudent } from '../services/admission.service.js?v=1.8.68';
-import { feeTotal } from '../utils/fees.js?v=1.8.68';
-import { compressTo100KB, readAsDataURL, blobToDataURL, isImageFile, formatBytes } from '../utils/image-compress.js?v=1.8.68';
+import { showToast } from '../components/toast.js?v=1.8.71';
+import { registerDirty, confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.71';
+import { buildStats, buildToolbar, renderPager } from '../components/list-page.js?v=1.8.71';
+import { createSelect } from '../components/ui-select.js?v=1.8.71';
+import { openMenu } from '../components/ui-menu.js?v=1.8.71';
+import { confirmDialog } from '../components/ui-confirm.js?v=1.8.71';
+import { getSelectedSessionId, getCachedSessions, loadSessions, todayISO } from '../core/sessions.js?v=1.8.71';
+import { firstInstallmentOf, admissionState, sessionLabel, installmentSchedule, batchAllowsCourse, batchCourseLabel, isCourseActive } from '../utils/session-rules.js?v=1.8.71';
+import { formatINR, formatDateIN, initials } from '../utils/formatter.js?v=1.8.71';
+import { validatePhone, validateEmail, validateDOB, validateName, validateRequired } from '../utils/validator.js?v=1.8.71';
+import { listStudentsRaw, checkDuplicatePhone, readStudentId, readReceiptNo, writeCounter, createStudentWithDocs, updateStudentWithDocs, updateStudent, deleteStudent } from '../services/admission.service.js?v=1.8.71';
+import { feeTotal } from '../utils/fees.js?v=1.8.71';
+import { compressTo100KB, readAsDataURL, blobToDataURL, isImageFile, formatBytes } from '../utils/image-compress.js?v=1.8.71';
 
 const COL = 'students';
 
@@ -33,8 +33,12 @@ const QUALIFICATIONS = [
 ];
 const STATUS_PILLS = [
   { value: 'active', label: 'Active', cls: 'active' },
-  { value: 'dropped', label: 'Dropped', cls: 'dropped' },
-  { value: 'completed', label: 'Completed', cls: 'completed' }
+  { value: 'dropped', label: 'Dropped', cls: 'inactive' },
+  { value: 'completed', label: 'Completed', cls: 'completed' },
+  { value: 'inactive', label: 'Inactive', cls: 'inactive' },
+  { value: 'ended', label: 'Ended', cls: 'archived' },
+  { value: 'archived', label: 'Archived', cls: 'archived' },
+  { value: 'break', label: 'On break', cls: 'break' }
 ];
 const PAGE_SIZE = 10;
 
@@ -73,6 +77,14 @@ export async function mount({ container, profile, ctx }) {
   const isSuper = profile && profile.role === 'superadmin';
   const isHead = profile && profile.role === 'branch_head';
   const fixedBranch = isHead ? profile.branchId : null;
+
+  // ---------- list / filter state (declared first, before any use) ----------
+  let students = [], courses = [], batches = [], branches = [], sessions = [];
+  let page = 1, filteredList = [];
+  let admDateFilter = 'all';   // 'all'|'today'|'last7'|'thismonth'|'lastmonth'|'last3months'|'thisyear'|'custom'
+  let admDateFrom = '', admDateTo = '';
+  let dateErrEl = null;
+  let dateSel = null, dateCustomWrap = null, fromInp = null, toInp = null;
 
   if (!youth) {
     showToast('Admissions is only available in the Youth Centre.', 'error');
@@ -150,24 +162,101 @@ export async function mount({ container, profile, ctx }) {
     placeholder: 'Search name, student ID, phone or guardian',
     filters: tbFilters,
     onChange: () => { page = 1; render(); },
-    onRefresh: () => load()
+    onRefresh: () => load(),
+    rowLayout: true
   });
   const tbHost = $('adm-toolbar');
   if (tbHost) {
     tbHost.innerHTML = '';
-    tb.el.classList.add('adm-toolbar-row');
     tbHost.appendChild(tb.el);
+
+    // Admission date filter dropdown + custom range row (inside row 3 container).
+    const dateWrap = document.createElement('div');
+    dateWrap.className = 'lp-filter';
+    const dateLabel = document.createElement('span');
+    dateLabel.className = 'lp-filter-label';
+    dateLabel.textContent = 'Admission date';
+    const dateSelHost = document.createElement('div');
+    dateSelHost.className = 'lp-filter-select';
+    dateWrap.appendChild(dateLabel);
+    dateWrap.appendChild(dateSelHost);
+    dateSel = createSelect(dateSelHost, {
+      options: [
+        { value: 'all', label: 'All dates', icon: 'calendar-clock' },
+        { value: 'today', label: 'Today', icon: 'calendar' },
+        { value: 'last7', label: 'Last 7 days', icon: 'calendar' },
+        { value: 'thismonth', label: 'This month', icon: 'calendar' },
+        { value: 'lastmonth', label: 'Last month', icon: 'calendar' },
+        { value: 'last3months', label: 'Last 3 months', icon: 'calendar' },
+        { value: 'thisyear', label: 'This year', icon: 'calendar' },
+        { value: 'custom', label: 'Custom range', icon: 'calendar' }
+      ],
+      value: admDateFilter, ariaLabel: 'Admission date filter',
+      onChange: (v) => {
+        admDateFilter = v;
+        admDateFrom = ''; admDateTo = '';
+        dateCustomWrap.hidden = v !== 'custom';
+        page = 1; render();
+      }
+    });
+    tb.addFilterEl(dateWrap);
+
+    dateCustomWrap = document.createElement('div');
+    dateCustomWrap.className = 'lp-date-custom';
+    dateCustomWrap.hidden = admDateFilter !== 'custom';
+    fromInp = document.createElement('input');
+    fromInp.type = 'date';
+    fromInp.className = 'lp-date-input';
+    toInp = document.createElement('input');
+    toInp.type = 'date';
+    toInp.className = 'lp-date-input';
+    const fromLbl = document.createElement('span');
+    fromLbl.className = 'lp-date-label';
+    fromLbl.textContent = 'From';
+    const toLbl = document.createElement('span');
+    toLbl.className = 'lp-date-label';
+    toLbl.textContent = 'To';
+    dateErrEl = document.createElement('span');
+    dateErrEl.className = 'lp-date-err';
+    dateErrEl.hidden = true;
+    dateCustomWrap.appendChild(fromLbl);
+    dateCustomWrap.appendChild(fromInp);
+    dateCustomWrap.appendChild(toLbl);
+    dateCustomWrap.appendChild(toInp);
+    dateCustomWrap.appendChild(dateErrEl);
+    tb.rowCustom.appendChild(dateCustomWrap);
+
+    fromInp.addEventListener('change', () => {
+      admDateFrom = fromInp.value; page = 1; render();
+    });
+    toInp.addEventListener('change', () => {
+      admDateTo = toInp.value; page = 1; render();
+    });
   }
 
   // ---------- stats ----------
   const stats = buildStats([
-    { label: 'Total admissions', value: 0, sub: 'This session', icon: 'user-plus', tone: 'indigo' },
-    { label: 'This month', value: 0, sub: 'Admitted this month', icon: 'calendar', tone: 'green' },
-    { label: 'Today', value: 0, sub: 'Admitted today', icon: 'clock', tone: 'amber' },
-    { label: 'Active students', value: 0, sub: 'Currently enrolled', icon: 'check-circle', tone: 'violet' }
+    { label: 'Total students', value: 0, sub: 'All records', icon: 'users', tone: 'indigo' },
+    { label: 'Active', value: 0, sub: 'Currently enrolled', icon: 'check-circle', tone: 'green' },
+    { label: 'On break', value: 0, sub: 'Currently on break', icon: 'pause-circle', tone: 'amber' },
+    { label: 'Admitted this month', value: 0, sub: 'This calendar month', icon: 'calendar', tone: 'blue' }
   ]);
   const statsHost = $('adm-stats');
   if (statsHost) statsHost.appendChild(stats.el);
+  // Clicking "Admitted this month" card (index 3) sets the date filter to This month.
+  setTimeout(() => {
+    const cards = statsHost.querySelectorAll('.lp-stat');
+    if (cards[3]) {
+      cards[3].style.cursor = 'pointer';
+      cards[3].addEventListener('click', () => {
+        admDateFilter = 'thismonth';
+        admDateFrom = ''; admDateTo = '';
+        dateSel.value = 'thismonth';
+        dateCustomWrap.hidden = true;
+        page = 1; render();
+      });
+    }
+  }, 0);
 
   function showRealStats() {
     statsHost.innerHTML = '';
@@ -175,9 +264,7 @@ export async function mount({ container, profile, ctx }) {
   }
 
   // ---------- state ----------
-  let students = [], courses = [], batches = [], branches = [], sessions = [];
   let editId = null, editRow = null, saved = {}, touched = false, saving = false, loading = false;
-  let page = 1, filteredList = [];
   let returnDoc = null;          // { id, sessionId, studentId, sessionName, previousStudentIds } of found returning student
   let keptDocs = {};             // key -> old doc data { data (base64), name, sizeBytes, type, updatedAt }
   let docAction = {};            // key -> 'keep' | 'replace' | 'remove'
@@ -252,10 +339,10 @@ export async function mount({ container, profile, ctx }) {
   function showSkeleton() {
     statsHost.innerHTML = '';
     const skStats = buildStats([
-      { label: 'Total admissions', value: '', sub: 'This session', icon: 'user-plus', tone: 'indigo' },
-      { label: 'This month', value: '', sub: 'Admitted this month', icon: 'calendar', tone: 'green' },
-      { label: 'Today', value: '', sub: 'Admitted today', icon: 'clock', tone: 'amber' },
-      { label: 'Active students', value: '', sub: 'Currently enrolled', icon: 'check-circle', tone: 'violet' }
+      { label: 'Total students', value: '', sub: 'All records', icon: 'users', tone: 'indigo' },
+      { label: 'Active', value: '', sub: 'Currently enrolled', icon: 'check-circle', tone: 'green' },
+      { label: 'On break', value: '', sub: 'Currently on break', icon: 'pause-circle', tone: 'amber' },
+      { label: 'Admitted this month', value: '', sub: 'This calendar month', icon: 'calendar', tone: 'blue' }
     ]);
     statsHost.appendChild(skStats.el);
     skStats.el.querySelectorAll('.lp-stat-value, .lp-stat-label, .lp-stat-sub').forEach((el) => {
@@ -376,10 +463,10 @@ function dueLabel(dueISO) {
     } catch (e) {
       console.error('[admissions] load failed', e);
       showRealStats();
-      stats.update(0, '-', 'This session');
-      stats.update(1, '-', 'Admitted this month');
-      stats.update(2, '-', 'Admitted today');
-      stats.update(3, '-', 'Currently enrolled');
+      stats.update(0, '-', 'All records');
+      stats.update(1, '-', 'Currently enrolled');
+      stats.update(2, '-', 'Currently on break');
+      stats.update(3, '-', 'This calendar month');
       rowsHost.innerHTML = '';
       const tr = mk('tr');
       const td = mk('td', 'adm-empty');
@@ -1081,9 +1168,32 @@ function dueLabel(dueISO) {
   }
 
   // ---------- render list ----------
+  function admDateRange() {
+    const now = new Date();
+    const y = now.getFullYear(), m = now.getMonth(), d = now.getDate();
+    const pad = (n) => String(n).padStart(2, '0');
+    const iso = (yy, mm, dd) => yy + '-' + pad(mm + 1) + '-' + pad(dd);
+    let from = '', to = '', err = '';
+    switch (admDateFilter) {
+      case 'today': from = iso(y, m, d); to = iso(y, m, d); break;
+      case 'last7': { const s = new Date(now); s.setDate(d - 6); from = iso(s.getFullYear(), s.getMonth(), s.getDate()); to = iso(y, m, d); break; }
+      case 'thismonth': from = iso(y, m, 1); to = iso(y, m, new Date(y, m + 1, 0).getDate()); break;
+      case 'lastmonth': { const pm = m === 0 ? 11 : m - 1; const py = m === 0 ? y - 1 : y; from = iso(py, pm, 1); to = iso(py, pm, new Date(py, pm + 1, 0).getDate()); break; }
+      case 'last3months': { const s = new Date(now); s.setMonth(m - 2); s.setDate(1); from = iso(s.getFullYear(), s.getMonth(), 1); to = iso(y, m, new Date(y, m + 1, 0).getDate()); break; }
+      case 'thisyear': from = iso(y, 0, 1); to = iso(y, 11, 31); break;
+      case 'custom': from = admDateFrom; to = admDateTo; break;
+    }
+    if (admDateFilter === 'custom' && from && to && to < from) err = 'To date must be on or after From date.';
+    return { from, to, err };
+  }
+
   function render() {
-    rowsHost.innerHTML = '';
+    if (!rowsHost) return;
+    try {
+      rowsHost.innerHTML = '';
     const f = tb.state || {};
+    const dr = admDateRange();
+    if (dateErrEl) { dateErrEl.textContent = dr.err || ''; dateErrEl.hidden = !dr.err; }
     const q = (f.q || '').toLowerCase();
     const selSession = getSelectedSessionId();
     let list = students.filter(s => {
@@ -1092,6 +1202,9 @@ function dueLabel(dueISO) {
       if (f.course && f.course !== 'all' && s.courseId !== f.course) return false;
       if (f.batch && f.batch !== 'all' && s.batchId !== f.batch) return false;
       if (isSuper && f.branch && f.branch !== 'all' && s.branchId !== f.branch) return false;
+      const ad = s.admissionDate || '';
+      if (dr.from && ad < dr.from) return false;
+      if (dr.to && ad > dr.to) return false;
       if (q) {
         const c = courseOf(s.courseId);
         const hay = [s.name, s.studentId, s.phone, s.guardianName, c.courseCode || c.code, c.name, s.batchName || ''].map(x => (x || '').toLowerCase()).join(' ');
@@ -1110,24 +1223,21 @@ function dueLabel(dueISO) {
       const now = new Date();
       return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
     }).length;
-    const today = students.filter(s => {
-      if (!selSession || s.sessionId !== selSession) return false;
-      return s.admissionDate === new Date().toISOString().slice(0, 10);
-    }).length;
     const active = students.filter(s => (!selSession || s.sessionId === selSession) && s.status === 'active').length;
+    const onBreak = students.filter(s => (!selSession || s.sessionId === selSession) && (s.status === 'inactive' || s.status === 'ended' || s.status === 'break')).length;
     const selSessionId = getSelectedSessionId();
     const selSName = sessions.find(s => s.id === selSessionId)?.name || selSessionId || 'This session';
     stats.update(0, total, selSName);
-    stats.update(1, thisMonth, 'Admitted this month');
-    stats.update(2, today, 'Admitted today');
-    stats.update(3, active, 'Currently enrolled');
+    stats.update(1, active, 'Currently enrolled');
+    stats.update(2, onBreak, 'Currently on break');
+    stats.update(3, thisMonth, 'This calendar month');
 
     const totalPages = Math.max(1, Math.ceil(list.length / PAGE_SIZE));
     if (page > totalPages) page = totalPages;
     const start = (page - 1) * PAGE_SIZE;
     const pageList = list.slice(start, start + PAGE_SIZE);
 
-    const hasFilter = q || f.status !== 'all' || f.course !== 'all' || f.batch !== 'all' || (isSuper && f.branch !== 'all');
+    const hasFilter = q || f.status !== 'all' || f.course !== 'all' || f.batch !== 'all' || (isSuper && f.branch !== 'all') || admDateFilter !== 'all' || admDateFrom || admDateTo;
 
     if (!list.length) {
       rowsHost.innerHTML = '';
@@ -1141,7 +1251,7 @@ function dueLabel(dueISO) {
         td.colSpan = 7;
         td.innerHTML = 'No students match your filters. <a href="#" id="adm-clear-filters" style="color:var(--primary);cursor:pointer;text-decoration:underline">Clear filters</a>';
         const cl = td.querySelector('#adm-clear-filters');
-        cl.addEventListener('click', (ev) => { ev.preventDefault(); tb.state.q = ''; tb.state.status = 'all'; tb.state.course = 'all'; tb.state.batch = 'all'; if (isSuper) tb.state.branch = 'all'; render(); });
+        cl.addEventListener('click', (ev) => { ev.preventDefault(); tb.state.q = ''; tb.state.status = 'all'; tb.state.course = 'all'; tb.state.batch = 'all'; if (isSuper) tb.state.branch = 'all'; admDateFilter = 'all'; admDateFrom = ''; admDateTo = ''; dateSel.value = 'all'; dateCustomWrap.hidden = true; fromInp.value = ''; toInp.value = ''; render(); });
         tr.appendChild(td);
         rowsHost.appendChild(tr);
         if (footEl) footEl.hidden = true;
@@ -1189,16 +1299,17 @@ function dueLabel(dueISO) {
         ki.setAttribute('data-lucide', 'more-vertical');
         kebab.appendChild(ki);
         const items = [
-          { label: 'View', icon: 'eye', onClick: () => viewStudent(s) },
-          { label: 'View student', icon: 'user', onClick: () => { location.hash = '#/students/' + s.studentId; } },
+          { section: 'View', label: 'View details', icon: 'eye', onClick: () => viewStudent(s) },
+          { label: 'View student profile', icon: 'user', onClick: () => { location.hash = '#/students/' + s.studentId; } },
           { label: 'View admission receipt', icon: 'file-text', onClick: () => { location.hash = '#/admissions/' + s.id + '/receipt'; } },
-          { label: 'Edit', icon: 'pencil', onClick: async () => {
+          'sep',
+          { section: 'Manage', label: 'Edit', icon: 'pencil', onClick: async () => {
             if (!form.hidden && !saveBtn.disabled && !(await confirmLeave({ clear: false }))) return;
             openForm(s);
           } }
         ];
         if (!isHead) {
-          items.push('sep', { label: 'Change status', icon: 'edit-3', onClick: () => changeStatus(s) }, 'sep', { label: 'Delete', icon: 'trash-2', danger: true, onClick: () => tryDelete(s) });
+          items.push('sep', { section: 'Danger', label: 'Change status / End course', icon: 'edit-3', danger: true, onClick: () => changeStatus(s) }, { label: 'Delete', icon: 'trash-2', danger: true, onClick: () => tryDelete(s) });
         }
         kebab.addEventListener('click', () => openMenu(kebab, items));
         tdAct.appendChild(kebab);
@@ -1213,6 +1324,19 @@ function dueLabel(dueISO) {
     }
 
     if (typeof lucide !== 'undefined') lucide.createIcons();
+    } catch (e) {
+      console.error('[admissions] render failed', e);
+      const msg = e && e.message ? e.message : String(e);
+      rowsHost.innerHTML = '';
+      const tr = mk('tr');
+      const td = mk('td', 'adm-empty');
+      td.colSpan = 7;
+      td.innerHTML = 'Could not load students: ' + msg + '. <button type="button" id="adm-retry" class="ui-btn primary" style="margin-top:8px;display:inline-flex;align-items:center;gap:6px;"><i data-lucide="rotate-ccw"></i>Retry</button>';
+      tr.appendChild(td);
+      rowsHost.appendChild(tr);
+      const retryBtn = $('adm-retry');
+      if (retryBtn) retryBtn.addEventListener('click', () => { load(); render(); });
+    }
   }
 
   // ---------- form actions ----------
@@ -1896,6 +2020,7 @@ function dueLabel(dueISO) {
 export function unmount() {
   clearDirty();
 }
+
 
 
 

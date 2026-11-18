@@ -9,18 +9,18 @@ import {
   collection, getDocs, query, where, doc, getDoc, addDoc, updateDoc, serverTimestamp,
   runTransaction, deleteField
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.68';
-import { registerDirty, confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.68';
-import { buildStats, buildToolbar, renderPager } from '../components/list-page.js?v=1.8.68';
-import { createSelect } from '../components/ui-select.js?v=1.8.68';
-import { openMenu } from '../components/ui-menu.js?v=1.8.68';
-import { confirmDialog } from '../components/ui-confirm.js?v=1.8.68';
-import { formatINR, formatDateIN, initials } from '../utils/formatter.js?v=1.8.68';
-import { validatePhone, validateEmail, validateDOB, validateName, validateRequired } from '../utils/validator.js?v=1.8.68';
-import { readStudentId, readReceiptNo, writeCounter } from '../services/admission.service.js?v=1.8.68';
-import { isCourseActive, batchAllowsCourse, todayISO } from '../utils/session-rules.js?v=1.8.68';
-import { compressTo100KB, readAsDataURL, blobToDataURL, isImageFile } from '../utils/image-compress.js?v=1.8.68';
-import { firstMonthlyMonth } from '../utils/school-receipt.js?v=1.8.68';
+import { showToast } from '../components/toast.js?v=1.8.71';
+import { registerDirty, confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.71';
+import { buildStats, buildToolbar, renderPager } from '../components/list-page.js?v=1.8.71';
+import { createSelect } from '../components/ui-select.js?v=1.8.71';
+import { openMenu } from '../components/ui-menu.js?v=1.8.71';
+import { confirmDialog } from '../components/ui-confirm.js?v=1.8.71';
+import { formatINR, formatDateIN, initials } from '../utils/formatter.js?v=1.8.71';
+import { validatePhone, validateEmail, validateDOB, validateName, validateRequired } from '../utils/validator.js?v=1.8.71';
+import { readStudentId, readReceiptNo, writeCounter } from '../services/admission.service.js?v=1.8.71';
+import { isCourseActive, batchAllowsCourse, todayISO } from '../utils/session-rules.js?v=1.8.71';
+import { compressTo100KB, readAsDataURL, blobToDataURL, isImageFile } from '../utils/image-compress.js?v=1.8.71';
+import { firstMonthlyMonth } from '../utils/school-receipt.js?v=1.8.71';
 
 const COL = 'students';
 const GENDERS = [
@@ -50,8 +50,9 @@ export async function mount({ container, profile, ctx }) {
     return;
   }
   const isSuper = profile && profile.role === 'superadmin';
-  if (!isSuper) {
-    showToast({ type: 'error', message: 'Kids Admissions is restricted to Super Admin.' });
+  const isHead = profile && profile.role === 'school_head';
+  if (!isSuper && !isHead) {
+    showToast({ type: 'error', message: 'Kids Admissions is restricted to Super Admin and School Head.' });
     return;
   }
 
@@ -85,6 +86,17 @@ export async function mount({ container, profile, ctx }) {
   if ([form, addBtn, saveBtn, cancelBtn, rowsHost, emptyEl, loadingEl, noMatchEl, loadErrorEl, feeBreakdown, feeConfigured, feePrior, feeAdj, feeDue, monthlyFeeEl, firstMonthlyEl, paymentModeFull, paymentModeDiff, paymentModeNone, noPaymentReasonWrap, noPaymentReasonInput, noPaymentOtherWrap, noPaymentOtherInput, confirmReceivedWrap, confirmReceivedInput].some(el => !el)) {
     showToast({ type: 'error', message: 'Admission page assets do not match. Refresh the page before continuing.' }); return;
   }
+
+  // Hide New admission for school_head (view-only).
+  if (!isSuper) { addBtn.hidden = true; }
+
+  // ---------- list / filter state (declared first, before any use) ----------
+  let students = [], levels = [], batches = [], coursesById = {};
+  let page = 1;
+  let admDateFilter = 'all';   // 'all'|'today'|'last7'|'thismonth'|'lastmonth'|'last3months'|'thisyear'|'custom'
+  let admDateFrom = '', admDateTo = '';
+  let dateErrEl = null;
+  let dateSel = null, dateCustomWrap = null, fromInp = null, toInp = null;
 
   // ---------- form selects ----------
   const genderSel = createSelect($('adm-gender-host'), {
@@ -169,31 +181,114 @@ export async function mount({ container, profile, ctx }) {
   const tbFilters = [
     { id: 'status', label: 'Status', options: [
       { value: 'all', label: 'All statuses' }, { value: 'active', label: 'Active' },
-      { value: 'completed', label: 'Completed' }, { value: 'archived', label: 'Archived' }
+      { value: 'completed', label: 'Completed' }, { value: 'archived', label: 'Archived' },
+      { value: 'inactive', label: 'Inactive' }
     ]},
-    { id: 'level', label: 'Level', options: [{ value: 'all', label: 'All levels', icon: 'book-open' }] }
+    { id: 'level', label: 'Level', options: [{ value: 'all', label: 'All levels', icon: 'book-open' }] },
+    { id: 'batch', label: 'Batch', options: [{ value: 'all', label: 'All batches', icon: 'layers' }] }
   ];
   const tb = buildToolbar({
     placeholder: 'Search name, student ID or parent phone',
     filters: tbFilters,
     onChange: () => { page = 1; render(); },
-    onRefresh: () => load()
+    onRefresh: () => load(),
+    rowLayout: true
   });
   const tbHost = $('adm-toolbar');
-  if (tbHost) { tbHost.innerHTML = ''; tb.el.classList.add('adm-toolbar-row'); tbHost.appendChild(tb.el); }
+  if (tbHost) {
+    tbHost.innerHTML = '';
+    tbHost.appendChild(tb.el);
+
+    // Admission date filter dropdown + custom range row (inside row 3 container).
+    const dateWrap = document.createElement('div');
+    dateWrap.className = 'lp-filter';
+    const dateLabel = document.createElement('span');
+    dateLabel.className = 'lp-filter-label';
+    dateLabel.textContent = 'Admission date';
+    const dateSelHost = document.createElement('div');
+    dateSelHost.className = 'lp-filter-select';
+    dateWrap.appendChild(dateLabel);
+    dateWrap.appendChild(dateSelHost);
+    dateSel = createSelect(dateSelHost, {
+      options: [
+        { value: 'all', label: 'All dates', icon: 'calendar-clock' },
+        { value: 'today', label: 'Today', icon: 'calendar' },
+        { value: 'last7', label: 'Last 7 days', icon: 'calendar' },
+        { value: 'thismonth', label: 'This month', icon: 'calendar' },
+        { value: 'lastmonth', label: 'Last month', icon: 'calendar' },
+        { value: 'last3months', label: 'Last 3 months', icon: 'calendar' },
+        { value: 'thisyear', label: 'This year', icon: 'calendar' },
+        { value: 'custom', label: 'Custom range', icon: 'calendar' }
+      ],
+      value: admDateFilter, ariaLabel: 'Admission date filter',
+      onChange: (v) => {
+        admDateFilter = v;
+        admDateFrom = ''; admDateTo = '';
+        dateCustomWrap.hidden = v !== 'custom';
+        page = 1; render();
+      }
+    });
+    tb.addFilterEl(dateWrap);
+
+    dateCustomWrap = document.createElement('div');
+    dateCustomWrap.className = 'lp-date-custom';
+    dateCustomWrap.hidden = admDateFilter !== 'custom';
+    fromInp = document.createElement('input');
+    fromInp.type = 'date';
+    fromInp.className = 'lp-date-input';
+    toInp = document.createElement('input');
+    toInp.type = 'date';
+    toInp.className = 'lp-date-input';
+    const fromLbl = document.createElement('span');
+    fromLbl.className = 'lp-date-label';
+    fromLbl.textContent = 'From';
+    const toLbl = document.createElement('span');
+    toLbl.className = 'lp-date-label';
+    toLbl.textContent = 'To';
+    dateErrEl = document.createElement('span');
+    dateErrEl.className = 'lp-date-err';
+    dateErrEl.hidden = true;
+    dateCustomWrap.appendChild(fromLbl);
+    dateCustomWrap.appendChild(fromInp);
+    dateCustomWrap.appendChild(toLbl);
+    dateCustomWrap.appendChild(toInp);
+    dateCustomWrap.appendChild(dateErrEl);
+    tb.rowCustom.appendChild(dateCustomWrap);
+
+    fromInp.addEventListener('change', () => {
+      admDateFrom = fromInp.value; page = 1; render();
+    });
+    toInp.addEventListener('change', () => {
+      admDateTo = toInp.value; page = 1; render();
+    });
+  }
 
   // ---------- stats (no duplicate) ----------
   const stats = buildStats([
-    { label: 'Total admissions', value: 0, sub: 'This centre', icon: 'user-plus', tone: 'indigo' },
-    { label: 'Active', value: 0, sub: 'Active students', icon: 'check-circle', tone: 'green' },
-    { label: 'Inactive', value: 0, sub: 'Inactive students', icon: 'pause-circle', tone: 'amber' }
+    { label: 'Total students', value: 0, sub: 'All records', icon: 'users', tone: 'indigo' },
+    { label: 'Active', value: 0, sub: 'Currently enrolled', icon: 'check-circle', tone: 'green' },
+    { label: 'On break', value: 0, sub: 'Currently on break', icon: 'pause-circle', tone: 'amber' },
+    { label: 'Admitted this month', value: 0, sub: 'This calendar month', icon: 'calendar', tone: 'blue' }
   ]);
   const statsHost = $('adm-stats');
   if (statsHost) statsHost.appendChild(stats.el);
+  // Clicking "Admitted this month" card (index 3) sets the date filter to This month.
+  setTimeout(() => {
+    const cards = statsHost.querySelectorAll('.lp-stat');
+    if (cards[3]) {
+      cards[3].style.cursor = 'pointer';
+      cards[3].addEventListener('click', () => {
+        admDateFilter = 'thismonth';
+        admDateFrom = ''; admDateTo = '';
+        dateSel.value = 'thismonth';
+        dateCustomWrap.hidden = true;
+        page = 1; render();
+      });
+    }
+  }, 0);
 
   // ---------- state ----------
-  let students = [], levels = [], batches = [], coursesById = {};
-  let page = 1, editId = null, editRow = null, saved = '', touched = false, saving = false, submitted = false, hydrating = false;
+  let editId = null, editRow = null, saved = '', touched = false, saving = false, submitted = false, hydrating = false;
   let alive = true; const uploadVersions = { photo: 0, signature: 0 };
   let loadError = null;
   let loading = true;
@@ -289,14 +384,34 @@ export async function mount({ container, profile, ctx }) {
 
   // ---------- renders ----------
   function statusPill(st) {
-    const cls = { active: 'active', completed: 'completed', archived: 'archived', inactive: 'inactive' }[st] || 'active';
-    const label = { active: 'Active', completed: 'Completed', archived: 'Archived', inactive: 'Inactive' }[st] || st;
+    const cls = { active: 'active', completed: 'completed', archived: 'archived', inactive: 'inactive', ended: 'archived', break: 'break', dropped: 'inactive' }[st] || 'active';
+    const label = { active: 'Active', completed: 'Completed', archived: 'Archived', inactive: 'Inactive', ended: 'Ended', break: 'On break', dropped: 'Dropped' }[st] || st;
     return '<span class="adm-pill ' + cls + '">' + label + '</span>';
+  }
+
+  function admDateRange() {
+    const now = new Date();
+    const y = now.getFullYear(), m = now.getMonth(), d = now.getDate();
+    const pad = (n) => String(n).padStart(2, '0');
+    const iso = (yy, mm, dd) => yy + '-' + pad(mm + 1) + '-' + pad(dd);
+    let from = '', to = '', err = '';
+    switch (admDateFilter) {
+      case 'today': from = iso(y, m, d); to = iso(y, m, d); break;
+      case 'last7': { const s = new Date(now); s.setDate(d - 6); from = iso(s.getFullYear(), s.getMonth(), s.getDate()); to = iso(y, m, d); break; }
+      case 'thismonth': from = iso(y, m, 1); to = iso(y, m, new Date(y, m + 1, 0).getDate()); break;
+      case 'lastmonth': { const pm = m === 0 ? 11 : m - 1; const py = m === 0 ? y - 1 : y; from = iso(py, pm, 1); to = iso(py, pm, new Date(py, pm + 1, 0).getDate()); break; }
+      case 'last3months': { const s = new Date(now); s.setMonth(m - 2); s.setDate(1); from = iso(s.getFullYear(), s.getMonth(), 1); to = iso(y, m, new Date(y, m + 1, 0).getDate()); break; }
+      case 'thisyear': from = iso(y, 0, 1); to = iso(y, 11, 31); break;
+      case 'custom': from = admDateFrom; to = admDateTo; break;
+    }
+    if (admDateFilter === 'custom' && from && to && to < from) err = 'To date must be on or after From date.';
+    return { from, to, err };
   }
 
   function render() {
     if (!rowsHost) return;
-    loading = false;
+    try {
+      loading = false;
     rowsHost.hidden = false;
     rowsHost.innerHTML = '';
     loadingEl.hidden = true;
@@ -305,11 +420,17 @@ export async function mount({ container, profile, ctx }) {
     loadErrorEl.hidden = true;
 
     const f = tb.state;
+    const dr = admDateRange();
+    if (dateErrEl) { dateErrEl.textContent = dr.err || ''; dateErrEl.hidden = !dr.err; }
     const list = students.filter((s) => {
       if (f.status && f.status !== 'all' && (s.status || 'active') !== f.status) return false;
       if (f.level && f.level !== 'all') {
         if (String(s.courseId || '') !== String(f.level)) return false;
       }
+      if (f.batch && f.batch !== 'all' && s.batchId !== f.batch) return false;
+      const ad = s.admissionDate || '';
+      if (dr.from && ad < dr.from) return false;
+      if (dr.to && ad > dr.to) return false;
       if (f.course && f.course !== 'all') {
         const c = courseOf(s.courseId);
         return (c.courseCode || c.code || c.id) === f.course || (c.name || '') === f.course;
@@ -324,18 +445,25 @@ export async function mount({ container, profile, ctx }) {
     if (students.length === 0) {
       emptyEl.hidden = false;
       footEl.hidden = true;
-      stats.update(0, 0);
-      stats.update(1, 0);
-      stats.update(2, 0);
+      stats.update(0, 0, 'All records');
+      stats.update(1, 0, 'Currently enrolled');
+      stats.update(2, 0, 'Currently on break');
+      stats.update(3, 0, 'This calendar month');
       return;
     }
 
     if (!list.length) {
       noMatchEl.hidden = false;
       footEl.hidden = true;
-      stats.update(0, students.length);
-      stats.update(1, students.filter((s) => (s.status || 'active') === 'active').length);
-      stats.update(2, students.filter((s) => { const st = s.status || 'active'; return st === 'completed' || st === 'archived' || st === 'inactive'; }).length);
+      stats.update(0, students.length, 'All records');
+      stats.update(1, students.filter((s) => (s.status || 'active') === 'active').length, 'Currently enrolled');
+      stats.update(2, students.filter((s) => { const st = s.status || 'active'; return st === 'inactive' || st === 'ended' || st === 'break'; }).length, 'Currently on break');
+      const now = new Date();
+      stats.update(3, students.filter((s) => { if (!s.admissionDate) return false; const d = new Date(s.admissionDate); return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear(); }).length, 'This calendar month');
+      const clearBtn = $('adm-no-match-clear');
+      if (clearBtn) {
+        clearBtn.onclick = (ev) => { ev.preventDefault(); tb.state.q = ''; tb.state.status = 'all'; tb.state.level = 'all'; tb.state.batch = 'all'; admDateFilter = 'all'; admDateFrom = ''; admDateTo = ''; dateSel.value = 'all'; dateCustomWrap.hidden = true; fromInp.value = ''; toInp.value = ''; render(); };
+      }
       return;
     }
 
@@ -371,13 +499,15 @@ export async function mount({ container, profile, ctx }) {
       ki.setAttribute('data-lucide', 'more-vertical');
       kebab.appendChild(ki);
       const items = [
-        { label: 'View', icon: 'eye', onClick: () => { location.hash = '#/school-admissions/' + s.id + '/receipt'; } },
-        { label: 'View admission receipt', icon: 'file-text', onClick: () => { location.hash = '#/school-admissions/' + s.id + '/receipt'; } },
-        { label: 'Edit', icon: 'pencil', onClick: async () => {
+        { section: 'View', label: 'View', icon: 'eye', onClick: () => { location.hash = '#/school-admissions/' + s.id + '/receipt'; } },
+        { label: 'View admission receipt', icon: 'file-text', onClick: () => { location.hash = '#/school-admissions/' + s.id + '/receipt'; } }
+      ];
+      if (isSuper) {
+        items.push('sep', { section: 'Manage', label: 'Edit', icon: 'pencil', onClick: async () => {
           if (!form.hidden && !saveBtn.disabled && !(await confirmLeave({ clear: false }))) return;
           openForm(students.find((x) => x.id === s.id));
-        } }
-      ];
+        } });
+      }
       kebab.addEventListener('click', () => openMenu(kebab, items));
       tdAct.appendChild(kebab);
       tr.appendChild(tdAct);
@@ -386,13 +516,33 @@ export async function mount({ container, profile, ctx }) {
     if (typeof lucide !== 'undefined') lucide.createIcons();
 
     const activeN = students.filter((s) => (s.status || 'active') === 'active').length;
-    const inactiveN = students.filter((s) => { const st = s.status || 'active'; return st === 'completed' || st === 'archived' || st === 'inactive'; }).length;
+    const onBreakN = students.filter((s) => { const st = s.status || 'active'; return st === 'inactive' || st === 'ended' || st === 'break'; }).length;
     const studentN = students.length;
-    stats.update(0, students.length);
-    stats.update(1, activeN);
-    stats.update(2, inactiveN);
+    const now = new Date();
+    const thisMonthN = students.filter((s) => {
+      if (!s.admissionDate) return false;
+      const d = new Date(s.admissionDate);
+      return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+    }).length;
+    stats.update(0, studentN, 'All records');
+    stats.update(1, activeN, 'Currently enrolled');
+    stats.update(2, onBreakN, 'Currently on break');
+    stats.update(3, thisMonthN, 'This calendar month');
     if (footEl) {
       renderPager(footEl, { page, pageSize: PAGE_SIZE, totalItems: list.length, onPageChange: (p) => { page = p; render(); } });
+    }
+    } catch (e) {
+      console.error('[school-admissions] render failed', e);
+      const msg = e && e.message ? e.message : String(e);
+      rowsHost.innerHTML = '';
+      const tr = mk('tr');
+      const td = mk('td', 'adm-empty');
+      td.colSpan = 7;
+      td.innerHTML = 'Could not load students: ' + msg + '. <button type="button" id="adm-retry" class="ui-btn primary" style="margin-top:8px;display:inline-flex;align-items:center;gap:6px;"><i data-lucide="rotate-ccw"></i>Retry</button>';
+      tr.appendChild(td);
+      rowsHost.appendChild(tr);
+      const retryBtn = $('adm-retry');
+      if (retryBtn) retryBtn.addEventListener('click', () => { load(); render(); });
     }
   }
 
@@ -410,6 +560,7 @@ export async function mount({ container, profile, ctx }) {
       batches = bSnap.docs.map((d) => Object.assign({ id: d.id }, d.data())).filter(b => (b.status || 'active') === 'active');
       tb.setFilterOptions('level', [{ value: 'all', label: 'All levels' }].concat(levels.map((c) => ({ value: c.id, label: c.name || c.id, icon: 'book-open' }))));
       levelSel.setOptions([{ value: '', label: 'Select a level', icon: 'book-open' }].concat(levels.map((c) => ({ value: c.id, label: c.name || c.id, icon: 'book-open' }))));
+      tb.setFilterOptions('batch', [{ value: 'all', label: 'All batches', icon: 'layers' }].concat(batches.map((b) => ({ value: b.id, label: b.name || b.id, icon: 'layers' }))));
       render();
     } catch (e) {
       console.error('[school-admissions] load failed', e);
@@ -885,6 +1036,8 @@ export async function mount({ container, profile, ctx }) {
     tb.state.q = '';
     tb.state.status = 'all';
     tb.state.level = 'all';
+    admDateFilter = 'all'; admDateFrom = ''; admDateTo = '';
+    dateSel.value = 'all'; dateCustomWrap.hidden = true; fromInp.value = ''; toInp.value = '';
     render();
   });
 
@@ -892,3 +1045,4 @@ export async function mount({ container, profile, ctx }) {
   form.addEventListener('reset', () => { touched = false; refresh(); });
   if (typeof lucide !== 'undefined') lucide.createIcons();
 }
+

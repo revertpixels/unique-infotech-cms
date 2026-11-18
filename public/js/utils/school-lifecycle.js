@@ -27,9 +27,9 @@ import {
   collection, getDocs, query, where, doc, getDoc, addDoc, updateDoc, deleteDoc,
   serverTimestamp, runTransaction, writeBatch
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.69';
-import { firstMonthlyMonth } from './school-receipt.js?v=1.8.69';
-import { isCourseActive } from './session-rules.js?v=1.8.69';
+import { showToast } from '../components/toast.js?v=1.8.71';
+import { firstMonthlyMonth } from './school-receipt.js?v=1.8.71';
+import { isCourseActive } from './session-rules.js?v=1.8.71';
 const ENROLMENTS_COL = 'enrolments';
 const BILLS_COL = 'bills';
 const PAYMENTS_COL = 'payments';
@@ -265,3 +265,4 @@ export async function checkAadhaarUniqueness(aadhaar, excludeStudentId) {
   });
   return { unique: !dup, existingStudentId: dup ? dup.id : null, existingName: dup ? (dup.data().name || '') : '' };
 }
+

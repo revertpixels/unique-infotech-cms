@@ -1,4 +1,4 @@
-import { confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.68';
+import { confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.71';
 
 export const ROLE_LABELS = {
   superadmin: 'Super Admin',
@@ -11,13 +11,13 @@ export const ROUTES = {
   branches: { label: 'Branches', icon: 'git-branch', group: 'Academics', page: 'branches', ctx: ['youth'], roles: ['superadmin'] },
   courses: { label: 'Courses & Packages', icon: 'layers', group: 'Academics', page: 'courses', ctx: ['youth', 'school'], roles: ['superadmin'] },
   batches: { label: 'Batches', icon: 'users-round', group: 'Academics', page: 'batches', ctx: ['youth', 'school'], roles: ['superadmin'] },
-  students: { label: 'All Students', icon: 'users', group: 'Students', page: 'students', ctx: ['youth'], roles: ['superadmin', 'branch_head'] },
-  admissions: { label: 'Admissions', icon: 'user-plus', group: 'Students', page: 'admissions', ctx: ['youth'], roles: ['superadmin', 'branch_head'] },
-  'school-admissions': { label: 'Kids Admissions', icon: 'user-plus', group: 'Students', page: 'school-admissions', ctx: ['school'], roles: ['superadmin'] },
+  students: { label: 'Students', icon: 'users', group: 'Students', page: 'admissions', ctx: ['youth'], roles: ['superadmin', 'branch_head'] },
+  admissions: { label: 'Admissions', icon: 'user-plus', group: 'Students', redirect: 'students', ctx: ['youth'], roles: ['superadmin', 'branch_head'], nav: false },
+  'school-admissions': { label: 'Kids Admissions', icon: 'user-plus', group: 'Students', redirect: 'school-students', ctx: ['school'], roles: ['superadmin'], nav: false },
   'pay-fees': { label: 'Pay Fees', icon: 'wallet', group: 'Fees', page: 'pay-fees', ctx: ['youth'], roles: ['superadmin', 'branch_head'] },
   pending: { label: 'Pending & Overdue', icon: 'alarm-clock', group: 'Fees', page: 'pending', ctx: ['youth'], roles: ['superadmin', 'branch_head'] },
   payments: { label: 'Payment History', icon: 'history', group: 'Fees', page: 'payments', ctx: ['youth'], roles: ['superadmin', 'branch_head'] },
-  'school-students': { label: 'All Students', icon: 'baby', group: 'Students', page: 'school-students', ctx: ['school'], roles: ['superadmin', 'school_head'] },
+  'school-students': { label: 'Students', icon: 'baby', group: 'Students', page: 'school-admissions', ctx: ['school'], roles: ['superadmin', 'school_head'] },
   'school-fees': { label: 'Collect Fees', icon: 'wallet', group: 'Fees', page: 'school-fees', ctx: ['school'], roles: ['superadmin', 'school_head'] },
   'school-pending': { label: 'Pending & Overdue', icon: 'alarm-clock', group: 'Fees', page: 'school-pending', ctx: ['school'], roles: ['superadmin', 'school_head'] },
   'school-payments': { label: 'Payment History', icon: 'receipt', group: 'Fees', page: 'school-payments', ctx: ['school'], roles: ['superadmin', 'school_head'] },
@@ -462,6 +462,11 @@ export function startRouter({ profile, getContext, setContext, onRouteChange }) 
       return;
     }
 
+    if (route.redirect) {
+      location.hash = '#/' + route.redirect;
+      return;
+    }
+
     if (!route) {
       renderEmpty('inbox', 'Page not found', 'The requested page does not exist.');
       setTitle('Page not found');
@@ -598,6 +603,7 @@ export function startRouter({ profile, getContext, setContext, onRouteChange }) 
 export function navigate(key) {
   location.hash = '#/' + key;
 }
+
 
 
 

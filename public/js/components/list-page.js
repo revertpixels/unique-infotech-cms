@@ -87,7 +87,25 @@ export function buildToolbar(opts) {
     r.setAttribute('aria-label', 'Refresh');
     r.title = 'Refresh';
     r.appendChild(icon('refresh-cw'));
-    r.addEventListener('click', () => { r.classList.remove('spin'); void r.offsetWidth; r.classList.add('spin'); o.onRefresh(); });
+    r.addEventListener('click', async () => {
+      if (r.disabled) return;
+      r.disabled = true;
+      const ic = r.querySelector('svg.lucide') || r.querySelector('i');
+      if (ic) ic.classList.add('spin');
+      const start = Date.now();
+      try {
+        await Promise.resolve(o.onRefresh());
+      } catch (err) {
+        console.error('[toolbar] refresh failed', err);
+      } finally {
+        const elapsed = Date.now() - start;
+        const remaining = Math.max(0, 600 - elapsed);
+        setTimeout(() => {
+          if (ic) ic.classList.remove('spin');
+          r.disabled = false;
+        }, remaining);
+      }
+    });
     rowFilters.appendChild(r);
     refreshBtn = r;
   }

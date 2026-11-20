@@ -371,3 +371,13 @@
   top: 8px;
   pointer-events: none;
 }
+
+/* ---------- Session notice ---------- */
+.adm-session-notice {
+  padding: 10px 16px;
+  background: #FEF3C7;
+  color: #92400E;
+  border-bottom: 1px solid #FDE68A;
+  font-size: 13px;
+  font-weight: 500;
+}

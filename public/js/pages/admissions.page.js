@@ -1,18 +1,34 @@
 import { db } from '../config/firebase-config.js';
-import { collection, getDocs, query, where, doc, getDoc, serverTimestamp, runTransaction } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.71';
-import { registerDirty, confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.71';
-import { buildStats, buildToolbar, renderPager } from '../components/list-page.js?v=1.8.71';
-import { createSelect } from '../components/ui-select.js?v=1.8.71';
-import { openMenu } from '../components/ui-menu.js?v=1.8.71';
-import { confirmDialog } from '../components/ui-confirm.js?v=1.8.71';
-import { getSelectedSessionId, getCachedSessions, loadSessions, todayISO } from '../core/sessions.js?v=1.8.71';
-import { firstInstallmentOf, admissionState, sessionLabel, installmentSchedule, batchAllowsCourse, batchCourseLabel, isCourseActive } from '../utils/session-rules.js?v=1.8.71';
-import { formatINR, formatDateIN, initials } from '../utils/formatter.js?v=1.8.71';
-import { validatePhone, validateEmail, validateDOB, validateName, validateRequired } from '../utils/validator.js?v=1.8.71';
-import { listStudentsRaw, checkDuplicatePhone, readStudentId, readReceiptNo, writeCounter, createStudentWithDocs, updateStudentWithDocs, updateStudent, deleteStudent } from '../services/admission.service.js?v=1.8.71';
-import { feeTotal } from '../utils/fees.js?v=1.8.71';
-import { compressTo100KB, readAsDataURL, blobToDataURL, isImageFile, formatBytes } from '../utils/image-compress.js?v=1.8.71';
+import {
+  collection,
+  getDocs,
+  query,
+  where,
+  doc,
+  getDoc,
+  serverTimestamp,
+  runTransaction,
+  writeBatch,
+  deleteDoc,
+  updateDoc,
+  arrayUnion,
+  addDoc
+} from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
+import { showToast } from '../components/toast.js?v=1.8.90';
+import { registerDirty, confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.90';
+import { buildStats, buildToolbar, renderPager } from '../components/list-page.js?v=1.8.90';
+import { createSelect } from '../components/ui-select.js?v=1.8.90';
+import { openMenu } from '../components/ui-menu.js?v=1.8.90';
+import { confirmDialog } from '../components/ui-confirm.js?v=1.8.90';
+import { openPopup } from '../components/modal.js?v=1.8.90';
+import { createDatePicker } from '../components/ui-datepicker.js?v=1.8.90';
+import { getSelectedSessionId, getCachedSessions, loadSessions, todayISO } from '../core/sessions.js?v=1.8.90';
+import { firstInstallmentOf, admissionState, sessionLabel, installmentSchedule, batchAllowsCourse, batchCourseLabel, isCourseActive } from '../utils/session-rules.js?v=1.8.90';
+import { formatINR, formatDateIN, initials } from '../utils/formatter.js?v=1.8.90';
+import { validatePhone, validateEmail, validateDOB, validateName, validateRequired } from '../utils/validator.js?v=1.8.90';
+import { listStudentsRaw, checkDuplicatePhone, readStudentId, readReceiptNo, writeCounter, createStudentWithDocs, updateStudentWithDocs, updateStudent, deleteStudent } from '../services/admission.service.js?v=1.8.90';
+import { feeTotal } from '../utils/fees.js?v=1.8.90';
+import { compressTo100KB, readAsDataURL, blobToDataURL, isImageFile, formatBytes } from '../utils/image-compress.js?v=1.8.90';
 
 const COL = 'students';
 
@@ -45,7 +61,7 @@ const PAGE_SIZE = 10;
 const DOC_KEYS = ['photo', 'signature', 'dobProof', 'marksheet'];
 const DOC_LABELS = {
   photo: 'Photo',
-  signature: 'Signature',
+  signature: "Student's signature",
   dobProof: 'Date of birth proof',
   marksheet: 'Marksheet (highest qualification)'
 };
@@ -104,6 +120,15 @@ export async function mount({ container, profile, ctx }) {
   const footEl = $('adm-foot');
   if (!form || !addBtn || !saveBtn || !cancelBtn || !rowsHost || !empty) return;
 
+  let sessionNotice = null;
+  const tableEl = rowsHost.closest('table');
+  const anchor = tableEl ? tableEl.parentNode : null; // the wrapper around the table
+  if (anchor && anchor.parentNode) {
+    sessionNotice = mk('div', 'adm-session-notice');
+    sessionNotice.hidden = true;
+    anchor.parentNode.insertBefore(sessionNotice, anchor);
+  }
+
   // ---------- form selects ----------
   const genderSel = createSelect($('adm-gender-host'), {
     options: [{ value: '', label: 'Select gender', icon: 'user' }].concat(GENDERS.map(g => ({ value: g.value, label: g.label, icon: g.icon }))),
@@ -125,15 +150,13 @@ export async function mount({ container, profile, ctx }) {
     onChange: () => { onSessionChange(); touched = true; refreshForm(); }
   });
 
-  if (isSuper) {
-    branchSel = createSelect($('adm-branch-host'), {
-      options: [{ value: '', label: 'Select a branch', icon: 'git-branch' }],
-      value: '', ariaLabel: 'Branch',
-      onChange: () => { onBranchChange(); touched = true; refreshForm(); }
-    });
-  } else {
-    $('adm-branch-host').hidden = true;
-  }
+  branchSel = createSelect($('adm-branch-host'), {
+    options: [{ value: '', label: 'Select a branch', icon: 'git-branch' }],
+    value: isSuper ? '' : (fixedBranch || ''),
+    ariaLabel: 'Branch',
+    disabled: !isSuper,
+    onChange: () => { onBranchChange(); touched = true; refreshForm(); }
+  });
 
   const courseSel = createSelect($('adm-course-host'), {
     options: [{ value: '', label: 'Select a course', icon: 'book-open' }],
@@ -380,7 +403,13 @@ export async function mount({ container, profile, ctx }) {
   }
   function courseOf(id) { return courses.find((c) => c.id === id) || {}; }
   function branchOf(id) { return branches.find((b) => b.id === id) || {}; }
-  function branchNameOf(id) { const b = branchOf(id); return b.name || b.id || ''; }
+  function branchNameOf(id) {
+    if (!id) return '';
+    const b = branchOf(id);
+    if (b && b.name) return b.name;
+    console.warn('[admissions] Unknown branch for id:', id);
+    return 'Unknown branch';
+  }
 function dueLabel(dueISO) {
   const d = toDate(dueISO);
   if (!d) return ' - ';
@@ -406,6 +435,17 @@ function dueLabel(dueISO) {
       if (isSuper) {
         const brSnap = await getDocs(collection(db, 'branches'));
         branches = brSnap.docs.map((d) => Object.assign({ id: d.id }, d.data())).filter(b => (b.status || 'active') === 'active');
+      } else if (isHead && fixedBranch) {
+        try {
+          const brSnap = await getDoc(doc(db, 'branches', fixedBranch));
+          if (brSnap.exists()) {
+            branches = [Object.assign({ id: brSnap.id }, brSnap.data())];
+          } else {
+            console.warn('[admissions] Branch doc does not exist for fixedBranch:', fixedBranch);
+          }
+        } catch (err) {
+          console.warn('[admissions] Failed to load own branch:', err);
+        }
       }
 
       const sessSnap = await getDocs(collection(db, 'sessions'));
@@ -422,11 +462,22 @@ function dueLabel(dueISO) {
       });
       tb.setFilterOptions('batch', batchOpts);
       if (isSuper) {
-        tb.setFilterOptions('branch', [{ value: 'all', label: 'All branches', icon: 'git-branch' }].concat(branches.map(b => ({ value: b.id, label: b.name || b.id, icon: 'git-branch' }))));
+        tb.setFilterOptions('branch', [{ value: 'all', label: 'All branches', icon: 'git-branch' }].concat(branches.map(b => ({ value: b.id, label: b.name || 'Unknown branch', icon: 'git-branch' }))));
       }
 
       if (branchSel) {
-        branchSel.setOptions([{ value: '', label: 'Select a branch', icon: 'git-branch' }].concat(branches.map(b => ({ value: b.id, label: b.name || b.id, icon: 'git-branch' }))));
+        if (isSuper) {
+          branchSel.setOptions([{ value: '', label: 'Select a branch', icon: 'git-branch' }].concat(branches.map(b => ({ value: b.id, label: b.name || 'Unknown branch', icon: 'git-branch' }))));
+        } else {
+          const myBr = branches.find(b => b.id === fixedBranch);
+          const brLabel = (myBr && myBr.name) ? myBr.name : 'Unknown branch';
+          if (!myBr || !myBr.name) {
+            console.warn('[admissions] Could not resolve branch name for fixedBranch:', fixedBranch);
+          }
+          branchSel.setOptions([{ value: fixedBranch, label: brLabel, icon: 'git-branch' }]);
+          branchSel.value = fixedBranch;
+          branchSel.disabled = true;
+        }
       }
       updateLookupPlaceholder();
 
@@ -460,6 +511,10 @@ function dueLabel(dueISO) {
       page = 1;
       showRealStats();
       render();
+      // Reload batch options whenever data finishes loading to prevent race condition
+      if (courseSel && courseSel.value) {
+        onCourseChange();
+      }
     } catch (e) {
       console.error('[admissions] load failed', e);
       showRealStats();
@@ -484,15 +539,55 @@ function dueLabel(dueISO) {
   }
 
   // ---------- form chain ----------
+  function isBatchSelectable(b) {
+    // Batches with status 'upcoming' OR 'active' (or with no status) must be selectable.
+    // Only 'closed'/'completed'/'inactive'/'archived' are excluded.
+    const rawStatus = (b.status || '').toLowerCase().trim();
+    if (['closed', 'completed', 'inactive', 'archived'].includes(rawStatus)) {
+      return { ok: false, reason: `status '${rawStatus}' is excluded` };
+    }
+    const s = sessions.find(x => String(x.id).trim() === String(b.sessionId).trim());
+    if (s) {
+      const sStatus = (s.status || '').toLowerCase().trim();
+      if (['closed', 'archived'].includes(sStatus)) {
+        return { ok: false, reason: `session status '${sStatus}' is excluded` };
+      }
+    }
+    return { ok: true, reason: 'upcoming/active/open' };
+  }
+
   function getBatchOptions(branchId, courseId, sessionId) {
     const opts = [];
     let matchCount = 0;
+    const bIdStr = String(branchId || '').trim();
+    const sIdStr = String(sessionId || '').trim();
+    const cIdStr = String(courseId || '').trim();
+
     batches.forEach(b => {
-      if (b.branchId !== branchId) return;
-      if (!batchAllowsCourse(b, courseId)) return;
-      if (sessionId && b.sessionId !== sessionId) return;
-      const st = batchStatusOf(b.id);
-      if (st !== 'upcoming' && st !== 'running') return;
+      const bBranch = String(b.branchId || '').trim();
+      const bSession = String(b.sessionId || '').trim();
+
+      // Check ctx
+      let rejectReason = null;
+      if (b.ctx && b.ctx !== 'youth') {
+        rejectReason = `ctx is '${b.ctx}' (expected youth)`;
+      } else if (bIdStr && bBranch !== bIdStr) {
+        rejectReason = `branchId mismatch (batch='${bBranch}', selected='${bIdStr}')`;
+      } else if (sIdStr && bSession !== sIdStr) {
+        rejectReason = `sessionId mismatch (batch='${bSession}', selected='${sIdStr}')`;
+      } else if (cIdStr && !batchAllowsCourse(b, cIdStr, courses)) {
+        rejectReason = `course check failed (allCourses=${b.allCourses}, courseIds=${b.courseIds ? b.courseIds.join(',') : b.courseId}, selectedCourse='${cIdStr}')`;
+      } else {
+        const stCheck = isBatchSelectable(b);
+        if (!stCheck.ok) {
+          rejectReason = stCheck.reason;
+        }
+      }
+
+      console.log(`[admissions] batch "${b.name || b.id}": ${rejectReason ? 'REJECTED (' + rejectReason + ')' : 'ACCEPTED'}`);
+
+      if (rejectReason) return;
+
       matchCount++;
       const cap = Number(b.capacity || 0);
       const filled = students.filter(s => s.batchId === b.id && s.status === 'active').length;
@@ -511,7 +606,7 @@ function dueLabel(dueISO) {
     // Clear batch when session changes.
     batchSel.setOptions([{ value: '', label: 'Select a batch', icon: 'layers' }]);
     batchSel.value = '';
-    if (sessionId && branchId && courseId) {
+    if (courseId) {
       onCourseChange();
     } else {
       updateFees(null, null);
@@ -543,6 +638,9 @@ function dueLabel(dueISO) {
     const s = sessions.find(sx => sx.id === sessionId);
 
     if (!courseId) {
+      // Still list the branch's batches so the user can see them before picking a course.
+      const pre = getBatchOptions(branchId, '', sessionId);
+      if (pre.matchCount) batchSel.setOptions([{ value: '', label: 'Select a batch', icon: 'layers' }].concat(pre.opts));
       const prereqEl = $('adm-prereq');
       if (prereqEl) prereqEl.hidden = true;
       updateFees(null, null);
@@ -553,7 +651,7 @@ function dueLabel(dueISO) {
 
     const { opts, matchCount } = getBatchOptions(branchId, courseId, sessionId);
     if (matchCount === 0) {
-      batchSel.setOptions([{ value: '', label: 'No open batch for this course in this branch', icon: 'layers', disabled: true }]);
+      batchSel.setOptions([{ value: '', label: 'No batch for this course in this branch and session', icon: 'layers', disabled: true }]);
       batchSel.value = '';
     } else {
       batchSel.setOptions([{ value: '', label: 'Select a batch', icon: 'layers' }].concat(opts));
@@ -881,8 +979,17 @@ function dueLabel(dueISO) {
       };
       populateStudentFields(src);
       try {
-        const docsSnap = await getDocs(query(collection(db, 'students', src.id, 'docs')));
+        const [docsSnap, aadhaarSnap] = await Promise.all([
+          getDocs(query(collection(db, 'students', src.id, 'docs'))),
+          getDoc(doc(db, 'students', src.id, 'aadhaar', 'aadhaar'))
+        ]);
         docsSnap.docs.forEach((d) => { keptDocs[d.id] = d.data(); });
+        if (aadhaarSnap.exists()) {
+          const aData = aadhaarSnap.data();
+          if (aData.aadhaar) {
+            $v('adm-aadhaar', aData.aadhaar);
+          }
+        }
       } catch (e) { /* non-fatal */ }
       renderReturnDocs();
       lookupStatus.textContent = 'Details loaded from ' + returnDoc.sessionName + '. You can edit anything.';
@@ -901,6 +1008,7 @@ function dueLabel(dueISO) {
     $v('adm-phone', v.phone || '');
     $v('adm-altPhone', v.altPhone || '');
     $v('adm-email', v.email || '');
+    $v('adm-aadhaar', v.aadhaar || '');
     $v('adm-dob', v.dob || '');
     genderSel.value = v.gender || '';
     qualificationSel.value = v.qualification || '';
@@ -965,6 +1073,12 @@ function dueLabel(dueISO) {
     if (pErr) err.phone = pErr;
     if (v.altPhone) { const aErr = validatePhone(v.altPhone); if (aErr) err.altPhone = aErr; }
     if (v.email) { const eErr = validateEmail(v.email); if (eErr) err.email = eErr; }
+    const rawAadhaar = (v.aadhaar || '').replace(/\s+/g, '');
+    if (!rawAadhaar) {
+      err.aadhaar = 'Aadhaar number is required.';
+    } else if (!/^\d{12}$/.test(rawAadhaar)) {
+      err.aadhaar = 'Aadhaar number must be exactly 12 digits.';
+    }
     const dErr = validateDOB(v.dob);
     if (dErr) err.dob = dErr;
     if (!v.admissionDate) err.admissionDate = 'Admission date is required.';
@@ -989,7 +1103,7 @@ function dueLabel(dueISO) {
   }
 
   function showErrors(err) {
-    const fields = ['name', 'guardianName', 'phone', 'altPhone', 'email', 'dob', 'admissionDate', 'address'];
+    const fields = ['name', 'guardianName', 'phone', 'altPhone', 'email', 'aadhaar', 'dob', 'admissionDate', 'address'];
     fields.forEach((k) => {
       const box = $('adm-' + k + '-err');
       if (box) box.textContent = err[k] || '';
@@ -1024,6 +1138,7 @@ function dueLabel(dueISO) {
     v.phone = $('adm-phone') ? $('adm-phone').value.trim() : '';
     v.altPhone = $('adm-altPhone') ? $('adm-altPhone').value.trim() : '';
     v.email = $('adm-email') ? $('adm-email').value.trim() : '';
+    v.aadhaar = $('adm-aadhaar') ? $('adm-aadhaar').value.replace(/\s+/g, '') : '';
     v.dob = $('adm-dob') ? $('adm-dob').value : '';
     v.admissionDate = $('adm-admissionDate') ? $('adm-admissionDate').value : '';
     v.gender = genderSel ? genderSel.value : '';
@@ -1044,6 +1159,7 @@ function dueLabel(dueISO) {
     $v('adm-phone', v.phone || '');
     $v('adm-altPhone', v.altPhone || '');
     $v('adm-email', v.email || '');
+    $v('adm-aadhaar', v.aadhaar || '');
     $v('adm-dob', v.dob || '');
     $v('adm-admissionDate', v.admissionDate || '');
     genderSel.value = v.gender || '';
@@ -1054,8 +1170,8 @@ function dueLabel(dueISO) {
       sessionSel.disabled = !!editId;
     }
     if (branchSel) {
-      branchSel.value = v.branchId || '';
-      branchSel.disabled = !!editId;
+      branchSel.value = isSuper ? (v.branchId || '') : (fixedBranch || '');
+      branchSel.disabled = !isSuper || !!editId;
     }
     courseSel.value = v.courseId || '';
     courseSel.disabled = !!editId;
@@ -1196,8 +1312,23 @@ function dueLabel(dueISO) {
     if (dateErrEl) { dateErrEl.textContent = dr.err || ''; dateErrEl.hidden = !dr.err; }
     const q = (f.q || '').toLowerCase();
     const selSession = getSelectedSessionId();
+
+    // Session filter helper: matches selected session, or if student has no session specified
+    const inCurrentSession = (s) => !(selSession && s.sessionId && s.sessionId !== selSession);
+
+    // Hidden students count (session filter hides students with different session)
+    const hiddenCount = students.filter(s => selSession && s.sessionId && s.sessionId !== selSession).length;
+    if (sessionNotice) {
+      if (hiddenCount > 0) {
+        sessionNotice.textContent = hiddenCount + ' students are in other sessions - switch session to see them.';
+        sessionNotice.hidden = false;
+      } else {
+        sessionNotice.hidden = true;
+      }
+    }
+
     let list = students.filter(s => {
-      if (selSession && s.sessionId !== selSession) return false;
+      if (selSession && s.sessionId && s.sessionId !== selSession) return false;
       if (f.status && f.status !== 'all' && s.status !== f.status) return false;
       if (f.course && f.course !== 'all' && s.courseId !== f.course) return false;
       if (f.batch && f.batch !== 'all' && s.batchId !== f.batch) return false;
@@ -1215,16 +1346,16 @@ function dueLabel(dueISO) {
     list.sort((a, b) => (b.admissionDate || '').localeCompare(a.admissionDate || ''));
     filteredList = list;
 
-    const total = students.filter(s => !selSession || s.sessionId === selSession).length;
+    const total = students.filter(s => inCurrentSession(s)).length;
     const thisMonth = students.filter(s => {
-      if (!selSession || s.sessionId !== selSession) return false;
+      if (!inCurrentSession(s)) return false;
       if (!s.admissionDate) return false;
       const d = new Date(s.admissionDate);
       const now = new Date();
       return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
     }).length;
-    const active = students.filter(s => (!selSession || s.sessionId === selSession) && s.status === 'active').length;
-    const onBreak = students.filter(s => (!selSession || s.sessionId === selSession) && (s.status === 'inactive' || s.status === 'ended' || s.status === 'break')).length;
+    const active = students.filter(s => inCurrentSession(s) && s.status === 'active').length;
+    const onBreak = students.filter(s => inCurrentSession(s) && (s.status === 'inactive' || s.status === 'ended' || s.status === 'break')).length;
     const selSessionId = getSelectedSessionId();
     const selSName = sessions.find(s => s.id === selSessionId)?.name || selSessionId || 'This session';
     stats.update(0, total, selSName);
@@ -1259,63 +1390,126 @@ function dueLabel(dueISO) {
     } else {
       if (empty) empty.hidden = true;
       pageList.forEach(s => {
-        const tr = mk('tr');
-        const c = courseOf(s.courseId);
-        const b = batchOf(s.batchId);
-        const st = STATUS_PILLS.find(x => x.value === s.status) || STATUS_PILLS[0];
+        try {
+          const tr = mk('tr');
+          const c = courseOf(s.courseId);
+          const b = batchOf(s.batchId);
+          const pill = STATUS_PILLS.find(x => x.value === s.status) || STATUS_PILLS[0];
 
-        tr.appendChild(mk('td', '', s.studentId || ' - '));
+          tr.appendChild(mk('td', '', s.studentId || ' - '));
 
-        const tdSt = mk('td');
-        tdSt.appendChild(mk('b', '', s.name || ' - '));
-        tdSt.appendChild(mk('br'));
-        tdSt.appendChild(mk('span', 'adm-sub', s.guardianName || '-'));
-        tr.appendChild(tdSt);
+          const tdSt = mk('td');
+          tdSt.appendChild(mk('b', '', s.name || ' - '));
+          tdSt.appendChild(mk('br'));
+          tdSt.appendChild(mk('span', 'adm-sub', s.guardianName || '-'));
+          tr.appendChild(tdSt);
 
-        tr.appendChild(mk('td', 'hide-sm', s.phone || ' - '));
+          tr.appendChild(mk('td', 'hide-sm', s.phone || ' - '));
 
-        const tdCb = mk('td');
-        const code = c.courseCode || c.code || '';
-        const courseName = c.name || '';
-        const line1 = code && courseName ? (code + '  -  ' + courseName) : (code || courseName || '-');
-        tdCb.appendChild(mk('span', '', line1));
-        tdCb.appendChild(mk('br'));
-        tdCb.appendChild(mk('span', 'adm-sub', b.name || '-'));
-        tr.appendChild(tdCb);
+          const tdCb = mk('td');
+          const code = c.courseCode || c.code || '';
+          const courseName = c.name || '';
+          const line1 = code && courseName ? (code + '  -  ' + courseName) : (code || courseName || '-');
+          tdCb.appendChild(mk('span', '', line1));
+          tdCb.appendChild(mk('br'));
+          tdCb.appendChild(mk('span', 'adm-sub', b.name || '-'));
+          tr.appendChild(tdCb);
 
-        tr.appendChild(mk('td', 'hide-sm', formatDateIN(s.admissionDate)));
+          tr.appendChild(mk('td', 'hide-sm', formatDateIN(s.admissionDate)));
 
-        const tdSt2 = mk('td', 'hide-md');
-        tdSt2.appendChild(mk('span', 'adm-pill ' + st.cls, st.label));
-        tr.appendChild(tdSt2);
+          const tdSt2 = mk('td', 'hide-md');
+          tdSt2.appendChild(mk('span', 'adm-pill ' + pill.cls, pill.label));
+          tr.appendChild(tdSt2);
 
-        const tdAct = mk('td', 'adm-actions');
-        const kebab = mk('button', 'ui-kebab');
-        kebab.type = 'button';
-        kebab.setAttribute('aria-label', 'Actions for ' + (s.name || 'student'));
-        kebab.setAttribute('aria-haspopup', 'menu');
-        kebab.setAttribute('aria-expanded', 'false');
-        const ki = document.createElement('i');
-        ki.setAttribute('data-lucide', 'more-vertical');
-        kebab.appendChild(ki);
-        const items = [
-          { section: 'View', label: 'View details', icon: 'eye', onClick: () => viewStudent(s) },
-          { label: 'View student profile', icon: 'user', onClick: () => { location.hash = '#/students/' + s.studentId; } },
-          { label: 'View admission receipt', icon: 'file-text', onClick: () => { location.hash = '#/admissions/' + s.id + '/receipt'; } },
-          'sep',
-          { section: 'Manage', label: 'Edit', icon: 'pencil', onClick: async () => {
-            if (!form.hidden && !saveBtn.disabled && !(await confirmLeave({ clear: false }))) return;
-            openForm(s);
-          } }
-        ];
-        if (!isHead) {
-          items.push('sep', { section: 'Danger', label: 'Change status / End course', icon: 'edit-3', danger: true, onClick: () => changeStatus(s) }, { label: 'Delete', icon: 'trash-2', danger: true, onClick: () => tryDelete(s) });
+          const tdAct = mk('td', 'adm-actions');
+          const kebab = mk('button', 'ui-kebab');
+          kebab.type = 'button';
+          kebab.setAttribute('aria-label', 'Actions for ' + (s.name || 'student'));
+          kebab.setAttribute('aria-haspopup', 'menu');
+          kebab.setAttribute('aria-expanded', 'false');
+          const ki = document.createElement('i');
+          ki.setAttribute('data-lucide', 'more-vertical');
+          kebab.appendChild(ki);
+          const st = (s.status || 'active');
+          const isSuperAdmin = isSuper;
+
+          // Build status-based menu items (Youth only)
+          const baseItems = [];
+
+          // SECTION: View
+          const viewItems = [
+            {
+              label: 'View student',
+              icon: 'user',
+              onClick: () => {
+                if (s.studentId) {
+                  location.hash = '#/students/' + s.studentId;
+                } else {
+                  showToast({ type: 'info', message: 'Student profile page is coming next' });
+                }
+              }
+            },
+            {
+              label: 'View admission receipt',
+              icon: 'file-text',
+              onClick: () => {
+                location.hash = '#/admissions/' + s.id + '/receipt';
+              }
+            }
+          ];
+          if (viewItems.length > 0) {
+            baseItems.push({ section: 'View' });
+            baseItems.push(...viewItems);
+          }
+
+          // SECTION: Manage (Super Admin; Branch Head for own branch)
+          const canManage = isSuperAdmin || (isHead && s.branchId === profile.branchId);
+          const isActiveOrBreak = st === 'active' || st === 'break';
+          const manageItems = [];
+          if (canManage && isActiveOrBreak) {
+            manageItems.push({
+              label: 'Change batch',
+              icon: 'shuffle',
+              onClick: () => changeBatchPopup(s)
+            });
+          }
+          if (manageItems.length > 0) {
+            baseItems.push({ section: 'Manage' });
+            baseItems.push(...manageItems);
+          }
+
+          // SECTION: Danger zone (Super Admin only)
+          if (isSuperAdmin) {
+            const dangerItems = [];
+            if (isActiveOrBreak) {
+              dangerItems.push({
+                label: 'Drop student',
+                icon: 'user-x',
+                danger: true,
+                onClick: () => removeStudentPopup(s, 'drop')
+              });
+            }
+            dangerItems.push({
+              label: 'Delete permanently',
+              icon: 'trash-2',
+              danger: true,
+              onClick: () => removeStudentPopup(s, 'delete')
+            });
+
+            if (dangerItems.length > 0) {
+              baseItems.push({ section: 'Danger zone' });
+              baseItems.push(...dangerItems);
+            }
+          }
+
+          kebab.addEventListener('click', () => openMenu(kebab, baseItems));
+          tdAct.appendChild(kebab);
+          tr.appendChild(tdAct);
+
+          rowsHost.appendChild(tr);
+        } catch (e) {
+          console.warn('[admissions] row failed', s.id, e);
         }
-        kebab.addEventListener('click', () => openMenu(kebab, items));
-        tdAct.appendChild(kebab);
-        tr.appendChild(tdAct);
-
-        rowsHost.appendChild(tr);
       });
 
       if (footEl) {
@@ -1351,16 +1545,17 @@ function dueLabel(dueISO) {
     editRow = r || null;
     const v = r ? {
       name: r.name || '', guardianName: r.guardianName || '', phone: r.phone || '',
-      altPhone: r.altPhone || '', email: r.email || '', dob: r.dob || '',
+      altPhone: r.altPhone || '', email: r.email || '', aadhaar: '', dob: r.dob || '',
       admissionDate: r.admissionDate || '', gender: r.gender || '',
       qualification: r.qualification || '', address: r.address || '',
-      branchId: r.branchId || '', courseId: r.courseId || '', batchId: r.batchId || ''
+      branchId: isSuper ? (r.branchId || '') : (fixedBranch || ''), courseId: r.courseId || '', batchId: r.batchId || ''
     } : {
-      name: '', guardianName: '', phone: '', altPhone: '', email: '', dob: '',
+      name: '', guardianName: '', phone: '', altPhone: '', email: '', aadhaar: '', dob: '',
       admissionDate: new Date().toISOString().slice(0, 10), gender: '',
       qualification: '', address: '', branchId: fixedBranch || '', courseId: '', batchId: '', sessionId: '', sessionName: ''
     };
     fillForm(v);
+    onBranchChange();
     $t('adm-form-title', r ? 'Edit admission' : 'New admission');
     $t('adm-save-label', r ? 'Save changes' : 'Admit student');
     form.hidden = false;
@@ -1374,12 +1569,20 @@ function dueLabel(dueISO) {
 
     if (r) {
       try {
-        const docsSnap = await getDocs(query(collection(db, 'students', r.id, 'docs')));
+        const [docsSnap, aadhaarSnap] = await Promise.all([
+          getDocs(query(collection(db, 'students', r.id, 'docs'))),
+          getDoc(doc(db, 'students', r.id, 'aadhaar', 'aadhaar'))
+        ]);
         docsSnap.docs.forEach((d) => {
           const data = d.data();
           docOriginals[d.id] = data;
         });
+        if (aadhaarSnap.exists()) {
+          const aData = aadhaarSnap.data();
+          v.aadhaar = aData.aadhaar || '';
+        }
         fillForm(v);
+        saved = snapshot();
       } catch (e) {
         // non-fatal
       }
@@ -1395,6 +1598,7 @@ function dueLabel(dueISO) {
     editId = null;
     editRow = null;
     clearReturnState();
+    $v('adm-aadhaar', '');
     DOC_KEYS.forEach((k) => { docFiles[k] = null; docOriginals[k] = null; });
     DOC_KEYS.forEach((k) => {
       const preview = $('adm-' + k + '-preview');
@@ -1406,9 +1610,9 @@ function dueLabel(dueISO) {
   }
 
   function focusFirstError(err) {
-    const order = ['name', 'guardianName', 'phone', 'email', 'dob', 'admissionDate', 'gender', 'qualification', 'address', 'session', 'branch', 'course', 'batch', ...DOC_KEYS];
+    const order = ['name', 'guardianName', 'phone', 'email', 'aadhaar', 'dob', 'admissionDate', 'gender', 'qualification', 'address', 'session', 'branch', 'course', 'batch', ...DOC_KEYS];
     const map = {
-      name: 'adm-name', guardianName: 'adm-guardianName', phone: 'adm-phone', email: 'adm-email',
+      name: 'adm-name', guardianName: 'adm-guardianName', phone: 'adm-phone', email: 'adm-email', aadhaar: 'adm-aadhaar',
       dob: 'adm-dob', admissionDate: 'adm-admissionDate', gender: 'adm-gender-host', qualification: 'adm-qualification-host',
       address: 'adm-address', session: 'adm-session-host', branch: 'adm-branch-host', course: 'adm-course-host', batch: 'adm-batch-host'
     };
@@ -1633,6 +1837,15 @@ function dueLabel(dueISO) {
           }
         });
 
+        if (v.aadhaar) {
+          const aadhaarRef = doc(db, COL, studentRef.id, 'aadhaar', 'aadhaar');
+          tx.set(aadhaarRef, {
+            studentId: studentId,
+            aadhaar: v.aadhaar,
+            updatedAt: serverTimestamp()
+          });
+        }
+
         return { studentId: studentId, receiptNo: receiptNo, id: newStudentRefId };
       });
     studentId = saveResult.studentId;
@@ -1797,7 +2010,7 @@ function dueLabel(dueISO) {
       ]},
       { id: 'course', icon: 'book-open', title: 'Course & batch', rows: [
         ['Session', selS.name || '-'],
-        ['Branch', s.branchName || '-'],
+        ['Branch', (s.branchName && s.branchName !== s.branchId) ? s.branchName : (branchNameOf(s.branchId) || 'Unknown branch')],
         ['Course', ((c.courseCode || c.code || '') + '  -  ' + (c.name || '')) || '-'],
         ['Batch', b.name || '-'],
         ['Admission date', formatDateIN(s.admissionDate)],
@@ -1891,6 +2104,487 @@ function dueLabel(dueISO) {
     }
   }
 
+  // ---------- status history helper ----------
+  async function appendStatusHistory(studentId, action, fromStatus, toStatus, details) {
+    try {
+      const snap = await getDoc(doc(db, COL, studentId));
+      if (!snap.exists()) return;
+      const data = snap.data();
+      const hist = Array.isArray(data.statusHistory) ? data.statusHistory.slice() : [];
+      hist.push({
+        action: action,
+        fromStatus: fromStatus,
+        toStatus: toStatus,
+        changedBy: (profile && profile.email) || '',
+        changedAt: serverTimestamp(),
+        details: details || ''
+      });
+      await updateDoc(doc(db, COL, studentId), { statusHistory: hist, updatedAt: serverTimestamp() });
+    } catch (e) {
+      console.error('[statusHistory] failed', e);
+    }
+  }
+
+  // ---------- Popup Helpers ----------
+  function courseNameOf(s) {
+    const c = (courses && courses.find ? courses.find(x => x.id === s.courseId) : null) || {};
+    return c.name || s.courseName || c.courseCode || c.code || s.courseCode || s.courseId || '-';
+  }
+
+  function studentSub(s) {
+    return `${s.name || 'Student'} - ${s.studentId || '-'} - ${courseNameOf(s)} / ${s.batchName || 'Batch'} / ${s.sessionName || 'Session'}`;
+  }
+
+  function formatTiming(b) {
+    if (!b) return '';
+    return b.timing || b.time || b.slot || b.schedule || '';
+  }
+
+  function pField(label, el, { half = false, required = false } = {}) {
+    const w = mk('div', 'pk-field' + (half ? ' half' : ''));
+    const lr = mk('div', 'pk-label-row');
+    const lab = mk('label', null, label);
+    if (required) {
+      const em = mk('span', 'pk-req', '*');
+      em.style.color = 'var(--danger)';
+      em.style.marginLeft = '4px';
+      lab.appendChild(em);
+    }
+    lr.appendChild(lab);
+    w.appendChild(lr);
+    w.appendChild(el);
+    return w;
+  }
+
+  function pFieldRow(f1, f2) {
+    const row = mk('div', 'pk-field-row-2');
+    row.appendChild(f1);
+    row.appendChild(f2);
+    return row;
+  }
+
+  function pTextarea(placeholder = '') {
+    const wrap = mk('div', 'ui-input-wrap top');
+    const ic = document.createElement('i');
+    ic.setAttribute('data-lucide', 'file-text');
+    wrap.appendChild(ic);
+    const ta = document.createElement('textarea');
+    ta.className = 'ui-input';
+    ta.rows = 2;
+    if (placeholder) ta.placeholder = placeholder;
+    wrap.appendChild(ta);
+    return { wrap, textarea: ta };
+  }
+
+  function pTypeConfirm(targetId) {
+    const wrap = mk('div', 'ui-input-wrap');
+    const ic = document.createElement('i');
+    ic.setAttribute('data-lucide', 'key-round');
+    wrap.appendChild(ic);
+    const inp = document.createElement('input');
+    inp.type = 'text';
+    inp.className = 'ui-input pk-confirm-id';
+    inp.placeholder = targetId || '';
+    inp.autocomplete = 'off';
+    inp.addEventListener('input', () => {
+      if (inp.value.trim() === String(targetId || '')) {
+        inp.classList.add('matched');
+      } else {
+        inp.classList.remove('matched');
+      }
+    });
+    wrap.appendChild(inp);
+    return { wrap, input: inp };
+  }
+
+  function pInfoGrid3(rows) {
+    const g = mk('div', 'pk-info-grid pk-info-grid-3');
+    rows.forEach(([label, value]) => {
+      const cell = mk('div', 'pk-info-cell');
+      cell.appendChild(mk('div', 'pk-info-label', label));
+      cell.appendChild(mk('div', 'pk-info-value', String(value ?? '-')));
+      g.appendChild(cell);
+    });
+    return g;
+  }
+
+  function pWarn(text) {
+    const w = mk('div', 'pk-warn');
+    w.innerHTML = `<i data-lucide="alert-triangle"></i><span>${text}</span>`;
+    return w;
+  }
+
+  function pNote(text) {
+    const n = mk('div', 'pk-note');
+    n.innerHTML = `<i data-lucide="info"></i><span>${text}</span>`;
+    return n;
+  }
+
+  function pButtons(popup, label, { icon = '', tone = 'default' } = {}) {
+    const foot = mk('div', 'adm-view-foot');
+    const c = mk('button', 'ui-btn ghost', 'Cancel');
+    c.type = 'button';
+    c.addEventListener('click', () => popup.close());
+    const ok = mk('button', 'ui-btn ' + (tone === 'danger' ? 'danger' : (tone === 'success' ? 'success' : 'primary')));
+    ok.type = 'button';
+    ok.disabled = true;
+    let originalHtml = '';
+    if (icon) {
+      originalHtml = `<i data-lucide="${icon}"></i><span>${label}</span>`;
+    } else {
+      originalHtml = `<span>${label}</span>`;
+    }
+    ok.innerHTML = originalHtml;
+    foot.appendChild(c);
+    foot.appendChild(ok);
+    popup.container.appendChild(foot);
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+
+    function setSaving(isSaving) {
+      if (isSaving) {
+        ok.disabled = true;
+        c.disabled = true;
+        ok.innerHTML = '<i data-lucide="loader-2" class="spin"></i><span>Saving...</span>';
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+      } else {
+        ok.innerHTML = originalHtml;
+        c.disabled = false;
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+      }
+    }
+
+    return { cancelBtn: c, okBtn: ok, setSaving };
+  }
+
+  // ---------- popup: change batch ----------
+  async function changeBatchPopup(s) {
+    // Eligible batches list:
+    // b.ctx === 'youth'
+    // b.branchId === s.branchId
+    // b.sessionId === s.sessionId
+    // b.status === 'active'
+    // batchAllowsCourse(b, s.courseId, courses)
+    // Exclude current batch (b.id !== s.batchId)
+    const eligibleBatches = batches.filter((b) => {
+      const isYouth = (b.ctx || 'youth') === 'youth';
+      const sameBranch = b.branchId === s.branchId;
+      const sameSession = b.sessionId === s.sessionId;
+      const isActive = (b.status || 'active') === 'active';
+      const allowsCourse = batchAllowsCourse(b, s.courseId, courses);
+      const notCurrent = b.id !== s.batchId;
+      return isYouth && sameBranch && sameSession && isActive && allowsCourse && notCurrent;
+    });
+
+    if (eligibleBatches.length === 0) {
+      showToast({ type: 'warning', message: 'No other open batch for this course in this branch and session' });
+      return;
+    }
+
+    let saving = false;
+    const popup = openPopup({
+      title: 'Change batch',
+      subtitle: studentSub(s),
+      icon: 'shuffle',
+      tone: 'default',
+      saving: () => saving
+    });
+    const c = popup.container;
+
+    // Target batch dropdown using createSelect
+    const batchSelectHost = document.createElement('div');
+    const batchOpts = [{ value: '', label: 'Select destination batch' }].concat(
+      eligibleBatches.map((b) => {
+        const timing = formatTiming(b);
+        const name = b.name || b.id;
+        return {
+          value: b.id,
+          label: timing ? `${name} (${timing})` : name,
+          icon: 'layers'
+        };
+      })
+    );
+
+    let selectedBatchId = '';
+    const capInfo = mk('div', 'pk-cap-info');
+    capInfo.style.fontSize = '12px';
+    capInfo.style.marginTop = '6px';
+    capInfo.style.color = 'var(--text-mute)';
+
+    const capWarn = pWarn('');
+    capWarn.hidden = true;
+
+    const bSelect = createSelect(batchSelectHost, {
+      options: batchOpts,
+      value: '',
+      ariaLabel: 'New batch',
+      onChange: (v) => {
+        selectedBatchId = v;
+        updateCapacityDisplay();
+        check();
+      }
+    });
+
+    function updateCapacityDisplay() {
+      if (!selectedBatchId) {
+        capInfo.textContent = '';
+        capWarn.hidden = true;
+        return;
+      }
+      const targetB = eligibleBatches.find(b => b.id === selectedBatchId);
+      if (!targetB) return;
+
+      const activeCount = students.filter(
+        st => (st.ctx || 'youth') === 'youth' &&
+              st.batchId === targetB.id &&
+              (st.status === 'active' || st.status === 'break')
+      ).length;
+      const cap = Number(targetB.capacity || targetB.maxStudents || 0);
+
+      if (cap > 0) {
+        capInfo.textContent = `Batch capacity: ${activeCount} / ${cap} students`;
+        if (activeCount >= cap) {
+          capWarn.querySelector('span').textContent = `This batch is at capacity (${activeCount}/${cap}). You can still proceed if needed.`;
+          capWarn.hidden = false;
+        } else {
+          capWarn.hidden = true;
+        }
+      } else {
+        capInfo.textContent = `Current batch strength: ${activeCount} students`;
+        capWarn.hidden = true;
+      }
+    }
+
+    const dateHost = document.createElement('div');
+    const dPicker = createDatePicker(dateHost, { value: todayISO(), ariaLabel: 'Effective date', onChange: () => check() });
+
+    const fBatch = pField('New batch', batchSelectHost, { required: true });
+    fBatch.appendChild(capInfo);
+    const fDate = pField('Effective date', dateHost, { required: true });
+    c.appendChild(pFieldRow(fBatch, fDate));
+    c.appendChild(capWarn);
+
+    const { wrap: reasonWrap, textarea: reasonTa } = pTextarea('Reason for batch change');
+    c.appendChild(pField('Reason', reasonWrap, { required: true }));
+
+    c.appendChild(pNote('Past payments and receipts will remain unchanged. Only the student\'s batch will change.'));
+
+    const { cancelBtn, okBtn, setSaving } = pButtons(popup, 'Change batch', { icon: 'shuffle', tone: 'default' });
+
+    const check = () => {
+      okBtn.disabled = saving || !selectedBatchId || !reasonTa.value.trim() || !dPicker.value;
+    };
+    reasonTa.addEventListener('input', check);
+    check();
+
+    okBtn.addEventListener('click', async () => {
+      const destBatchId = selectedBatchId;
+      const effectiveDate = dPicker.value;
+      const reason = reasonTa.value.trim();
+      const destBatch = eligibleBatches.find((b) => b.id === destBatchId);
+      if (!destBatch) return;
+
+      saving = true;
+      setSaving(true);
+
+      try {
+        await updateDoc(doc(db, COL, s.id), {
+          batchId: destBatch.id,
+          batchName: destBatch.name || destBatch.id,
+          batchHistory: arrayUnion({
+            fromBatchId: s.batchId || '',
+            fromBatchName: s.batchName || '',
+            toBatchId: destBatch.id,
+            toBatchName: destBatch.name || destBatch.id,
+            date: effectiveDate,
+            reason: reason,
+            by: (profile && profile.email) || 'admin',
+            at: new Date().toISOString()
+          }),
+          updatedAt: serverTimestamp()
+        });
+
+        showToast({ type: 'success', message: `Batch changed to ${destBatch.name || destBatch.id}` });
+        popup.close();
+        await load();
+        render();
+      } catch (err) {
+        console.error('[admissions] change batch failed', err);
+        showToast({ type: 'error', message: 'Could not change batch: ' + (err.message || 'error') });
+        saving = false;
+        setSaving(false);
+      }
+    });
+  }
+
+  // ---------- Session-Scoped Youth Drop & Delete ----------
+  async function purgeYouthAdmission(s, meta) {
+    // 1. Gather all subcollection documents of students/{s.id}: docs, payment, aadhaar
+    const subcols = ['docs', 'payment', 'aadhaar'];
+    const subRefs = [];
+    for (const sc of subcols) {
+      try {
+        const snap = await getDocs(collection(db, COL, s.id, sc));
+        snap.docs.forEach(d => subRefs.push(d.ref));
+      } catch (_) { /* non-fatal */ }
+    }
+
+    // 2. Gather root collection documents: bills, payments, waivers, breaks, transfers, enrolments
+    // Strictly session-scoped: delete only records where studentId == s.id OR (studentId == s.studentId && sessionId == s.sessionId)
+    const rootCols = ['bills', 'payments', 'waivers', 'breaks', 'transfers', 'enrolments'];
+    const rootRefs = [];
+    for (const rc of rootCols) {
+      try {
+        const snap1 = await getDocs(query(collection(db, rc), where('studentId', '==', s.id)));
+        snap1.docs.forEach(d => {
+          if (!rootRefs.some(r => r.path === d.ref.path)) rootRefs.push(d.ref);
+        });
+
+        if (s.studentId && s.studentId !== s.id && s.sessionId) {
+          const snap2 = await getDocs(query(collection(db, rc), where('studentId', '==', s.studentId)));
+          snap2.docs.forEach(d => {
+            const data = d.data();
+            if (data.sessionId === s.sessionId) {
+              if (!rootRefs.some(r => r.path === d.ref.path)) rootRefs.push(d.ref);
+            }
+          });
+        }
+      } catch (_) { /* non-fatal */ }
+    }
+
+    const totalRecords = subRefs.length + rootRefs.length + 1;
+
+    // 3. Log to root collection /deletionLog BEFORE deleting
+    try {
+      await addDoc(collection(db, 'deletionLog'), {
+        ctx: 'youth',
+        type: meta.mode,
+        studentCode: s.studentId || '',
+        name: s.name || '',
+        sessionName: s.sessionName || '',
+        courseName: courseNameOf(s),
+        branchName: s.branchName || '',
+        reason: meta.reason || '',
+        lastDay: meta.lastDay || '',
+        recordsDeleted: totalRecords,
+        by: (profile && profile.email) || 'admin',
+        at: new Date().toISOString()
+      });
+    } catch (err) {
+      console.warn('[youth] deletion log failed', err);
+    }
+
+    // 4. Delete in chunks of max 400
+    const allRefs = [...subRefs, ...rootRefs];
+    for (let i = 0; i < allRefs.length; i += 400) {
+      const wb = writeBatch(db);
+      allRefs.slice(i, i + 400).forEach(r => wb.delete(r));
+      await wb.commit();
+    }
+
+    // 5. Delete the student document itself
+    await deleteDoc(doc(db, COL, s.id));
+
+    return totalRecords;
+  }
+
+  // ---------- popup: drop / delete ----------
+  async function removeStudentPopup(s, mode) {
+    const isDrop = mode === 'drop';
+    let saving = false;
+    const popup = openPopup({
+      title: isDrop ? 'Drop student' : 'Delete permanently',
+      subtitle: studentSub(s),
+      icon: isDrop ? 'user-x' : 'trash-2',
+      tone: 'danger',
+      wide: true,
+      saving: () => saving
+    });
+    const c = popup.container;
+
+    // 3-column info grid
+    const infoRows = [
+      ['Student ID', s.studentId || '-'],
+      ['Session', s.sessionName || s.sessionId || '-'],
+      ['Course', courseNameOf(s)]
+    ];
+    c.appendChild(pInfoGrid3(infoRows));
+
+    // Warning line explaining session-scoped action
+    const warn = pWarn(
+      isDrop
+        ? `This drops the student from the ${s.sessionName || 'current'} session ONLY. Records from other sessions will not be affected.`
+        : `Permanent deletion: this completely removes the admission and all fee records for ${s.sessionName || 'current'} ONLY. Other sessions of this student are kept. This action cannot be undone.`
+    );
+    c.appendChild(warn);
+
+    let reasonTa = null;
+    let lastDayPicker = null;
+
+    if (isDrop) {
+      const lastDayHost = document.createElement('div');
+      lastDayPicker = createDatePicker(lastDayHost, {
+        value: todayISO(),
+        max: todayISO(),
+        ariaLabel: 'Last day of attendance',
+        onChange: () => check()
+      });
+      c.appendChild(pField('Last day attended', lastDayHost, { half: true, required: true }));
+
+      const { wrap: reasonWrap, textarea } = pTextarea('Reason for dropping');
+      reasonTa = textarea;
+      c.appendChild(pField('Reason for dropping', reasonWrap, { required: true }));
+    }
+
+    // Type student ID to confirm
+    const { wrap: confirmWrap, input: confirmInp } = pTypeConfirm(s.studentId);
+    c.appendChild(pField(`Type student ID (${s.studentId || ''}) to confirm`, confirmWrap, { required: true }));
+
+    const { cancelBtn, okBtn, setSaving } = pButtons(
+      popup,
+      isDrop ? 'Drop student' : 'Delete permanently',
+      { icon: isDrop ? 'user-x' : 'trash-2', tone: 'danger' }
+    );
+
+    const check = () => {
+      const idOk = confirmInp.value.trim() === String(s.studentId || '');
+      if (isDrop) {
+        okBtn.disabled = saving || !idOk || !reasonTa.value.trim() || !lastDayPicker.value;
+      } else {
+        okBtn.disabled = saving || !idOk;
+      }
+    };
+
+    confirmInp.addEventListener('input', check);
+    if (isDrop && reasonTa) reasonTa.addEventListener('input', check);
+    check();
+
+    okBtn.addEventListener('click', async () => {
+      saving = true;
+      setSaving(true);
+      try {
+        await purgeYouthAdmission(s, {
+          mode,
+          reason: isDrop ? reasonTa.value.trim() : 'Permanent deletion via menu',
+          lastDay: isDrop ? lastDayPicker.value : ''
+        });
+
+        showToast({
+          type: 'success',
+          message: isDrop ? `Student dropped from ${s.sessionName || 'session'}` : 'Admission deleted permanently'
+        });
+        popup.close();
+        if (editId === s.id) closeForm();
+        await load();
+        render();
+      } catch (err) {
+        console.error('[admissions] purgeYouthAdmission failed', err);
+        showToast({ type: 'error', message: 'Operation failed: ' + (err.message || 'unknown error') });
+        saving = false;
+        setSaving(false);
+      }
+    });
+  }
+
   // ---------- event listeners ----------
   addBtn.addEventListener('click', async () => {
     if (!form.hidden && !saveBtn.disabled && !(await confirmLeave({ clear: false }))) return;
@@ -1910,6 +2604,12 @@ function dueLabel(dueISO) {
     });
   }
   registerDirty(() => !form.hidden && !saveBtn.disabled && !saving);
+  const aadhInp = $('adm-aadhaar');
+  if (aadhInp) {
+    aadhInp.addEventListener('blur', () => {
+      aadhInp.value = aadhInp.value.replace(/\s+/g, '');
+    });
+  }
   form.addEventListener('input', (ev) => {
     touched = true;
     refreshForm();
@@ -2020,6 +2720,7 @@ function dueLabel(dueISO) {
 export function unmount() {
   clearDirty();
 }
+
 
 
 

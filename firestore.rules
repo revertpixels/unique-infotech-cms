@@ -87,7 +87,9 @@ service cloud.firestore {
     }
 
     match /branches/{branchId} {
-      allow read: if isSuperAdmin() || (isBranchHead() && branchId == myBranchId());
+      allow read: if isSuperAdmin()
+        || (isBranchHead() && branchId == myBranchId())
+        || (isActiveHead() && branchId == myBranchId());
       allow write: if isSuperAdmin();
     }
 
@@ -98,7 +100,17 @@ service cloud.firestore {
 
     match /batches/{batchId} {
       allow read: if isSuperAdmin() || isBranchHead();
-      allow create, update: if isSuperAdmin() && validBatchDoc();
+      allow create: if (isSuperAdmin()
+        || (isBranchHead()
+            && request.resource.data.branchId == myBranchId()
+            && request.resource.data.ctx == 'youth'))
+        && validBatchDoc();
+      allow update: if (isSuperAdmin()
+        || (isBranchHead()
+            && request.resource.data.branchId == myBranchId()
+            && request.resource.data.ctx == 'youth'
+            && resource.data.branchId == myBranchId()))
+        && validBatchDoc();
       allow delete: if isSuperAdmin();
     }
 
@@ -127,22 +139,31 @@ service cloud.firestore {
       allow delete: if isSuperAdmin();
 
       match /docs/{docId} {
-        allow read, write: if isSuperAdmin()
+        allow read: if isSuperAdmin()
           || (isBranchHead() && get(/databases/$(database)/documents/students/$(studentId)).data.branchId == myBranchId());
+        // getAfter: the parent student doc may be created in the SAME batch (new admission).
+        allow write: if isSuperAdmin()
+          || (isBranchHead() && getAfter(/databases/$(database)/documents/students/$(studentId)).data.branchId == myBranchId());
       }
     }
 
     match /students/{studentId}/payment/{paymentId} {
-      allow read, write: if isSuperAdmin();
+      allow read: if isSuperAdmin()
+        || (isBranchHead() && get(/databases/$(database)/documents/students/$(studentId)).data.branchId == myBranchId());
+      allow write: if isSuperAdmin()
+        || (isBranchHead() && getAfter(/databases/$(database)/documents/students/$(studentId)).data.branchId == myBranchId());
     }
 
     match /students/{studentId}/aadhaar/{aadhaarId} {
-      allow read, write: if isSuperAdmin();
+      allow read: if isSuperAdmin()
+        || (isBranchHead() && get(/databases/$(database)/documents/students/$(studentId)).data.branchId == myBranchId());
+      allow write: if isSuperAdmin()
+        || (isBranchHead() && getAfter(/databases/$(database)/documents/students/$(studentId)).data.branchId == myBranchId());
     }
 
     match /counters/{counterId} {
       allow read, write: if isSuperAdmin()
-        || (isBranchHead() && (counterId.matches('sid_*') || counterId.matches('rcpt_*')));
+        || (isBranchHead() && (counterId.matches('sid_.*') || counterId.matches('rcpt_.*')));
     }
 
     match /enrolments/{enrolmentId} {
@@ -185,6 +206,11 @@ service cloud.firestore {
         || (isBranchHead() && get(/databases/$(database)/documents/students/$(request.resource.data.studentId)).data.branchId == myBranchId());
       allow create, update: if isSuperAdmin();
       allow delete: if isSuperAdmin();
+    }
+
+    match /deletionLog/{logId} {
+      allow read, create: if isSuperAdmin();
+      allow update, delete: if false;
     }
 
     // Everything else is denied until its phase adds rules

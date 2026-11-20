@@ -1,0 +1,374 @@
+/* ==========================================================================
+   Course View Modal (Receipt / Document Style)
+   v1.8.90
+   ========================================================================== */
+
+.course-view-modal {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 720px;
+  max-height: 88vh;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-pop);
+  overflow: hidden;
+  font-family: var(--font-main);
+  color: var(--text);
+  box-sizing: border-box;
+}
+
+/* Header band: Formal receipt document style */
+.cv-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px 24px;
+  background: var(--primary);
+  color: var(--surface);
+  flex-shrink: 0;
+  box-sizing: border-box;
+}
+
+.cv-head-main {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  flex: 1;
+}
+
+.cv-head-top {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.cv-code-chip {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--surface);
+  background: color-mix(in srgb, var(--surface) 22%, transparent);
+  border-radius: var(--r);
+  padding: 3px 8px;
+  line-height: 1;
+}
+
+.cv-code-chip-sm {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: var(--primary);
+  background: var(--primary-soft);
+  border-radius: var(--r);
+  padding: 2px 6px;
+  margin-right: 6px;
+  line-height: 1.2;
+}
+
+.cv-status-pill {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-radius: 999px;
+  padding: 2px 10px;
+  line-height: 1.4;
+}
+
+.cv-status-pill.active {
+  background: var(--success);
+  color: var(--surface);
+}
+
+.cv-status-pill.inactive {
+  background: var(--danger);
+  color: var(--surface);
+}
+
+.cv-title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 800;
+  line-height: 1.3;
+  color: var(--surface);
+  letter-spacing: -0.01em;
+  word-break: break-word;
+}
+
+.cv-sub {
+  font-size: 13px;
+  font-weight: 500;
+  color: color-mix(in srgb, var(--surface) 85%, transparent);
+  line-height: 1.4;
+}
+
+.cv-close-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  background: color-mix(in srgb, var(--surface) 15%, transparent);
+  border: 1px solid color-mix(in srgb, var(--surface) 25%, transparent);
+  border-radius: var(--r);
+  color: var(--surface);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s ease;
+}
+
+.cv-close-btn:hover {
+  background: color-mix(in srgb, var(--surface) 28%, transparent);
+}
+
+.cv-close-btn svg.lucide {
+  width: 18px;
+  height: 18px;
+}
+
+/* Modal Body */
+.cv-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  background: var(--surface);
+  box-sizing: border-box;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--primary) 35%, transparent) transparent;
+}
+
+.cv-body::-webkit-scrollbar {
+  width: 6px;
+}
+
+.cv-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.cv-body::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--primary) 35%, transparent);
+  border-radius: var(--r);
+}
+
+.cv-body::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--primary) 55%, transparent);
+}
+
+/* Sections */
+.cv-sec {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.cv-sec-head {
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 6px;
+}
+
+.cv-sec-title {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-sec);
+}
+
+/* Grid key-value details */
+.cv-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 14px 16px;
+  background: color-mix(in srgb, var(--primary) 2%, var(--surface));
+}
+
+.cv-kv {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.cv-kv.span-2 {
+  grid-column: 1 / -1;
+}
+
+.cv-k {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-mute);
+}
+
+.cv-v {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text);
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+/* Formal Tables for Fees & Packages */
+.cv-table {
+  width: 100%;
+  border-collapse: collapse;
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  overflow: hidden;
+  background: var(--surface);
+}
+
+.cv-table tr {
+  border-bottom: 1px solid var(--border);
+}
+
+.cv-table tr:last-child {
+  border-bottom: none;
+}
+
+.cv-cell-label {
+  padding: 9px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  vertical-align: middle;
+}
+
+.cv-cell-note {
+  display: block;
+  font-size: 11.5px;
+  font-weight: 400;
+  color: var(--text-mute);
+  margin-top: 1px;
+}
+
+.cv-cell-val {
+  padding: 9px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  text-align: right;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.cv-row-total {
+  background: color-mix(in srgb, var(--primary) 5%, var(--surface));
+}
+
+.cv-row-total .cv-cell-label {
+  font-weight: 700;
+  color: var(--primary);
+  font-size: 13.5px;
+}
+
+.cv-row-total .cv-cell-val {
+  font-weight: 800;
+  color: var(--primary);
+  font-size: 14.5px;
+}
+
+/* Topics list */
+.cv-topic-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cv-topic-item {
+  display: inline-flex;
+  align-items: center;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text);
+  background: var(--primary-soft);
+  border: 1px solid color-mix(in srgb, var(--primary) 12%, transparent);
+  border-radius: var(--r);
+  padding: 5px 10px;
+  line-height: 1.3;
+}
+
+.cv-empty-note {
+  margin: 0;
+  font-size: 13px;
+  font-style: italic;
+  color: var(--text-mute);
+}
+
+/* Plain text running batches note (Decision 26: no blue info box) */
+.cv-batch-note {
+  margin: 0;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-sec);
+  line-height: 1.4;
+}
+
+/* Modal Footer */
+.cv-foot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 14px 24px;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+  flex-shrink: 0;
+}
+
+.cv-foot .ui-btn {
+  min-width: 90px;
+}
+
+/* Responsive (Mobile 375px) */
+@media (max-width: 600px) {
+  .course-view-modal {
+    max-height: 92vh;
+    border-radius: var(--r);
+  }
+  .cv-head {
+    padding: 16px;
+    gap: 12px;
+  }
+  .cv-title {
+    font-size: 17px;
+  }
+  .cv-body {
+    padding: 16px;
+    gap: 18px;
+  }
+  .cv-grid-2 {
+    grid-template-columns: 1fr;
+    padding: 12px;
+  }
+  .cv-foot {
+    padding: 12px 16px;
+  }
+  .cv-cell-label, .cv-cell-val {
+    padding: 8px 10px;
+    font-size: 12.5px;
+  }
+}

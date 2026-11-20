@@ -1,13 +1,13 @@
 import { db } from '../config/firebase-config.js';
-import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.71';
+import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.90';
 import { collection, getDocs, doc, addDoc, updateDoc, deleteDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
 import { createSelect } from '../components/ui-select.js';
 import { openMenu } from '../components/ui-menu.js';
 import { confirmDialog } from '../components/ui-confirm.js';
 import { showToast } from '../components/toast.js';
 import { buildStats, buildToolbar } from '../components/list-page.js';
-import { INST_PER_SEM, feeTotal } from '../utils/fees.js?v=1.8.71';
-import { isCourseActive } from '../utils/session-rules.js?v=1.8.71';
+import { INST_PER_SEM, feeTotal } from '../utils/fees.js?v=1.8.90';
+import { isCourseActive } from '../utils/session-rules.js?v=1.8.90';
 
 const ENDED = ['ended', 'closed', 'completed', 'archived', 'cancelled'];
 const LOCK_FIELDS = { admission: 'Admission fee', installment: 'Installment amount', material: 'Material fee' };
@@ -30,8 +30,9 @@ const num = (v) => { const n = Number(v); return Number.isFinite(n) && n > 0 ? M
 const rs = (n) => 'Rs ' + (Number(n) || 0).toLocaleString('en-IN');
 const lvlOf = (c) => [1, 2, 3].includes(Number(c && c.level)) ? Number(c.level) : 1;
 
-export async function mount({ ctx }) {
+export async function mount({ ctx, profile }) {
   try {
+    const isHead = profile && profile.role === 'branch_head';
     const mode = ctx === 'school' ? 'school' : 'youth';
     const Y = mode === 'youth';
     const T = Y
@@ -43,6 +44,10 @@ export async function mount({ ctx }) {
     $('cs-sub').textContent = T.sub;
     $('cs-add-label').textContent = T.add;
     $('cs-card-title').textContent = T.card;
+    if (isHead) {
+      const addBtn = $('cs-add');
+      if (addBtn) addBtn.hidden = true;
+    }
     document.querySelectorAll('#cs-form [data-only]').forEach((n) => { n.hidden = n.dataset.only !== mode; });
     if (!Y) {
       $('cs-name-label').innerHTML = 'Level name <em>*</em>';
@@ -275,7 +280,7 @@ export async function mount({ ctx }) {
 
     const filters = [];
     if (Y) filters.push({ id: 'level', label: 'Level', options: [{ value: 'all', label: 'All levels', icon: 'layers' }, { value: '1', label: 'Sem 1 - Base', icon: 'book-open' }, { value: '2', label: 'Sem 2 - Combo', icon: 'git-merge' }, { value: '3', label: 'Sem 3 - Advanced', icon: 'award' }] });
-    filters.push({ id: 'status', label: 'Status', options: [{ value: 'all', label: 'All statuses' }, { value: 'active', label: 'Active' }, { value: 'inactive', label: 'Inactive' }] });
+    if (!isHead) filters.push({ id: 'status', label: 'Status', options: [{ value: 'all', label: 'All statuses' }, { value: 'active', label: 'Active' }, { value: 'inactive', label: 'Inactive' }] });
     const tb = buildToolbar({ placeholder: Y ? 'Search code, name, eligibility or topic' : 'Search level', filters, onChange: () => render(), onRefresh: () => load() });
     $('cs-toolbar').appendChild(tb.el);
 
@@ -374,6 +379,7 @@ export async function mount({ ctx }) {
         : { name: '', admissionFee: 0, monthlyFee: 0, status: 'active' };
     }
     function openForm(r, isCopy) {
+      if (isHead) return;
       editId = r && !isCopy ? r.id : null;
       const base = Object.assign(blank(), r ? JSON.parse(JSON.stringify(r)) : {});
       if (isCopy) { base.code = ''; base.name = (base.name || '') + ' (copy)'; }
@@ -391,13 +397,262 @@ export async function mount({ ctx }) {
     }
     function closeForm() { form.hidden = true; editId = null; saved = ''; showErrors({}); }
 
+    // ---------- course view popup (shared by Super Admin & Branch Head, Youth & School) ----------
+    function openCourseView(row) {
+      const triggerEl = document.activeElement;
+      const back = mk('div', 'ui-modal-back');
+      const modal = mk('div', 'ui-modal course-view-modal');
+      modal.setAttribute('role', 'dialog');
+      modal.setAttribute('aria-modal', 'true');
+      const titleId = 'cv-title-' + Math.random().toString(36).slice(2, 8);
+      modal.setAttribute('aria-labelledby', titleId);
+
+      const prevOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+
+      function closeModal() {
+        document.removeEventListener('keydown', onKey);
+        document.body.style.overflow = prevOverflow;
+        if (back.parentNode) back.parentNode.removeChild(back);
+        if (triggerEl && typeof triggerEl.focus === 'function') {
+          try { triggerEl.focus(); } catch (e) {}
+        }
+      }
+
+      function onKey(ev) {
+        if (ev.key === 'Escape') {
+          ev.preventDefault();
+          closeModal();
+        }
+      }
+      document.addEventListener('keydown', onKey);
+      back.addEventListener('click', (ev) => {
+        if (ev.target === back) closeModal();
+      });
+
+      // Header band
+      const head = mk('div', 'cv-head');
+      const headMain = mk('div', 'cv-head-main');
+      const topRow = mk('div', 'cv-head-top');
+
+      const isOn = (row.status || 'active') === 'active';
+      const statusPill = mk('span', 'cv-status-pill ' + (isOn ? 'active' : 'inactive'), isOn ? 'Active' : 'Inactive');
+
+      if (Y) {
+        const codeChip = mk('span', 'cv-code-chip', row.code || '-');
+        topRow.append(codeChip, statusPill);
+        const title = mk('h2', 'cv-title', row.name || '-');
+        title.id = titleId;
+        const lv = lvlOf(row);
+        const dur = row.durationMonths || DURATION[lv] || (lv * 6);
+        const sub = mk('div', 'cv-sub', (LEVEL_NAME[lv] || ('Semester ' + lv)) + ' • ' + dur + ' months');
+        headMain.append(topRow, title, sub);
+      } else {
+        topRow.append(statusPill);
+        const title = mk('h2', 'cv-title', row.name || '-');
+        title.id = titleId;
+        const sub = mk('div', 'cv-sub', 'Unique Kids Level');
+        headMain.append(topRow, title, sub);
+      }
+
+      const closeBtn = mk('button', 'cv-close-btn');
+      closeBtn.type = 'button';
+      closeBtn.setAttribute('aria-label', 'Close');
+      closeBtn.appendChild(icon('x'));
+      closeBtn.addEventListener('click', closeModal);
+      head.append(headMain, closeBtn);
+
+      // Body
+      const body = mk('div', 'cv-body');
+
+      if (Y) {
+        const lv = lvlOf(row);
+        const dur = row.durationMonths || DURATION[lv] || (lv * 6);
+        const fe = row.fees || {};
+
+        // 1. Course details
+        const secDetails = mk('div', 'cv-sec');
+        const secDetailsH = mk('div', 'cv-sec-head');
+        secDetailsH.appendChild(mk('h3', 'cv-sec-title', 'Course details'));
+        secDetails.appendChild(secDetailsH);
+
+        const grid = mk('div', 'cv-grid-2');
+        const dLvl = mk('div', 'cv-kv');
+        dLvl.appendChild(mk('span', 'cv-k', 'Level'));
+        dLvl.appendChild(mk('span', 'cv-v', LEVEL_NAME[lv] || ('Semester ' + lv)));
+
+        const dDur = mk('div', 'cv-kv');
+        dDur.appendChild(mk('span', 'cv-k', 'Duration'));
+        dDur.appendChild(mk('span', 'cv-v', dur + ' months'));
+        grid.append(dLvl, dDur);
+
+        const dReq = mk('div', 'cv-kv span-2');
+        if (lv === 1) {
+          dReq.appendChild(mk('span', 'cv-k', 'Eligibility'));
+          dReq.appendChild(mk('span', 'cv-v', row.eligibilityText || row.eligibility || 'None required'));
+        } else {
+          dReq.appendChild(mk('span', 'cv-k', 'Prerequisite'));
+          const p = row.prerequisiteId ? byId[row.prerequisiteId] : null;
+          const pCode = row.prerequisiteCode || (p ? p.code : null) || 'Not linked';
+          const pName = p && p.name ? (' - ' + p.name) : '';
+          dReq.appendChild(mk('span', 'cv-v', pCode + pName));
+        }
+        grid.appendChild(dReq);
+        secDetails.appendChild(grid);
+        body.appendChild(secDetails);
+
+        // 2. Fees for this semester
+        const secFees = mk('div', 'cv-sec');
+        const secFeesH = mk('div', 'cv-sec-head');
+        secFeesH.appendChild(mk('h3', 'cv-sec-title', 'Fees for this semester'));
+        secFees.appendChild(secFeesH);
+
+        const feeTable = mk('table', 'cv-table');
+        const tbTbody = mk('tbody');
+
+        function addFeeRow(label, val, note) {
+          const tr = mk('tr');
+          const tdL = mk('td', 'cv-cell-label', label);
+          if (note) tdL.appendChild(mk('span', 'cv-cell-note', note));
+          const tdV = mk('td', 'cv-cell-val', rs(val));
+          tr.append(tdL, tdV);
+          tbTbody.appendChild(tr);
+        }
+
+        addFeeRow('Admission fee', num(fe.admission));
+        addFeeRow('Installment', num(fe.installment) * 4, rs(num(fe.installment)) + ' x 4 installments');
+        if (num(fe.exam) > 0) addFeeRow('Exam fee', num(fe.exam));
+        if (num(fe.material) > 0) addFeeRow('Study material', num(fe.material));
+
+        const trTot = mk('tr', 'cv-row-total');
+        const tdTotL = mk('td', 'cv-cell-label', 'Total semester fee');
+        const tdTotV = mk('td', 'cv-cell-val', rs(feeTotal(fe)));
+        trTot.append(tdTotL, tdTotV);
+        tbTbody.appendChild(trTot);
+
+        feeTable.appendChild(tbTbody);
+        secFees.appendChild(feeTable);
+        body.appendChild(secFees);
+
+        // 3. Full package
+        const chain = chainOf(row);
+        const secPkg = mk('div', 'cv-sec');
+        const secPkgH = mk('div', 'cv-sec-head');
+        secPkgH.appendChild(mk('h3', 'cv-sec-title', 'Full package'));
+        secPkg.appendChild(secPkgH);
+
+        const pkgTable = mk('table', 'cv-table');
+        const pkgTbody = mk('tbody');
+        chain.forEach((c) => {
+          const tr = mk('tr');
+          const tdC = mk('td', 'cv-cell-label');
+          tdC.appendChild(mk('span', 'cv-code-chip-sm', c.code || '-'));
+          tdC.appendChild(document.createTextNode(' ' + (c.name || '')));
+          const tdV = mk('td', 'cv-cell-val', rs(feeTotal(c.fees)));
+          tr.append(tdC, tdV);
+          pkgTbody.appendChild(tr);
+        });
+
+        const trPkgTot = mk('tr', 'cv-row-total');
+        const tdPkgL = mk('td', 'cv-cell-label', 'Package total');
+        tdPkgL.appendChild(mk('span', 'cv-cell-note', (chain.length * INST_PER_SEM) + ' total installments'));
+        const tdPkgV = mk('td', 'cv-cell-val', rs(packageTotal(row)));
+        trPkgTot.append(tdPkgL, tdPkgV);
+        pkgTbody.appendChild(trPkgTot);
+
+        pkgTable.appendChild(pkgTbody);
+        secPkg.appendChild(pkgTable);
+        body.appendChild(secPkg);
+
+        // 4. Topics
+        const secTopics = mk('div', 'cv-sec');
+        const secTopicsH = mk('div', 'cv-sec-head');
+        secTopicsH.appendChild(mk('h3', 'cv-sec-title', 'Topics'));
+        secTopics.appendChild(secTopicsH);
+
+        const cur = row.curriculum || [];
+        if (cur.length) {
+          const ul = mk('ul', 'cv-topic-list');
+          cur.forEach((t) => {
+            ul.appendChild(mk('li', 'cv-topic-item', String(t)));
+          });
+          secTopics.appendChild(ul);
+        } else {
+          secTopics.appendChild(mk('p', 'cv-empty-note', 'No topics added'));
+        }
+        body.appendChild(secTopics);
+
+        // 5. Running batches (Super Admin only - Correction 3)
+        if (!isHead) {
+          const run = runningBatchesFor(row.id);
+          if (run.length) {
+            body.appendChild(mk('p', 'cv-batch-note', run.length + ' running batch' + (run.length === 1 ? '' : 'es') + ' use this course'));
+          }
+        }
+      } else {
+        // School levels
+        const secFees = mk('div', 'cv-sec');
+        const secFeesH = mk('div', 'cv-sec-head');
+        secFeesH.appendChild(mk('h3', 'cv-sec-title', 'Fees'));
+        secFees.appendChild(secFeesH);
+
+        const feeTable = mk('table', 'cv-table');
+        const tbTbody = mk('tbody');
+
+        const trAdm = mk('tr');
+        trAdm.append(mk('td', 'cv-cell-label', 'Admission fee'), mk('td', 'cv-cell-val', rs(row.admissionFee)));
+        tbTbody.appendChild(trAdm);
+
+        const trMo = mk('tr');
+        trMo.append(mk('td', 'cv-cell-label', 'Monthly fee'), mk('td', 'cv-cell-val', rs(row.monthlyFee) + ' / month'));
+        tbTbody.appendChild(trMo);
+
+        feeTable.appendChild(tbTbody);
+        secFees.appendChild(feeTable);
+        body.appendChild(secFees);
+
+        const secTopics = mk('div', 'cv-sec');
+        const secTopicsH = mk('div', 'cv-sec-head');
+        secTopicsH.appendChild(mk('h3', 'cv-sec-title', 'Topics'));
+        secTopics.appendChild(secTopicsH);
+
+        const cur = row.curriculum || [];
+        if (cur.length) {
+          const ul = mk('ul', 'cv-topic-list');
+          cur.forEach((t) => {
+            ul.appendChild(mk('li', 'cv-topic-item', String(t)));
+          });
+          secTopics.appendChild(ul);
+        } else {
+          secTopics.appendChild(mk('p', 'cv-empty-note', 'No topics added'));
+        }
+        body.appendChild(secTopics);
+      }
+
+      // Footer
+      const foot = mk('div', 'cv-foot');
+      const footClose = mk('button', 'ui-btn');
+      footClose.type = 'button';
+      footClose.textContent = 'Close';
+      footClose.addEventListener('click', closeModal);
+      foot.appendChild(footClose);
+
+      modal.append(head, body, foot);
+      back.appendChild(modal);
+      document.body.appendChild(back);
+
+      if (typeof lucide !== 'undefined') lucide.createIcons();
+      closeBtn.focus();
+    }
+
     // ---------- table ----------
     function render() {
       const tbody = $('cs-rows');
       tbody.textContent = '';
       const st = tb.state;
       const rows = all.filter((r) => {
-        if (st.status && st.status !== 'all' && (r.status || 'active') !== st.status) return false;
+        if (isHead && (r.status || 'active') !== 'active') return false;
+        if (!isHead && st.status && st.status !== 'all' && (r.status || 'active') !== st.status) return false;
         if (Y && st.level && st.level !== 'all' && String(lvlOf(r)) !== st.level) return false;
         if (st.q) {
           const hay = [r.name, r.code, r.eligibility, r.prerequisiteCode].concat(r.curriculum || []).map((x) => String(x || '').toLowerCase());
@@ -405,27 +660,28 @@ export async function mount({ ctx }) {
         }
         return true;
       });
-      const activeN = all.filter((r) => (r.status || 'active') === 'active').length;
+      const listForStats = isHead ? all.filter((r) => (r.status || 'active') === 'active') : all;
+      const activeN = listForStats.filter((r) => (r.status || 'active') === 'active').length;
       if (Y) {
-        const c = (l) => all.filter((r) => lvlOf(r) === l).length;
-        stats.update(0, all.length);
+        const c = (l) => listForStats.filter((r) => lvlOf(r) === l).length;
+        stats.update(0, listForStats.length);
         stats.update(1, c(1));
         stats.update(2, c(2) + ' / ' + c(3));
         stats.update(3, activeN);
       } else {
-        const avg = (k) => all.length ? Math.round(all.reduce((s, r) => s + num(r[k]), 0) / all.length) : 0;
-        stats.update(0, all.length);
+        const avg = (k) => listForStats.length ? Math.round(listForStats.reduce((s, r) => s + num(r[k]), 0) / listForStats.length) : 0;
+        stats.update(0, listForStats.length);
         stats.update(1, activeN);
         stats.update(2, rs(avg('monthlyFee')));
         stats.update(3, rs(avg('admissionFee')));
       }
-      $('cs-count').textContent = all.length + ' ' + (all.length === 1 ? T.one : T.many);
+      $('cs-count').textContent = listForStats.length + ' ' + (listForStats.length === 1 ? T.one : T.many);
       const foot = $('cs-foot');
-      foot.hidden = !all.length;
-      foot.textContent = rows.length === all.length ? 'Showing all ' + all.length : 'Showing ' + rows.length + ' of ' + all.length;
+      foot.hidden = !listForStats.length;
+      foot.textContent = rows.length === listForStats.length ? 'Showing all ' + listForStats.length : 'Showing ' + rows.length + ' of ' + listForStats.length;
       if (!rows.length) {
         const tr = mk('tr');
-        const td = mk('td', 'lp-empty', all.length ? 'No ' + T.many + ' match your search or filter.' : 'No ' + T.many + ' yet. Click "' + T.add + '" to create one.');
+        const td = mk('td', 'lp-empty', listForStats.length ? 'No ' + T.many + ' match your search or filter.' : (isHead ? 'No active ' + T.many + ' available.' : 'No ' + T.many + ' yet. Click "' + T.add + '" to create one.'));
         td.colSpan = Y ? 9 : 6; tr.appendChild(td); tbody.appendChild(tr);
       }
       rows.forEach((r) => {
@@ -462,18 +718,30 @@ export async function mount({ ctx }) {
         const tdS = mk('td');
         tdS.appendChild(mk('span', 'br-pill ' + (isOn ? 'on' : 'off'), isOn ? 'Active' : 'Inactive'));
         const tdA = mk('td', 'br-actions');
-        const k = mk('button', 'ui-kebab');
-        k.type = 'button';
-        k.setAttribute('aria-label', 'Actions for ' + (r.name || T.one));
-        k.appendChild(icon('more-vertical'));
-        const items = [
-          { label: 'Edit', icon: 'pencil', onClick: () => openForm(r) },
-          { label: 'Duplicate', icon: 'copy', onClick: () => openForm(r, true) }
-        ];
-        if (Y && lvlOf(r) < 3) items.push({ label: 'Create Semester ' + (lvlOf(r) + 1) + ' course from this', icon: 'git-merge', onClick: () => createNext(r) });
-        items.push('sep', { label: isOn ? 'Mark inactive' : 'Mark active', icon: 'archive', onClick: () => toggle(r) }, 'sep', { label: 'Delete', icon: 'trash-2', danger: true, onClick: () => del(r) });
-        k.addEventListener('click', () => openMenu(k, items));
-        tdA.appendChild(k);
+        if (isHead) {
+          const btn = mk('button', 'ui-kebab');
+          btn.type = 'button';
+          btn.setAttribute('aria-label', 'View ' + (r.name || r.code || T.one));
+          btn.title = 'View';
+          btn.appendChild(icon('eye'));
+          btn.addEventListener('click', () => openCourseView(r));
+          tdA.appendChild(btn);
+        } else {
+          const k = mk('button', 'ui-kebab');
+          k.type = 'button';
+          k.setAttribute('aria-label', 'Actions for ' + (r.name || T.one));
+          k.appendChild(icon('more-vertical'));
+          const items = [
+            { label: 'View', icon: 'eye', onClick: () => openCourseView(r) },
+            'sep',
+            { label: 'Edit', icon: 'pencil', onClick: () => openForm(r) },
+            { label: 'Duplicate', icon: 'copy', onClick: () => openForm(r, true) }
+          ];
+          if (Y && lvlOf(r) < 3) items.push({ label: 'Create Semester ' + (lvlOf(r) + 1) + ' course from this', icon: 'git-merge', onClick: () => createNext(r) });
+          items.push('sep', { label: isOn ? 'Mark inactive' : 'Mark active', icon: 'archive', onClick: () => toggle(r) }, 'sep', { label: 'Delete', icon: 'trash-2', danger: true, onClick: () => del(r) });
+          k.addEventListener('click', () => openMenu(k, items));
+          tdA.appendChild(k);
+        }
         tr.append(tdS, tdA);
         tbody.appendChild(tr);
       });

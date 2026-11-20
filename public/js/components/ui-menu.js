@@ -19,7 +19,13 @@ export function openMenu(anchor, items) {
   el.setAttribute('role', 'menu');
   items.forEach((it) => {
     if (it === 'sep') { el.appendChild(document.createElement('hr')); return; }
-    if (it && it.section) { const s = document.createElement('div'); s.className = 'ui-menu-sec'; s.textContent = it.section; el.appendChild(s); return; }
+    if (it && it.section) {
+      const s = document.createElement('div');
+      s.className = 'ui-menu-sec';
+      s.textContent = it.section;
+      el.appendChild(s);
+      if (!it.label) return;
+    }
     const b = document.createElement('button');
     b.type = 'button';
     b.setAttribute('role', 'menuitem');
@@ -37,8 +43,17 @@ export function openMenu(anchor, items) {
   const r = anchor.getBoundingClientRect();
   const mw = el.offsetWidth;
   const mh = el.offsetHeight;
+  const vh = window.innerHeight;
   let top = r.bottom + 6;
-  if (top + mh > window.innerHeight - 8) top = r.top - mh - 6;
+  if (top + mh > vh - 8) top = r.top - mh - 6;
+  // Clamp top so the first items are never cut off
+  if (top < 8) top = 8;
+  // If the menu is taller than the viewport, constrain it and scroll
+  if (mh > vh - 16) {
+    el.style.maxHeight = (vh - 16) + 'px';
+    el.style.overflowY = 'auto';
+    top = 8;
+  }
   let left = r.right - mw;
   if (left < 8) left = 8;
   el.style.top = top + 'px';

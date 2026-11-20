@@ -3,10 +3,12 @@
 @import url('./components/ui-kit.css');
 @import url('./components/toast.css');
 @import url('./components/list-page.css');
+@import url('./components/course-view.css');
 @import url('./pages/settings.css');
 @import url('./pages/branches.css');
 @import url('./pages/branch-heads.css');
 @import url('./pages/admissions.css');
+@import url('./pages/admission-receipt.css');
 @import url('./pages/batches.css');
 @import url('./pages/sessions.css');
 @import url('./pages/dashboard.css');

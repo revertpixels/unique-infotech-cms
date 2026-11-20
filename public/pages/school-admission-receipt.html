@@ -1,29 +1,22 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Kids Admission Receipt</title>
-<link rel="stylesheet" href="../css/pages/school-admission-receipt.css?v=1.8.71">
-</head>
-<body>
-  <div class="uk-receipt-page">
-    <header class="uk-toolbar">
-      <button type="button" id="uk-back" class="ui-btn ghost"><i data-lucide="arrow-left"></i> Back to admissions</button>
-      <div class="uk-toolbar-spacer"></div>
-      <button type="button" id="uk-download" class="ui-btn primary"><i data-lucide="download"></i> Download PDF</button>
-      <button type="button" id="uk-print" class="ui-btn"><i data-lucide="printer"></i> Print</button>
-    </header>
-    <div id="uk-loading" class="uk-loading">Loading receipt…</div>
-    <div id="uk-notfound" class="uk-notfound" hidden>
-      <i data-lucide="alert-circle"></i>
-      <h2>Receipt not found</h2>
-      <p>The admission record could not be loaded.</p>
-      <button type="button" id="uk-nf-back" class="ui-btn ghost"><i data-lucide="arrow-left"></i> Back to admissions</button>
+<div class="uk-receipt-page">
+  <header class="uk-toolbar">
+    <div class="uk-toolbar-left">
+      <button type="button" id="uk-back" class="ui-btn ghost"><i data-lucide="arrow-left"></i> Back to students</button>
+      <button type="button" id="uk-profile-btn" class="ui-btn ghost"><i data-lucide="user"></i> View student's profile</button>
     </div>
-    <div id="uk-sheet" class="uk-sheet"></div>
+    <div class="uk-toolbar-spacer"></div>
+    <div class="uk-toolbar-right">
+      <div id="uk-course-select" class="uk-course-select-wrap"></div>
+      <button type="button" id="uk-download" class="ui-btn primary"><i data-lucide="download"></i> Download PDF</button>
+      <button type="button" id="uk-print" class="ui-btn ghost"><i data-lucide="printer"></i> Print</button>
+    </div>
+  </header>
+  <div id="uk-loading" class="uk-loading">Loading receipt…</div>
+  <div id="uk-notfound" class="uk-notfound" hidden>
+    <i data-lucide="alert-circle"></i>
+    <h2>Receipt not found</h2>
+    <p>The admission record could not be loaded.</p>
+    <button type="button" id="uk-nf-back" class="ui-btn ghost"><i data-lucide="arrow-left"></i> Back to students</button>
   </div>
-  <script type="module" src="../js/pages/school-admission-receipt.page.js?v=1.8.71"></script>
-</body>
-</html>
-
+  <div id="uk-sheet" class="uk-sheet"></div>
+</div>

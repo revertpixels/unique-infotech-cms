@@ -1,12 +1,12 @@
-// school-end.page.js — End/drop a Kids or Youth student's current enrolment.
+﻿// school-end.page.js — End/drop a Kids or Youth student's current enrolment.
 // Super Admin only. Sets status='ended', effective date + reason. Stops future
 // monthly bill generation from the following month. Existing bills/payments/receipts
 // are preserved. Idempotent (repeated clicks do not duplicate end events).
 import { db } from '../config/firebase-config.js';
 import { doc, getDoc, getDocs, query, where, updateDoc, runTransaction, serverTimestamp, collection } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.71';
-import { localToday, nextMonth } from '../utils/school-lifecycle.js?v=1.8.71';
-import { formatINR, formatDateIN } from '../utils/formatter.js?v=1.8.71';
+import { showToast } from '../components/toast.js?v=1.8.90';
+import { localToday, nextMonth } from '../utils/school-lifecycle.js?v=1.8.90';
+import { formatINR, formatDateIN } from '../utils/formatter.js?v=1.8.90';
 
 const COL = 'students';
 const ENROLMENTS_COL = 'enrolments';

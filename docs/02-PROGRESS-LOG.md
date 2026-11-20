@@ -42,6 +42,111 @@
 ## ACTIVE LOG (NEWEST ON TOP)
 ---
 
+### [2026-11-20 11:10] Version 1.8.90 — Read-Only Courses & Packages for Branch Heads with View Popup, Super Admin View in Kebab Menu
+
+**What was built & updated:**
+1. **Branch Head Read-Only Courses Access (`router.js` & `courses.page.js`)**:
+   - Added `'branch_head'` role to `ROUTES.courses` in `router.js` so "Courses & Packages" appears in Academics group in the sidebar.
+   - Updated `courses.page.js` mount to take `profile` and determine `isHead`.
+   - For Branch Heads:
+     - "Add Course" button (`#cs-add`) and edit form (`#cs-form`) are hidden and protected from opening.
+     - Toolbar Status filter is excluded from display.
+     - Courses displayed in table are filtered to active courses only (`status === 'active'`), while keeping full loaded list (`all`, `byId`) intact so prerequisites and package chains resolve properly.
+     - Top summary stat cards and footer count calculate visible (active) courses only.
+     - Actions column renders a single eye-icon button (`title="View"`, `aria-label="View <course name>"`) opening the course view popup, with no three-dots kebab menu or write actions.
+2. **Super Admin Course View Option (`courses.page.js`)**:
+   - Added `View` (eye icon) as the first item in the three-dots kebab menu, followed by a separator (`'sep'`). Existing actions (Edit, Duplicate, Create Next Semester, Mark active/inactive, Delete) remain fully functional.
+3. **Shared Course View Popup (`courses.page.js` & `course-view.css`)**:
+   - Single shared `openCourseView(row)` implementation supporting both Youth courses and School levels.
+   - Receipt-style formal document visual aesthetic: primary brand header band with course code chip, title, status pill, level/duration subtitle, and close button.
+   - Course details section with level, duration, and eligibility (Sem 1) or prerequisite (Sem 2/3).
+   - Semester fees breakdown table with admission, installments (x4), exam fee, study material, and bold total.
+   - Full package chain table with prerequisite progression, course fees, package total, and total installments count.
+   - Topics curriculum list or "No topics added" notice.
+   - Running batches notice ("N running batch(es) use this course") rendered for Super Admin only (plain text, no blue info box per Decision 26).
+   - School levels mode shows Level details, Fees (Admission and Monthly fee), and Topics.
+   - Accessible modal lifecycle (`role="dialog"`, `aria-modal="true"`, focus management, Escape key, backdrop click, close button, and body scroll lock).
+   - Slim 6px scrollbar on scrollable modal body using CSS design tokens (`color-mix` on `--primary`).
+   - Responsive layout adapting to 375px mobile screens.
+4. **CSS Variables & Strict Design Rules (`course-view.css` & `main.css`)**:
+   - Created `public/css/components/course-view.css` imported into `public/css/main.css`.
+   - Zero hex/rgb/rgba/hsl literals: colors strictly utilize CSS variables from `variables.css`.
+5. **Version Bump**:
+   - Bumped `APP_VERSION` in `app.js` and `window.__BUILD__` in `index.html` to `1.8.90`.
+   - Bumped all `?v=` script/style query references across the project from `1.8.89` to `1.8.90`.
+
+**Files touched:**
+- CREATED: `public/css/components/course-view.css`
+- MODIFIED: `public/css/main.css`
+- MODIFIED: `public/js/core/router.js`
+- MODIFIED: `public/js/pages/courses.page.js`
+- MODIFIED: `public/js/core/app.js`
+- MODIFIED: `public/index.html`
+- MODIFIED: `docs/02-PROGRESS-LOG.md`
+- MODIFIED: `docs/03-DECISIONS.md`
+- MODIFIED: `docs/05-FILE-INDEX.md`
+- MODIFIED: all JS/HTML/CSS `?v=` references across the project
+
+---
+
+### [2026-11-20 09:48] Version 1.8.89 — Branch Head Admission Rules, Branch Select, Batches Page Fix, Refresh Button Spin Fix
+
+**What was built & fixed:**
+1. **Firestore Rules for Branch Head Admission & Batches**:
+   - Fixed counters regex in `firestore.rules`: updated `matches('sid_*')` and `matches('rcpt_*')` to `matches('sid_.*')` and `matches('rcpt_.*')` so multi-segment IDs like `sid_ui_27_01` match properly.
+   - Updated `students/{studentId}/payment/{paymentId}` to allow read/write for Branch Heads of their own branch.
+   - Updated `/batches/{batchId}` to allow create and update for Branch Heads of their own branch (`ctx == 'youth'`).
+2. **Branch Field in Youth Admission Form (`admissions.page.js`)**:
+   - For Branch Heads, the Branch field is pre-selected with their own branch name and disabled (read-only); the branchId is retained and saved. Super Admin retains the normal dropdown.
+   - Course and batch options load automatically for that branch on form open.
+3. **Batches Page (`batches.page.js` & `router.js`)**:
+   - Added `branch_head` role to `/batches` route in `router.js` so Branch Heads can see Batches in navigation and access the route.
+   - Fixed `resolveBatchBranch` to never throw when opening form. Branch validation now occurs on SAVE and displays inline error in `#bt-branch-err`.
+   - For Branch Heads, Branch is pre-selected and locked to their own branch; batches list and creation are scoped to their own branch only. Delete remains Super Admin only.
+   - Wrapped all button click handlers in `try/catch` with toast feedback.
+4. **Refresh Button Spinning Fix (`list-page.js` & `list-page.css`)**:
+   - Updated `buildToolbar` to rotate only the icon inside `.lp-refresh`, not the button element or background.
+   - Added button disable state during load to prevent click stacking.
+   - Added minimum 1 full turn (~600ms) animation and guaranteed removal of `.spin` class via `finally` on both success and error.
+
+**Files touched:**
+- MODIFIED: `firestore.rules`
+- MODIFIED: `public/js/core/router.js`
+- MODIFIED: `public/js/pages/admissions.page.js`
+- MODIFIED: `public/js/pages/batches.page.js`
+- MODIFIED: `public/js/components/list-page.js`
+- MODIFIED: `public/css/components/list-page.css`
+- MODIFIED: `public/js/core/app.js`
+- MODIFIED: `public/index.html`
+- MODIFIED: all JS/HTML/CSS `?v=` references across the project
+
+---
+
+### [2026-11-19 18:05] Version 1.8.89 — Youth Centre Fixes: Three-dots menu, Receipt logo & fees, Action bar session control, Aadhaar form field
+
+**What was built & fixed:**
+- Fixed Youth three-dots menu in `admissions.page.js` and `ui-menu.js`: Fixed root cause in `ui-menu.js` line 22 where `return;` on section items discarded menu items when `section` and `label` were combined. Refactored `admissions.page.js` to build separate `viewItems`, `manageItems`, and `dangerItems` arrays so empty section headers are never created.
+- Added missing menu actions: "View student" (navigates to `#/students/<studentId>` or displays informational toast "Student profile page is coming next"), "Change batch", "Drop student", and "Delete permanently" with proper role-based gating (Branch Head can only manage own branch; Super Admin can drop/delete).
+- Fixed receipt logo missing: `buildYouthReceiptData` now checks `o.logo || o.logoUrl || '/assets/images/logo-192.jpg'`, ensuring the real organization logo is shown on screen, in print, and embedded as base64 vector in pdfmake PDFs.
+- Fixed fee calculation in Youth receipt (`admission-receipt.js`): Dynamic calculation `feeTotal` = admission fee + sum of instalments (3,000 for CDTA). Excluded study material fee (100) and exam fee (180) from total course fee. Calculated `balanceDue = Math.max(0, feeTotal - admissionFeePaid - instalmentsPaid)` (2,000), with matching in-words "Rupees Two Thousand Only". Added non-breaking space `\u00A0` and `white-space: nowrap;` to prevent line wrapping in Balance due box.
+- Compact receipt action bar session control: Single-session students get a clean read-only chip "Session: <name>" (~200px width, 38px height, calendar icon, centered text). Multi-session students get a compact `createSelect` dropdown that switches sessions.
+- Youth Aadhaar input: Added required 12-digit Aadhaar input in `public/pages/admissions.html` in personal details grid, validated format `^\d{12}$`, stored in subcollection `students/{studentId}/aadhaar/aadhaar` (omitted from parent doc for privacy). Populated on edit and returning student search. Updated `firestore.rules` for Branch Head write access to their branch students' aadhaar subdoc.
+- Bumped version to `1.8.89` across `APP_VERSION`, `__BUILD__`, and all cache-busting query strings.
+
+**Files touched:**
+- MODIFIED: `public/js/components/ui-menu.js`
+- MODIFIED: `public/js/pages/admissions.page.js`
+- MODIFIED: `public/pages/admissions.html`
+- MODIFIED: `public/js/utils/admission-receipt.js`
+- MODIFIED: `public/js/pages/admission-receipt.page.js`
+- MODIFIED: `public/css/pages/admission-receipt.css`
+- MODIFIED: `firestore.rules`
+- MODIFIED: `public/js/core/app.js`
+- MODIFIED: `public/index.html`
+- MODIFIED: all JS/HTML/CSS `?v=` references across the project
+
+---
+
 ### [2026-11-15 13:23] Version 1.8.68 — Unique Kids admission + approved Kids admission receipt
 T0: Preserved all 1.8.66/1.8.67/1.8.68 fixes (Organisation phones, batches MAX_PHONES=3, context switching, batch-code pills, status pills, summary cards, delete permissions). Version kept at 1.8.68 (no bump).
 
@@ -75,7 +180,7 @@ T5: Security & Youth isolation
 
 T6: Kids Admission Receipt (school-admission-receipt.page.js + .html + .css)
 - Source: reference-templates/uk.html (two-page structure, CSS, fonts, colours, borders, spacing, photo/signature positions, table, page breaks). UI kit CSS scoped under .uk-receipt-page so it cannot restyle the app.
-- Replaces: "Admission no" → Student ID; session rows → Monthly fees start / Monthly payment due / Programme: Ongoing; "Parent/guardian signature" → "Student's signature". Never shows full Aadhaar. Renders only saved fee heads.
+- Replaces: "Admission no" → Student ID; session rows → Monthly fees start / Monthly payment due / Programme: Ongoing; "Student's signature". Never shows full Aadhaar. Renders only saved fee heads.
 - Header reads org_config: orgName, phones[] (up to 3 joined), email; logo /assets/images/logo.jpg.
 - Filename: Admission-<studentId>.pdf. Preview/Print/Download PDF use same rendered template. Download PDF falls back to Print→Save as PDF if html2canvas/jsPDF unavailable (not installed in project).
 

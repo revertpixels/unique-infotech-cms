@@ -44,6 +44,7 @@ unique-infotech-cms/
     │   │   ├── badges.css
     │   │   ├── buttons.css
     │   │   ├── cards.css
+    │   │   ├── course-view.css
     │   │   ├── dropdown.css
     │   │   ├── forms.css
     │   │   ├── modal.css

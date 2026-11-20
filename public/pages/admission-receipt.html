@@ -1,44 +1,26 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>Admission Receipt</title>
-  <link rel="stylesheet" href="../css/pages/admission-receipt.css?v=1.8.71">
-</head>
-<body>
-  <div class="ar-page">
-    <!-- Top toolbar: sticky, not printed -->
-    <header class="ar-toolbar">
-      <button type="button" id="ar-back" class="ui-btn ghost"><i data-lucide="arrow-left"></i> Back to admissions</button>
-      <div class="ar-toolbar-spacer"></div>
-      <button type="button" id="ar-download" class="ui-btn primary"><i data-lucide="download"></i> Download PDF</button>
-      <button type="button" id="ar-print" class="ui-btn"><i data-lucide="printer"></i> Print</button>
-    </header>
-
-    <!-- Sheet container -->
-    <div class="ar-sheet-wrap">
-      <div id="ar-sheet" class="ar-sheet">
-        <!-- Loading state -->
-        <div class="ar-loading" id="ar-loading">
-          <div class="ar-loading-spinner"></div>
-          <p>Loading receipt…</p>
-        </div>
-
-        <!-- Not found state -->
-        <div class="ar-notfound" id="ar-notfound" hidden>
-          <i data-lucide="alert-circle"></i>
-          <h2>Receipt not found</h2>
-          <p>The admission record could not be loaded.</p>
-          <button type="button" id="ar-nf-back" class="ui-btn ghost"><i data-lucide="arrow-left"></i> Back to admissions</button>
-        </div>
-
-        <!-- Receipt sheet (populated by JS) -->
-        <div id="ar-receipt-content"></div>
-      </div>
+<div class="ar-receipt-page">
+  <!-- Sticky action bar: screen only, hidden when printing -->
+  <header class="ar-toolbar">
+    <div class="ar-toolbar-left">
+      <button type="button" id="ar-back" class="ui-btn ghost"><i data-lucide="arrow-left"></i> Back to students</button>
+      <button type="button" id="ar-profile-btn" class="ui-btn ghost"><i data-lucide="user"></i> View student's profile</button>
     </div>
+    <div class="ar-toolbar-spacer"></div>
+    <div class="ar-toolbar-right">
+      <div id="ar-session-select" class="ar-session-select-wrap"></div>
+      <button type="button" id="ar-download" class="ui-btn primary"><i data-lucide="download"></i> Download PDF</button>
+      <button type="button" id="ar-print" class="ui-btn ghost"><i data-lucide="printer"></i> Print</button>
+    </div>
+  </header>
+
+  <div id="ar-loading" class="ar-loading">Loading receipt…</div>
+
+  <div id="ar-notfound" class="ar-notfound" hidden>
+    <i data-lucide="alert-circle"></i>
+    <h2>Receipt not found</h2>
+    <p>The admission record could not be loaded.</p>
+    <button type="button" id="ar-nf-back" class="ui-btn ghost"><i data-lucide="arrow-left"></i> Back to students</button>
   </div>
 
-  <script type="module" src="../js/pages/admission-receipt.page.js?v=1.8.71"></script>
-</body>
-</html>
-
+  <div id="ar-sheet" class="ar-stage"></div>
+</div>

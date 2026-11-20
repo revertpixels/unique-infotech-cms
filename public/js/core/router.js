@@ -1,4 +1,4 @@
-import { confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.71';
+import { confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.90';
 
 export const ROLE_LABELS = {
   superadmin: 'Super Admin',
@@ -9,8 +9,8 @@ export const ROLE_LABELS = {
 export const ROUTES = {
   dashboard: { label: 'Dashboard', icon: 'layout-dashboard', group: 'Main', page: 'dashboard', ctx: ['youth', 'school'], roles: ['superadmin', 'branch_head', 'school_head'] },
   branches: { label: 'Branches', icon: 'git-branch', group: 'Academics', page: 'branches', ctx: ['youth'], roles: ['superadmin'] },
-  courses: { label: 'Courses & Packages', icon: 'layers', group: 'Academics', page: 'courses', ctx: ['youth', 'school'], roles: ['superadmin'] },
-  batches: { label: 'Batches', icon: 'users-round', group: 'Academics', page: 'batches', ctx: ['youth', 'school'], roles: ['superadmin'] },
+  courses: { label: 'Courses & Packages', icon: 'layers', group: 'Academics', page: 'courses', ctx: ['youth', 'school'], roles: ['superadmin', 'branch_head'] },
+  batches: { label: 'Batches', icon: 'users-round', group: 'Academics', page: 'batches', ctx: ['youth', 'school'], roles: ['superadmin', 'branch_head'] },
   students: { label: 'Students', icon: 'users', group: 'Students', page: 'admissions', ctx: ['youth'], roles: ['superadmin', 'branch_head'] },
   admissions: { label: 'Admissions', icon: 'user-plus', group: 'Students', redirect: 'students', ctx: ['youth'], roles: ['superadmin', 'branch_head'], nav: false },
   'school-admissions': { label: 'Kids Admissions', icon: 'user-plus', group: 'Students', redirect: 'school-students', ctx: ['school'], roles: ['superadmin'], nav: false },
@@ -151,6 +151,10 @@ export function startRouter({ profile, getContext, setContext, onRouteChange }) 
       if (typeof lucide !== 'undefined') lucide.createIcons();
     } catch (e) {
       console.error(e);
+      renderEmpty('alert-triangle', 'Failed to load page: ' + (route.page || key) + '.page.js', e.message || String(e));
+      setTitle('Error loading ' + route.title);
+      if (onRouteChange) onRouteChange(key, route);
+      return;
     }
   }
 
@@ -201,6 +205,10 @@ export function startRouter({ profile, getContext, setContext, onRouteChange }) 
       if (typeof lucide !== 'undefined') lucide.createIcons();
     } catch (e) {
       console.error(e);
+      renderEmpty('alert-triangle', 'Failed to load page: ' + (route.page || key) + '.page.js', e.message || String(e));
+      setTitle('Error loading ' + route.title);
+      if (onRouteChange) onRouteChange(key, route);
+      return;
     }
   }
 
@@ -251,6 +259,10 @@ export function startRouter({ profile, getContext, setContext, onRouteChange }) 
       if (typeof lucide !== 'undefined') lucide.createIcons();
     } catch (e) {
       console.error(e);
+      renderEmpty('alert-triangle', 'Failed to load page: ' + (route.page || key) + '.page.js', e.message || String(e));
+      setTitle('Error loading ' + route.title);
+      if (onRouteChange) onRouteChange(key, route);
+      return;
     }
   }
 
@@ -301,6 +313,10 @@ export function startRouter({ profile, getContext, setContext, onRouteChange }) 
       if (typeof lucide !== 'undefined') lucide.createIcons();
     } catch (e) {
       console.error(e);
+      renderEmpty('alert-triangle', 'Failed to load page: ' + (route.page || key) + '.page.js', e.message || String(e));
+      setTitle('Error loading ' + route.title);
+      if (onRouteChange) onRouteChange(key, route);
+      return;
     }
   }
 
@@ -351,6 +367,10 @@ export function startRouter({ profile, getContext, setContext, onRouteChange }) 
       if (typeof lucide !== 'undefined') lucide.createIcons();
     } catch (e) {
       console.error(e);
+      renderEmpty('alert-triangle', 'Failed to load page: ' + (route.page || key) + '.page.js', e.message || String(e));
+      setTitle('Error loading ' + route.title);
+      if (onRouteChange) onRouteChange(key, route);
+      return;
     }
   }
 
@@ -402,6 +422,10 @@ export function startRouter({ profile, getContext, setContext, onRouteChange }) 
       if (typeof lucide !== 'undefined') lucide.createIcons();
     } catch (e) {
       console.error(e);
+      renderEmpty('alert-triangle', 'Failed to load page: ' + (route.page || key) + '.page.js', e.message || String(e));
+      setTitle('Error loading ' + route.title);
+      if (onRouteChange) onRouteChange(key, route);
+      return;
     }
   }
 
@@ -560,6 +584,10 @@ export function startRouter({ profile, getContext, setContext, onRouteChange }) 
       }
     } catch (e) {
       console.error(e);
+      renderEmpty('alert-triangle', 'Failed to load page: ' + (route.page || key) + '.page.js', e.message || String(e));
+      setTitle('Error loading ' + route.title);
+      if (onRouteChange) onRouteChange(key, route);
+      return;
     }
     if (thisNav !== navCounter) return;
     const viewEl = document.getElementById('view');

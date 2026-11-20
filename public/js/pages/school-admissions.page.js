@@ -1,4 +1,4 @@
-// school-admissions.page.js — Unique Kids admissions (school context, Super Admin only).
+﻿// school-admissions.page.js — Unique Kids admissions (school context, Super Admin only).
 // Kids batches are session-independent: no session field, no branch selector, Head Office
 // (branchId 'HO') is used internally. Student IDs are YYYYNNNN from the admission year;
 // receipt numbers use the shared Youth counter service with the configured
@@ -7,20 +7,22 @@
 import { db } from '../config/firebase-config.js';
 import {
   collection, getDocs, query, where, doc, getDoc, addDoc, updateDoc, serverTimestamp,
-  runTransaction, deleteField
+  runTransaction, deleteField, writeBatch, deleteDoc
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.71';
-import { registerDirty, confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.71';
-import { buildStats, buildToolbar, renderPager } from '../components/list-page.js?v=1.8.71';
-import { createSelect } from '../components/ui-select.js?v=1.8.71';
-import { openMenu } from '../components/ui-menu.js?v=1.8.71';
-import { confirmDialog } from '../components/ui-confirm.js?v=1.8.71';
-import { formatINR, formatDateIN, initials } from '../utils/formatter.js?v=1.8.71';
-import { validatePhone, validateEmail, validateDOB, validateName, validateRequired } from '../utils/validator.js?v=1.8.71';
-import { readStudentId, readReceiptNo, writeCounter } from '../services/admission.service.js?v=1.8.71';
-import { isCourseActive, batchAllowsCourse, todayISO } from '../utils/session-rules.js?v=1.8.71';
-import { compressTo100KB, readAsDataURL, blobToDataURL, isImageFile } from '../utils/image-compress.js?v=1.8.71';
-import { firstMonthlyMonth } from '../utils/school-receipt.js?v=1.8.71';
+import { showToast } from '../components/toast.js?v=1.8.90';
+import { registerDirty, confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.90';
+import { buildStats, buildToolbar, renderPager } from '../components/list-page.js?v=1.8.90';
+import { createSelect } from '../components/ui-select.js?v=1.8.90';
+import { openMenu } from '../components/ui-menu.js?v=1.8.90';
+import { openPopup } from '../components/modal.js?v=1.8.90';
+import { createDatePicker, createMonthPicker } from '../components/ui-datepicker.js?v=1.8.90';
+import { confirmDialog } from '../components/ui-confirm.js?v=1.8.90';
+import { formatINR, formatDateIN, initials } from '../utils/formatter.js?v=1.8.90';
+import { validatePhone, validateEmail, validateDOB, validateName, validateRequired } from '../utils/validator.js?v=1.8.90';
+import { readStudentId, readReceiptNo, writeCounter } from '../services/admission.service.js?v=1.8.90';
+import { isCourseActive, batchAllowsCourse, todayISO } from '../utils/session-rules.js?v=1.8.90';
+import { compressTo100KB, readAsDataURL, blobToDataURL, isImageFile } from '../utils/image-compress.js?v=1.8.90';
+import { firstMonthlyMonth } from '../utils/school-receipt.js?v=1.8.90';
 
 const COL = 'students';
 const GENDERS = [
@@ -181,8 +183,7 @@ export async function mount({ container, profile, ctx }) {
   const tbFilters = [
     { id: 'status', label: 'Status', options: [
       { value: 'all', label: 'All statuses' }, { value: 'active', label: 'Active' },
-      { value: 'completed', label: 'Completed' }, { value: 'archived', label: 'Archived' },
-      { value: 'inactive', label: 'Inactive' }
+      { value: 'break', label: 'On break' }, { value: 'completed', label: 'Completed' }
     ]},
     { id: 'level', label: 'Level', options: [{ value: 'all', label: 'All levels', icon: 'book-open' }] },
     { id: 'batch', label: 'Batch', options: [{ value: 'all', label: 'All batches', icon: 'layers' }] }
@@ -457,7 +458,7 @@ export async function mount({ container, profile, ctx }) {
       footEl.hidden = true;
       stats.update(0, students.length, 'All records');
       stats.update(1, students.filter((s) => (s.status || 'active') === 'active').length, 'Currently enrolled');
-      stats.update(2, students.filter((s) => { const st = s.status || 'active'; return st === 'inactive' || st === 'ended' || st === 'break'; }).length, 'Currently on break');
+      stats.update(2, students.filter((s) => { const st = s.status || 'active'; return st === 'break'; }).length, 'Currently on break');
       const now = new Date();
       stats.update(3, students.filter((s) => { if (!s.admissionDate) return false; const d = new Date(s.admissionDate); return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear(); }).length, 'This calendar month');
       const clearBtn = $('adm-no-match-clear');
@@ -498,15 +499,24 @@ export async function mount({ container, profile, ctx }) {
       const ki = document.createElement('i');
       ki.setAttribute('data-lucide', 'more-vertical');
       kebab.appendChild(ki);
+      const st = s.status || 'active';
       const items = [
-        { section: 'View', label: 'View', icon: 'eye', onClick: () => { location.hash = '#/school-admissions/' + s.id + '/receipt'; } },
-        { label: 'View admission receipt', icon: 'file-text', onClick: () => { location.hash = '#/school-admissions/' + s.id + '/receipt'; } }
+        { section: 'View', label: 'View details', icon: 'eye', onClick: () => viewDetailsPopup(s) },
+        { label: 'View student', icon: 'user', onClick: () => showToast({ type: 'info', message: 'The student profile page (with Edit) is the next build step.' }) },
+        { label: 'View admission receipt', icon: 'file-text', onClick: () => { location.hash = '#/school-admissions/' + s.id + '/receipt'; } },
       ];
       if (isSuper) {
-        items.push('sep', { section: 'Manage', label: 'Edit', icon: 'pencil', onClick: async () => {
-          if (!form.hidden && !saveBtn.disabled && !(await confirmLeave({ clear: false }))) return;
-          openForm(students.find((x) => x.id === s.id));
-        } });
+        const live = st === 'active' || st === 'break';
+        if (live) {
+          items.push({ section: 'Manage' });
+          items.push({ label: 'Change batch', icon: 'shuffle', onClick: () => changeBatchPopup(s) });
+          if (st === 'active') items.push({ label: 'Start break', icon: 'pause-circle', onClick: () => startBreakPopup(s) });
+          if (st === 'break') items.push({ label: 'End break', icon: 'play-circle', onClick: () => endBreakPopup(s) });
+          items.push({ label: 'Mark course completed', icon: 'graduation-cap', onClick: () => completePopup(s) });
+        }
+        items.push({ section: 'Danger zone' });
+        if (live) items.push({ label: 'Drop student', icon: 'user-x', danger: true, onClick: () => removeStudentPopup(s, 'drop') });
+        items.push({ label: 'Delete permanently', icon: 'trash-2', danger: true, onClick: () => removeStudentPopup(s, 'delete') });
       }
       kebab.addEventListener('click', () => openMenu(kebab, items));
       tdAct.appendChild(kebab);
@@ -516,7 +526,7 @@ export async function mount({ container, profile, ctx }) {
     if (typeof lucide !== 'undefined') lucide.createIcons();
 
     const activeN = students.filter((s) => (s.status || 'active') === 'active').length;
-    const onBreakN = students.filter((s) => { const st = s.status || 'active'; return st === 'inactive' || st === 'ended' || st === 'break'; }).length;
+    const onBreakN = students.filter((s) => { const st = s.status || 'active'; return st === 'break'; }).length;
     const studentN = students.length;
     const now = new Date();
     const thisMonthN = students.filter((s) => {
@@ -621,6 +631,781 @@ export async function mount({ container, profile, ctx }) {
     refresh();
     $('adm-name').focus({ preventScroll: true });
     if (typeof lucide !== 'undefined') lucide.createIcons();
+  }
+
+  // ---------- popup UI helpers (v1.8.90) ----------
+  const who = () => (profile && profile.email) || '';
+  const courseNameOf = (s) => (coursesById[s.courseId] || {}).name || s.courseName || '-';
+  const studentSub = (s) => `${s.name || '-'} — ${s.studentId || '-'} — ${courseNameOf(s)} / ${s.batchName || '-'}`;
+  const ymOf = (iso) => String(iso || '').slice(0, 7);
+  function nextYM(ym) { let [y, m] = ym.split('-').map(Number); m++; if (m > 12) { m = 1; y++; } return y + '-' + String(m).padStart(2, '0'); }
+  function monthsBetween(a, b) { if (!a || !b) return 0; const [y1, m1] = a.split('-').map(Number); const [y2, m2] = b.split('-').map(Number); return Math.max(0, (y2 - y1) * 12 + (m2 - m1)); }
+
+  function fmtYM(ym) {
+    if (!ym || !/^\d{4}-\d{2}$/.test(ym)) return ym || '';
+    const [y, m] = ym.split('-').map(Number);
+    const mName = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][m - 1] || '';
+    return `${mName} ${y}`;
+  }
+
+  function pInfoGrid3(rows) {
+    const box = mk('div', 'pk-info-grid-3');
+    rows.forEach(([k, v, span3, valClass]) => {
+      const item = mk('div', 'pk-info-item' + (span3 ? ' span-3' : ''));
+      const lbl = mk('div', 'pk-info-label', k);
+      const val = mk('div', 'pk-info-val' + (valClass ? ' ' + valClass : ''), v == null || v === '' ? '-' : String(v));
+      item.appendChild(lbl);
+      item.appendChild(val);
+      box.appendChild(item);
+    });
+    return box;
+  }
+
+  function pField(label, el, { half = false, required = false } = {}) {
+    const w = mk('div', 'ui-field ' + (half ? 'pk-field-half' : 'pk-field-full'));
+    const lr = mk('div', 'ui-label-row');
+    const lab = mk('label', null, label);
+    if (required) {
+      const em = mk('em', null, ' *');
+      lab.appendChild(em);
+    }
+    lr.appendChild(lab);
+    w.appendChild(lr);
+    w.appendChild(el);
+    return w;
+  }
+
+  function pFieldRow(f1, f2) {
+    const row = mk('div', 'pk-field-row-2');
+    row.appendChild(f1);
+    row.appendChild(f2);
+    return row;
+  }
+
+  function pTextarea(placeholder = '') {
+    const wrap = mk('div', 'ui-input-wrap top');
+    const ic = document.createElement('i');
+    ic.setAttribute('data-lucide', 'file-text');
+    wrap.appendChild(ic);
+    const ta = document.createElement('textarea');
+    ta.className = 'ui-input';
+    ta.rows = 2;
+    if (placeholder) ta.placeholder = placeholder;
+    wrap.appendChild(ta);
+    return { wrap, textarea: ta };
+  }
+
+  function pTypeConfirm(targetId) {
+    const wrap = mk('div', 'ui-input-wrap');
+    const ic = document.createElement('i');
+    ic.setAttribute('data-lucide', 'key-round');
+    wrap.appendChild(ic);
+    const inp = document.createElement('input');
+    inp.type = 'text';
+    inp.className = 'ui-input pk-confirm-id';
+    inp.placeholder = targetId || '';
+    inp.autocomplete = 'off';
+    inp.addEventListener('input', () => {
+      if (inp.value.trim() === String(targetId || '')) {
+        inp.classList.add('matched');
+      } else {
+        inp.classList.remove('matched');
+      }
+    });
+    wrap.appendChild(inp);
+    return { wrap, input: inp };
+  }
+
+  function pNote(text) {
+    const n = mk('div', 'pk-note');
+    n.innerHTML = `<i data-lucide="info"></i><span>${text}</span>`;
+    return n;
+  }
+
+  function pWarn(text) {
+    const w = mk('div', 'pk-warn');
+    w.innerHTML = `<i data-lucide="alert-triangle"></i><span>${text}</span>`;
+    return w;
+  }
+
+  function pErr(container) {
+    const e = mk('div', 'pk-err');
+    e.hidden = true;
+    container.appendChild(e);
+    return e;
+  }
+
+  function pCheck(text) {
+    const lab = mk('label', 'pk-check-row');
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    lab.appendChild(cb);
+    lab.appendChild(mk('span', null, text));
+    return { lab, cb };
+  }
+
+  function pButtons(popup, label, { icon = '', tone = 'default' } = {}) {
+    const foot = mk('div', 'adm-view-foot');
+    const c = mk('button', 'ui-btn ghost', 'Cancel');
+    c.type = 'button';
+    c.addEventListener('click', () => popup.close());
+    const ok = mk('button', 'ui-btn ' + (tone === 'danger' ? 'danger' : (tone === 'success' ? 'success' : 'primary')));
+    ok.type = 'button';
+    ok.disabled = true;
+    let originalHtml = '';
+    if (icon) {
+      originalHtml = `<i data-lucide="${icon}"></i><span>${label}</span>`;
+    } else {
+      originalHtml = `<span>${label}</span>`;
+    }
+    ok.innerHTML = originalHtml;
+    foot.appendChild(c);
+    foot.appendChild(ok);
+    popup.container.appendChild(foot);
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+
+    function setSaving(isSaving) {
+      if (isSaving) {
+        ok.disabled = true;
+        c.disabled = true;
+        ok.innerHTML = '<i data-lucide="loader-2" class="spin"></i><span>Saving...</span>';
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+      } else {
+        ok.innerHTML = originalHtml;
+        c.disabled = false;
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+      }
+    }
+
+    return { cancelBtn: c, okBtn: ok, setSaving };
+  }
+
+  async function queryByStudent(colName, s) {
+    const keys = [...new Set([s.id, s.studentId].filter(Boolean))];
+    const out = [];
+    for (const k of keys) {
+      const snap = await getDocs(query(collection(db, colName), where('studentId', '==', k)));
+      snap.docs.forEach(d => { if (!out.some(x => x.id === d.id)) out.push(Object.assign({ id: d.id, _ref: d.ref }, d.data())); });
+    }
+    return out;
+  }
+  async function billsFor(s) { try { return await queryByStudent('bills', s); } catch (e) { console.warn('[kids] bills read failed', e); return []; } }
+  const dueOf = (bills) => bills.filter(b => b.status === 'unpaid' || b.status === 'partial')
+    .reduce((t, b) => t + Math.max(0, Number(b.monthlyFee || 0) - Number(b.paidAmount || 0)), 0);
+  const isUntouchedUnpaid = (b) => b.status === 'unpaid' && !(Number(b.paidAmount || 0) > 0);
+
+  // ---------- popup: view details ----------
+  async function viewDetailsPopup(s) {
+    const popup = openPopup({
+      title: 'Student details',
+      subtitle: studentSub(s),
+      icon: 'eye',
+      tone: 'default',
+      wide: true,
+      saving: () => false,
+    });
+    const container = popup.container;
+
+    let aadhaarMasked = ' - ';
+    try {
+      const aadhaarSnap = await getDoc(doc(db, 'students', s.id, 'aadhaar', 'aadhaar'));
+      if (aadhaarSnap.exists() && aadhaarSnap.data()?.aadhaar) {
+        const a = aadhaarSnap.data().aadhaar;
+        aadhaarMasked = '••••-••••-' + a.slice(-4);
+      }
+    } catch (_) { /* non-fatal */ }
+
+    const feePaid = s.actualAmountReceived ?? s.admissionFee ?? 0;
+    const rows = [
+      ['Guardian', s.guardianName || '-'],
+      ['Phone', s.phone || '-'],
+      ['Alt phone', s.altPhone || '-'],
+      ['Email', s.email || '-'],
+      ['DOB', formatDateIN(s.dob) || '-'],
+      ['Gender', (s.gender || '-').charAt(0).toUpperCase() + (s.gender || '').slice(1)],
+      ['School class', s.schoolClass || '-'],
+      ['Admission date', formatDateIN(s.admissionDate) || '-'],
+      ['Receipt no', s.receiptNo || '-'],
+      ['Monthly fee', formatINR(Number(s.monthlyFee || 0))],
+      ['Admission fee paid', formatINR(Number(feePaid))],
+      ['First monthly bill', s.firstMonthlyMonth || '-'],
+      ['Aadhaar', aadhaarMasked],
+      ['Status', (s.status || 'active').charAt(0).toUpperCase() + (s.status || 'active').slice(1)],
+      ['Address', s.address || '-', true],
+    ];
+
+    container.appendChild(pInfoGrid3(rows));
+
+    const foot = mk('div', 'adm-view-foot');
+    const viewRcpt = mk('button', 'ui-btn ghost', 'View receipt');
+    viewRcpt.type = 'button';
+    viewRcpt.addEventListener('click', () => {
+      popup.close();
+      location.hash = '#/school-admissions/' + s.id + '/receipt';
+    });
+    const closeBtn = mk('button', 'ui-btn primary');
+    closeBtn.type = 'button';
+    closeBtn.innerHTML = '<i data-lucide="check"></i><span>Close</span>';
+    closeBtn.addEventListener('click', () => popup.close());
+    foot.appendChild(viewRcpt);
+    foot.appendChild(closeBtn);
+    container.appendChild(foot);
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+  }
+
+  // ---------- popup: change batch ----------
+  async function changeBatchPopup(s) {
+    const curBatch = batches.find((b) => b.id === s.batchId) || {};
+    const course = s.courseId ? (coursesById[s.courseId] || null) : null;
+
+    let destOptions = [];
+    try {
+      const bSnap = await getDocs(query(collection(db, 'batches'), where('ctx', '==', 'school')));
+      const allBatches = bSnap.docs.map((d) => Object.assign({ id: d.id }, d.data()));
+      destOptions = allBatches.filter((b) => {
+        if (b.ctx !== 'school') return false;
+        if ((b.status || 'active') !== 'active') return false;
+        if (b.id === s.batchId) return false;
+        if (!course || !batchAllowsCourse(b, course.id, levels)) return false;
+        return true;
+      });
+    } catch (e) {
+      console.error('[changeBatch] load failed', e);
+      showToast({ type: 'error', message: 'Could not load batches.' });
+      return;
+    }
+
+    if (destOptions.length === 0) {
+      showToast({ type: 'error', message: 'No eligible destination batch for this student.' });
+      return;
+    }
+
+    let saving = false;
+    const popup = openPopup({
+      title: 'Change batch',
+      subtitle: studentSub(s),
+      icon: 'shuffle',
+      tone: 'default',
+      saving: () => saving,
+    });
+    const c = popup.container;
+
+    // Custom select dropdown using createSelect
+    const batchSelectHost = document.createElement('div');
+    const batchOpts = [{ value: '', label: 'Select destination batch' }].concat(
+      destOptions.map((b) => {
+        const timing = b.timing || b.time || '';
+        const name = b.name || b.id;
+        return {
+          value: b.id,
+          label: timing ? `${name} (${timing})` : name,
+          icon: 'layers'
+        };
+      })
+    );
+
+    let selectedBatchId = '';
+    const bSelect = createSelect(batchSelectHost, {
+      options: batchOpts,
+      value: '',
+      ariaLabel: 'New batch',
+      onChange: (v) => {
+        selectedBatchId = v;
+        capErr.hidden = true;
+        check();
+      }
+    });
+
+    const dateHost = document.createElement('div');
+    const dPicker = createDatePicker(dateHost, { value: todayISO(), ariaLabel: 'Effective date', onChange: () => check() });
+
+    const fBatch = pField('New batch', batchSelectHost, { required: true });
+    const fDate = pField('Effective date', dateHost, { required: true });
+    c.appendChild(pFieldRow(fBatch, fDate));
+
+    const { wrap: reasonWrap, textarea: reasonTa } = pTextarea('Reason for batch change');
+    c.appendChild(pField('Reason', reasonWrap, { required: true }));
+
+    c.appendChild(pNote('Past payments and receipts will remain unchanged. Only the student\'s batch will change.'));
+
+    const capErr = pErr(c);
+
+    const { cancelBtn, okBtn, setSaving } = pButtons(popup, 'Change batch', { icon: 'shuffle', tone: 'default' });
+
+    const check = () => {
+      okBtn.disabled = saving || !selectedBatchId || !reasonTa.value.trim() || !dPicker.value;
+    };
+    reasonTa.addEventListener('input', check);
+    check();
+
+    okBtn.addEventListener('click', async () => {
+      const destBatchId = selectedBatchId;
+      const effectiveDate = dPicker.value;
+      const reason = reasonTa.value.trim();
+      const destBatch = destOptions.find((b) => b.id === destBatchId);
+      if (!destBatch) return;
+
+      saving = true;
+      setSaving(true);
+      capErr.hidden = true;
+
+      // Capacity check with getDocs BEFORE transaction
+      if (destBatch.capacity != null && destBatch.capacity > 0) {
+        try {
+          const allSnap = await getDocs(query(collection(db, COL), where('ctx', '==', 'school')));
+          const allStudents = allSnap.docs.map((d) => Object.assign({ id: d.id }, d.data()));
+          const sameBatch = allStudents.filter((s2) => {
+            if (s2.batchId !== destBatchId || s2.id === s.id) return false;
+            const st = s2.status || 'active';
+            return st === 'active' || st === 'break';
+          }).length;
+          if (sameBatch >= destBatch.capacity) {
+            capErr.textContent = 'Destination batch is full.';
+            capErr.hidden = false;
+            saving = false;
+            setSaving(false);
+            check();
+            return;
+          }
+        } catch (e) {
+          console.error('[changeBatch] capacity check failed', e);
+          capErr.textContent = 'Capacity check failed.';
+          capErr.hidden = false;
+          saving = false;
+          setSaving(false);
+          check();
+          return;
+        }
+      }
+
+      try {
+        await runTransaction(db, async (tx) => {
+          const sRef = doc(db, COL, s.id);
+          const tRef = doc(collection(db, 'transfers'));
+          tx.update(sRef, {
+            batchId: destBatchId,
+            batchName: destBatch.name || destBatch.id,
+            updatedAt: serverTimestamp(),
+            updatedBy: who(),
+          });
+          tx.set(tRef, {
+            ctx: 'school',
+            type: 'batch_change',
+            studentId: s.id,
+            studentCode: s.studentId || '',
+            studentName: s.name || '',
+            fromBatchId: s.batchId || '',
+            fromBatchName: curBatch.name || curBatch.id || '',
+            toBatchId: destBatchId,
+            toBatchName: destBatch.name || destBatch.id,
+            effectiveDate: effectiveDate,
+            reason: reason,
+            changedBy: who(),
+            changedAt: serverTimestamp(),
+          });
+        });
+
+        popup.close();
+        showToast({ type: 'success', message: 'Batch changed.' });
+        load();
+      } catch (e) {
+        console.error('[changeBatch] failed', e);
+        showToast({ type: 'error', message: e.message || 'Batch change failed.' });
+      } finally {
+        saving = false;
+        setSaving(false);
+        check();
+      }
+    });
+  }
+
+  // ---------- popup: start break ----------
+  async function startBreakPopup(s) {
+    let saving = false;
+    const popup = openPopup({
+      title: 'Start break',
+      subtitle: studentSub(s),
+      icon: 'pause-circle',
+      tone: 'amber',
+      saving: () => saving
+    });
+    const c = popup.container;
+
+    const wait = pNote('Checking billed months...');
+    c.appendChild(wait);
+    const bills = await billsFor(s);
+    wait.remove();
+
+    // Section 4: Earliest break month calculation
+    const currentYM = ymOf(todayISO());
+    let lastBilled = null;
+    if (bills && bills.length > 0) {
+      const bMonths = bills.map(b => b.month).filter(Boolean);
+      if (bMonths.length > 0) {
+        bMonths.sort();
+        lastBilled = bMonths[bMonths.length - 1];
+      }
+    }
+    let minStart = currentYM;
+    if (lastBilled) {
+      const afterLast = nextYM(lastBilled);
+      if (afterLast > minStart) {
+        minStart = afterLast;
+      }
+    }
+
+    let hintText = '';
+    if (lastBilled && nextYM(lastBilled) > currentYM) {
+      hintText = `Earliest possible: ${fmtYM(minStart)} (fees up to ${fmtYM(lastBilled)} are already billed).`;
+    } else {
+      hintText = `Earliest possible: ${fmtYM(minStart)} (current month).`;
+    }
+
+    const hostFrom = document.createElement('div');
+    const hostTo = document.createElement('div');
+
+    const fromPicker = createMonthPicker(hostFrom, {
+      value: minStart,
+      min: minStart,
+      ariaLabel: 'Break from',
+      onChange: (v) => {
+        toPicker.setMin(v);
+        if (toPicker.value < v) toPicker.value = v;
+        check();
+      }
+    });
+
+    const toPicker = createMonthPicker(hostTo, {
+      value: minStart,
+      min: minStart,
+      ariaLabel: 'Break until',
+      onChange: () => check()
+    });
+
+    c.appendChild(pFieldRow(pField('Break from (month)', hostFrom, { required: true }), pField('Break until (month)', hostTo, { required: true })));
+
+    const hintEl = mk('div', 'pk-hint', hintText);
+    c.appendChild(hintEl);
+
+    const { wrap: reasonWrap, textarea: reasonTa } = pTextarea('Reason for break');
+    c.appendChild(pField('Reason', reasonWrap, { required: true }));
+
+    c.appendChild(pNote('No monthly fee will be charged for the break months.'));
+
+    const err = pErr(c);
+    const { cancelBtn, okBtn, setSaving } = pButtons(popup, 'Start break', { icon: 'pause', tone: 'default' });
+
+    const check = () => {
+      const fVal = fromPicker.value;
+      const tVal = toPicker.value;
+      okBtn.disabled = saving || !fVal || !tVal || !reasonTa.value.trim() || fVal < minStart || tVal < fVal;
+    };
+    reasonTa.addEventListener('input', check);
+    check();
+
+    okBtn.addEventListener('click', async () => {
+      const fVal = fromPicker.value;
+      const tVal = toPicker.value;
+      const reasonVal = reasonTa.value.trim();
+
+      if (saving || !fVal || !tVal || !reasonVal || fVal < minStart || tVal < fVal) {
+        err.textContent = 'Invalid break months. Earliest start is ' + fmtYM(minStart) + '.';
+        err.hidden = false;
+        return;
+      }
+
+      saving = true;
+      setSaving(true);
+      err.hidden = true;
+      try {
+        const wb = writeBatch(db);
+        const brRef = doc(collection(db, 'breaks'));
+        wb.set(brRef, {
+          ctx: 'school', studentId: s.id, studentCode: s.studentId || '', studentName: s.name || '',
+          startMonth: fVal, endMonth: tVal, reason: reasonVal, status: 'approved',
+          requestedBy: who(), approvedBy: who(), createdAt: serverTimestamp(), approvedAt: serverTimestamp(), updatedAt: serverTimestamp()
+        });
+        wb.update(doc(db, COL, s.id), {
+          status: 'break', breakId: brRef.id, breakFrom: fVal, breakTo: tVal,
+          breakReason: reasonVal, updatedAt: serverTimestamp(), updatedBy: who()
+        });
+        await wb.commit();
+        saving = false;
+        popup.close();
+        showToast({ type: 'success', message: 'Break started for ' + (s.name || 'student') + '.' });
+        load();
+      } catch (e) {
+        console.error('[kids] start break failed', e);
+        saving = false;
+        setSaving(false);
+        err.textContent = 'Could not start break: ' + (e.message || e.code || e);
+        err.hidden = false;
+        check();
+      }
+    });
+  }
+
+  // ---------- popup: end break ----------
+  async function endBreakPopup(s) {
+    let saving = false;
+    const popup = openPopup({
+      title: 'End break',
+      subtitle: studentSub(s),
+      icon: 'play-circle',
+      tone: 'default',
+      saving: () => saving
+    });
+    const c = popup.container;
+
+    c.appendChild(pInfoGrid3([
+      ['Break period', (s.breakFrom || '?') + ' to ' + (s.breakTo || '?')],
+      ['Reason', s.breakReason || '-']
+    ]));
+
+    const dateHost = document.createElement('div');
+    const dPicker = createDatePicker(dateHost, { value: todayISO(), ariaLabel: 'Return date' });
+    c.appendChild(pField('Return date', dateHost, { half: true, required: true }));
+
+    c.appendChild(pNote('The student becomes Active again in the same level and batch. No new admission fee. Monthly billing continues normally.'));
+
+    const err = pErr(c);
+    const { cancelBtn, okBtn, setSaving } = pButtons(popup, 'End break', { icon: 'play', tone: 'default' });
+    okBtn.disabled = false;
+
+    okBtn.addEventListener('click', async () => {
+      const returnDate = dPicker.value;
+      if (saving || !returnDate) return;
+      saving = true;
+      setSaving(true);
+      err.hidden = true;
+      try {
+        const wb = writeBatch(db);
+        wb.update(doc(db, COL, s.id), { status: 'active', breakEndedOn: returnDate, updatedAt: serverTimestamp(), updatedBy: who() });
+        if (s.breakId) wb.update(doc(db, 'breaks', s.breakId), { status: 'ended', endedOn: returnDate, endedBy: who(), updatedAt: serverTimestamp() });
+        await wb.commit();
+        saving = false;
+        popup.close();
+        showToast({ type: 'success', message: (s.name || 'Student') + ' is active again.' });
+        load();
+      } catch (e) {
+        console.error('[kids] end break failed', e);
+        saving = false;
+        setSaving(false);
+        okBtn.disabled = false;
+        err.textContent = 'Could not end break: ' + (e.message || e.code || e);
+        err.hidden = false;
+      }
+    });
+  }
+
+  // ---------- popup: mark course completed ----------
+  async function completePopup(s) {
+    let saving = false;
+    const popup = openPopup({
+      title: 'Mark course completed',
+      subtitle: studentSub(s),
+      icon: 'graduation-cap',
+      tone: 'success',
+      wide: true,
+      saving: () => saving
+    });
+    const c = popup.container;
+
+    const wait = pNote('Loading student details...');
+    c.appendChild(wait);
+    const bills = await billsFor(s);
+    wait.remove();
+
+    const today = todayISO();
+    const months = monthsBetween(ymOf(s.admissionDate), ymOf(today));
+    const dues = dueOf(bills);
+
+    c.appendChild(pInfoGrid3([
+      ['In level since', formatDateIN(s.admissionDate)],
+      ['Duration', months + ' month' + (months === 1 ? '' : 's')],
+      ['Monthly fee', formatINR(Number(s.monthlyFee || 0))],
+      ['Outstanding dues', formatINR(dues), false, dues > 0 ? 'pk-dues-has' : 'pk-dues-none']
+    ]));
+
+    // Completion date on standalone row (50% width). Remarks on NEXT row (full width, rows=2).
+    const dateHost = document.createElement('div');
+    const dPicker = createDatePicker(dateHost, { value: today, max: today, ariaLabel: 'Completion date', onChange: () => check() });
+    c.appendChild(pField('Completion date', dateHost, { half: true, required: true }));
+
+    const { wrap: noteWrap, textarea: noteTa } = pTextarea('Remarks (optional)');
+    c.appendChild(pField('Remarks (optional)', noteWrap));
+
+    c.appendChild(pNote('Monthly billing stops from the month after completion date. Existing unpaid dues remain payable. To move to next level, give a new admission after completion.'));
+
+    const { lab, cb } = pCheck('I have verified that ' + (s.name || 'this student') + ' has completed ' + courseNameOf(s) + '.');
+    c.appendChild(lab);
+
+    const { wrap: idWrap, input: idInp } = pTypeConfirm(s.studentId);
+    c.appendChild(pField('Type student ID ' + (s.studentId || '') + ' to confirm', idWrap, { half: true, required: true }));
+
+    const err = pErr(c);
+    const { cancelBtn, okBtn, setSaving } = pButtons(popup, 'Mark completed', { icon: 'graduation-cap', tone: 'success' });
+
+    const check = () => {
+      okBtn.disabled = saving || !cb.checked || !dPicker.value || idInp.value.trim() !== String(s.studentId || '');
+    };
+    cb.addEventListener('change', check);
+    idInp.addEventListener('input', check);
+
+    okBtn.addEventListener('click', async () => {
+      const compDate = dPicker.value;
+      if (saving || !compDate) return;
+      saving = true;
+      setSaving(true);
+      err.hidden = true;
+      try {
+        const stopFrom = nextYM(ymOf(compDate));
+        const stop = bills.filter(b => isUntouchedUnpaid(b) && b.month >= stopFrom);
+        let enrols = [];
+        try { enrols = (await queryByStudent('enrolments', s)).filter(e => e.status === 'active'); } catch (e) { console.warn('[kids] enrolments read failed', e); }
+        const wb = writeBatch(db);
+        stop.forEach(b => wb.update(doc(db, 'bills', b.id), { status: 'stopped', stoppedAt: serverTimestamp(), stoppedBy: who() }));
+        enrols.forEach(e => wb.update(doc(db, 'enrolments', e.id), { status: 'completed', endDate: compDate, endReason: 'Course completed', endedBy: who(), endedAt: serverTimestamp(), updatedAt: serverTimestamp() }));
+        wb.update(doc(db, COL, s.id), {
+          status: 'completed', completedOn: compDate, completionNote: noteTa.value.trim(),
+          completedBy: who(), completedAt: serverTimestamp(), updatedAt: serverTimestamp(), updatedBy: who()
+        });
+        await wb.commit();
+        saving = false;
+        popup.close();
+        showToast({ type: 'success', message: courseNameOf(s) + ' marked completed for ' + (s.name || 'student') + '.' });
+        load();
+      } catch (e) {
+        console.error('[kids] complete failed', e);
+        saving = false;
+        setSaving(false);
+        err.textContent = 'Could not mark completed: ' + (e.message || e.code || e);
+        err.hidden = false;
+        check();
+      }
+    });
+  }
+
+  // Permanently deletes EVERY record of a Kids student (one profile = everything). No trash.
+  async function purgeStudent(s, meta) {
+    const refs = [];
+    const add = (r) => { if (!refs.some(x => x.path === r.path)) refs.push(r); };
+    for (const colName of ['bills', 'payments', 'waivers', 'breaks', 'transfers', 'enrolments']) {
+      (await queryByStudent(colName, s)).forEach(d => add(d._ref));
+    }
+    for (const sub of ['docs', 'payment', 'aadhaar']) {
+      const snap = await getDocs(collection(db, COL, s.id, sub));
+      snap.docs.forEach(d => add(d.ref));
+    }
+    try {
+      await addDoc(collection(db, 'deletionLog'), {
+        ctx: 'school', type: meta.mode, studentCode: s.studentId || '', name: s.name || '',
+        courseName: courseNameOf(s), reason: meta.reason || '', lastDay: meta.lastDay || '',
+        recordsDeleted: refs.length + 1, by: who(), at: serverTimestamp()
+      });
+    } catch (e) { console.warn('[kids] deletion log not saved (deploy firestore.rules)', e); }
+    for (let i = 0; i < refs.length; i += 400) {
+      const wb = writeBatch(db);
+      refs.slice(i, i + 400).forEach(r => wb.delete(r));
+      await wb.commit();
+    }
+    await deleteDoc(doc(db, COL, s.id));
+    return refs.length + 1;
+  }
+
+  // ---------- popup: drop / delete ----------
+  async function removeStudentPopup(s, mode) {
+    const isDrop = mode === 'drop';
+    let saving = false;
+    const popup = openPopup({
+      title: isDrop ? 'Drop student' : 'Delete student permanently',
+      subtitle: studentSub(s),
+      icon: isDrop ? 'user-x' : 'trash-2',
+      tone: 'danger',
+      wide: true,
+      saving: () => saving
+    });
+    const c = popup.container;
+
+    // Load bills and payments before showing details
+    const wait = pNote('Loading student details...');
+    c.appendChild(wait);
+    const [bills, payments] = await Promise.all([
+      billsFor(s),
+      queryByStudent('payments', s)
+    ]);
+    wait.remove();
+
+    const dues = dueOf(bills);
+    const totalMonthlyPaid = bills.reduce((t, b) => t + Number(b.paidAmount || 0), 0);
+    const feePaid = s.actualAmountReceived ?? s.admissionFee ?? 0;
+
+    const infoRows = [
+      ['Guardian', s.guardianName || '-'],
+      ['Phone', s.phone || '-'],
+      ['Admission date', formatDateIN(s.admissionDate) || '-'],
+      ['Admission receipt no', s.receiptNo || '-'],
+      ['Level', courseNameOf(s)],
+      ['Batch', s.batchName || '-'],
+      ['Status', (s.status || 'active').charAt(0).toUpperCase() + (s.status || 'active').slice(1)],
+      ['Admission fee paid', formatINR(Number(feePaid))],
+      ['Total monthly fees paid', formatINR(totalMonthlyPaid)],
+      ['Outstanding dues', formatINR(dues), false, dues > 0 ? 'pk-dues-has' : 'pk-dues-none'],
+      ['Number of bills', bills.length],
+      ['Number of payments', payments.length]
+    ];
+    c.appendChild(pInfoGrid3(infoRows));
+
+    // ONE short red text line with alert-triangle icon
+    const warn = pWarn('All data of this student will be permanently deleted. This cannot be undone.');
+    c.appendChild(warn);
+
+    let reasonTa = null;
+    let lastDayPicker = null;
+    if (isDrop) {
+      // Last day attended on its own row (50% width). Reason for dropping on the NEXT row, full width, rows=2.
+      const lastDayHost = document.createElement('div');
+      lastDayPicker = createDatePicker(lastDayHost, { value: todayISO(), max: todayISO(), ariaLabel: 'Last day attended', onChange: () => check() });
+      c.appendChild(pField('Last day attended', lastDayHost, { half: true, required: true }));
+
+      const { wrap: rWrap, textarea: rTa } = pTextarea('Reason for dropping');
+      reasonTa = rTa;
+      c.appendChild(pField('Reason for dropping', rWrap, { required: true }));
+    }
+
+    const { wrap: idWrap, input: idInp } = pTypeConfirm(s.studentId);
+    c.appendChild(pField('Type student ID ' + (s.studentId || '') + ' to confirm', idWrap, { half: true, required: true }));
+
+    const err = pErr(c);
+    const { cancelBtn, okBtn, setSaving } = pButtons(popup, isDrop ? 'Drop student' : 'Delete permanently', { icon: isDrop ? 'user-x' : 'trash-2', tone: 'danger' });
+
+    const check = () => {
+      okBtn.disabled = saving || idInp.value.trim() !== String(s.studentId || '') || (isDrop && (!reasonTa.value.trim() || !lastDayPicker.value));
+    };
+    idInp.addEventListener('input', check);
+    if (reasonTa) reasonTa.addEventListener('input', check);
+
+    okBtn.addEventListener('click', async () => {
+      if (saving) return;
+      saving = true;
+      setSaving(true);
+      err.hidden = true;
+      try {
+        const lastDayVal = lastDayPicker ? lastDayPicker.value : '';
+        const n = await purgeStudent(s, { mode, reason: reasonTa ? reasonTa.value.trim() : '', lastDay: lastDayVal });
+        saving = false;
+        popup.close();
+        showToast({ type: 'success', message: (s.name || 'Student') + ' ' + (isDrop ? 'dropped' : 'deleted') + '. ' + n + ' records removed.' });
+        load();
+      } catch (e) {
+        console.error('[kids] delete failed', e);
+        saving = false;
+        setSaving(false);
+        err.textContent = 'Delete stopped: ' + (e.message || e.code || e) + '. Some records may already be removed - press Delete again to finish.';
+        err.hidden = false;
+        check();
+      }
+    });
   }
 
   function closeForm() {
@@ -811,7 +1596,7 @@ export async function mount({ container, profile, ctx }) {
     }
     if (!v.admissionDate) e.admissionDate = 'Select an admission date.';
     else if (!validCalendarDate(v.admissionDate) || v.admissionDate > localToday()) e.admissionDate = 'Admission date cannot be in the future.';
-    DOC_KEYS.forEach(k => { const d=docFiles[k]; if (!d || !d.dataUrl || d.pending) e[k]='Upload a valid '+(k==='photo'?'student photo':"student signature")+'.'; });
+    DOC_KEYS.forEach(k => { const d=docFiles[k]; if (!d || !d.dataUrl || d.pending) e[k]='Upload a valid '+(k==='photo'?'student photo':"student's signature")+'.'; });
     if (editId && (v.levelId !== editRow.courseId || v.batchId !== editRow.batchId || v.admissionDate !== editRow.admissionDate))
       e.levelId = 'Existing admission level, batch and admission date cannot be rewritten here. A separate upgrade/transfer flow is required.';
     if (v.paymentMode === 'none') {
@@ -948,7 +1733,7 @@ export async function mount({ container, profile, ctx }) {
       const docs={};
       for(const k of DOC_KEYS){
         const df=docFiles[k];
-        if(!df || df.pending || !df.dataUrl) throw new Error('Upload both the student photo and signature first.');
+        if(!df || df.pending || !df.dataUrl) throw new Error("Upload both the student photo and student's signature first.");
         if(df.compressedBlob) docs[k]={type:'image/jpeg',mime:'image/jpeg',name:df.file.name,sizeBytes:df.compressedBlob.size,data:df.dataUrl};
       }
       const studentRef=updating ? doc(db,COL,existingId) : doc(collection(db,COL));

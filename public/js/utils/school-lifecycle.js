@@ -1,4 +1,4 @@
-// school-lifecycle.js — Unique Kids student lifecycle helpers (upgrade, return,
+﻿// school-lifecycle.js — Unique Kids student lifecycle helpers (upgrade, return,
 // transfer, end, break, waiver, permanent delete).
 //
 // Canonical data model (separates identity from enrolment):
@@ -27,9 +27,9 @@ import {
   collection, getDocs, query, where, doc, getDoc, addDoc, updateDoc, deleteDoc,
   serverTimestamp, runTransaction, writeBatch
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.71';
-import { firstMonthlyMonth } from './school-receipt.js?v=1.8.71';
-import { isCourseActive } from './session-rules.js?v=1.8.71';
+import { showToast } from '../components/toast.js?v=1.8.90';
+import { firstMonthlyMonth } from './school-receipt.js?v=1.8.90';
+import { isCourseActive } from './session-rules.js?v=1.8.90';
 const ENROLMENTS_COL = 'enrolments';
 const BILLS_COL = 'bills';
 const PAYMENTS_COL = 'payments';

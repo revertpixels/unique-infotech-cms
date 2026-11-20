@@ -230,3 +230,13 @@ Reasoning: blue info boxes under fields (e.g. "Prerequisite: ...", "Exam fee loc
 
 Decision: a course is selectable (batch multi-select, admissions course dropdown, courses prerequisite selector) only when `isCourseActive(c)` returns true: `(c.status || 'active') === 'active' && c.active !== false && !c.archived`. Toolbar "Course" filters may list all courses for filtering old data. Editing an existing batch that references an inactive course keeps the id saved and shows a grey-italic "CODE (inactive)" chip, but the course is not in the dropdown list and is not removed silently. "All courses" batches (batchAllowsCourse with allCourses:true) return false for inactive courses. Admission save rejects an inactive course with "This course is inactive. Choose another course."
 Reasoning: inactive courses must not be available for new admissions or batch enrollment, but historical references must be preserved for data integrity.
+
+## 28. Branch Head course view
+
+- **Decision:** Branch Heads have read-only access to Courses & Packages (`/courses` route). They see only active courses in the table and top summary statistics. In the Actions column, Branch Heads see a single eye-icon button opening the Course View popup (no kebab menu, no Add Course button, no edit/delete/status toggle capabilities). Super Admin gets the same Course View popup as the first item in the row kebab menu.
+- **Reasoning:**
+    - Branch Heads need full visibility into course curriculum, prerequisite chains, and fee structures to counsel prospective students and guide admissions, but course definitions and pricing are managed centrally by Super Admin.
+    - Full loaded lists (`all`, `byId`) are preserved on the client so prerequisite lookups and full package chain totals (`chainOf`, `packageTotal`) calculate accurately even if a prerequisite course was historically retired.
+    - Running batch counts are shown in the view popup exclusively for Super Admin, as showing global batch counts to Branch Heads would leak information about other branches' batches.
+    - The Course View popup follows the formal receipt document design (primary header band, bordered key/value grid, bordered fee tables, slim 6px scrollbar, and 375px responsiveness) using 100% design tokens from `variables.css`.
+    - Firestore security rules for `/courses/{courseId}` already allow read for both `isSuperAdmin()` and `isBranchHead()`, and restrict writes to `isSuperAdmin()`, so no rules changes were required.

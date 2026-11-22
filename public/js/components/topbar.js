@@ -1,5 +1,6 @@
-﻿import { getRunningPeriod, getPeriodOptions } from '../utils/date.utils.js?v=1.8.90';
-import { loadSessions, getSelectedSessionId, setSelectedSession } from '../core/sessions.js?v=1.8.90';
+import { getRunningPeriod, getPeriodOptions } from '../utils/date.utils.js?v=1.8.96';
+import { loadSessions, getSelectedSessionId, setSelectedSession } from '../core/sessions.js?v=1.8.96';
+import { confirmLeave } from '../utils/unsaved-guard.js?v=1.8.96';
 
 let listenersRegistered = false;
 let sessionsListenerRegistered = false;
@@ -171,7 +172,18 @@ export function renderTopbar({ profile, ctx, canSwitch, onMenu, onSwitch }) {
           tag.textContent = 'Running';
           li.appendChild(tag);
         }
-        li.addEventListener('click', () => { pick(s); closeSessionMenu(); });
+        li.addEventListener('click', async () => {
+          if (s.id === (selected && selected.id)) {
+            closeSessionMenu();
+            return;
+          }
+          if (!(await confirmLeave())) {
+            closeSessionMenu();
+            return;
+          }
+          pick(s);
+          closeSessionMenu();
+        });
         menu.appendChild(li);
       });
       pick(selected);

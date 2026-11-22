@@ -1,8 +1,8 @@
-ï»¿// school-receipt-pdf.js â€” Vector PDF generator for Unique Kids Admission Receipt
+// school-receipt-pdf.js — Vector PDF generator for Unique Kids Admission Receipt
 // using pdfmake. Loaded dynamically on demand. Produces real, selectable,
 // searchable text with exact 2-page layout matching reference-templates/uk.html.
 
-import { fmtRs } from './school-receipt.js?v=1.8.90';
+import { fmtRs } from './school-receipt.js?v=1.8.96';
 
 const INK = '#1D1A3A';
 const MUTED = '#5B5F85';
@@ -545,7 +545,7 @@ export function buildSchoolReceiptPdfDefinition(d, logoDataUrl) {
     margin: [10, 0, 0, 20]
   });
 
-  // Signatures Area (Student's signature + Authorised signatory) â€” No "Issued by" line
+  // Signatures Area (Student's signature + Authorised signatory) — No "Issued by" line
   content.push({
     columns: [
       {

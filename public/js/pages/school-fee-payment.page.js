@@ -1,10 +1,10 @@
-﻿// school-fee-payment.page.js — Record a monthly fee payment for a specific bill.
+// school-fee-payment.page.js � Record a monthly fee payment for a specific bill.
 // Super Admin only. Shows bill details and accepts payment amount.
 import { db } from '../config/firebase-config.js';
 import { doc, getDoc, updateDoc, serverTimestamp, runTransaction } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.90';
-import { formatINR, formatDateIN } from '../utils/formatter.js?v=1.8.90';
-import { computeLateFee, recordPayment } from '../utils/school-billing.js?v=1.8.90';
+import { showToast } from '../components/toast.js?v=1.8.96';
+import { formatINR, formatDateIN } from '../utils/formatter.js?v=1.8.96';
+import { computeLateFee, recordPayment } from '../utils/school-billing.js?v=1.8.96';
 
 const BILLS_COL = 'bills';
 const PAYMENTS_COL = 'payments';
@@ -63,7 +63,7 @@ export async function mount({ container, profile, ctx, billId }) {
   form.addEventListener('submit', async ev => {
     ev.preventDefault();
     const amountStr = $('sk-pay-amount').value.trim();
-    const amount = Number(amountStr.replace(/[₹,]/g, ''));
+    const amount = Number(amountStr.replace(/[?,]/g, ''));
     if (!amount || amount <= 0) { showToast({ type: 'error', message: 'Enter a valid payment amount.' }); return; }
     const late = computeLateFee(bill);
     const totalDue = rupees(bill.monthlyFee) + late - rupees(bill.paidAmount || 0);

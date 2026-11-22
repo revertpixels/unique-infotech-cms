@@ -145,6 +145,15 @@ service cloud.firestore {
         allow write: if isSuperAdmin()
           || (isBranchHead() && getAfter(/databases/$(database)/documents/students/$(studentId)).data.branchId == myBranchId());
       }
+
+      // Activity log: append-only. Nobody can edit or delete entries.
+      match /activity/{activityId} {
+        allow read: if isSuperAdmin()
+          || (isBranchHead() && get(/databases/$(database)/documents/students/$(studentId)).data.branchId == myBranchId());
+        allow create: if isSuperAdmin()
+          || (isBranchHead() && getAfter(/databases/$(database)/documents/students/$(studentId)).data.branchId == myBranchId());
+        allow update, delete: if false;
+      }
     }
 
     match /students/{studentId}/payment/{paymentId} {

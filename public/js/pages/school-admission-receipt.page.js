@@ -1,13 +1,13 @@
-ï»¿// school-admission-receipt.page.js â€” Renders the approved Kids admission receipt
+// school-admission-receipt.page.js — Renders the approved Kids admission receipt
 // (matching reference-templates/uk.html design) from saved Firestore snapshots.
 // Scope: Super Admin.
 import { db } from '../config/firebase-config.js';
 import { doc, getDoc, getDocs, collection, query, where } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.90';
-import { createSelect } from '../components/ui-select.js?v=1.8.90';
-import { formatDateIN } from '../utils/formatter.js?v=1.8.90';
-import { buildSchoolReceiptData, fmtRs } from '../utils/school-receipt.js?v=1.8.90';
-import { downloadSchoolReceiptPdf } from '../utils/school-receipt-pdf.js?v=1.8.90';
+import { showToast } from '../components/toast.js?v=1.8.96';
+import { createSelect } from '../components/ui-select.js?v=1.8.96';
+import { formatDateIN } from '../utils/formatter.js?v=1.8.96';
+import { buildSchoolReceiptData, fmtRs } from '../utils/school-receipt.js?v=1.8.96';
+import { downloadSchoolReceiptPdf } from '../utils/school-receipt-pdf.js?v=1.8.96';
 
 const COL = 'students';
 let studentDocId = '';
@@ -550,7 +550,7 @@ function renderReceipt(container, d) {
     </ol>
   `;
 
-  // Signatures Area â€” "Issued by: <email>" removed; Student's signature
+  // Signatures Area — "Issued by: <email>" removed; Student's signature
   const sigs = document.createElement('div');
   sigs.className = 'uk-sigs';
   sigs.innerHTML = `

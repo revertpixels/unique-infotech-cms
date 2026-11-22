@@ -1,4 +1,4 @@
-﻿// school-billing.js — Monthly bill generation, late fees, and payment allocation
+// school-billing.js � Monthly bill generation, late fees, and payment allocation
 // for Unique Kids (ongoing, session-independent billing).
 //
 // Canonical bill identity: studentId + month (YYYY-MM). Idempotent generation.
@@ -11,8 +11,8 @@ import {
   collection, getDocs, query, where, doc, getDoc, addDoc, updateDoc, serverTimestamp,
   runTransaction
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.90';
-import { localToday, monthSeq, nextMonth, previousMonth } from './school-lifecycle.js?v=1.8.90';
+import { showToast } from '../components/toast.js?v=1.8.96';
+import { localToday, monthSeq, nextMonth, previousMonth } from './school-lifecycle.js?v=1.8.96';
 
 const BILLS_COL = 'bills';
 const PAYMENTS_COL = 'payments';
@@ -172,7 +172,7 @@ export async function applyWaiver(tx, { studentId, billId, amount, reason, waive
   const bill = snap.data();
   const outstanding = rupees(bill.monthlyFee) + computeLateFee(bill) - rupees(bill.paidAmount || 0);
   amount = rupees(amount);
-  if (amount > outstanding) throw new Error('Cannot waive more than outstanding amount (₹' + outstanding + ').');
+  if (amount > outstanding) throw new Error('Cannot waive more than outstanding amount (?' + outstanding + ').');
 
   const waiverRef = doc(collection(db, WAIVERS_COL));
   tx.set(waiverRef, {

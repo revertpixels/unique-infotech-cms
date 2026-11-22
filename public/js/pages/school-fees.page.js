@@ -1,19 +1,19 @@
-﻿// school-fees.page.js — Unique Kids monthly fee collection (school context, Super Admin).
+// school-fees.page.js � Unique Kids monthly fee collection (school context, Super Admin).
 // Lists monthly bills with status (unpaid/paid/partial), late fees, and allows recording
 // payments. Kids billing is session-independent: monthly bills open on the 1st, due by the
 // 10th, late fine Rs 1/day from the 11th.
 import { db } from '../config/firebase-config.js';
 import { collection, getDocs, query, where, doc, getDoc, updateDoc, runTransaction, serverTimestamp } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.90';
-import { registerDirty, confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.90';
-import { buildStats, buildToolbar } from '../components/list-page.js?v=1.8.90';
-import { createSelect } from '../components/ui-select.js?v=1.8.90';
-import { openMenu } from '../components/ui-menu.js?v=1.8.90';
-import { confirmDialog } from '../components/ui-confirm.js?v=1.8.90';
-import { formatINR, formatDateIN } from '../utils/formatter.js?v=1.8.90';
-import { isCourseActive } from '../utils/session-rules.js?v=1.8.90';
-import { localToday, monthSeq, nextMonth } from '../utils/school-lifecycle.js?v=1.8.90';
-import { daysLate, computeLateFee } from '../utils/school-billing.js?v=1.8.90';
+import { showToast } from '../components/toast.js?v=1.8.96';
+import { registerDirty, confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.96';
+import { buildStats, buildToolbar } from '../components/list-page.js?v=1.8.96';
+import { createSelect } from '../components/ui-select.js?v=1.8.96';
+import { openMenu } from '../components/ui-menu.js?v=1.8.96';
+import { confirmDialog } from '../components/ui-confirm.js?v=1.8.96';
+import { formatINR, formatDateIN } from '../utils/formatter.js?v=1.8.96';
+import { isCourseActive } from '../utils/session-rules.js?v=1.8.96';
+import { localToday, monthSeq, nextMonth } from '../utils/school-lifecycle.js?v=1.8.96';
+import { daysLate, computeLateFee } from '../utils/school-billing.js?v=1.8.96';
 
 const COL = 'students';
 const BILLS_COL = 'bills';

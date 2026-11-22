@@ -57,11 +57,12 @@ textarea.ui-input { height: auto; min-height: 92px; padding: 10px 12px 10px 38px
 .ui-select.open .ui-select-btn, .ui-select-btn:focus-visible { outline: 0; border-color: var(--primary); box-shadow: 0 0 0 4px color-mix(in srgb, var(--primary) 14%, transparent); }
 .ui-select-btn svg.lucide { width: 16px; height: 16px; color: var(--text-mute); flex-shrink: 0; }
 .ui-select-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ui-select-btn svg.ui-select-chev { transition: transform .15s; }
+.ui-select-btn svg.ui-select-chev { transition: transform .15s; margin-left: auto; }
 .ui-select.open svg.ui-select-chev { transform: rotate(180deg); }
-.ui-select-list { position: absolute; top: calc(100% + 6px); left: 0; right: 0; z-index: 40; margin: 0; padding: 4px; list-style: none; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 12px 32px rgba(16, 24, 40, .14); min-width: 100%; width: max-content; max-width: min(420px, 90vw); }
+.ui-select-list { position: absolute; top: calc(100% + 6px); left: 0; right: 0; z-index: 10005; margin: 0; padding: 4px; list-style: none; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 12px 32px rgba(16, 24, 40, .14); min-width: 100%; width: max-content; max-width: min(480px, 90vw); max-height: 260px; overflow-y: auto; box-sizing: border-box; }
 .ui-select-list[hidden] { display: none; }
-.ui-select-opt { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 8px; font-size: 13.5px; color: var(--text); cursor: pointer; outline: 0; white-space: nowrap; }
+.ui-select-opt { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 8px; font-size: 13.5px; color: var(--text); cursor: pointer; outline: 0; white-space: normal; word-break: break-word; }
+.ui-select-opt > span { flex: 1; min-width: 0; }
 .ui-select-opt svg.lucide { width: 16px; height: 16px; color: var(--text-mute); flex-shrink: 0; }
 .ui-select-opt:hover, .ui-select-opt:focus { background: var(--bg); }
 .ui-select-opt[aria-selected="true"] { color: var(--primary); font-weight: 600; }

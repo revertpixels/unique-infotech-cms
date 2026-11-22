@@ -4,6 +4,7 @@
 @import url('./components/toast.css');
 @import url('./components/list-page.css');
 @import url('./components/course-view.css');
+@import url('./components/doc-card.css');
 @import url('./pages/settings.css');
 @import url('./pages/branches.css');
 @import url('./pages/branch-heads.css');
@@ -21,6 +22,7 @@
 @import url('./pages/school-end.css');
 @import url('./pages/school-break.css');
 @import url('./pages/school-delete.css');
+@import url('./pages/student-profile.css');
 @import url('./base/typography.css');
 @import url('./components/buttons.css');
 @import url('./components/forms.css');

@@ -1,4 +1,4 @@
-import { confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.90';
+import { confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.96';
 
 export const ROLE_LABELS = {
   superadmin: 'Super Admin',
@@ -49,6 +49,21 @@ export function startRouter({ profile, getContext, setContext, onRouteChange }) 
 
   function setTitle(text) {
     document.title = text + ' - ' + orgName;
+    const pageTitleEl = document.getElementById('page-title');
+    if (pageTitleEl) pageTitleEl.textContent = text;
+  }
+
+  function resetScroll() {
+    const viewEl = document.getElementById('view');
+    if (viewEl) {
+      if (typeof viewEl.focus === 'function') {
+        viewEl.focus({ preventScroll: true });
+      }
+      viewEl.scrollTop = 0;
+    }
+    window.scrollTo(0, 0);
+    if (document.documentElement) document.documentElement.scrollTop = 0;
+    if (document.body) document.body.scrollTop = 0;
   }
 
   function emptyState(iconName, heading, line) {
@@ -75,33 +90,54 @@ export function startRouter({ profile, getContext, setContext, onRouteChange }) 
     }
   }
 
-  // T6: simple "coming soon" student profile card for #/students/<studentId>
-  function renderStudentProfile(studentId, routeKey) {
-    view.textContent = '';
-    const box = document.createElement('div');
-    box.className = 'empty-state';
-    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    svg.setAttribute('data-lucide', 'user');
-    svg.setAttribute('aria-hidden', 'true');
-    box.appendChild(svg);
-    const h = document.createElement('h3');
-    h.textContent = 'Student profile - coming soon';
-    box.appendChild(h);
-    const p = document.createElement('p');
-    p.textContent = 'Student ID: ' + studentId;
-    box.appendChild(p);
-    const back = document.createElement('button');
-    back.type = 'button';
-    back.className = 'btn pri';
-    back.textContent = 'Back';
-    back.addEventListener('click', () => { location.hash = '#/admissions'; });
-    box.appendChild(back);
-    view.appendChild(box);
-    setTitle('Student profile');
-    if (typeof lucide !== 'undefined') {
-      lucide.createIcons();
+  // Dynamic student profile loader for #/students/<studentId>
+  async function renderStudentProfile(studentId, routeKey) {
+    const thisNav = ++navCounter;
+    try {
+      const resp = await fetch('/pages/student-profile.html', { cache: 'no-cache' });
+      if (thisNav !== navCounter) return;
+      if (!resp.ok) {
+        renderEmpty('inbox', "This page isn't available yet", 'The student profile page could not be loaded.');
+        setTitle('Student Profile');
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+        if (onRouteChange) onRouteChange(routeKey, null);
+        return;
+      }
+      let html = await resp.text();
+      if (thisNav !== navCounter) return;
+      html = html.trim();
+      if (!html) {
+        renderEmpty('inbox', "This page isn't available yet", 'The student profile page has no content yet.');
+        setTitle('Student Profile');
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+        if (onRouteChange) onRouteChange(routeKey, null);
+        return;
+      }
+      view.innerHTML = html;
+      if (thisNav !== navCounter) return;
+      try {
+        const mod = await import('/js/pages/student-profile.page.js?v=' + (window.__BUILD__ || Date.now()));
+        if (thisNav !== navCounter) return;
+        if (mod && typeof mod.mount === 'function') {
+          currentModule = mod;
+          await mod.mount({ container: document.getElementById('view'), profile, ctx: getContext() });
+        } else {
+          currentModule = null;
+        }
+      } catch (e) {
+        console.error(e);
+      }
+      if (thisNav !== navCounter) return;
+      resetScroll();
+      setTitle('Student Profile');
+      if (onRouteChange) onRouteChange(routeKey, null);
+      if (typeof lucide !== 'undefined') lucide.createIcons();
+    } catch (e) {
+      console.error(e);
+      renderEmpty('alert-triangle', 'Failed to load Student Profile', e.message || String(e));
+      setTitle('Error loading Student Profile');
+      if (onRouteChange) onRouteChange(routeKey, null);
     }
-    if (onRouteChange) onRouteChange(routeKey, null);
   }
 
   async function renderAdmissionReceipt(key) {
@@ -141,11 +177,7 @@ export function startRouter({ profile, getContext, setContext, onRouteChange }) 
         console.error(e);
       }
       if (thisNav !== navCounter) return;
-      const viewEl = document.getElementById('view');
-      if (viewEl) {
-        viewEl.focus();
-        viewEl.scrollTop = 0;
-      }
+      resetScroll();
       setTitle('Admission Receipt');
       if (onRouteChange) onRouteChange(key, null);
       if (typeof lucide !== 'undefined') lucide.createIcons();
@@ -195,11 +227,7 @@ export function startRouter({ profile, getContext, setContext, onRouteChange }) 
         console.error(e);
       }
       if (thisNav !== navCounter) return;
-      const viewEl = document.getElementById('view');
-      if (viewEl) {
-        viewEl.focus();
-        viewEl.scrollTop = 0;
-      }
+      resetScroll();
       setTitle('Kids Admission Receipt');
       if (onRouteChange) onRouteChange(key, null);
       if (typeof lucide !== 'undefined') lucide.createIcons();
@@ -249,11 +277,7 @@ export function startRouter({ profile, getContext, setContext, onRouteChange }) 
         console.error(e);
       }
       if (thisNav !== navCounter) return;
-      const viewEl = document.getElementById('view');
-      if (viewEl) {
-        viewEl.focus();
-        viewEl.scrollTop = 0;
-      }
+      resetScroll();
       setTitle('Change Batch');
       if (onRouteChange) onRouteChange(key, null);
       if (typeof lucide !== 'undefined') lucide.createIcons();
@@ -303,11 +327,7 @@ export function startRouter({ profile, getContext, setContext, onRouteChange }) 
         console.error(e);
       }
       if (thisNav !== navCounter) return;
-      const viewEl = document.getElementById('view');
-      if (viewEl) {
-        viewEl.focus();
-        viewEl.scrollTop = 0;
-      }
+      resetScroll();
       setTitle('End Course');
       if (onRouteChange) onRouteChange(key, null);
       if (typeof lucide !== 'undefined') lucide.createIcons();
@@ -357,11 +377,7 @@ export function startRouter({ profile, getContext, setContext, onRouteChange }) 
         console.error(e);
       }
       if (thisNav !== navCounter) return;
-      const viewEl = document.getElementById('view');
-      if (viewEl) {
-        viewEl.focus();
-        viewEl.scrollTop = 0;
-      }
+      resetScroll();
       setTitle('Permanent Delete');
       if (onRouteChange) onRouteChange(key, null);
       if (typeof lucide !== 'undefined') lucide.createIcons();
@@ -412,11 +428,7 @@ export function startRouter({ profile, getContext, setContext, onRouteChange }) 
         console.error(e);
       }
       if (thisNav !== navCounter) return;
-      const viewEl = document.getElementById('view');
-      if (viewEl) {
-        viewEl.focus();
-        viewEl.scrollTop = 0;
-      }
+      resetScroll();
       setTitle('Record Payment');
       if (onRouteChange) onRouteChange(key, null);
       if (typeof lucide !== 'undefined') lucide.createIcons();
@@ -440,13 +452,14 @@ export function startRouter({ profile, getContext, setContext, onRouteChange }) 
     }
     currentModule = null;
     clearDirty();
+    resetScroll();
 
     const route = Object.prototype.hasOwnProperty.call(ROUTES, key) ? ROUTES[key] : null;
     const ctx = getContext();
 
-    // T6: dynamic student profile route #/students/<studentId>
+    // Dynamic student profile route #/students/<studentId>
     if (key.startsWith('students/') && key.length > 'students/'.length) {
-      renderStudentProfile(key.slice('students/'.length));
+      renderStudentProfile(key.slice('students/'.length), key);
       return;
     }
 
@@ -590,11 +603,7 @@ export function startRouter({ profile, getContext, setContext, onRouteChange }) 
       return;
     }
     if (thisNav !== navCounter) return;
-    const viewEl = document.getElementById('view');
-    if (viewEl) {
-      viewEl.focus();
-      viewEl.scrollTop = 0;
-    }
+    resetScroll();
     setTitle(route.title);
     if (onRouteChange) onRouteChange(key, route);
     if (typeof lucide !== 'undefined') {
@@ -625,6 +634,13 @@ export function startRouter({ profile, getContext, setContext, onRouteChange }) 
   }
 
   window.addEventListener('hashchange', onHashChange);
+  window.addEventListener('uic:session-selected', () => {
+    const hash = location.hash;
+    if (hash && hash.length > 2) {
+      const key = hash.slice(2);
+      render(key);
+    }
+  });
   onHashChange();
 }
 

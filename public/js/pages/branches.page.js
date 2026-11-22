@@ -1,11 +1,11 @@
-﻿import { db } from '../config/firebase-config.js';
+import { db } from '../config/firebase-config.js';
 import { collection, getDocs, doc, addDoc, updateDoc, deleteDoc, query, where, serverTimestamp } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
 import { createSelect } from '../components/ui-select.js';
 import { openMenu } from '../components/ui-menu.js';
 import { confirmDialog } from '../components/ui-confirm.js';
 import { showToast } from '../components/toast.js';
-import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.90';
-import { buildStats, buildToolbar } from '../components/list-page.js';
+import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.96';
+import { buildStats, buildToolbar, renderEmptyTableState } from '../components/list-page.js?v=1.8.96';
 
 const TEXT_KEYS = ['name', 'code', 'email', 'address', 'mapUrl'];
 const KEYS = ['name', 'code', 'phones', 'email', 'address', 'mapUrl', 'status'];
@@ -270,11 +270,16 @@ export async function mount({ profile }) {
       foot.textContent = list.length === rows.length ? 'Showing all ' + rows.length : 'Showing ' + list.length + ' of ' + rows.length;
     }
     if (rows.length && !list.length) {
-      const tr = mk('tr');
-      const td = mk('td', 'lp-empty', 'No branches match your search or filter.');
-      td.colSpan = 7;
-      tr.appendChild(td);
-      tbody.appendChild(tr);
+      renderEmptyTableState(tbody, {
+        colSpan: 7,
+        title: 'No matching branches',
+        desc: 'No branches match your search or filter criteria.',
+        onClear: () => {
+          tb.state.q = '';
+          tb.state.status = 'all';
+          render();
+        }
+      });
     }
     list.forEach((r) => {
       const tr = mk('tr');

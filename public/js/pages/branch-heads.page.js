@@ -1,11 +1,11 @@
-﻿import { db } from '../config/firebase-config.js';
+import { db } from '../config/firebase-config.js';
 import { collection, getDocs, doc, getDoc, setDoc, updateDoc, deleteDoc, query, where, serverTimestamp } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { createSelect } from '../components/ui-select.js?v=1.8.90';
-import { openMenu } from '../components/ui-menu.js?v=1.8.90';
-import { confirmDialog } from '../components/ui-confirm.js?v=1.8.90';
-import { showToast } from '../components/toast.js?v=1.8.90';
-import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.90';
-import { buildStats, buildToolbar } from '../components/list-page.js?v=1.8.90';
+import { createSelect } from '../components/ui-select.js?v=1.8.96';
+import { openMenu } from '../components/ui-menu.js?v=1.8.96';
+import { confirmDialog } from '../components/ui-confirm.js?v=1.8.96';
+import { showToast } from '../components/toast.js?v=1.8.96';
+import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.96';
+import { buildStats, buildToolbar, renderEmptyTableState } from '../components/list-page.js?v=1.8.96';
 
 const TEXT_KEYS = ['name', 'email', 'phone'];
 const KEYS = ['name', 'email', 'phone', 'branchId', 'status'];
@@ -199,11 +199,16 @@ export async function mount({ profile }) {
       foot.textContent = list.length === rows.length ? 'Showing all ' + rows.length : 'Showing ' + list.length + ' of ' + rows.length;
     }
     if (rows.length && !list.length) {
-      const tr = mk('tr');
-      const td = mk('td', 'lp-empty', 'No branch heads match your search or filter.');
-      td.colSpan = 5;
-      tr.appendChild(td);
-      tbody.appendChild(tr);
+      renderEmptyTableState(tbody, {
+        colSpan: 5,
+        title: 'No matching branch heads',
+        desc: 'No branch heads match your search or filter criteria.',
+        onClear: () => {
+          tb.state.q = '';
+          tb.state.status = 'all';
+          render();
+        }
+      });
     }
     list.forEach((r) => {
       const tr = mk('tr');

@@ -1,7 +1,7 @@
-﻿import { ROUTES, ROLE_LABELS } from '../core/router.js?v=1.8.90';
-import { APP_VERSION } from '../core/app.js?v=1.8.90';
-import { getRunningPeriod, getNextDueDate, formatDayMonth } from '../utils/date.utils.js?v=1.8.90';
-import { getRunningSession, toPeriod, daysLeft, expectedStatus } from '../core/sessions.js?v=1.8.90';
+import { ROUTES, ROLE_LABELS } from '../core/router.js?v=1.8.96';
+import { APP_VERSION } from '../core/app.js?v=1.8.96';
+import { getRunningPeriod, getNextDueDate, formatDayMonth } from '../utils/date.utils.js?v=1.8.96';
+import { getRunningSession, toPeriod, daysLeft, expectedStatus } from '../core/sessions.js?v=1.8.96';
 
 let drawerOpen = false;
 let tipEl = null;
@@ -45,6 +45,9 @@ function listenSessionsLoaded() {
   if (sessionsLoadedListener) return;
   sessionsLoadedListener = true;
   window.addEventListener('uic:sessions-loaded', () => {
+    refreshSessionCard(lastSessionCtx);
+  });
+  window.addEventListener('uic:session-selected', () => {
     refreshSessionCard(lastSessionCtx);
   });
 }

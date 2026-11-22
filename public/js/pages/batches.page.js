@@ -1,14 +1,14 @@
 import { db } from '../config/firebase-config.js';
 import { collection, getDocs, getDoc, query, where, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, deleteField } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.90';
-import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.90';
-import { buildStats, buildToolbar } from '../components/list-page.js?v=1.8.90';
-import { createSelect } from '../components/ui-select.js?v=1.8.90';
-import { createMultiSelect } from '../components/multi-select.js?v=1.8.90';
-import { openMenu } from '../components/ui-menu.js?v=1.8.90';
-import { confirmDialog } from '../components/ui-confirm.js?v=1.8.90';
-import { loadSessions } from '../core/sessions.js?v=1.8.90';
-import { batchAllowsCourse, batchCourseLabel, batchCourseTooltip, isCourseActive } from '../utils/session-rules.js?v=1.8.90';
+import { showToast } from '../components/toast.js?v=1.8.96';
+import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.96';
+import { buildStats, buildToolbar, renderEmptyTableState } from '../components/list-page.js?v=1.8.96';
+import { createSelect } from '../components/ui-select.js?v=1.8.96';
+import { createMultiSelect } from '../components/multi-select.js?v=1.8.96';
+import { openMenu } from '../components/ui-menu.js?v=1.8.96';
+import { confirmDialog } from '../components/ui-confirm.js?v=1.8.96';
+import { loadSessions } from '../core/sessions.js?v=1.8.96';
+import { batchAllowsCourse, batchCourseLabel, batchCourseTooltip, isCourseActive } from '../utils/session-rules.js?v=1.8.96';
 // Batches Part 2A/2B: add/edit form, delete, student capacity
 
 const TEXT_KEYS = ['name', 'code', 'capacity'];
@@ -448,13 +448,18 @@ export async function mount({ profile, ctx }) {
     if (empty) empty.hidden = batches.length > 0;
 
     if (batches.length && !list.length) {
-      const tr = document.createElement('tr');
-      const td = document.createElement('td');
-      td.className = 'lp-empty';
-      td.colSpan = youth ? 7 : 5;
-      td.textContent = 'No batches match your search or filter.';
-      tr.appendChild(td);
-      rowsHost.appendChild(tr);
+      renderEmptyTableState(rowsHost, {
+        colSpan: youth ? 7 : 5,
+        title: 'No matching batches',
+        desc: 'No batches match your search or filter criteria.',
+        onClear: () => {
+          tb.state.q = '';
+          if (tb.state.status) tb.state.status = 'all';
+          if (tb.state.course) tb.state.course = 'all';
+          if (tb.state.branch) tb.state.branch = 'all';
+          render();
+        }
+      });
     }
 
     list.forEach(b => {

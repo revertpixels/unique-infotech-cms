@@ -1,4 +1,4 @@
-﻿// ui-datepicker.js — Custom floating Date & Month pickers (v1.8.90)
+// ui-datepicker.js � Custom floating Date & Month pickers (v1.8.96)
 // No external libraries. Uses Lucide icons and clean responsive popups.
 
 const MONTH_NAMES = [

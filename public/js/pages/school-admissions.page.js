@@ -1,4 +1,4 @@
-ï»¿// school-admissions.page.js â€” Unique Kids admissions (school context, Super Admin only).
+// school-admissions.page.js — Unique Kids admissions (school context, Super Admin only).
 // Kids batches are session-independent: no session field, no branch selector, Head Office
 // (branchId 'HO') is used internally. Student IDs are YYYYNNNN from the admission year;
 // receipt numbers use the shared Youth counter service with the configured
@@ -9,20 +9,20 @@ import {
   collection, getDocs, query, where, doc, getDoc, addDoc, updateDoc, serverTimestamp,
   runTransaction, deleteField, writeBatch, deleteDoc
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.90';
-import { registerDirty, confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.90';
-import { buildStats, buildToolbar, renderPager } from '../components/list-page.js?v=1.8.90';
-import { createSelect } from '../components/ui-select.js?v=1.8.90';
-import { openMenu } from '../components/ui-menu.js?v=1.8.90';
-import { openPopup } from '../components/modal.js?v=1.8.90';
-import { createDatePicker, createMonthPicker } from '../components/ui-datepicker.js?v=1.8.90';
-import { confirmDialog } from '../components/ui-confirm.js?v=1.8.90';
-import { formatINR, formatDateIN, initials } from '../utils/formatter.js?v=1.8.90';
-import { validatePhone, validateEmail, validateDOB, validateName, validateRequired } from '../utils/validator.js?v=1.8.90';
-import { readStudentId, readReceiptNo, writeCounter } from '../services/admission.service.js?v=1.8.90';
-import { isCourseActive, batchAllowsCourse, todayISO } from '../utils/session-rules.js?v=1.8.90';
-import { compressTo100KB, readAsDataURL, blobToDataURL, isImageFile } from '../utils/image-compress.js?v=1.8.90';
-import { firstMonthlyMonth } from '../utils/school-receipt.js?v=1.8.90';
+import { showToast } from '../components/toast.js?v=1.8.96';
+import { registerDirty, confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.96';
+import { buildStats, buildToolbar, renderPager } from '../components/list-page.js?v=1.8.96';
+import { createSelect } from '../components/ui-select.js?v=1.8.96';
+import { openMenu } from '../components/ui-menu.js?v=1.8.96';
+import { openPopup } from '../components/modal.js?v=1.8.96';
+import { createDatePicker, createMonthPicker } from '../components/ui-datepicker.js?v=1.8.96';
+import { confirmDialog } from '../components/ui-confirm.js?v=1.8.96';
+import { formatINR, formatDateIN, initials } from '../utils/formatter.js?v=1.8.96';
+import { validatePhone, validateEmail, validateDOB, validateName, validateRequired } from '../utils/validator.js?v=1.8.96';
+import { readStudentId, readReceiptNo, writeCounter } from '../services/admission.service.js?v=1.8.96';
+import { isCourseActive, batchAllowsCourse, todayISO } from '../utils/session-rules.js?v=1.8.96';
+import { compressTo100KB, readAsDataURL, blobToDataURL, isImageFile } from '../utils/image-compress.js?v=1.8.96';
+import { firstMonthlyMonth } from '../utils/school-receipt.js?v=1.8.96';
 
 const COL = 'students';
 const GENDERS = [
@@ -633,10 +633,10 @@ export async function mount({ container, profile, ctx }) {
     if (typeof lucide !== 'undefined') lucide.createIcons();
   }
 
-  // ---------- popup UI helpers (v1.8.90) ----------
+  // ---------- popup UI helpers (v1.8.96) ----------
   const who = () => (profile && profile.email) || '';
   const courseNameOf = (s) => (coursesById[s.courseId] || {}).name || s.courseName || '-';
-  const studentSub = (s) => `${s.name || '-'} â€” ${s.studentId || '-'} â€” ${courseNameOf(s)} / ${s.batchName || '-'}`;
+  const studentSub = (s) => `${s.name || '-'} — ${s.studentId || '-'} — ${courseNameOf(s)} / ${s.batchName || '-'}`;
   const ymOf = (iso) => String(iso || '').slice(0, 7);
   function nextYM(ym) { let [y, m] = ym.split('-').map(Number); m++; if (m > 12) { m = 1; y++; } return y + '-' + String(m).padStart(2, '0'); }
   function monthsBetween(a, b) { if (!a || !b) return 0; const [y1, m1] = a.split('-').map(Number); const [y2, m2] = b.split('-').map(Number); return Math.max(0, (y2 - y1) * 12 + (m2 - m1)); }
@@ -811,7 +811,7 @@ export async function mount({ container, profile, ctx }) {
       const aadhaarSnap = await getDoc(doc(db, 'students', s.id, 'aadhaar', 'aadhaar'));
       if (aadhaarSnap.exists() && aadhaarSnap.data()?.aadhaar) {
         const a = aadhaarSnap.data().aadhaar;
-        aadhaarMasked = 'â€¢â€¢â€¢â€¢-â€¢â€¢â€¢â€¢-' + a.slice(-4);
+        aadhaarMasked = '••••-••••-' + a.slice(-4);
       }
     } catch (_) { /* non-fatal */ }
 
@@ -1442,7 +1442,7 @@ export async function mount({ container, profile, ctx }) {
     if (submitted) showErrors(validate(v));
     saveBtn.disabled = saving || DOC_KEYS.some(k => docFiles[k]?.pending) || !dirty;
     cancelBtn.disabled = saving;
-    if (!saving) setState(dirty ? 'Unsaved changes' : (editId ? 'Existing admission â€” payment unchanged' : 'New admission â€” not submitted'), dirty ? 'dirty' : '');
+    if (!saving) setState(dirty ? 'Unsaved changes' : (editId ? 'Existing admission — payment unchanged' : 'New admission — not submitted'), dirty ? 'dirty' : '');
   }
 
   function updateCounters() {
@@ -1483,13 +1483,13 @@ export async function mount({ container, profile, ctx }) {
     $('adm-monthly-placeholder').hidden = !!c;
     if (c) {
       feeConfigured.textContent = formatINR(editId ? Number(editRow.configuredAdmissionFee ?? configured) : configured);
-      feePrior.textContent = priorAdmissionPaid ? formatINR(priorAdmissionPaid) : 'â€”';
+      feePrior.textContent = priorAdmissionPaid ? formatINR(priorAdmissionPaid) : '—';
       const adj = configured - due;
-      feeAdj.textContent = adj > 0 ? ('âˆ’ ' + formatINR(adj)) : 'â€”';
+      feeAdj.textContent = adj > 0 ? ('- ' + formatINR(adj)) : '—';
       feeDue.textContent = formatINR(due);
     }
-    monthlyFeeEl.textContent = c ? formatINR(editId ? Number(editRow.monthlyFee ?? monthly) : monthly) : 'â€”';
-    firstMonthlyEl.textContent = c && $('adm-admissionDate').value ? formatBillingMonth(firstMonthlyMonth($('adm-admissionDate').value)) : 'â€”';
+    monthlyFeeEl.textContent = c ? formatINR(editId ? Number(editRow.monthlyFee ?? monthly) : monthly) : '—';
+    firstMonthlyEl.textContent = c && $('adm-admissionDate').value ? formatBillingMonth(firstMonthlyMonth($('adm-admissionDate').value)) : '—';
 
     // Difference is unavailable for new admissions (no upgrade / verified-history infrastructure).
     paymentModeDiff.disabled = true;

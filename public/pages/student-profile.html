@@ -1,0 +1,533 @@
+<div class="sp-wrap" id="sp-container">
+  <!-- Top Action Row (Breadcrumbs & Page Title on left, Back button on right) -->
+  <div class="sp-head-row">
+    <section class="pg-head">
+      <div class="pg-crumbs">Students / <span>Student Profile</span></div>
+      <h2>Student Profile</h2>
+      <p>View and manage student profile, documents, course details, and fee payment history.</p>
+    </section>
+    <a href="#/students" class="ui-btn ghost sp-back-btn" id="sp-back-btn">
+      <i data-lucide="arrow-left"></i><span>Back to students</span>
+    </a>
+  </div>
+
+  <!-- Loading Skeleton -->
+  <div class="lp-card sp-loading-card" id="sp-loading">
+    <div class="sp-skel-hero">
+      <div class="skel sp-skel-avatar"></div>
+      <div class="sp-skel-lines">
+        <div class="skel" style="width: 260px; height: 26px;"></div>
+        <div class="skel" style="width: 420px; height: 16px;"></div>
+      </div>
+    </div>
+    <div class="sp-skel-stats">
+      <div class="skel" style="height: 72px;"></div>
+      <div class="skel" style="height: 72px;"></div>
+      <div class="skel" style="height: 72px;"></div>
+      <div class="skel" style="height: 72px;"></div>
+    </div>
+  </div>
+
+  <!-- Error State -->
+  <div class="lp-card sp-error-card" id="sp-error" hidden>
+    <div class="empty-state">
+      <i data-lucide="alert-circle" style="color: var(--danger);"></i>
+      <h3 id="sp-error-title">Student Not Found</h3>
+      <p id="sp-error-desc">We could not locate this student record or your account does not have access permissions.</p>
+      <div style="margin-top: 16px;">
+        <a href="#/students" class="ui-btn primary"><i data-lucide="arrow-left"></i><span>Back to students</span></a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main Profile Content -->
+  <div class="sp-content" id="sp-content" hidden>
+    <!-- 1. Student Hero Profile Card (Matches AI Reference Design) -->
+    <div class="lp-card sp-hero-card">
+      <div class="sp-hero-inner">
+        <!-- Left: Avatar + Details -->
+        <div class="sp-hero-left">
+          <div class="sp-avatar" id="sp-avatar">
+            <span class="sp-avatar-initials" id="sp-avatar-initials">--</span>
+            <img class="sp-avatar-img" id="sp-avatar-img" alt="Student photo" hidden>
+          </div>
+          <div class="sp-hero-info">
+            <div class="sp-name-row">
+              <h1 class="sp-student-name" id="sp-name">-</h1>
+              <span class="sp-status-badge active" id="sp-status">
+                <span class="sp-status-dot"></span><span id="sp-status-text">Active</span>
+              </span>
+            </div>
+            <div class="sp-id-chip" id="sp-id-chip">
+              <span>Student ID: <b id="sp-student-id">-</b></span>
+              <button type="button" class="sp-id-copy-btn" id="sp-copy-id-btn" title="Copy Student ID" aria-label="Copy Student ID">
+                <i data-lucide="copy"></i>
+              </button>
+            </div>
+            <div class="sp-meta-inline-row">
+              <span class="sp-meta-inline"><i data-lucide="layers"></i><span id="sp-course-text">-</span></span>
+              <span class="sp-meta-sep">|</span>
+              <span class="sp-meta-inline"><i data-lucide="layers"></i><span id="sp-batch-text">-</span></span>
+              <span class="sp-meta-sep">|</span>
+              <span class="sp-meta-inline"><i data-lucide="calendar"></i><span id="sp-session-text">-</span></span>
+            </div>
+            <div class="sp-branch-row">
+              <i data-lucide="building-2"></i><span id="sp-branch-text">-</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Vertical Divider -->
+        <div class="sp-hero-divider" aria-hidden="true"></div>
+
+        <!-- Right: Actions Block -->
+        <div class="sp-hero-actions">
+          <button class="sp-notify-btn" id="sp-btn-notify" type="button" title="Notify payment dues">
+            <i data-lucide="bell"></i><span>Notify Dues</span>
+          </button>
+          <div class="sp-action-grid-4">
+            <a class="sp-sq-btn" id="sp-btn-wa" target="_blank" rel="noopener noreferrer" title="WhatsApp student">
+              <i data-lucide="message-circle" class="sp-ic-wa"></i>
+            </a>
+            <a class="sp-sq-btn" id="sp-btn-call" title="Call student">
+              <i data-lucide="phone"></i>
+            </a>
+            <a class="sp-sq-btn" id="sp-btn-mail" title="Email student">
+              <i data-lucide="mail"></i>
+            </a>
+            <button type="button" class="sp-sq-btn" id="sp-btn-receipt" title="View admission receipt">
+              <i data-lucide="receipt"></i>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2. KPI Metric Stat Cards (4 Cards) -->
+    <div class="sp-stats-wrapper">
+      <div class="lp-stats sp-stats-grid-4">
+        <div class="lp-stat indigo">
+          <div class="lp-stat-ic"><i data-lucide="wallet"></i></div>
+          <div class="lp-stat-txt">
+            <span class="lp-stat-label">Total Fee</span>
+            <span class="lp-stat-value" id="sp-m-total-fee">-</span>
+            <span class="lp-stat-sub">Course package</span>
+          </div>
+        </div>
+        <div class="lp-stat green sp-stat-paid-card">
+          <div class="lp-stat-ic"><i data-lucide="check-circle"></i></div>
+          <div class="lp-stat-txt">
+            <span class="lp-stat-label">Paid Amount</span>
+            <span class="lp-stat-value text-success" id="sp-m-paid">-</span>
+            <span class="lp-stat-sub" id="sp-progress-text">0% of total</span>
+            <div class="sp-stat-bar-track">
+              <div class="sp-stat-bar-fill" id="sp-stats-bar-fill" style="width: 0%;"></div>
+            </div>
+          </div>
+        </div>
+        <div class="lp-stat red" id="sp-m-card-outstanding">
+          <div class="lp-stat-ic"><i data-lucide="alert-circle"></i></div>
+          <div class="lp-stat-txt">
+            <span class="lp-stat-label">Outstanding</span>
+            <span class="lp-stat-value text-danger" id="sp-m-outstanding">-</span>
+            <span class="lp-stat-sub" id="sp-m-outstanding-sub">Balance due</span>
+          </div>
+        </div>
+        <div class="lp-stat violet">
+          <div class="lp-stat-ic"><i data-lucide="list-checks"></i></div>
+          <div class="lp-stat-txt">
+            <span class="lp-stat-label">Installments</span>
+            <span class="lp-stat-value" id="sp-m-inst-paid">-</span>
+            <span class="lp-stat-sub">Paid of scheduled</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 3. Navigation Tabs (Full Width Grid with Titles & Descriptions) -->
+    <nav class="sp-tabs-nav" role="tablist" aria-label="Student Profile Sections">
+      <button class="sp-tab-btn active" role="tab" id="sp-tab-personal" aria-selected="true" aria-controls="sp-pane-personal">
+        <div class="sp-tab-icon-wrap">
+          <i data-lucide="user"></i>
+        </div>
+        <div class="sp-tab-text-wrap">
+          <span class="sp-tab-title">Personal Details</span>
+          <span class="sp-tab-desc">Profile, guardian &amp; contact info</span>
+        </div>
+      </button>
+      <button class="sp-tab-btn" role="tab" id="sp-tab-documents" aria-selected="false" aria-controls="sp-pane-documents">
+        <div class="sp-tab-icon-wrap">
+          <i data-lucide="file-text"></i>
+        </div>
+        <div class="sp-tab-text-wrap">
+          <span class="sp-tab-title">Documents</span>
+          <span class="sp-tab-desc">Certificates &amp; identification proofs</span>
+        </div>
+      </button>
+      <button class="sp-tab-btn" role="tab" id="sp-tab-course" aria-selected="false" aria-controls="sp-pane-course">
+        <div class="sp-tab-icon-wrap">
+          <i data-lucide="book-open"></i>
+        </div>
+        <div class="sp-tab-text-wrap">
+          <span class="sp-tab-title">Course Details</span>
+          <span class="sp-tab-desc">Course, batch &amp; enrollment info</span>
+        </div>
+      </button>
+      <button class="sp-tab-btn" role="tab" id="sp-tab-payments" aria-selected="false" aria-controls="sp-pane-payments">
+        <div class="sp-tab-icon-wrap">
+          <i data-lucide="receipt"></i>
+        </div>
+        <div class="sp-tab-text-wrap">
+          <span class="sp-tab-title">Payment History</span>
+          <span class="sp-tab-desc">Fee schedule, dues &amp; ledger</span>
+        </div>
+      </button>
+    </nav>
+
+    <!-- Tab Panes -->
+    <main class="sp-panes-wrap">
+      <!-- PANE 1: PERSONAL DETAILS -->
+      <section class="sp-pane active" id="sp-pane-personal" role="tabpanel" aria-labelledby="sp-tab-personal">
+        <div class="sp-grid-2">
+          <!-- Card: Personal Information -->
+          <div class="lp-card">
+            <div class="lp-card-head">
+              <div class="lp-card-title">
+                <i data-lucide="user"></i><span>Personal Information</span>
+              </div>
+              <button type="button" class="ui-btn ghost sm" id="sp-edit-personal">
+                <i data-lucide="pencil"></i><span>Edit</span>
+              </button>
+            </div>
+            <div class="sp-card-body">
+              <div class="sp-kv-grid">
+                <div class="sp-kv-item">
+                  <span class="sp-kv-label">Full Name</span>
+                  <span class="sp-kv-val" id="sp-dt-name">-</span>
+                </div>
+                <div class="sp-kv-item">
+                  <span class="sp-kv-label">Date of Birth</span>
+                  <span class="sp-kv-val" id="sp-dt-dob">-</span>
+                </div>
+                <div class="sp-kv-item">
+                  <span class="sp-kv-label">Gender</span>
+                  <span class="sp-kv-val" id="sp-dt-gender">-</span>
+                </div>
+                <div class="sp-kv-item">
+                  <span class="sp-kv-label">Educational Qualification</span>
+                  <span class="sp-kv-val" id="sp-dt-qual">-</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Card: Contact Information -->
+          <div class="lp-card">
+            <div class="lp-card-head">
+              <div class="lp-card-title">
+                <i data-lucide="phone"></i><span>Contact Information</span>
+              </div>
+              <button type="button" class="ui-btn ghost sm" id="sp-edit-contact">
+                <i data-lucide="pencil"></i><span>Edit</span>
+              </button>
+            </div>
+            <div class="sp-card-body">
+              <div class="sp-kv-grid">
+                <div class="sp-kv-item">
+                  <span class="sp-kv-label">Mobile Phone</span>
+                  <span class="sp-kv-val font-semibold" id="sp-dt-phone">-</span>
+                </div>
+                <div class="sp-kv-item">
+                  <span class="sp-kv-label">Alternative Phone</span>
+                  <span class="sp-kv-val" id="sp-dt-altphone">-</span>
+                </div>
+                <div class="sp-kv-item full-col">
+                  <span class="sp-kv-label">Email Address</span>
+                  <span class="sp-kv-val" id="sp-dt-email">-</span>
+                </div>
+                <div class="sp-kv-item full-col">
+                  <span class="sp-kv-label">Residential Address</span>
+                  <span class="sp-kv-val" id="sp-dt-address">-</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Card: Guardian Information -->
+          <div class="lp-card">
+            <div class="lp-card-head">
+              <div class="lp-card-title">
+                <i data-lucide="shield"></i><span>Guardian Details</span>
+              </div>
+              <button type="button" class="ui-btn ghost sm" id="sp-edit-guardian">
+                <i data-lucide="pencil"></i><span>Edit</span>
+              </button>
+            </div>
+            <div class="sp-card-body">
+              <div class="sp-kv-grid">
+                <div class="sp-kv-item full-col">
+                  <span class="sp-kv-label">Guardian / Parent Name</span>
+                  <span class="sp-kv-val" id="sp-dt-guardian">-</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Card: Academic Enrollment -->
+          <div class="lp-card">
+            <div class="lp-card-head">
+              <div class="lp-card-title">
+                <i data-lucide="graduation-cap"></i><span>Academic Enrollment</span>
+              </div>
+            </div>
+            <div class="sp-card-body">
+              <div class="sp-kv-grid">
+                <div class="sp-kv-item">
+                  <span class="sp-kv-label">Course</span>
+                  <span class="sp-kv-val font-semibold text-primary" id="sp-dt-course">-</span>
+                </div>
+                <div class="sp-kv-item">
+                  <span class="sp-kv-label">Batch</span>
+                  <span class="sp-kv-val font-semibold" id="sp-dt-batch">-</span>
+                </div>
+                <div class="sp-kv-item">
+                  <span class="sp-kv-label">Session</span>
+                  <span class="sp-kv-val" id="sp-dt-session">-</span>
+                </div>
+                <div class="sp-kv-item">
+                  <span class="sp-kv-label">Branch</span>
+                  <span class="sp-kv-val" id="sp-dt-branch">-</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Card: System & Admission Metadata -->
+          <div class="lp-card full-span">
+            <div class="lp-card-head">
+              <div class="lp-card-title">
+                <i data-lucide="file-check"></i><span>System & Audit Metadata</span>
+              </div>
+            </div>
+            <div class="sp-card-body">
+              <div class="sp-kv-grid sp-kv-grid-4">
+                <div class="sp-kv-item">
+                  <span class="sp-kv-label">Student Document ID</span>
+                  <span class="sp-kv-val font-mono" id="sp-dt-docid">-</span>
+                </div>
+                <div class="sp-kv-item">
+                  <span class="sp-kv-label">Admission Receipt No</span>
+                  <span class="sp-kv-val font-mono font-semibold" id="sp-dt-receiptno">-</span>
+                </div>
+                <div class="sp-kv-item">
+                  <span class="sp-kv-label">Registered By</span>
+                  <span class="sp-kv-val" id="sp-dt-createdby">-</span>
+                </div>
+                <div class="sp-kv-item">
+                  <span class="sp-kv-label">Registered On</span>
+                  <span class="sp-kv-val" id="sp-dt-createdat">-</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- PANE 2: DOCUMENTS -->
+      <section class="sp-pane" id="sp-pane-documents" role="tabpanel" aria-labelledby="sp-tab-documents" hidden>
+        <div class="sp-docs-grid" id="sp-docs-grid"></div>
+      </section>
+
+      <!-- PANE 3: COURSE DETAILS -->
+      <section class="sp-pane" id="sp-pane-course" role="tabpanel" aria-labelledby="sp-tab-course" hidden>
+        <div class="sp-stack">
+          <!-- Course & Batch Overview -->
+          <div class="lp-card">
+            <div class="lp-card-head">
+              <div class="lp-card-title">
+                <i data-lucide="book-open"></i>
+                <div class="sp-course-title-wrap">
+                  <div style="display: flex; align-items: center; gap: 8px;">
+                    <span id="sp-c-name">-</span>
+                    <span class="cs-code" id="sp-c-code">-</span>
+                  </div>
+                </div>
+              </div>
+              <button type="button" class="ui-btn ghost sm" id="sp-view-receipt-btn">
+                <i data-lucide="receipt"></i><span>View admission receipt</span>
+              </button>
+            </div>
+            <div class="sp-card-body">
+              <div class="sp-kv-grid sp-kv-grid-4">
+                <div class="sp-kv-item">
+                  <span class="sp-kv-label">Course Duration</span>
+                  <span class="sp-kv-val font-semibold" id="sp-c-duration">-</span>
+                </div>
+                <div class="sp-kv-item">
+                  <span class="sp-kv-label">Prerequisites</span>
+                  <span class="sp-kv-val" id="sp-c-prereq">-</span>
+                </div>
+                <div class="sp-kv-item">
+                  <span class="sp-kv-label">Batch Name</span>
+                  <span class="sp-kv-val font-semibold" id="sp-c-batch-name">-</span>
+                </div>
+                <div class="sp-kv-item">
+                  <span class="sp-kv-label">Batch Timing</span>
+                  <span class="sp-kv-val" id="sp-c-batch-timing">-</span>
+                </div>
+                <div class="sp-kv-item">
+                  <span class="sp-kv-label">Session Begins</span>
+                  <span class="sp-kv-val" id="sp-c-sess-start">-</span>
+                </div>
+                <div class="sp-kv-item">
+                  <span class="sp-kv-label">Session Ends</span>
+                  <span class="sp-kv-val" id="sp-c-sess-end">-</span>
+                </div>
+                <div class="sp-kv-item">
+                  <span class="sp-kv-label">Branch</span>
+                  <span class="sp-kv-val" id="sp-c-branch-name">-</span>
+                </div>
+                <div class="sp-kv-item">
+                  <span class="sp-kv-label">Certification</span>
+                  <span class="sp-kv-val font-semibold text-success">On Passing Exam</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Fee Breakdown Table -->
+          <div class="lp-card">
+            <div class="lp-card-head">
+              <div class="lp-card-title">
+                <i data-lucide="credit-card"></i><span>Fee Breakdown (Locked at Admission)</span>
+              </div>
+            </div>
+            <div class="lp-scroll">
+              <table class="lp-table">
+                <thead>
+                  <tr>
+                    <th>Fee head</th>
+                    <th class="num">Amount</th>
+                  </tr>
+                </thead>
+                <tbody id="sp-fee-breakdown-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Scheduled Installment Plan -->
+          <div class="lp-card">
+            <div class="lp-card-head">
+              <div class="lp-card-title">
+                <i data-lucide="calendar"></i><span>Scheduled Installment Plan</span>
+              </div>
+            </div>
+            <div class="lp-scroll">
+              <table class="lp-table">
+                <thead>
+                  <tr>
+                    <th>Installment</th>
+                    <th>Billing month</th>
+                    <th>Opens on</th>
+                    <th>Due date</th>
+                    <th class="num">Installment fee</th>
+                  </tr>
+                </thead>
+                <tbody id="sp-sched-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- PANE 4: PAYMENT HISTORY -->
+      <section class="sp-pane" id="sp-pane-payments" role="tabpanel" aria-labelledby="sp-tab-payments" hidden>
+        <!-- Youth Payments Flow -->
+        <div id="sp-youth-payments-wrap" class="sp-stack">
+          <!-- Fee Schedule & Status Table -->
+          <div class="lp-card">
+            <div class="lp-card-head">
+              <div class="lp-card-title">
+                <i data-lucide="calendar"></i><span>Fee Schedule & Installment Status</span>
+              </div>
+              <button type="button" class="ui-btn primary sm" id="sp-btn-record-payment">
+                <i data-lucide="plus-circle"></i><span>Record Payment</span>
+              </button>
+            </div>
+            <div class="lp-scroll">
+              <table class="lp-table">
+                <thead>
+                  <tr>
+                    <th>Fee head</th>
+                    <th>Billing month</th>
+                    <th>Due date</th>
+                    <th class="num">Scheduled</th>
+                    <th class="num">Paid amount</th>
+                    <th>Paid on</th>
+                    <th>Status</th>
+                    <th class="act">Action</th>
+                  </tr>
+                </thead>
+                <tbody id="sp-inst-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Chronological Payment Transactions -->
+          <div class="lp-card">
+            <div class="lp-card-head">
+              <div class="lp-card-title">
+                <i data-lucide="receipt"></i><span>Chronological Payment Transactions</span>
+              </div>
+            </div>
+            <div class="lp-scroll">
+              <table class="lp-table">
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Receipt no</th>
+                    <th>Type</th>
+                    <th class="num">Amount collected</th>
+                    <th>Mode</th>
+                    <th>Transaction ID</th>
+                    <th>Collected & Recorded by</th>
+                    <th>Remarks</th>
+                    <th class="act">Action</th>
+                  </tr>
+                </thead>
+                <tbody id="sp-txns-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Kids Payments Flow (ctx: 'school') -->
+        <div id="sp-kids-payments-wrap" class="sp-stack" hidden>
+          <div class="lp-card">
+            <div class="lp-card-head">
+              <div class="lp-card-title">
+                <i data-lucide="calendar"></i><span>Monthly Bills & Ledger</span>
+              </div>
+            </div>
+            <div class="lp-scroll">
+              <table class="lp-table">
+                <thead>
+                  <tr>
+                    <th>Month</th>
+                    <th>Due date</th>
+                    <th class="num">Monthly fee</th>
+                    <th class="num">Late fine</th>
+                    <th class="num">Paid amount</th>
+                    <th>Status</th>
+                    <th class="act">Action</th>
+                  </tr>
+                </thead>
+                <tbody id="sp-kids-bills-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+</div>

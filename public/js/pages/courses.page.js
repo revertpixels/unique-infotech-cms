@@ -1,13 +1,13 @@
 import { db } from '../config/firebase-config.js';
-import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.90';
+import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.96';
 import { collection, getDocs, doc, addDoc, updateDoc, deleteDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
 import { createSelect } from '../components/ui-select.js';
 import { openMenu } from '../components/ui-menu.js';
 import { confirmDialog } from '../components/ui-confirm.js';
 import { showToast } from '../components/toast.js';
-import { buildStats, buildToolbar } from '../components/list-page.js';
-import { INST_PER_SEM, feeTotal } from '../utils/fees.js?v=1.8.90';
-import { isCourseActive } from '../utils/session-rules.js?v=1.8.90';
+import { buildStats, buildToolbar, renderEmptyTableState } from '../components/list-page.js?v=1.8.96';
+import { INST_PER_SEM, feeTotal } from '../utils/fees.js?v=1.8.96';
+import { isCourseActive } from '../utils/session-rules.js?v=1.8.96';
 
 const ENDED = ['ended', 'closed', 'completed', 'archived', 'cancelled'];
 const LOCK_FIELDS = { admission: 'Admission fee', installment: 'Installment amount', material: 'Material fee' };
@@ -546,8 +546,10 @@ export async function mount({ ctx, profile }) {
         chain.forEach((c) => {
           const tr = mk('tr');
           const tdC = mk('td', 'cv-cell-label');
-          tdC.appendChild(mk('span', 'cv-code-chip-sm', c.code || '-'));
-          tdC.appendChild(document.createTextNode(' ' + (c.name || '')));
+          const rowWrap = mk('div', 'cv-pkg-row');
+          rowWrap.appendChild(mk('span', 'cv-pkg-name', c.name || '-'));
+          rowWrap.appendChild(mk('span', 'cv-code-chip-sm', c.code || '-'));
+          tdC.appendChild(rowWrap);
           const tdV = mk('td', 'cv-cell-val', rs(feeTotal(c.fees)));
           tr.append(tdC, tdV);
           pkgTbody.appendChild(tr);
@@ -629,15 +631,7 @@ export async function mount({ ctx, profile }) {
         body.appendChild(secTopics);
       }
 
-      // Footer
-      const foot = mk('div', 'cv-foot');
-      const footClose = mk('button', 'ui-btn');
-      footClose.type = 'button';
-      footClose.textContent = 'Close';
-      footClose.addEventListener('click', closeModal);
-      foot.appendChild(footClose);
-
-      modal.append(head, body, foot);
+      modal.append(head, body);
       back.appendChild(modal);
       document.body.appendChild(back);
 
@@ -680,9 +674,25 @@ export async function mount({ ctx, profile }) {
       foot.hidden = !listForStats.length;
       foot.textContent = rows.length === listForStats.length ? 'Showing all ' + listForStats.length : 'Showing ' + rows.length + ' of ' + listForStats.length;
       if (!rows.length) {
-        const tr = mk('tr');
-        const td = mk('td', 'lp-empty', listForStats.length ? 'No ' + T.many + ' match your search or filter.' : (isHead ? 'No active ' + T.many + ' available.' : 'No ' + T.many + ' yet. Click "' + T.add + '" to create one.'));
-        td.colSpan = Y ? 9 : 6; tr.appendChild(td); tbody.appendChild(tr);
+        if (listForStats.length) {
+          renderEmptyTableState(tbody, {
+            colSpan: Y ? 9 : 6,
+            title: 'No matching ' + T.many.toLowerCase(),
+            desc: 'No ' + T.many.toLowerCase() + ' match your current search or filter criteria.',
+            onClear: () => {
+              tb.state.q = '';
+              if (tb.state.level) tb.state.level = 'all';
+              if (tb.state.status) tb.state.status = 'all';
+              render();
+            }
+          });
+        } else {
+          const tr = mk('tr');
+          const td = mk('td', 'lp-empty', isHead ? 'No active ' + T.many + ' available.' : 'No ' + T.many + ' yet. Click "' + T.add + '" to create one.');
+          td.colSpan = Y ? 9 : 6;
+          tr.appendChild(td);
+          tbody.appendChild(tr);
+        }
       }
       rows.forEach((r) => {
         const tr = mk('tr');

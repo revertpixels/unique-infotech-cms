@@ -1,0 +1,419 @@
+/* doc-card.css — Shared Design System extracted from Youth Admission Receipt (v1.8.97) */
+
+:root {
+  --ar-ink: #1d1a3a;
+  --ar-muted: #5b5f85;
+  --ar-line: #b9bfdc;
+  --ar-navy: #333b84;
+  --ar-deep: #291670;
+  --ar-gold: #151caa;
+  --ar-bg: #e4e6f0;
+  --ar-tint: #eceefa;
+  --ar-white: #ffffff;
+}
+
+/* Base card in receipt style */
+.ar-card {
+  background: #ffffff;
+  border: 1px solid var(--ar-line);
+  border-radius: 6px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
+  overflow: hidden;
+  font-family: 'IBM Plex Sans', system-ui, sans-serif;
+  color: var(--ar-ink);
+}
+
+/* Section Header matching .sec h4 */
+.ar-sec-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 16px 8px;
+  border-bottom: 2px solid var(--ar-navy);
+  background: #ffffff;
+}
+.ar-sec-title {
+  margin: 0;
+  font: 700 15px 'Libre Franklin', sans-serif;
+  color: var(--ar-navy);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.ar-sec-title svg.lucide {
+  width: 17px;
+  height: 17px;
+  color: var(--ar-navy);
+  flex-shrink: 0;
+}
+.ar-sec-meta {
+  font: 500 11.5px 'IBM Plex Sans', sans-serif;
+  color: var(--ar-muted);
+}
+
+/* Receipt Top Header Double Line */
+.ar-hd-accent {
+  border-bottom: 3px solid var(--ar-navy);
+  position: relative;
+  padding-bottom: 14px;
+}
+.ar-hd-accent:after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -6px;
+  border-bottom: 1px solid var(--ar-gold);
+}
+
+/* Button style matching .ar-toolbar .ui-btn */
+.ar-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 38px;
+  padding: 0 16px;
+  font: 600 13px 'IBM Plex Sans', sans-serif;
+  border-radius: 6px;
+  cursor: pointer;
+  border: 1px solid var(--ar-navy);
+  transition: all 0.15s ease;
+  white-space: nowrap;
+  text-decoration: none;
+}
+.ar-btn svg.lucide {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+.ar-btn.primary {
+  background: var(--ar-navy);
+  color: #ffffff;
+  border-color: var(--ar-navy);
+}
+.ar-btn.primary:hover:not(:disabled) {
+  background: var(--ar-deep);
+  border-color: var(--ar-deep);
+}
+.ar-btn.ghost {
+  background: #ffffff;
+  color: var(--ar-navy);
+  border-color: var(--ar-navy);
+}
+.ar-btn.ghost:hover:not(:disabled) {
+  background: var(--ar-tint);
+}
+.ar-btn.sm {
+  height: 30px;
+  padding: 0 10px;
+  font-size: 12px;
+  gap: 6px;
+}
+.ar-btn.sm svg.lucide {
+  width: 14px;
+  height: 14px;
+}
+.ar-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Detail Table matching table.d */
+table.ar-d {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: 'IBM Plex Sans', sans-serif;
+  font-size: 12.5px;
+  color: var(--ar-ink);
+}
+table.ar-d th {
+  width: 140px;
+  text-align: left;
+  font-weight: 500;
+  color: var(--ar-muted);
+  background: var(--ar-tint);
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--ar-line);
+  border-right: 1px solid var(--ar-line);
+}
+table.ar-d td {
+  padding: 8px 12px;
+  font-weight: 500;
+  border-bottom: 1px solid var(--ar-line);
+  color: var(--ar-ink);
+}
+table.ar-d tr:last-child th,
+table.ar-d tr:last-child td {
+  border-bottom: none;
+}
+table.ar-d td.num, table.ar-d th.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Fee & Transaction Table matching table.fe */
+table.ar-fe {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: 'IBM Plex Sans', sans-serif;
+  font-variant-numeric: tabular-nums;
+  font-size: 12.5px;
+  color: var(--ar-ink);
+}
+table.ar-fe th {
+  background: var(--ar-tint);
+  text-align: left;
+  padding: 8px 12px;
+  font-weight: 600;
+  font-size: 12px;
+  border-top: 1px solid var(--ar-line);
+  border-bottom: 1px solid var(--ar-navy);
+  color: var(--ar-ink);
+  white-space: nowrap;
+}
+table.ar-fe td {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--ar-line);
+}
+table.ar-fe th.num, table.ar-fe td.num {
+  text-align: right;
+}
+table.ar-fe th.act, table.ar-fe td.act {
+  text-align: right;
+  width: 1%;
+  white-space: nowrap;
+}
+table.ar-fe tfoot td {
+  font-weight: 700;
+  background: var(--ar-tint);
+  border-top: 1px solid var(--ar-navy);
+  border-bottom: 1px solid var(--ar-line);
+  padding: 8px 12px;
+  color: var(--ar-navy);
+}
+
+/* Status Pill matching .pill */
+.ar-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10.5px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 9px;
+  border: 1px solid var(--ar-ink);
+  color: var(--ar-ink);
+  background: #ffffff;
+  white-space: nowrap;
+}
+.ar-pill svg.lucide {
+  width: 11px;
+  height: 11px;
+}
+.ar-pill.paid, .ar-pill.running, .ar-pill.active {
+  border-color: var(--ar-navy);
+  color: var(--ar-navy);
+  background: var(--ar-tint);
+}
+.ar-pill.due, .ar-pill.upcoming {
+  border-style: dashed;
+  border-color: var(--ar-navy);
+  color: var(--ar-navy);
+}
+.ar-pill.overdue, .ar-pill.off {
+  border-color: #c92a2a;
+  color: #c92a2a;
+  background: #fdf2f2;
+}
+
+/* Pay / Summary Box matching .pbox */
+.ar-pbox {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  border: 1px solid var(--ar-line);
+  background: #ffffff;
+}
+.ar-pcell {
+  padding: 8px 14px;
+  font-variant-numeric: tabular-nums;
+  border-right: 1px solid var(--ar-line);
+}
+.ar-pcell:last-child {
+  border-right: none;
+}
+.ar-pcell em {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-style: normal;
+  font-size: 10.5px;
+  color: var(--ar-muted);
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  margin-bottom: 2px;
+}
+.ar-pcell em svg.lucide {
+  width: 12px;
+  height: 12px;
+}
+.ar-pcell b {
+  font: 700 16px 'Libre Franklin', sans-serif;
+  color: var(--ar-ink);
+  white-space: nowrap;
+}
+.ar-pcell.bal {
+  background: var(--ar-navy);
+  color: #ffffff;
+}
+.ar-pcell.bal em {
+  color: #c5cbe1;
+}
+.ar-pcell.bal b {
+  color: #ffffff;
+}
+
+/* Course Spec Header & Grid matching .cname and .cgrid */
+.ar-cname {
+  position: relative;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 9px 14px 9px 18px;
+  background: var(--ar-tint);
+  border: 1px solid var(--ar-line);
+  color: var(--ar-ink);
+}
+.ar-cname:before {
+  content: "";
+  position: absolute;
+  left: -1px;
+  top: -1px;
+  bottom: -1px;
+  width: 4px;
+  background: var(--ar-navy);
+}
+.ar-cname b {
+  font: 700 15px 'Libre Franklin', sans-serif;
+}
+.ar-cname span {
+  font-size: 11.5px;
+  border: 1px solid var(--ar-ink);
+  color: var(--ar-ink);
+  padding: 2px 9px;
+  border-radius: 2px;
+  font-weight: 600;
+  background: #ffffff;
+}
+.ar-cgrid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  border: 1px solid var(--ar-line);
+  border-top: 0;
+  background: #ffffff;
+}
+.ar-cgrid div {
+  padding: 8px 12px;
+  border-right: 1px solid var(--ar-line);
+  border-bottom: 1px solid var(--ar-line);
+}
+.ar-cgrid div:nth-child(4n) {
+  border-right: 0;
+}
+.ar-cgrid div:nth-last-child(-n+4) {
+  border-bottom: 0;
+}
+.ar-cgrid em {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-style: normal;
+  font-size: 11px;
+  color: var(--ar-muted);
+  margin-bottom: 2px;
+}
+.ar-cgrid em svg.lucide {
+  width: 12px;
+  height: 12px;
+}
+.ar-cgrid b {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--ar-ink);
+}
+
+/* Important callout matching .imp */
+.ar-imp {
+  position: relative;
+  margin-top: 10px;
+  padding: 8px 12px 8px 16px;
+  background: var(--ar-tint);
+  font-size: 11.5px;
+  line-height: 1.55;
+  border: 1px solid var(--ar-line);
+  color: var(--ar-ink);
+}
+.ar-imp:before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: var(--ar-navy);
+}
+
+/* Modals & Popups matching Receipt Design Language */
+.ui-modal.ar-modal {
+  background: #ffffff;
+  border: 1px solid var(--ar-line);
+  border-radius: 6px;
+  box-shadow: 0 10px 30px rgba(29, 26, 58, 0.18);
+  font-family: 'IBM Plex Sans', system-ui, sans-serif;
+  color: var(--ar-ink);
+  overflow: hidden;
+}
+.ui-modal.ar-modal .adm-view-head {
+  padding: 14px 20px 12px;
+  border-bottom: 2px solid var(--ar-navy);
+  background: #ffffff;
+}
+.ui-modal.ar-modal .adm-view-tile {
+  width: 36px;
+  height: 36px;
+  border-radius: 6px;
+  background: var(--ar-tint);
+  color: var(--ar-navy);
+}
+.ui-modal.ar-modal .adm-view-tile svg.lucide {
+  color: var(--ar-navy);
+}
+.ui-modal.ar-modal .adm-view-title {
+  font: 700 16px 'Libre Franklin', sans-serif;
+  color: var(--ar-navy);
+}
+.ui-modal.ar-modal .adm-view-subtitle {
+  font: 500 12px 'IBM Plex Sans', sans-serif;
+  color: var(--ar-muted);
+}
+.ui-modal.ar-modal .adm-view-close {
+  border: 1px solid var(--ar-line);
+  color: var(--ar-muted);
+  border-radius: 6px;
+  background: #ffffff;
+}
+.ui-modal.ar-modal .adm-view-close:hover {
+  background: var(--ar-tint);
+  color: var(--ar-navy);
+}
+.ui-modal.ar-modal .adm-view-body {
+  padding: 18px 20px;
+}
+.ui-modal.ar-modal .adm-view-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 14px 20px;
+  border-top: 1px solid var(--ar-line);
+  background: var(--ar-tint);
+}
+

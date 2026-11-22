@@ -1,4 +1,4 @@
-﻿// school-delete.page.js — Permanent delete of a Kids student (Super Admin only).
+// school-delete.page.js � Permanent delete of a Kids student (Super Admin only).
 // PERMANENT DELETION IS CURRENTLY DISABLED. A trusted recursive deletion path
 // (removing personal details, private Aadhaar, documents, enrolments, bills,
 // payments, allocations, breaks, waivers, transfers, and related storage) is not
@@ -6,8 +6,8 @@
 // disabled. No browser-only partial-delete fallback is provided.
 import { db } from '../config/firebase-config.js';
 import { doc, getDoc } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.90';
-import { formatINR, formatDateIN } from '../utils/formatter.js?v=1.8.90';
+import { showToast } from '../components/toast.js?v=1.8.96';
+import { formatINR, formatDateIN } from '../utils/formatter.js?v=1.8.96';
 
 const COL = 'students';
 

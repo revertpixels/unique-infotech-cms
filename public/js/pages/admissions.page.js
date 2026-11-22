@@ -14,21 +14,21 @@ import {
   arrayUnion,
   addDoc
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.90';
-import { registerDirty, confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.90';
-import { buildStats, buildToolbar, renderPager } from '../components/list-page.js?v=1.8.90';
-import { createSelect } from '../components/ui-select.js?v=1.8.90';
-import { openMenu } from '../components/ui-menu.js?v=1.8.90';
-import { confirmDialog } from '../components/ui-confirm.js?v=1.8.90';
-import { openPopup } from '../components/modal.js?v=1.8.90';
-import { createDatePicker } from '../components/ui-datepicker.js?v=1.8.90';
-import { getSelectedSessionId, getCachedSessions, loadSessions, todayISO } from '../core/sessions.js?v=1.8.90';
-import { firstInstallmentOf, admissionState, sessionLabel, installmentSchedule, batchAllowsCourse, batchCourseLabel, isCourseActive } from '../utils/session-rules.js?v=1.8.90';
-import { formatINR, formatDateIN, initials } from '../utils/formatter.js?v=1.8.90';
-import { validatePhone, validateEmail, validateDOB, validateName, validateRequired } from '../utils/validator.js?v=1.8.90';
-import { listStudentsRaw, checkDuplicatePhone, readStudentId, readReceiptNo, writeCounter, createStudentWithDocs, updateStudentWithDocs, updateStudent, deleteStudent } from '../services/admission.service.js?v=1.8.90';
-import { feeTotal } from '../utils/fees.js?v=1.8.90';
-import { compressTo100KB, readAsDataURL, blobToDataURL, isImageFile, formatBytes } from '../utils/image-compress.js?v=1.8.90';
+import { showToast } from '../components/toast.js?v=1.8.96';
+import { registerDirty, confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.96';
+import { buildStats, buildToolbar, renderPager, renderEmptyTableState } from '../components/list-page.js?v=1.8.96';
+import { createSelect } from '../components/ui-select.js?v=1.8.96';
+import { openMenu } from '../components/ui-menu.js?v=1.8.96';
+import { confirmDialog } from '../components/ui-confirm.js?v=1.8.96';
+import { openPopup } from '../components/modal.js?v=1.8.96';
+import { createDatePicker } from '../components/ui-datepicker.js?v=1.8.96';
+import { getSelectedSessionId, getCachedSessions, loadSessions, todayISO } from '../core/sessions.js?v=1.8.96';
+import { firstInstallmentOf, admissionState, sessionLabel, installmentSchedule, batchAllowsCourse, batchCourseLabel, isCourseActive } from '../utils/session-rules.js?v=1.8.96';
+import { formatINR, formatDateIN, initials } from '../utils/formatter.js?v=1.8.96';
+import { validatePhone, validateEmail, validateDOB, validateName, validateRequired } from '../utils/validator.js?v=1.8.96';
+import { listStudentsRaw, checkDuplicatePhone, readStudentId, readReceiptNo, writeCounter, createStudentWithDocs, updateStudentWithDocs, updateStudent, deleteStudent } from '../services/admission.service.js?v=1.8.96';
+import { feeTotal } from '../utils/fees.js?v=1.8.96';
+import { compressTo100KB, readAsDataURL, blobToDataURL, isImageFile, formatBytes } from '../utils/image-compress.js?v=1.8.96';
 
 const COL = 'students';
 
@@ -1363,29 +1363,51 @@ function dueLabel(dueISO) {
     stats.update(2, onBreak, 'Currently on break');
     stats.update(3, thisMonth, 'This calendar month');
 
+    const countEl = $('adm-count');
+    if (countEl) {
+      countEl.textContent = total === 1 ? '1 student' : total + ' students';
+    }
+
     const totalPages = Math.max(1, Math.ceil(list.length / PAGE_SIZE));
     if (page > totalPages) page = totalPages;
     const start = (page - 1) * PAGE_SIZE;
     const pageList = list.slice(start, start + PAGE_SIZE);
 
-    const hasFilter = q || f.status !== 'all' || f.course !== 'all' || f.batch !== 'all' || (isSuper && f.branch !== 'all') || admDateFilter !== 'all' || admDateFrom || admDateTo;
+    const N = list.length;
+    const T = total;
 
     if (!list.length) {
       rowsHost.innerHTML = '';
-      if (!hasFilter) {
+      if (T === 0) {
         empty.hidden = false;
         if (footEl) footEl.hidden = true;
       } else {
         empty.hidden = true;
-        const tr = mk('tr');
-        const td = mk('td', 'adm-empty');
-        td.colSpan = 7;
-        td.innerHTML = 'No students match your filters. <a href="#" id="adm-clear-filters" style="color:var(--primary);cursor:pointer;text-decoration:underline">Clear filters</a>';
-        const cl = td.querySelector('#adm-clear-filters');
-        cl.addEventListener('click', (ev) => { ev.preventDefault(); tb.state.q = ''; tb.state.status = 'all'; tb.state.course = 'all'; tb.state.batch = 'all'; if (isSuper) tb.state.branch = 'all'; admDateFilter = 'all'; admDateFrom = ''; admDateTo = ''; dateSel.value = 'all'; dateCustomWrap.hidden = true; fromInp.value = ''; toInp.value = ''; render(); });
-        tr.appendChild(td);
-        rowsHost.appendChild(tr);
-        if (footEl) footEl.hidden = true;
+        renderEmptyTableState(rowsHost, {
+          colSpan: 7,
+          title: 'No matching students',
+          desc: 'No students match your current search or filter criteria.',
+          onClear: () => {
+            tb.state.q = '';
+            tb.state.status = 'all';
+            tb.state.course = 'all';
+            tb.state.batch = 'all';
+            if (isSuper) tb.state.branch = 'all';
+            admDateFilter = 'all';
+            admDateFrom = '';
+            admDateTo = '';
+            if (dateSel) dateSel.value = 'all';
+            if (dateCustomWrap) dateCustomWrap.hidden = true;
+            if (fromInp) fromInp.value = '';
+            if (toInp) toInp.value = '';
+            render();
+          }
+        });
+        if (footEl) {
+          footEl.hidden = false;
+          footEl.innerHTML = '';
+          footEl.appendChild(mk('span', null, 'Showing 0 of ' + T));
+        }
       }
     } else {
       if (empty) empty.hidden = true;
@@ -1513,7 +1535,20 @@ function dueLabel(dueISO) {
       });
 
       if (footEl) {
-        renderPager(footEl, { page, pageSize: PAGE_SIZE, totalItems: list.length, onPageChange: (p) => { page = p; render(); } });
+        if (T === 0) {
+          footEl.hidden = true;
+        } else {
+          const a = (page - 1) * PAGE_SIZE + 1;
+          const b = Math.min(page * PAGE_SIZE, N);
+          const range = a + '–' + b;
+          let summary;
+          if (N === T) {
+            summary = totalPages <= 1 ? ('Showing all ' + N) : ('Showing ' + range + ' of ' + N);
+          } else {
+            summary = totalPages <= 1 ? ('Showing ' + N + ' of ' + T) : ('Showing ' + range + ' of ' + N + ' (filtered from ' + T + ')');
+          }
+          renderPager(footEl, { page, pageSize: PAGE_SIZE, totalItems: N, summary, showWhenSingle: true, onPageChange: (p) => { page = p; render(); } });
+        }
       }
     }
 

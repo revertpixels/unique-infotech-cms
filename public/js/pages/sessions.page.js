@@ -1,13 +1,13 @@
-﻿import { db } from '../config/firebase-config.js';
+import { db } from '../config/firebase-config.js';
 import { collection, getDocs, doc, addDoc, updateDoc, deleteDoc, query, where, serverTimestamp } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
 import { createSelect } from '../components/ui-select.js';
 import { openMenu } from '../components/ui-menu.js';
 import { confirmDialog } from '../components/ui-confirm.js';
 import { showToast } from '../components/toast.js';
-import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.90';
-import { buildStats, buildToolbar } from '../components/list-page.js';
-import { notifySessionsChanged, todayISO, expectedStatus, statusMismatch, daysLeft } from '../core/sessions.js?v=1.8.90';
-import { firstInstallmentOf, admissionState, installmentSchedule, sessionPattern, fmtDate } from '../utils/session-rules.js?v=1.8.90';
+import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.96';
+import { buildStats, buildToolbar, renderEmptyTableState } from '../components/list-page.js?v=1.8.96';
+import { notifySessionsChanged, todayISO, expectedStatus, statusMismatch, daysLeft } from '../core/sessions.js?v=1.8.96';
+import { firstInstallmentOf, admissionState, installmentSchedule, sessionPattern, fmtDate } from '../utils/session-rules.js?v=1.8.96';
 
 const TEXT_KEYS = ['name', 'start', 'end'];
 const KEYS = ['name', 'start', 'end', 'status'];
@@ -258,11 +258,16 @@ export async function mount({ profile, ctx }) {
       foot.textContent = list.length === rows.length ? 'Showing all ' + rows.length : 'Showing ' + list.length + ' of ' + rows.length;
     }
     if (rows.length && !list.length) {
-      const tr = mk('tr');
-      const td = mk('td', 'lp-empty', 'No sessions match your search or filter.');
-      td.colSpan = 6;
-      tr.appendChild(td);
-      tbody.appendChild(tr);
+      renderEmptyTableState(tbody, {
+        colSpan: 6,
+        title: 'No matching sessions',
+        desc: 'No sessions match your search or filter criteria.',
+        onClear: () => {
+          tb.state.q = '';
+          tb.state.status = 'all';
+          render();
+        }
+      });
     }
     list.forEach((r) => {
       const tr = mk('tr');

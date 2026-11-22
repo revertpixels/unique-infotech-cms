@@ -61,7 +61,10 @@ export function openPopup({ title = '', subtitle = '', icon = '', tone = 'defaul
   xBtn.innerHTML = '<i data-lucide="x" width="18" height="18"></i>';
   xBtn.addEventListener('click', (ev) => { ev.stopPropagation(); close(); });
 
-  head.appendChild(xBtn);
+  const actionsWrap = document.createElement('div');
+  actionsWrap.className = 'adm-view-head-actions';
+  actionsWrap.appendChild(xBtn);
+  head.appendChild(actionsWrap);
   box.appendChild(head);
 
   const container = document.createElement('div');
@@ -111,5 +114,5 @@ export function openPopup({ title = '', subtitle = '', icon = '', tone = 'defaul
     if (focusable) focusable.focus();
   });
 
-  return { el: box, close, container, backdrop: back };
+  return { el: box, box, head, actions: actionsWrap, close, container, backdrop: back };
 }

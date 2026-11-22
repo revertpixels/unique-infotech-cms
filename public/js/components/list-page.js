@@ -90,8 +90,7 @@ export function buildToolbar(opts) {
     r.addEventListener('click', async () => {
       if (r.disabled) return;
       r.disabled = true;
-      const ic = r.querySelector('svg.lucide') || r.querySelector('i');
-      if (ic) ic.classList.add('spin');
+      r.classList.add('spin');
       const start = Date.now();
       try {
         await Promise.resolve(o.onRefresh());
@@ -99,8 +98,11 @@ export function buildToolbar(opts) {
         console.error('[toolbar] refresh failed', err);
       } finally {
         const elapsed = Date.now() - start;
-        const remaining = Math.max(0, 600 - elapsed);
+        const remaining = Math.max(0, 500 - elapsed);
         setTimeout(() => {
+          r.classList.remove('spin');
+          r.querySelectorAll('.spin').forEach(el => el.classList.remove('spin'));
+          const ic = r.querySelector('svg.lucide') || r.querySelector('i');
           if (ic) ic.classList.remove('spin');
           r.disabled = false;
         }, remaining);
@@ -140,8 +142,8 @@ export function buildTableCard(opts) {
 }
 
 // Renders a shared pagination footer into `container`.
-// opts: { page, pageSize, totalItems, onPageChange(page) }
-// Hides the container when there is only one page.
+// opts: { page, pageSize, totalItems, onPageChange(page), summary, showWhenSingle }
+// Hides the container when there is only one page (unless showWhenSingle is true).
 export function renderPager(container, opts) {
   const o = opts || {};
   const page = Math.max(1, o.page || 1);
@@ -149,14 +151,19 @@ export function renderPager(container, opts) {
   const totalItems = Math.max(0, o.totalItems || 0);
   const onPageChange = o.onPageChange || (() => {});
   const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+  const showWhenSingle = Boolean(o.showWhenSingle);
   container.innerHTML = '';
-  if (totalPages <= 1) { container.hidden = true; return; }
+  if (totalPages <= 1 && !showWhenSingle) { container.hidden = true; return; }
   container.hidden = false;
-  const from = (page - 1) * pageSize + 1;
+  const from = totalItems > 0 ? (page - 1) * pageSize + 1 : 0;
   const to = Math.min(page * pageSize, totalItems);
-  container.appendChild(el('span', null, 'Showing ' + from + '-' + to + ' of ' + totalItems));
+  const defaultText = 'Showing ' + from + '-' + to + ' of ' + totalItems;
+  const text = o.summary !== undefined && o.summary !== null ? o.summary : defaultText;
+  container.appendChild(el('span', null, text));
+  if (totalPages <= 1) { return; }
   const wrap = el('div', 'adm-pager');
-  wrap.style.cssText = 'display:inline-flex;gap:6px;align-items:center;margin-left:16px;';
+  const ml = o.summary !== undefined && o.summary !== null ? '0' : '16px';
+  wrap.style.cssText = 'display:inline-flex;gap:6px;align-items:center;margin-left:' + ml + ';';
   const prev = el('button', 'ui-btn ghost' + (page <= 1 ? ' disabled' : ''), 'Prev');
   prev.type = 'button';
   prev.disabled = page <= 1;
@@ -174,4 +181,44 @@ export function renderPager(container, opts) {
   next.addEventListener('click', () => { if (page < totalPages) onPageChange(page + 1); });
   wrap.appendChild(next);
   container.appendChild(wrap);
+}
+
+// Renders a high-quality empty state inside a table body when filters or search yield 0 matches.
+// opts: { colSpan, title, desc, onClear, clearLabel }
+export function renderEmptyTableState(tbody, opts) {
+  if (!tbody) return;
+  const o = opts || {};
+  tbody.innerHTML = '';
+  const tr = el('tr', 'lp-table-empty-row');
+  const td = el('td', 'lp-table-empty-td');
+  td.colSpan = o.colSpan || 7;
+
+  const box = el('div', 'lp-table-empty-box');
+
+  const iconWrap = el('div', 'lp-table-empty-icon');
+  iconWrap.appendChild(icon('search'));
+
+  const h = el('b', 'lp-table-empty-title', o.title || 'No matching records');
+  const p = el('span', 'lp-table-empty-desc', o.desc || 'No records match your search or filter criteria.');
+
+  box.append(iconWrap, h, p);
+
+  if (typeof o.onClear === 'function') {
+    const btn = el('button', 'ui-btn ghost sm lp-table-empty-clear');
+    btn.type = 'button';
+    btn.appendChild(icon('rotate-ccw'));
+    const span = el('span', null, o.clearLabel || 'Clear filters');
+    btn.appendChild(span);
+    btn.onclick = (e) => {
+      e.preventDefault();
+      o.onClear();
+    };
+    box.appendChild(btn);
+  }
+
+  td.appendChild(box);
+  tr.appendChild(td);
+  tbody.appendChild(tr);
+
+  paint();
 }

@@ -42,6 +42,279 @@
 ## ACTIVE LOG (NEWEST ON TOP)
 ---
 
+### [2026-11-21 14:35] Version 1.8.98 — Student Profile Calm, Modern, Borderless UI Redesign
+
+**What was built:**
+- `public/pages/student-profile.html`: Rebuilt markup for calm, open, modern design with zero clutter:
+  - Header: Single white surface (`.sp-header-card`), 72px round avatar, 22px semibold student name with small `.sp-status-pill.success`, muted metadata line (`ID · course · batch · session · branch`) without link underline, and quick actions (WhatsApp, Call, Email as round ghost icon buttons with tooltips, and "Notify dues" as the only filled button).
+  - Stats: Merged into ONE white card (`.sp-stats-card`) split into 6 borderless columns (`.sp-stats-grid`, `gap: 24px`), small icons + 12px muted labels + 20px semibold values + 12px muted hints (Outstanding in `#dc2626`, Paid in `#16a34a`), plus thin progress bar track & fill under the strip.
+  - Tabs: Plain text tabs on the page background, no boxes around active tab; active tab indicated via navy text + 2px navy bottom underline and faint `#e2e8f0` separator line.
+  - Documents tab: 4 cards with 8px radius, no border, soft shadow (`0 1px 3px rgba(16,24,40,.06)`), 4:3 top image fill, title + small status pill row, file name and size in 12px muted, 3 small icon buttons (`eye`, `download`, `refresh-cw`) with tooltips, and a light dashed area with upload icon and "Upload" text button for missing documents.
+  - Personal & Course tabs: Clean 2-column key-value grid (`.sp-kv-grid`) with 12px muted labels and 14px values; course fee breakdown and installment schedule tables with faint row separators (`border-bottom: 1px solid #f1f5f9`), no vertical lines, and right-aligned amounts.
+  - Payments tab: Clean payment overview card, installment status table with status pills and filled "Pay" action, and chronological ledger table.
+- `public/css/pages/student-profile.css`: Enforced calm, open aesthetic:
+  - Eliminated thick dark/gold lines under header and card borders (`border: none !important; box-shadow: 0 1px 3px rgba(16, 24, 40, 0.06);`).
+  - Removed all inner divider lines between sections, relying purely on 24px section spacing.
+  - Popups (`.ui-modal.ar-modal`): 24px internal padding, title row with small icon, right-aligned action buttons with no divider line above, and soft tinted drop zone (`.sp-drop-zone`).
+- `public/js/pages/student-profile.page.js`: Updated DOM manipulation logic for header pills, stats progress bar, document cards, table actions, and popups while keeping 100% of the underlying business logic, compression pipeline, and Firestore transactions intact.
+
+**Why:**
+- Previous versions felt either crowded with excessive dark borders, double highlight lines, and divider lines, or over-styled. The redesign delivers a calm, modern, and open interface matching standard SaaS design principles with balanced whitespace.
+
+**Files touched:**
+- MODIFIED: `public/pages/student-profile.html`
+- MODIFIED: `public/css/pages/student-profile.css`
+- MODIFIED: `public/js/pages/student-profile.page.js`
+- MODIFIED: `public/js/core/app.js`
+- MODIFIED: `public/index.html`
+- MODIFIED: `docs/02-PROGRESS-LOG.md`
+
+**Firestore changes:**
+- None (strictly UI, presentation, and layout changes).
+
+**Tested on:**
+- Microsoft Edge headless screenshots captured and verified:
+  - Header, Stats, and Personal Details (`sp-personal.png`)
+  - Documents Tab (`sp-documents.png`)
+  - Course Tab (`sp-course.png`)
+  - Payments Tab (`sp-payments.png`)
+  - Record Payment Popup (`sp-popup-payment.png`)
+- Node syntax check: Passed (`node --check public/js/pages/student-profile.page.js`)
+
+---
+
+### [2026-11-21 14:05] Version 1.8.97 — Admission Receipt Design System Alignment for Student Profile & Popups
+
+**What was built:**
+- `public/css/components/doc-card.css`: Shared design tokens (`--ar-navy: #333b84`, `--ar-deep: #291670`, `--ar-gold: #151caa`, `--ar-tint: #eceefa`, `--ar-line: #b9bfdc`, `--ar-ink: #1d1a3a`, `--ar-muted: #5b5f85`) and reusable receipt-styled components (`.ar-card`, `.ar-sec-head`, `.ar-sec-title`, `.ar-hd-accent`, `.ar-btn`, `table.ar-d`, `table.ar-fe`, `.ar-pill`, `.ar-pbox`, `.ar-pcell`, `.ar-cname`, `.ar-cgrid`, `.ar-imp`, `.ui-modal.ar-modal`).
+- `public/css/main.css`: Imported `doc-card.css` into global stylesheet bundle.
+- `public/pages/student-profile.html`: Aligned entire page markup to the Admission Receipt reference: double-line navy/gold top header accent, round avatar, student name with `.ar-pill`, metadata chips with lucide icons (`hash`, `book-open`, `layers`, `calendar-range`, `git-branch`), 6 receipt-styled metric cards (`wallet`, `check-circle`, `alert-circle`, `calendar-clock`, `timer`, `list-checks`), tabs with icons, detail tables using `table.ar-d`, course spec cards using `.ar-cname` / `.ar-cgrid`, and financial ledgers using `table.ar-fe`.
+- `public/css/pages/student-profile.css`: Styled using receipt typography (`IBM Plex Sans` for body/tables, `Libre Franklin` for headings/totals), receipt palette, crisp 6px borders, and responsive grid layouts.
+- `public/js/pages/student-profile.page.js`: Controller fully updated to use receipt components:
+  - Header: `.ar-pill` (`paid`, `due`, `overdue`), `.ar-btn.ghost.sm`, `.ar-btn.primary.sm`.
+  - Documents tab: 4 cards with `.ar-pill`, `.sp-doc-thumb-box`, action icon buttons (`eye`, `download`, `refresh-cw`, `upload`).
+  - Course tab: `table.ar-fe` breakdown and direct navigation to `#/admissions/<id>/receipt`.
+  - Payments tab: `.ar-pbox` summary block, `table.ar-fe` installment status schedule with `.ar-pill` and `ar-btn.primary.sm` ("Pay"), and chronological ledger with receipt download button.
+  - All popups (Personal, Contact, Guardian, Preview Doc, Replace Doc, Record Payment, Notify Dues): Styled via `.ui-modal.ar-modal` matching receipt headers (`.adm-view-head`, `.adm-view-title`, `.adm-view-tile`), receipt `.ar-pbox` summary in payment recording, and `.ar-btn` footer buttons.
+- Preserved all functional logic: image compression pipeline (`isImageFile -> compressTo100KB -> compResult.blob -> blobToDataURL`), subcollection writes (`students/{id}/docs/{key}`), activity audit logging (`students/{id}/activity`), and Firestore security rules compatibility.
+
+**Files touched:**
+- CREATED: `public/css/components/doc-card.css`
+- MODIFIED: `public/css/main.css`
+- MODIFIED: `public/pages/student-profile.html`
+- MODIFIED: `public/css/pages/student-profile.css`
+- MODIFIED: `public/js/pages/student-profile.page.js`
+- MODIFIED: `public/js/core/app.js`
+- MODIFIED: `public/index.html`
+- MODIFIED: `docs/02-PROGRESS-LOG.md`
+
+**Firestore changes:**
+- None (100% compliant with existing security rules and student schemas).
+
+**Tested on:**
+- Node syntax check: Passed (`node --check public/js/pages/student-profile.page.js`)
+- CSS variable verification: All tokens match extracted Admission Receipt values
+- Route integrity: Direct hash navigation to `#/admissions/<id>/receipt` intact
+
+---
+
+### [2026-11-21 13:30] Version 1.8.96 — Design Alignment with Batches & Admissions (Standard Look Restored)
+
+**What was updated:**
+1. **Removed Non-Native Styles**:
+   - Reverted all oversized radii, backdrop blur, colored glow shadows, gradients, and oversized numbers.
+   - Restored shared `.ui-modal`, `.ui-modal-back`, `.adm-view-...` popup styling in `list-page.css` to 8px radius, plain dark overlay without blur, 40px icon tiles, and standard footer/header padding.
+2. **Student Profile Page Layout**:
+   - Header: Single white card (`.card`), 64px circular avatar with initials or image, 20px semibold student name with `.bt-pill` status badge, meta text separated by dots (`•`), and outlined quick contact buttons + notify button.
+   - Dashboard Stats Row: 6 compact stat cards matching `Batches` / `Students` header metrics (18-20px semibold values, 11px uppercase labels, no decorative colored circles).
+   - Tabs: Simple admin underline tabs (14px, muted text, 2px primary bottom border for active tab, no pills/backgrounds/icons).
+   - Cards & Tables: Standard `.card` with 8px radius, 16px padding, 11-12px uppercase labels, 14px values, and `<table class="lp-table">` for fee breakdown, installment schedule, and transaction ledger.
+3. **Popups Overhaul**:
+   - Reverted all edit and transaction modals to standard admission form components (`.ui-field`, `.ui-input-wrap`, `.ui-input`, `.adm-view-foot`).
+   - Replaced custom pill selectors in Record Payment with standard dropdown and `.pk-info-grid-3` summary.
+4. **Preserved Functional Pipeline**:
+   - Maintained image compression pipeline (`compressTo100KB -> compResult.blob -> blobToDataURL`), document subcollection updates, append-only activity logging, and direct navigation to `#/admissions/<id>/receipt`.
+5. **Version Bump**:
+   - Bumped `APP_VERSION` to `1.8.96` across all files.
+
+**Files touched:**
+- MODIFIED: `public/css/components/list-page.css`
+- MODIFIED: `public/pages/student-profile.html`
+- MODIFIED: `public/css/pages/student-profile.css`
+- MODIFIED: `public/js/pages/student-profile.page.js`
+- MODIFIED: `public/js/core/app.js`
+- MODIFIED: `public/index.html`
+- MODIFIED: `docs/02-PROGRESS-LOG.md`
+
+---
+
+### [2026-11-21 11:20] Version 1.8.95 — Modern SaaS Redesign of Student Profile & Popup Overhaul
+
+**What was built & updated:**
+1. **Functional Fixes**:
+   - **Admission Receipt Navigation**: Completely removed iframe/popup preview; "View admission receipt" and transaction receipt buttons now cleanly navigate to `#/admissions/<id>/receipt`.
+   - **Document Upload Bug Resolution**: Fixed `compressTo100KB` return signature unpacking (`res.blob` vs raw object) and ensured strict matching of `auth.currentUser.email.toLowerCase()` for append-only activity logs and doc updates. Immediate live avatar and card thumbnail refresh without page reloads.
+2. **Modern SaaS Admin Redesign (Linear / Stripe / Vercel)**:
+   - **Header Card**: Soft gradient brand banner strip with 100px avatar overlapping with a white border ring, copyable studentId chip with clipboard feedback, status pills, meta chips (course, batch, session with switcher, branch), and action row (Notify Dues, WhatsApp, Call, Email).
+   - **Metrics Dashboard**: Responsive grid of cards with tinted rounded icons, 26px bold values, and animated progress bar showing paid % of total.
+   - **Sticky Navigation Tabs**: Modern segmented tabs with icons and active underline pill, sticky below topbar.
+   - **Personal Details**: 2-column grid of section cards with 13px uppercase muted labels and 16px values, ghost edit buttons in headers.
+   - **Documents Grid**: 4 cards with 4:3 large thumbnails, metadata line, clean action footers, and dashed drop-zone supporting drag-and-drop file upload.
+   - **Course Details**: Clean course overview, fee breakdown snapshot table, and scheduled installment dates table.
+   - **Payment History**: Unified summary banner, 4-installment schedule status table with soft status pills, and chronological transactions ledger.
+3. **Popup Redesign (`components/modal.js` & `components/list-page.css`)**:
+   - Upgraded shared modal: 580px width, 16px radius, `backdrop-filter: blur(4px)`, layered shadow, scale+fade animation, mobile bottom sheet.
+   - Redesigned Edit Details modals with 44px inputs, 15px font, focus rings, and inline red error text.
+   - Redesigned Replace Document modal with side-by-side current vs new preview, drag-and-drop zone, and compressed size readout.
+   - Redesigned Record Payment modal with top summary banner, mode pill selector buttons (Cash, UPI, Card, Bank, Cheque), and saving spinner.
+   - Redesigned Notify Dues modal with prefilled editable message and WhatsApp/Email triggers.
+4. **Version Bump**:
+   - Bumped `APP_VERSION` to `1.8.95` across all files.
+
+**Files created & modified:**
+- MODIFIED: `public/pages/student-profile.html`
+- MODIFIED: `public/css/pages/student-profile.css`
+- MODIFIED: `public/js/pages/student-profile.page.js`
+- MODIFIED: `public/css/components/list-page.css`
+- MODIFIED: `public/js/core/app.js`
+- MODIFIED: `public/index.html`
+- MODIFIED: `docs/02-PROGRESS-LOG.md`
+- MODIFIED: `?v=` references in all `public/js/` files
+
+### [2026-11-21 11:00] Version 1.8.94 — Student Profile Page & Ledger Implementation
+
+**What was built & updated:**
+1. **Dynamic Student Profile Page (`student-profile.html`, `student-profile.css`, `student-profile.page.js`)**:
+   - Built the 360-degree Student Profile covering:
+     - **Cover & Identity Header**: Round avatar photo with fallback initials, student name, 8-digit/UIC pill, status badge, meta bar (Course, Batch, Session with multi-session switcher, Branch), and contact actions (WhatsApp with validation, Email, Call, and Due reminder modal).
+     - **Metrics Dashboard**: 9 real-time KPI cards (Total Fee, Paid, Outstanding, Next Due with date, Late fine accrued today at ₹1/day, Installments paid X/4, Admission date, Course duration/remaining, Batch timing).
+     - **Tab 1 - Personal Details**: Grouped cards (Personal, Contact, Guardian, Academic, Metadata) with edit modals, field validation via `validator.js`, dirty state tracking via `unsaved-guard.js`, single-doc update for Youth, and linked multi-record update across sessions with confirmation prompt for Kids.
+     - **Tab 2 - Documents**: 4 document cards (DOB, Marksheet, Photo, Signature) supporting full preview modal, original file download, image download, and replace/upload modal with canvas compression to 100KB (`compressTo100KB`).
+     - **Tab 3 - Course Details**: Complete academic information, snapshot fee breakdown, scheduled installment dates, and embedded modal preview of the admission receipt.
+     - **Tab 4 - Payment History**: Youth installment ledger with summary strip (Total, Paid, Waived, Outstanding, Late fine), 4-installment schedule status table (Paid, Due, Overdue with fine, Upcoming, Waived), chronological transactions ledger, and "Record Payment" transaction modal adhering strictly to Decision 3 (full installment payments, late fine accrued in same transaction, receipt numbering via atomic counters, Super Admin fine waiver). Kids payment tab dynamically loads bills and payments.
+2. **Payment & Activity Service (`services/payment.service.js`)**:
+   - Created reusable services: `calculateLateFee`, `fetchStudentPayments`, `fetchStudentActivities`, `recordPaymentTx`, and `logStudentActivity`.
+3. **Router Dynamic Loader (`core/router.js`)**:
+   - Replaced placeholder `renderStudentProfile()` with full dynamic loader mounting `student-profile.html` + `student-profile.page.js`, resolving by Firestore docId or 8-digit studentId, and supporting `?tab=personal|documents|course|payments`.
+4. **Security Rules (`firestore.rules`)**:
+   - Updated `students/{studentId}/payment/{paymentId}` rules to restrict waivers to Super Admin and enforce `recordedBy == authEmail` for branch heads.
+   - Added append-only `students/{studentId}/activity/{activityId}` rules (create only for branch head on own branch, update/delete denied for all).
+5. **Version Bump**:
+   - Bumped `APP_VERSION` to `1.8.94` across `app.js`, `index.html`, and all `?v=` references.
+
+**Files created & modified:**
+- CREATED: `public/pages/student-profile.html`
+- CREATED: `public/css/pages/student-profile.css`
+- CREATED: `public/js/pages/student-profile.page.js`
+- MODIFIED: `public/js/services/payment.service.js` (written from 0 bytes)
+- MODIFIED: `public/js/core/router.js`
+- MODIFIED: `firestore.rules`
+- MODIFIED: `public/css/main.css`
+- MODIFIED: `public/js/core/app.js`
+- MODIFIED: `public/index.html`
+- MODIFIED: `docs/02-PROGRESS-LOG.md`
+
+### [2026-11-21 09:55] Version 1.8.93 — Unified Table Header Styling Across Tables (Branches, Branch Heads, Students)
+
+**What was built & updated:**
+1. **Unified Token-Based Table Header Rule (`list-page.css`)**:
+   - Replaced hardcoded color literals (`#F5F6FD`, `#3730A3`, `#E0E3F5`) with token-based CSS variables:
+     - `background: color-mix(in srgb, var(--primary-soft) 55%, var(--surface))`
+     - `color: var(--primary)`
+     - `font-weight: 800; letter-spacing: .06em`
+     - `border-bottom: 1px solid color-mix(in srgb, var(--primary) 14%, var(--surface))`
+   - Extended selector to serve `.lp-table`, `.lp-card .lp-table`, `.lp-card .bh-table`, and `.adm-table-card .adm-table` consistently.
+   - Headers now automatically adapt their tint and font color when switching context between Youth and School.
+2. **Cleaned Per-Page Table Header Rules (`branch-heads.css` & `admissions.css`)**:
+   - Removed conflicting `background: var(--bg)`, `color: var(--text-mute)`, and `border-bottom: 1px solid var(--border)` declarations from `.bh-table th` and `.adm-table th`, retaining their padding, text-align, and font-size.
+3. **Mobile & Card Integrity Preserved**:
+   - Maintained all mobile card layout rules for the Students table (`@media (max-width: 900px)`), row hovers, status pills, and action cell alignment.
+4. **Version Bump**:
+   - Bumped `APP_VERSION` in `app.js` and `window.__BUILD__` in `index.html` to `1.8.93`.
+   - Updated all `?v=` references across the project to `1.8.93`.
+
+**Files touched:**
+- MODIFIED: `public/css/components/list-page.css`
+- MODIFIED: `public/css/pages/branch-heads.css`
+- MODIFIED: `public/css/pages/admissions.css`
+- MODIFIED: `public/js/core/app.js`
+- MODIFIED: `public/index.html`
+- MODIFIED: `docs/02-PROGRESS-LOG.md`
+- MODIFIED: all JS/HTML `?v=` references across the project
+
+---
+
+### [2026-11-21 09:40] Version 1.8.92 — Students Page Table Card Header & Filter-Aware Footer Alignment
+
+**What was built & updated:**
+1. **Students Table Card Header (`admissions.html` & `admissions.page.js`)**:
+   - Added standard `.lp-card-head` to `.adm-table-card` featuring `users` icon, "All students" title, and scope count pill (`#adm-count`).
+   - `#adm-count` dynamically updates on every `render()` to reflect the current session scope total (`total === 1 ? '1 student' : total + ' students'`), matching the first stat card and Branches card pattern.
+2. **Filter-Aware Footer Text & Logic (`admissions.page.js`)**:
+   - Implemented exact count-comparison rules (N = filtered count, T = session scope total):
+     - `N === T, 1 page`: "Showing all N"
+     - `N === T, >1 pages`: "Showing a–b of N" (with en dash)
+     - `N < T, 1 page`: "Showing N of T"
+     - `N < T, >1 pages`: "Showing a–b of N (filtered from T)"
+     - `N === 0, T > 0`: "Showing 0 of T" (directly rendered in empty-match branch without pager buttons)
+     - `T === 0`: footer hidden (`footEl.hidden = true`).
+3. **Backward-Compatible Pager Extension (`list-page.js`)**:
+   - Extended `renderPager(container, opts)` with `summary` and `showWhenSingle` options.
+   - When `showWhenSingle: true` and only 1 page exists, renders the summary text cleanly and keeps the container visible without buttons.
+   - Pager button container sets `margin-left: 0` when `summary` is provided, retaining `margin-left: 16px` when `summary` is omitted to preserve the exact layout of `school-admissions.page.js`.
+4. **Footer Layout & Mobile Styling (`admissions.css`)**:
+   - Applied `.lp-card-foot` class to `#adm-foot` and styled as a responsive flex row (`justify-content: space-between; flex-wrap: wrap; gap: 8px;`).
+   - Added `@media (max-width: 480px)` wrapping for `.adm-table-card .lp-card-head` to prevent horizontal overflow on 375px screens.
+5. **Module Import URL Standardization (`public/js/pages/*.js`)**:
+   - Updated all 10 page files importing `list-page.js` to use `'../components/list-page.js?v=1.8.92'`.
+6. **Version Bump**:
+   - Bumped `APP_VERSION` in `app.js` and `window.__BUILD__` in `index.html` to `1.8.92`.
+   - Updated all `?v=` references across the project to `1.8.92`.
+
+**Files touched:**
+- MODIFIED: `public/pages/admissions.html`
+- MODIFIED: `public/js/pages/admissions.page.js`
+- MODIFIED: `public/js/components/list-page.js`
+- MODIFIED: `public/css/pages/admissions.css`
+- MODIFIED: `public/js/core/app.js`
+- MODIFIED: `public/index.html`
+- MODIFIED: `docs/02-PROGRESS-LOG.md`
+- MODIFIED: all JS/HTML `?v=` references across the project
+
+---
+
+### [2026-11-20 15:50] Version 1.8.91 — Course View Popup Polish: Removed Bottom Button, Slim Scrollbar Fix, Full Package Order, Mobile Sizing
+
+**What was built & polished:**
+1. **Removed Bottom Close Button (`courses.page.js` & `course-view.css`)**:
+   - The top-right X button is now the sole visible close control; deleted the `.cv-foot` element and button in `openCourseView`, assembling modal as `modal.append(head, body)`. Removed unused `.cv-foot` CSS.
+   - Preserved dialog closing via X button, clicking backdrop, and pressing Escape key.
+   - Retained accessibility: focuses X on open, returns focus to invoking trigger on close, and locks body scroll.
+2. **Bottom Area & Modal Layout (`course-view.css`)**:
+   - Updated `.cv-body` with `padding-bottom: 28px` to ensure generous spacing at the bottom of the modal.
+   - Modal corners remain rounded with `overflow: hidden`. Short courses fit naturally with no bottom strip, and long courses scroll smoothly.
+   - Responsive sizing: for screens up to 640px, the X button is sized to at least 40x40px (`min-width: 40px; min-height: 40px`), and the header remains sticky outside the scrolling area.
+3. **Full Package Row Ordering (`courses.page.js` & `course-view.css`)**:
+   - Swapped item order in each row of the "Full package" table: course name (`.cv-pkg-name`) displays first, followed by the code pill (`.cv-code-chip-sm`).
+   - Built cell as a flex row (`.cv-pkg-row`) with `gap: 8px` and `flex-wrap: wrap` for small screens; removed right margin from the code chip.
+4. **Real Slim Scrollbar (`course-view.css`)**:
+   - Removed `scrollbar-width` and `scrollbar-color` from the standard `.cv-body` rule so Chrome and Brave properly apply `::-webkit-scrollbar` rules without defaulting or showing arrow buttons.
+   - Styled `::-webkit-scrollbar` (6px), transparent track, token-based thumb with 99px border-radius, and hidden `::-webkit-scrollbar-button`.
+   - Added `@supports not selector(::-webkit-scrollbar)` for Firefox fallback and `overscroll-behavior: contain` to prevent background body scroll chaining.
+5. **Version Bump**:
+   - Bumped `APP_VERSION` in `app.js` and `window.__BUILD__` in `index.html` to `1.8.91`.
+   - Updated all `?v=` query strings across the project to `1.8.91`.
+
+**Files touched:**
+- MODIFIED: `public/js/pages/courses.page.js`
+- MODIFIED: `public/css/components/course-view.css`
+- MODIFIED: `public/js/core/app.js`
+- MODIFIED: `public/index.html`
+- MODIFIED: `docs/02-PROGRESS-LOG.md`
+- MODIFIED: all JS/HTML/CSS `?v=` references across the project
+
+---
+
 ### [2026-11-20 11:10] Version 1.8.90 — Read-Only Courses & Packages for Branch Heads with View Popup, Super Admin View in Kebab Menu
 
 **What was built & updated:**

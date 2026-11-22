@@ -1,13 +1,13 @@
 import { db } from '../config/firebase-config.js';
-import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.96';
-import { collection, getDocs, doc, addDoc, updateDoc, deleteDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
+import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.101';
+import { collection, getDocs, query, where, doc, addDoc, updateDoc, deleteDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
 import { createSelect } from '../components/ui-select.js';
 import { openMenu } from '../components/ui-menu.js';
 import { confirmDialog } from '../components/ui-confirm.js';
 import { showToast } from '../components/toast.js';
-import { buildStats, buildToolbar, renderEmptyTableState } from '../components/list-page.js?v=1.8.96';
-import { INST_PER_SEM, feeTotal } from '../utils/fees.js?v=1.8.96';
-import { isCourseActive } from '../utils/session-rules.js?v=1.8.96';
+import { buildStats, buildToolbar, renderEmptyTableState } from '../components/list-page.js?v=1.8.101';
+import { INST_PER_SEM, feeTotal } from '../utils/fees.js?v=1.8.101';
+import { isCourseActive } from '../utils/session-rules.js?v=1.8.101';
 
 const ENDED = ['ended', 'closed', 'completed', 'archived', 'cancelled'];
 const LOCK_FIELDS = { admission: 'Admission fee', installment: 'Installment amount', material: 'Material fee' };
@@ -74,6 +74,7 @@ export async function mount({ ctx, profile }) {
     function examFrozenBatchesFor(courseId) {
       return runningBatchesFor(courseId).filter((b) => b.lockedExamFee !== undefined && b.lockedExamFee !== null);
     }
+    let sessions = [];
     function paintLock() {
       const banner = $('cs-lock-banner');
       if (!banner) return;
@@ -84,20 +85,41 @@ export async function mount({ ctx, profile }) {
         el.readOnly = locked;
         if (el.parentElement) el.parentElement.classList.toggle('is-locked', locked);
       });
-      banner.hidden = !locked;
-      if (locked) {
-        const frozen = examFrozenBatchesFor(editId);
-        banner.textContent = 'This course is locked for fee edits. ' + run.length + ' active batch(es) use this course. Edit fees only after those batches are closed.'
-          + (frozen.length ? ' Exam fee is frozen inside: ' + frozen.map((b) => b.name || b.id).join(', ') + ' - a new exam fee applies only to other batches.' : ' Exam fee can still be updated.');
+
+      // Check if any active/running session has exam fee collection locked
+      const activeSessionWithExamLock = (sessions || []).find((s) => (s.status === 'running' || s.status === 'upcoming') && s.examFeeCollection?.started);
+      const isExamLocked = !!activeSessionWithExamLock;
+      if (f.exam) {
+        f.exam.readOnly = isExamLocked;
+        if (f.exam.parentElement) f.exam.parentElement.classList.toggle('is-locked', isExamLocked);
+      }
+
+      banner.hidden = !locked && !isExamLocked;
+      if (locked || isExamLocked) {
+        let msg = '';
+        if (locked) {
+          const frozen = examFrozenBatchesFor(editId);
+          msg += 'This course is locked for fee edits. ' + run.length + ' active batch(es) use this course. Edit fees only after those batches are closed.'
+            + (frozen.length ? ' Exam fee is frozen inside: ' + frozen.map((b) => b.name || b.id).join(', ') + ' - a new exam fee applies only to other batches.' : ' Exam fee can still be updated.');
+        }
+        if (isExamLocked) {
+          msg += (msg ? ' ' : '') + `Exam fee is locked for ${activeSessionWithExamLock.name || 'the active session'} (exam fee collection started). Changes to exam fee will not affect this session.`;
+        }
+        banner.textContent = msg;
       }
     }
     async function loadBatches() {
       try {
-        const snap = await getDocs(collection(db, 'batches'));
-        batches = snap.docs.map((d) => Object.assign({ id: d.id }, d.data()));
+        const [bSnap, sSnap] = await Promise.all([
+          getDocs(collection(db, 'batches')),
+          getDocs(query(collection(db, 'sessions'), where('ctx', '==', 'youth')))
+        ]);
+        batches = bSnap.docs.map((d) => Object.assign({ id: d.id }, d.data()));
+        sessions = sSnap.docs.map((d) => Object.assign({ id: d.id }, d.data()));
       } catch (e) {
-        console.warn('[courses] batches not readable yet - fee lock stays open', e && e.code);
+        console.warn('[courses] batches/sessions not readable yet - fee lock stays open', e && e.code);
         batches = [];
+        sessions = [];
       }
     }
     let prereqSel = null;

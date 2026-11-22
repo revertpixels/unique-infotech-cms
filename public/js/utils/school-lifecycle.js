@@ -1,20 +1,20 @@
-// school-lifecycle.js — Unique Kids student lifecycle helpers (upgrade, return,
+// school-lifecycle.js ï¿½ Unique Kids student lifecycle helpers (upgrade, return,
 // transfer, end, break, waiver, permanent delete).
 //
 // Canonical data model (separates identity from enrolment):
 //
-//   students/{id}               — permanent student identity (ctx='school')
-//   students/{id}/docs/{key}    — photo, signature
-//   students/{id}/aadhaar/aadhaar — private Aadhaar (Super Admin only)
-//   students/{id}/payment/payment — immutable admission-payment record
-//   enrolments/{id}             — one enrolment episode per admission/upgrade/return
-//   bills/{id}                  — monthly bills (student-month unique)
-//   payments/{id}               — monthly payments + allocations
-//   waivers/{id}                — bill waivers (explicit, reason, staff)
-//   breaks/{id}                 — approved break month ranges
-//   transfers/{id}              — batch-only transfer audit
-//   counters/sid_uk_<YYYY>      — Kids student ID counter (YYYYNNNN)
-//   counters/rcpt_uk_<YY>_<type>_<branchCode> — receipt counter
+//   students/{id}               ï¿½ permanent student identity (ctx='school')
+//   students/{id}/docs/{key}    ï¿½ photo, signature
+//   students/{id}/aadhaar/aadhaar ï¿½ private Aadhaar (Super Admin only)
+//   students/{id}/payment/payment ï¿½ immutable admission-payment record
+//   enrolments/{id}             ï¿½ one enrolment episode per admission/upgrade/return
+//   bills/{id}                  ï¿½ monthly bills (student-month unique)
+//   payments/{id}               ï¿½ monthly payments + allocations
+//   waivers/{id}                ï¿½ bill waivers (explicit, reason, staff)
+//   breaks/{id}                 ï¿½ approved break month ranges
+//   transfers/{id}              ï¿½ batch-only transfer audit
+//   counters/sid_uk_<YYYY>      ï¿½ Kids student ID counter (YYYYNNNN)
+//   counters/rcpt_uk_<YY>_<type>_<branchCode> ï¿½ receipt counter
 //
 // Money: rupees with 2 decimals in display/storage; integer paise used for
 // comparisons. No floating-point drift (round to 2dp after every op).
@@ -27,9 +27,9 @@ import {
   collection, getDocs, query, where, doc, getDoc, addDoc, updateDoc, deleteDoc,
   serverTimestamp, runTransaction, writeBatch
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.96';
-import { firstMonthlyMonth } from './school-receipt.js?v=1.8.96';
-import { isCourseActive } from './session-rules.js?v=1.8.96';
+import { showToast } from '../components/toast.js?v=1.8.101';
+import { firstMonthlyMonth } from './school-receipt.js?v=1.8.101';
+import { isCourseActive } from './session-rules.js?v=1.8.101';
 const ENROLMENTS_COL = 'enrolments';
 const BILLS_COL = 'bills';
 const PAYMENTS_COL = 'payments';

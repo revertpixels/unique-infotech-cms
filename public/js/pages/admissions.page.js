@@ -14,21 +14,21 @@ import {
   arrayUnion,
   addDoc
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.96';
-import { registerDirty, confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.96';
-import { buildStats, buildToolbar, renderPager, renderEmptyTableState } from '../components/list-page.js?v=1.8.96';
-import { createSelect } from '../components/ui-select.js?v=1.8.96';
-import { openMenu } from '../components/ui-menu.js?v=1.8.96';
-import { confirmDialog } from '../components/ui-confirm.js?v=1.8.96';
-import { openPopup } from '../components/modal.js?v=1.8.96';
-import { createDatePicker } from '../components/ui-datepicker.js?v=1.8.96';
-import { getSelectedSessionId, getCachedSessions, loadSessions, todayISO } from '../core/sessions.js?v=1.8.96';
-import { firstInstallmentOf, admissionState, sessionLabel, installmentSchedule, batchAllowsCourse, batchCourseLabel, isCourseActive } from '../utils/session-rules.js?v=1.8.96';
-import { formatINR, formatDateIN, initials } from '../utils/formatter.js?v=1.8.96';
-import { validatePhone, validateEmail, validateDOB, validateName, validateRequired } from '../utils/validator.js?v=1.8.96';
-import { listStudentsRaw, checkDuplicatePhone, readStudentId, readReceiptNo, writeCounter, createStudentWithDocs, updateStudentWithDocs, updateStudent, deleteStudent } from '../services/admission.service.js?v=1.8.96';
-import { feeTotal } from '../utils/fees.js?v=1.8.96';
-import { compressTo100KB, readAsDataURL, blobToDataURL, isImageFile, formatBytes } from '../utils/image-compress.js?v=1.8.96';
+import { showToast } from '../components/toast.js?v=1.8.101';
+import { registerDirty, confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.101';
+import { buildStats, buildToolbar, renderPager, renderEmptyTableState } from '../components/list-page.js?v=1.8.101';
+import { createSelect } from '../components/ui-select.js?v=1.8.101';
+import { openMenu } from '../components/ui-menu.js?v=1.8.101';
+import { confirmDialog } from '../components/ui-confirm.js?v=1.8.101';
+import { openPopup } from '../components/modal.js?v=1.8.101';
+import { createDatePicker } from '../components/ui-datepicker.js?v=1.8.101';
+import { getSelectedSessionId, getCachedSessions, loadSessions, todayISO } from '../core/sessions.js?v=1.8.101';
+import { firstInstallmentOf, admissionState, sessionLabel, installmentSchedule, batchAllowsCourse, batchCourseLabel, isCourseActive } from '../utils/session-rules.js?v=1.8.101';
+import { formatINR, formatDateIN, initials } from '../utils/formatter.js?v=1.8.101';
+import { validatePhone, validateEmail, validateDOB, validateName, validateRequired } from '../utils/validator.js?v=1.8.101';
+import { listStudentsRaw, checkDuplicatePhone, readStudentId, readReceiptNo, writeCounter, createStudentWithDocs, updateStudentWithDocs, updateStudent, deleteStudent } from '../services/admission.service.js?v=1.8.101';
+import { feeTotal } from '../utils/fees.js?v=1.8.101';
+import { compressTo100KB, readAsDataURL, blobToDataURL, isImageFile, formatBytes } from '../utils/image-compress.js?v=1.8.101';
 
 const COL = 'students';
 

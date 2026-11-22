@@ -1,0 +1,180 @@
+<div class="pf-wrap">
+  <!-- Page Header -->
+  <div class="pf-head-row">
+    <section class="pg-head">
+      <div class="pg-crumbs">Fees / <span>Pay Fees</span></div>
+      <h2>Pay Fees</h2>
+      <p>Search students by ID, phone number or name to collect scheduled installments and examination fees.</p>
+    </section>
+  </div>
+
+  <!-- Search Card -->
+  <div class="pf-search-card">
+    <div class="pf-search-bar-wrap">
+      <div class="ui-input-wrap pf-search-input-wrap">
+        <i data-lucide="search" class="pf-search-icon"></i>
+        <input
+          type="text"
+          id="pf-search-input"
+          class="ui-input pf-search-input"
+          placeholder="Search by student ID (8 digits), phone number (10 digits) or student name..."
+          autocomplete="off"
+        />
+        <button type="button" id="pf-search-clear" class="pf-clear-btn" title="Clear search" hidden>
+          <i data-lucide="x"></i>
+        </button>
+      </div>
+      <button type="button" id="pf-search-btn" class="ui-btn primary pf-search-btn">
+        <i data-lucide="search"></i>
+        <span>Search</span>
+      </button>
+    </div>
+    <div class="pf-search-hint">
+      <span class="pf-hint-item"><i data-lucide="hash"></i> 8 digits: exact Student ID</span>
+      <span class="pf-hint-sep">•</span>
+      <span class="pf-hint-item"><i data-lucide="phone"></i> 10 digits: Phone number</span>
+      <span class="pf-hint-sep">•</span>
+      <span class="pf-hint-item"><i data-lucide="user"></i> Text: Student name</span>
+      <span class="pf-hint-sep">•</span>
+      <span class="pf-hint-session"><i data-lucide="calendar"></i> Session: <strong id="pf-session-badge">Loading...</strong></span>
+    </div>
+  </div>
+
+  <!-- Multiple Search Results List Card -->
+  <div id="pf-multi-card" class="pf-card pf-multi-card" hidden>
+    <div class="lp-card-head">
+      <div class="lp-card-title"><i data-lucide="users"></i><span>Matching Students (<span id="pf-multi-count">0</span>)</span></div>
+      <span class="pf-multi-note">Select a student to view installment fee ledger and collect payment</span>
+    </div>
+    <div id="pf-multi-list" class="pf-multi-list"></div>
+  </div>
+
+  <!-- Empty / Not Found State -->
+  <div id="pf-empty-state" class="pf-empty-card" hidden>
+    <div class="pf-empty-icon-wrap">
+      <i data-lucide="user-x"></i>
+    </div>
+    <h3 id="pf-empty-title">No student found</h3>
+    <p id="pf-empty-msg">No student matches your search query in the active session.</p>
+  </div>
+
+  <!-- Student Payment Panel -->
+  <div id="pf-panel" class="pf-panel" hidden>
+    <!-- Top Student Header Card -->
+    <div class="pf-card pf-student-card">
+      <div class="pf-student-header">
+        <div class="pf-avatar-wrap" id="pf-avatar-wrap">
+          <div class="pf-avatar-initials" id="pf-avatar-text">ST</div>
+          <img id="pf-avatar-img" class="pf-avatar-img" src="" alt="Student photo" hidden />
+        </div>
+        <div class="pf-student-info">
+          <div class="pf-name-row">
+            <h3 id="pf-student-name">Student Name</h3>
+            <span id="pf-student-status" class="pill up">Active</span>
+            <div class="pf-id-badge">
+              <span>ID: <strong id="pf-student-id">27010001</strong></span>
+              <button type="button" id="pf-btn-copy-id" class="pf-icon-action" title="Copy Student ID">
+                <i data-lucide="copy"></i>
+              </button>
+            </div>
+          </div>
+          <div class="pf-meta-pills">
+            <span class="pf-meta-pill"><i data-lucide="book-open"></i> <span id="pf-course-name">Course</span></span>
+            <span class="pf-meta-pill"><i data-lucide="users"></i> <span id="pf-batch-name">Batch</span></span>
+            <span class="pf-meta-pill"><i data-lucide="calendar"></i> <span id="pf-session-name">Session</span></span>
+            <span class="pf-meta-pill"><i data-lucide="map-pin"></i> <span id="pf-branch-name">Branch</span></span>
+          </div>
+        </div>
+        <div class="pf-header-actions">
+          <button type="button" id="pf-btn-view-profile" class="ui-btn ghost">
+            <i data-lucide="external-link"></i>
+            <span>View Full Profile</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Financial Metric Cards -->
+      <div class="pf-metrics-grid">
+        <div class="pf-metric-card">
+          <div class="pf-metric-icon bg-indigo"><i data-lucide="wallet"></i></div>
+          <div class="pf-metric-data">
+            <span class="pf-metric-label">Total Course Fee</span>
+            <strong class="pf-metric-val" id="pf-m-total">Rs 0.00</strong>
+            <span class="pf-metric-sub">Scheduled package</span>
+          </div>
+        </div>
+        <div class="pf-metric-card">
+          <div class="pf-metric-icon bg-green"><i data-lucide="check-circle-2"></i></div>
+          <div class="pf-metric-data">
+            <span class="pf-metric-label">Paid Amount</span>
+            <strong class="pf-metric-val text-success" id="pf-m-paid">Rs 0.00</strong>
+            <span class="pf-metric-sub" id="pf-m-pct">0% of total fee</span>
+          </div>
+        </div>
+        <div class="pf-metric-card">
+          <div class="pf-metric-icon bg-amber"><i data-lucide="clock"></i></div>
+          <div class="pf-metric-data">
+            <span class="pf-metric-label">Balance Outstanding</span>
+            <strong class="pf-metric-val text-danger" id="pf-m-outstanding">Rs 0.00</strong>
+            <span class="pf-metric-sub">Balance due</span>
+          </div>
+        </div>
+        <div class="pf-metric-card">
+          <div class="pf-metric-icon bg-rose"><i data-lucide="alert-triangle"></i></div>
+          <div class="pf-metric-data">
+            <span class="pf-metric-label">Late Fee As Of Today</span>
+            <strong class="pf-metric-val text-danger" id="pf-m-latefee">Rs 0.00</strong>
+            <span class="pf-metric-sub">Rs 1 / day after 10th</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Installment Schedule Table Card -->
+    <div class="pf-card pf-table-card">
+      <div class="lp-card-head">
+        <div class="lp-card-title">
+          <i data-lucide="list-ordered"></i>
+          <span>Fee Schedule &amp; Installments</span>
+        </div>
+        <div class="pf-card-head-actions">
+          <button type="button" id="pf-btn-all-payments" class="ui-btn ghost sm">
+            <i data-lucide="history"></i>
+            <span>View All Payments</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="adm-scroll">
+        <table class="adm-table pf-table">
+          <thead>
+            <tr>
+              <th>Fee Head</th>
+              <th>Billing Month</th>
+              <th>Due Date</th>
+              <th class="num">Amount</th>
+              <th class="num">Late Fee Today</th>
+              <th class="num">Total Payable</th>
+              <th>Status</th>
+              <th class="adm-actions">Action</th>
+            </tr>
+          </thead>
+          <tbody id="pf-inst-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Exam Fee Card -->
+    <div class="pf-card pf-exam-card" id="pf-exam-card">
+      <div class="lp-card-head">
+        <div class="lp-card-title">
+          <i data-lucide="award"></i>
+          <span>Board Examination Fee</span>
+        </div>
+      </div>
+      <div class="pf-exam-content" id="pf-exam-content">
+        <!-- Dynamically rendered -->
+      </div>
+    </div>
+  </div>
+</div>

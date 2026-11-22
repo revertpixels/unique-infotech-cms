@@ -151,7 +151,10 @@ service cloud.firestore {
         allow read: if isSuperAdmin()
           || (isBranchHead() && get(/databases/$(database)/documents/students/$(studentId)).data.branchId == myBranchId());
         allow create: if isSuperAdmin()
-          || (isBranchHead() && getAfter(/databases/$(database)/documents/students/$(studentId)).data.branchId == myBranchId());
+          || (isBranchHead() && (
+              (exists(/databases/$(database)/documents/students/$(studentId)) && get(/databases/$(database)/documents/students/$(studentId)).data.branchId == myBranchId()) ||
+              getAfter(/databases/$(database)/documents/students/$(studentId)).data.branchId == myBranchId()
+          ));
         allow update, delete: if false;
       }
     }
@@ -160,7 +163,10 @@ service cloud.firestore {
       allow read: if isSuperAdmin()
         || (isBranchHead() && get(/databases/$(database)/documents/students/$(studentId)).data.branchId == myBranchId());
       allow write: if isSuperAdmin()
-        || (isBranchHead() && getAfter(/databases/$(database)/documents/students/$(studentId)).data.branchId == myBranchId());
+        || (isBranchHead() && (
+            (exists(/databases/$(database)/documents/students/$(studentId)) && get(/databases/$(database)/documents/students/$(studentId)).data.branchId == myBranchId()) ||
+            getAfter(/databases/$(database)/documents/students/$(studentId)).data.branchId == myBranchId()
+        ));
     }
 
     match /students/{studentId}/aadhaar/{aadhaarId} {

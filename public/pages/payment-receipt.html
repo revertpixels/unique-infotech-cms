@@ -1,0 +1,32 @@
+<div class="mpr-wrap">
+  <!-- Sticky action toolbar: screen only -->
+  <header class="mpr-toolbar">
+    <div class="mpr-toolbar-left">
+      <button type="button" id="mpr-back" class="ui-btn ghost"><i data-lucide="arrow-left"></i> Back</button>
+      <button type="button" id="mpr-profile" class="ui-btn ghost"><i data-lucide="user"></i> Student Profile</button>
+    </div>
+    <div class="mpr-toolbar-spacer"></div>
+    <div class="mpr-toolbar-right">
+      <button type="button" id="mpr-download" class="ui-btn primary"><i data-lucide="download"></i> Download PDF</button>
+      <button type="button" id="mpr-print" class="ui-btn ghost"><i data-lucide="printer"></i> Print</button>
+    </div>
+  </header>
+
+  <div id="mpr-loading" class="mpr-loading">
+    <div class="mpr-spinner"></div>
+    <span>Loading payment receipt…</span>
+  </div>
+
+  <div id="mpr-notfound" class="mpr-notfound" hidden>
+    <i data-lucide="alert-circle"></i>
+    <h2>Receipt not found</h2>
+    <p>The requested payment record could not be found or loaded.</p>
+    <button type="button" id="mpr-nf-back" class="ui-btn ghost"><i data-lucide="arrow-left"></i> Back</button>
+  </div>
+
+  <div id="mpr-stage" class="mpr-stage" hidden>
+    <div id="mpr-sheet" class="mpr-page">
+      <!-- Dynamically filled with receipt content -->
+    </div>
+  </div>
+</div>

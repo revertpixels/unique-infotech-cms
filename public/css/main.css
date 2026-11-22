@@ -23,6 +23,8 @@
 @import url('./pages/school-break.css');
 @import url('./pages/school-delete.css');
 @import url('./pages/student-profile.css');
+@import url('./pages/pay-fees.css');
+@import url('./pages/payment-receipt.css');
 @import url('./base/typography.css');
 @import url('./components/buttons.css');
 @import url('./components/forms.css');

@@ -1,18 +1,18 @@
-// school-students.page.js — Unique Kids student list (school context, Super Admin).
+// school-students.page.js ï¿½ Unique Kids student list (school context, Super Admin).
 // Lists all Kids students with Student ID, name, guardian, phone, level, batch,
 // admission date, status, and actions (view receipt, change batch, end course,
 // permanent delete). Search by name, Student ID, or parent phone. Siblings may share phone.
 import { db } from '../config/firebase-config.js';
 import { collection, getDocs, query, where, doc, getDoc } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.96';
-import { registerDirty, confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.96';
-import { buildStats, buildToolbar } from '../components/list-page.js?v=1.8.96';
-import { createSelect } from '../components/ui-select.js?v=1.8.96';
-import { openMenu } from '../components/ui-menu.js?v=1.8.96';
-import { confirmDialog } from '../components/ui-confirm.js?v=1.8.96';
-import { formatINR, formatDateIN } from '../utils/formatter.js?v=1.8.96';
-import { isCourseActive } from '../utils/session-rules.js?v=1.8.96';
-import { localToday } from '../utils/school-lifecycle.js?v=1.8.96';
+import { showToast } from '../components/toast.js?v=1.8.101';
+import { registerDirty, confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.101';
+import { buildStats, buildToolbar } from '../components/list-page.js?v=1.8.101';
+import { createSelect } from '../components/ui-select.js?v=1.8.101';
+import { openMenu } from '../components/ui-menu.js?v=1.8.101';
+import { confirmDialog } from '../components/ui-confirm.js?v=1.8.101';
+import { formatINR, formatDateIN } from '../utils/formatter.js?v=1.8.101';
+import { isCourseActive } from '../utils/session-rules.js?v=1.8.101';
+import { localToday } from '../utils/school-lifecycle.js?v=1.8.101';
 
 const COL = 'students';
 const GENDER_LABELS = { male: 'Male', female: 'Female', other: 'Other' };

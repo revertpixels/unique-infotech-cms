@@ -7,8 +7,8 @@ import {
   setDoc,
   serverTimestamp
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { readReceiptNo, writeCounter } from './admission.service.js?v=1.8.96';
-import { fineFor, todayISO } from '../utils/session-rules.js?v=1.8.96';
+import { readReceiptNo, writeCounter } from './admission.service.js?v=1.8.101';
+import { fineFor, todayISO } from '../utils/session-rules.js?v=1.8.101';
 
 const COL = 'students';
 
@@ -30,8 +30,8 @@ export async function fetchStudentPayments(studentDocId) {
     const snap = await getDocs(collection(db, COL, studentDocId, 'payment'));
     const list = snap.docs.map(d => Object.assign({ id: d.id }, d.data()));
     list.sort((a, b) => {
-      const da = a.date || (a.createdAt && a.createdAt.seconds ? new Date(a.createdAt.seconds * 1000).toISOString().slice(0, 10) : '');
-      const dbDate = b.date || (b.createdAt && b.createdAt.seconds ? new Date(b.createdAt.seconds * 1000).toISOString().slice(0, 10) : '');
+      const da = a.paidOn || a.date || (a.createdAt && a.createdAt.seconds ? new Date(a.createdAt.seconds * 1000).toISOString().slice(0, 10) : '');
+      const dbDate = b.paidOn || b.date || (b.createdAt && b.createdAt.seconds ? new Date(b.createdAt.seconds * 1000).toISOString().slice(0, 10) : '');
       if (da !== dbDate) return dbDate.localeCompare(da);
       const ca = a.createdAt && a.createdAt.seconds ? a.createdAt.seconds : 0;
       const cb = b.createdAt && b.createdAt.seconds ? b.createdAt.seconds : 0;
@@ -65,13 +65,92 @@ export async function fetchStudentActivities(studentDocId) {
 }
 
 /**
- * Records a payment inside a Firestore transaction.
- * Generates an atomic receipt number from counters, logs activity, and updates student totals.
+ * Checks whether an installment has been paid
+ */
+export function isInstallmentPaid(it, paymentsList, student) {
+  const itNo = Number(it.no ?? it.installmentNo);
+  if (!itNo || !Number.isFinite(itNo)) return false;
+  if (it.paid === true || it.isPaid === true || it.status === 'paid' || it.waived === true || it.isWaived === true) {
+    return true;
+  }
+  if (Array.isArray(student?.paidInstallments) && student.paidInstallments.includes(itNo)) {
+    return true;
+  }
+  if (Number(student?.installmentsPaid || 0) >= itNo) {
+    return true;
+  }
+  const list = paymentsList || [];
+  const rec = list.find(p => {
+    const t = String(p.type || '').toUpperCase().trim();
+    const pNo = Number(p.installmentNo ?? p.installment ?? p.no ?? p.instNo);
+    const isInstType = (t === 'IN' || t === 'INST' || t === 'INSTALLMENT' || t === 'WA');
+    return isInstType && pNo === itNo;
+  });
+  return !!rec;
+}
+
+/**
+ * Checks whether the admission fee has been paid
+ */
+export function isAdmissionFeePaid(admFee, paymentsList, student) {
+  if (admFee <= 0) return true;
+  const list = paymentsList || [];
+  const admTxn = list.find(p => {
+    const t = String(p.type || '').toUpperCase().trim();
+    return t === 'AD' || t === 'ADM' || t === 'ADMISSION';
+  });
+  if (admTxn) return true;
+  const admPaidAtAdmission = Number(student?.dueAtAdmission?.admission ?? student?.dueAtAdmission?.total ?? 0);
+  if (admPaidAtAdmission >= admFee && admFee > 0) return true;
+  if (student?.admissionPaid === true || student?.isAdmissionPaid === true) return true;
+  return false;
+}
+
+/**
+ * Checks whether the study material fee has been paid
+ */
+export function isMaterialFeePaid(matFee, paymentsList, student) {
+  if (matFee <= 0) return true;
+  const list = paymentsList || [];
+  const matTxn = list.find(p => {
+    const t = String(p.type || '').toUpperCase().trim();
+    return t === 'MAT' || t === 'MATERIAL' || t === 'STUDY_MATERIAL';
+  });
+  if (matTxn) return true;
+  const matPaidAtAdmission = Number(student?.dueAtAdmission?.material || 0);
+  if (matPaidAtAdmission >= matFee && matFee > 0) return true;
+  if (student?.materialPaid === true || student?.isMaterialPaid === true) return true;
+  return false;
+}
+
+/**
+ * Checks whether the examination fee has been paid
+ */
+export function isExamFeePaid(examFee, paymentsList, student) {
+  if (examFee <= 0) return true;
+  const list = paymentsList || [];
+  const examTxn = list.find(p => {
+    const t = String(p.type || '').toUpperCase().trim();
+    return t === 'EX' || t === 'EXAM' || t === 'EXAMINATION';
+  });
+  if (examTxn) return true;
+  if (student?.examPaid === true || student?.isExamPaid === true) return true;
+  return false;
+}
+
+/**
+ * Records a payment inside a single atomic Firestore transaction.
+ * - Reads student doc inside transaction to check if already paid
+ * - Reads and increments receipt counter
+ * - Writes payment subcollection doc
+ * - Updates student doc (totals, paid installments, balance)
+ * - Writes activity log doc
  */
 export async function recordPaymentTx(tx, {
   studentDoc,
-  type, // 'IN' (Installment) | 'EX' (Exam) | 'WA' (Waiver)
+  type, // 'IN' (Installment) | 'EX' (Exam) | 'AD' (Admission) | 'MAT' (Material)
   installmentNo,
+  month,
   amount,
   lateFeeAmount,
   mode,
@@ -90,8 +169,29 @@ export async function recordPaymentTx(tx, {
   const pDate = paymentDate || todayISO();
   const org = studentDoc.ctx || 'youth';
   const bCode = branchCode || studentDoc.branchCode || 'HO';
+  const studentRef = doc(db, COL, studentDoc.id);
 
-  // 1. Transaction Read: Receipt counter
+  // 1. Transaction Read: Student doc fresh verification
+  const studentSnap = await tx.get(studentRef);
+  if (!studentSnap.exists()) {
+    throw new Error('Student document does not exist.');
+  }
+  const sData = studentSnap.data();
+
+  // Double-payment guard inside transaction
+  const paidInsts = Array.isArray(sData.paidInstallments) ? [...sData.paidInstallments] : [];
+  if (type === 'IN') {
+    const instNo = Number(installmentNo);
+    if (paidInsts.includes(instNo)) {
+      throw new Error(`Installment ${instNo} has already been paid for this student.`);
+    }
+  } else if (type === 'EX') {
+    if (sData.examPaid === true) {
+      throw new Error('Exam fee has already been paid for this student.');
+    }
+  }
+
+  // 2. Transaction Read: Receipt counter
   const rc = await readReceiptNo(tx, {
     org,
     type: type || 'IN',
@@ -99,7 +199,7 @@ export async function recordPaymentTx(tx, {
     date: pDate
   });
 
-  // 2. Transaction Writes
+  // 3. Transaction Writes
   // Write counter increment
   writeCounter(tx, rc.ref, rc.next, {
     org,
@@ -113,97 +213,120 @@ export async function recordPaymentTx(tx, {
 
   const numAmount = Number(amount || 0);
   const numLate = Number(lateFeeAmount || 0);
-  const currentPaid = Number(studentDoc.paidAmount ?? studentDoc.totalPaid ?? 0);
+  const totalAmount = numAmount + (waived ? 0 : numLate);
+
+  const currentPaid = Number(sData.paidAmount ?? sData.totalPaid ?? 0);
   const newPaid = currentPaid + numAmount;
-  const newBalance = Math.max(0, Number(studentDoc.feeTotal || 0) - newPaid);
+  const newBalance = Math.max(0, Number(sData.feeTotal || studentDoc.feeTotal || 0) - newPaid);
 
   const paymentData = {
     amount: numAmount,
+    lateFee: numLate,
+    lateFeeAmount: numLate,
+    lateFeeWaived: !!waived,
+    waived: !!waived,
+    waiverReason: waived ? (waiverReason || '') : '',
+    total: totalAmount,
     date: pDate,
+    paidOn: pDate,
     type: type || 'IN',
     installmentNo: installmentNo != null ? Number(installmentNo) : null,
+    month: month || '',
     mode: mode || 'cash',
     txnId: mode !== 'cash' ? (txnId || '') : '',
     receiptNo: rc.receiptNo,
-    lateFeeAmount: numLate,
-    waived: !!waived,
-    waiverReason: waived ? (waiverReason || '') : '',
     remarks: remarks || '',
     recordedBy: (userEmail || '').toLowerCase(),
+    recordedByRole: userRole || '',
     recordedByName: userName || '',
-    recordedAtBranchId: branchId || studentDoc.branchId || 'HO',
+    recordedAtBranchId: branchId || sData.branchId || 'HO',
     recordedAtBranchCode: bCode,
-    recordedAtBranchName: branchName || studentDoc.branchName || '',
+    recordedAtBranchName: branchName || sData.branchName || '',
     createdAt: serverTimestamp()
   };
 
   tx.set(paymentRef, paymentData);
 
-  // Update student doc (preserves branchId, studentId, ctx, status so validStudentDoc passes)
-  const studentRef = doc(db, COL, studentDoc.id);
-  tx.update(studentRef, {
+  // Update student doc fields
+  const studentUpdate = {
     paidAmount: newPaid,
     totalPaid: newPaid,
     balanceDue: newBalance,
     updatedAt: serverTimestamp(),
     updatedBy: (userEmail || '').toLowerCase()
-  });
+  };
+
+  if (type === 'IN') {
+    const instNo = Number(installmentNo);
+    if (!paidInsts.includes(instNo)) {
+      paidInsts.push(instNo);
+      paidInsts.sort((a, b) => a - b);
+    }
+    studentUpdate.paidInstallments = paidInsts;
+    studentUpdate.installmentsPaid = paidInsts.length;
+
+    // Also update feeSchedule items if present
+    if (Array.isArray(sData.feeSchedule)) {
+      studentUpdate.feeSchedule = sData.feeSchedule.map(item => {
+        if (Number(item.no ?? item.installmentNo) === instNo) {
+          return {
+            ...item,
+            paid: true,
+            paidOn: pDate,
+            receiptNo: rc.receiptNo,
+            lateFee: numLate,
+            waived: !!waived
+          };
+        }
+        return item;
+      });
+    }
+  } else if (type === 'EX') {
+    studentUpdate.examPaid = true;
+    studentUpdate.examPaidOn = pDate;
+    studentUpdate.examReceiptNo = rc.receiptNo;
+  } else if (type === 'AD') {
+    studentUpdate.admissionPaid = true;
+    studentUpdate.admissionPaidOn = pDate;
+  } else if (type === 'MAT') {
+    studentUpdate.materialPaid = true;
+    studentUpdate.materialPaidOn = pDate;
+  }
+
+  tx.update(studentRef, studentUpdate);
 
   // Activity log entry (append-only)
-  const feeTypeDesc = type === 'EX' ? 'Exam fee payment' :
-    (type === 'MAT' ? 'Study material fee payment' : `Installment ${installmentNo || ''} payment`);
-  const summaryText = feeTypeDesc +
-    `: Rs ${numAmount}` + (numLate > 0 ? ` (+ Rs ${numLate} late fee)` : '') + (waived ? ' [Waived]' : '');
+  const feeLabel = type === 'EX'
+    ? 'Exam fee'
+    : (type === 'MAT' ? 'Study material fee' : (type === 'AD' ? 'Admission fee' : `Installment ${installmentNo}`));
+
+  const summary = `Collected ${rc.receiptNo} - ${feeLabel} Rs ${numAmount}` +
+    (numLate > 0 ? (waived ? ` (late fee Rs ${numLate} waived)` : ` (+ Rs ${numLate} late fee)`) : '') +
+    ` via ${mode || 'cash'}`;
 
   tx.set(activityRef, {
     action: 'payment_recorded',
-    summary: summaryText,
+    summary,
+    receiptNo: rc.receiptNo,
+    type,
+    installmentNo: installmentNo != null ? Number(installmentNo) : null,
+    amount: numAmount,
+    lateFee: numLate,
+    waived: !!waived,
+    mode: mode || 'cash',
     changes: {
       paidAmount: { from: currentPaid, to: newPaid },
-      balanceDue: { from: studentDoc.balanceDue || 0, to: newBalance }
+      balanceDue: { from: sData.balanceDue || 0, to: newBalance }
     },
     by: (userEmail || '').toLowerCase(),
     byRole: userRole || '',
-    branchId: branchId || studentDoc.branchId || '',
+    branchId: branchId || sData.branchId || '',
     at: serverTimestamp()
   });
 
   return {
-    paymentId: paymentRef.id,
     receiptNo: rc.receiptNo,
-    amount: numAmount,
-    lateFeeAmount: numLate,
-    date: pDate
+    paymentId: paymentRef.id,
+    studentDocId: studentDoc.id
   };
-}
-
-/**
- * Appends an activity log entry to students/{studentDocId}/activity/{auto}.
- * If batch is provided, adds to batch; otherwise sets directly.
- */
-export async function logStudentActivity(studentDocId, {
-  action,
-  summary,
-  changes,
-  userEmail,
-  userRole,
-  branchId
-}, batch) {
-  if (!studentDocId) return;
-  const actRef = doc(collection(db, COL, studentDocId, 'activity'));
-  const payload = {
-    action: action || 'update',
-    summary: summary || '',
-    changes: changes || {},
-    by: (userEmail || '').toLowerCase(),
-    byRole: userRole || '',
-    branchId: branchId || '',
-    at: serverTimestamp()
-  };
-
-  if (batch) {
-    batch.set(actRef, payload);
-  } else {
-    await setDoc(actRef, payload);
-  }
 }

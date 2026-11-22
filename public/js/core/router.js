@@ -1,4 +1,4 @@
-import { confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.96';
+import { confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.101';
 
 export const ROLE_LABELS = {
   superadmin: 'Super Admin',
@@ -240,6 +240,55 @@ export function startRouter({ profile, getContext, setContext, onRouteChange }) 
     }
   }
 
+  async function renderPaymentReceipt(key) {
+    const thisNav = ++navCounter;
+    try {
+      const resp = await fetch('/pages/payment-receipt.html', { cache: 'no-cache' });
+      if (thisNav !== navCounter) return;
+      if (!resp.ok) {
+        renderEmpty('inbox', "This page isn't available yet", 'The payment receipt page could not be loaded.');
+        setTitle('Payment Receipt');
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+        if (onRouteChange) onRouteChange(key, null);
+        return;
+      }
+      let html = await resp.text();
+      if (thisNav !== navCounter) return;
+      html = html.trim();
+      if (!html) {
+        renderEmpty('inbox', "This page isn't available yet", 'The payment receipt page has no content yet.');
+        setTitle('Payment Receipt');
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+        if (onRouteChange) onRouteChange(key, null);
+        return;
+      }
+      view.innerHTML = html;
+      if (thisNav !== navCounter) return;
+      try {
+        const mod = await import('/js/pages/payment-receipt.page.js?v=' + (window.__BUILD__ || Date.now()));
+        if (thisNav !== navCounter) return;
+        if (mod && typeof mod.mount === 'function') {
+          currentModule = mod;
+          await mod.mount({ container: document.getElementById('view'), profile, ctx: getContext() });
+        } else {
+          currentModule = null;
+        }
+      } catch (e) {
+        console.error(e);
+      }
+      if (thisNav !== navCounter) return;
+      resetScroll();
+      setTitle('Payment Receipt');
+      if (onRouteChange) onRouteChange(key, null);
+      if (typeof lucide !== 'undefined') lucide.createIcons();
+    } catch (e) {
+      console.error(e);
+      renderEmpty('alert-triangle', 'Failed to load Payment Receipt', e.message || String(e));
+      setTitle('Error loading Payment Receipt');
+      if (onRouteChange) onRouteChange(key, null);
+    }
+  }
+
   async function renderSchoolTransfer(key) {
     const thisNav = ++navCounter;
     try {
@@ -466,6 +515,12 @@ export function startRouter({ profile, getContext, setContext, onRouteChange }) 
     // T1: dynamic admission receipt route #/admissions/<admissionId>/receipt
     if (key.startsWith('admissions/') && key.endsWith('/receipt') && key.length > 'admissions/'.length + '/receipt'.length) {
       renderAdmissionReceipt(key);
+      return;
+    }
+
+    // Dynamic payment receipt route #/payments/<studentDocId>/<paymentId>/receipt
+    if (key.startsWith('payments/') && key.endsWith('/receipt')) {
+      renderPaymentReceipt(key);
       return;
     }
 

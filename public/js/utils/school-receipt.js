@@ -1,7 +1,7 @@
-// school-receipt.js — pure view-model builders for the Kids admission receipt.
+// school-receipt.js ï¿½ pure view-model builders for the Kids admission receipt.
 // No Firebase, no DOM. Safe to unit-test in plain Node.
 
-import { formatDateIN } from './formatter.js?v=1.8.96';
+import { formatDateIN } from './formatter.js?v=1.8.101';
 
 const MONTH_NAMES = [
   'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',

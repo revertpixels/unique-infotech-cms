@@ -4,8 +4,8 @@ import { createSelect } from '../components/ui-select.js';
 import { openMenu } from '../components/ui-menu.js';
 import { confirmDialog } from '../components/ui-confirm.js';
 import { showToast } from '../components/toast.js';
-import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.101';
-import { buildStats, buildToolbar, renderEmptyTableState } from '../components/list-page.js?v=1.8.101';
+import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.107';
+import { buildStats, buildToolbar, renderEmptyTableState } from '../components/list-page.js?v=1.8.107';
 
 const TEXT_KEYS = ['name', 'code', 'email', 'address', 'mapUrl'];
 const KEYS = ['name', 'code', 'phones', 'email', 'address', 'mapUrl', 'status'];

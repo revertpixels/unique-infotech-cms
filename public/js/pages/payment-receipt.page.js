@@ -3,16 +3,17 @@
 import { db } from '../config/firebase-config.js';
 import {
   doc,
-  getDoc,
-  getDocs,
-  collection,
-  query,
-  where
+  getDoc
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { inWords } from '../utils/admission-receipt.js?v=1.8.101';
-import { showToast } from '../components/toast.js?v=1.8.101';
-import { fmtDate } from '../utils/session-rules.js?v=1.8.101';
-import { fetchStudentPayments, isInstallmentPaid } from '../services/payment.service.js?v=1.8.101';
+import { inWords } from '../utils/admission-receipt.js?v=1.8.107';
+import { showToast } from '../components/toast.js?v=1.8.107';
+import { fmtDate, todayISO } from '../utils/session-rules.js?v=1.8.107';
+import {
+  fetchStudentPayments,
+  isInstallmentPaid,
+  courseFeeWithoutExam,
+  courseBalanceWithoutExam
+} from '../services/payment.service.js?v=1.8.107';
 
 function $(id) {
   return document.getElementById(id);
@@ -36,6 +37,8 @@ function fmtMoney(num) {
 let studentDocId = '';
 let paymentId = '';
 let isDownloadingPdf = false;
+let fromParam = '';
+let autoPrint = false;
 
 export async function mount({ container, profile, ctx }) {
   const isSuper = profile && profile.role === 'superadmin';
@@ -46,10 +49,20 @@ export async function mount({ container, profile, ctx }) {
     return;
   }
 
-  // Parse hash: #/payments/<studentDocId>/<paymentId>/receipt
-  const m = location.hash.match(/#\/payments\/([^\/#?]+)\/([^\/#?]+)\/receipt/);
+  // Parse hash: #/payments/<studentDocId>/<paymentId>/receipt?from=...&print=...
+  const rawHash = location.hash || '';
+  const m = rawHash.match(/#\/payments\/([^\/#?]+)\/([^\/#?]+)\/receipt/);
   studentDocId = m && m[1];
   paymentId = m && m[2];
+
+  fromParam = '';
+  autoPrint = false;
+  const qIdx = rawHash.indexOf('?');
+  if (qIdx !== -1) {
+    const q = new URLSearchParams(rawHash.slice(qIdx));
+    fromParam = q.get('from') || '';
+    if (q.get('print') === '1') autoPrint = true;
+  }
 
   if (!studentDocId || !paymentId) {
     $('mpr-loading').hidden = true;
@@ -69,10 +82,14 @@ function bindActions() {
   const dlBtn = $('mpr-download');
 
   const goBack = () => {
-    if (window.history.length > 1) {
+    if (fromParam === 'pay-fees') {
+      location.hash = `#/pay-fees?student=${encodeURIComponent(studentDocId)}`;
+    } else if (fromParam === 'profile') {
+      location.hash = `#/students/${encodeURIComponent(studentDocId)}?tab=payments`;
+    } else if (window.history.length > 1) {
       window.history.back();
     } else {
-      location.hash = '#/pay-fees';
+      location.hash = `#/students`;
     }
   };
 
@@ -81,7 +98,7 @@ function bindActions() {
 
   if (profileBtn) {
     profileBtn.onclick = () => {
-      if (studentDocId) location.hash = '#/students/' + studentDocId + '?tab=payments';
+      if (studentDocId) location.hash = `#/students/${encodeURIComponent(studentDocId)}?tab=payments`;
     };
   }
 
@@ -132,14 +149,15 @@ async function loadAndRenderReceipt() {
       return;
     }
 
-    // 3. Fetch org info & branch details
+    // 3. Fetch org info & branch details (matching admission receipt logic)
     let org = window.APP_CACHE?.org || {};
     try {
       if (!org.orgName) {
-        const orgSnap = await getDoc(doc(db, 'settings', 'org'));
+        const orgSnap = await getDoc(doc(db, 'settings', 'org_config'));
         if (orgSnap.exists()) org = orgSnap.data();
       }
     } catch (_) {}
+    const orgLogo = org.logo || org.logoUrl || '/assets/images/logo-192.jpg';
 
     let branch = null;
     if (student.branchId) {
@@ -152,22 +170,35 @@ async function loadAndRenderReceipt() {
     // 4. Fetch all payments for ledger
     const allStudentPayments = await fetchStudentPayments(studentDocId);
 
-    // 5. Check student photo
+    // 5. Fetch student photo (matching admission receipt logic)
     let photoUrl = student.photoUrl || '';
     if (!photoUrl) {
       try {
         const photoDoc = await getDoc(doc(db, 'students', studentDocId, 'docs', 'photo'));
-        if (photoDoc.exists() && photoDoc.data().dataUrl) {
-          photoUrl = photoDoc.data().dataUrl;
+        if (photoDoc.exists()) {
+          const d = photoDoc.data();
+          photoUrl = (d && (d.data || d.dataUrl || d.url)) || '';
         }
       } catch (_) {}
     }
 
-    renderReceiptHTML({ student, payment, org, branch, allPayments: allStudentPayments, photoUrl });
+    renderReceiptHTML({
+      student,
+      payment,
+      org,
+      orgLogo,
+      branch,
+      allPayments: allStudentPayments,
+      photoUrl
+    });
 
     loading.hidden = true;
     stage.hidden = false;
     if (typeof lucide !== 'undefined') lucide.createIcons();
+
+    if (autoPrint) {
+      setTimeout(() => window.print(), 600);
+    }
   } catch (err) {
     console.error('[payment-receipt] load error', err);
     loading.hidden = true;
@@ -178,14 +209,14 @@ async function loadAndRenderReceipt() {
 /**
  * Builds the receipt layout according to reference templates
  */
-function renderReceiptHTML({ student, payment, org, branch, allPayments, photoUrl }) {
+function renderReceiptHTML({ student, payment, org, orgLogo, branch, allPayments, photoUrl }) {
   const sheet = $('mpr-sheet');
   sheet.innerHTML = '';
 
   const orgName = org.orgName || 'Unique Infotech';
-  const orgSub = org.orgSubtitle || 'An ISO 9001:2015 Certified Organisation';
+  const orgSub = org.orgSubtitle || org.isoLine || org.isoText || 'An ISO 9001:2015 Certified Organisation';
   const branchName = branch?.name || student.branchName || 'BANKURA ZILLA YOUTH COMPUTER TRAINING CENTRE';
-  const orgPhones = org.phones || '9851771893, 9832147650, 8641209375';
+  const orgPhones = org.phones || org.phone || '9851771893, 9832147650, 8641209375';
   const orgEmail = org.email || 'utpal.goutam@gmail.com';
   const branchPhones = branch?.phone || branch?.phones || '9733518246, 7003624981, 9475036218';
 
@@ -194,11 +225,16 @@ function renderReceiptHTML({ student, payment, org, branch, allPayments, photoUr
   const isInstallment = payType === 'IN' || payType === 'INST';
   const instNo = payment.installmentNo || 1;
 
-  const totalCourseFee = Number(student.feeTotal || 0);
+  // Course fee & balance calculations strictly excluding examination fee for installment receipts
+  const totalCourseFee = isExam
+    ? Number(payment.amount || 0)
+    : courseFeeWithoutExam(student);
   const paidAmount = Number(payment.amount || 0);
   const lateFee = Number(payment.lateFee || payment.lateFeeAmount || 0);
   const totalReceived = Number(payment.total ?? (paidAmount + (payment.waived ? 0 : lateFee)));
-  const balanceDue = Math.max(0, Number(student.balanceDue ?? (totalCourseFee - (student.paidAmount || 0))));
+  const balanceDue = isExam
+    ? 0
+    : courseBalanceWithoutExam(student, allPayments);
 
   const pDateStr = fmtDate(payment.paidOn || payment.date);
   const rNo = payment.receiptNo || 'RCPT-PREVIEW';
@@ -226,8 +262,8 @@ function renderReceiptHTML({ student, payment, org, branch, allPayments, photoUr
   const html = `
     <!-- Header -->
     <div class="mpr-hd">
-      <div class="mpr-logo ${org.logoUrl ? 'img' : ''}">
-        ${org.logoUrl ? `<img src="${org.logoUrl}" alt="Logo" onerror="this.remove()" />` : `<span>UI</span>`}
+      <div class="mpr-logo ${orgLogo ? 'img' : ''}">
+        ${orgLogo ? `<img src="${escapeHtml(orgLogo)}" alt="Logo" onerror="this.parentElement.classList.remove('img'); this.remove();" />` : `<span>UI</span>`}
       </div>
       <div>
         <h1>${escapeHtml(orgName)}</h1>
@@ -251,7 +287,7 @@ function renderReceiptHTML({ student, payment, org, branch, allPayments, photoUr
         <td><strong>${escapeHtml(student.name || '—')}</strong></td>
         <td class="mpr-pc" rowspan="5">
           <div class="mpr-photo">
-            ${photoUrl ? `<img src="${photoUrl}" alt="Student photo" onerror="this.remove()" />` : `<span>Photo</span>`}
+            ${photoUrl ? `<img src="${photoUrl}" alt="Student photo" onerror="this.remove();" />` : `<span>Photo</span>`}
           </div>
         </td>
       </tr>
@@ -312,6 +348,12 @@ function renderReceiptHTML({ student, payment, org, branch, allPayments, photoUr
           ${nextDueHint ? `<span class="w">${escapeHtml(nextDueHint)}</span>` : ''}
         </div>
       </div>
+
+      ${!isExam ? `
+        <div class="mpr-imp">
+          <b>Important - Examination fee:</b> The examination fee is not included in the total course fee shown above. It will be charged as per the Government order in force at the time of the examination, and is payable in addition to the balance due.
+        </div>
+      ` : ''}
     </div>
 
     <!-- Fee ledger table -->
@@ -321,7 +363,7 @@ function renderReceiptHTML({ student, payment, org, branch, allPayments, photoUr
           <svg class="mpr-ic" viewBox="0 0 24 24"><path d="M6 3h12"/><path d="M6 8h12"/><path d="m6 13 8.5 8"/><path d="M6 13h3"/><path d="M9 13c6.667 0 6.667-10 0-10"/></svg>
           Fee ledger
         </span>
-        <small>Total course fee ${fmtMoney(totalCourseFee)}</small>
+        <small>${isExam ? `Examination fee ${fmtMoney(paidAmount)}` : `Total course fee ${fmtMoney(totalCourseFee)}`}</small>
       </h4>
       <table class="mpr-fe">
         <thead>
@@ -333,36 +375,36 @@ function renderReceiptHTML({ student, payment, org, branch, allPayments, photoUr
           </tr>
         </thead>
         <tbody>
-          <!-- Admission Fee -->
-          <tr>
-            <td>Admission fee</td>
-            <td>At admission</td>
-            <td><span class="mpr-pill">Paid</span></td>
-            <td>${fmtMoney(student.admissionFee || student.feeSnapshot?.admission || 1000)}</td>
-          </tr>
-          <!-- Installments -->
-          ${sched.map(it => {
-            const itNo = Number(it.no ?? it.installmentNo);
-            const isCur = isInstallment && itNo === instNo;
-            const paid = isInstallmentPaid(it, allPayments, student);
-            return `
-              <tr class="${isCur ? 'cur' : ''}">
-                <td>Instalment ${itNo} of ${sched.length || 4} ${isCur ? '(this receipt)' : ''}</td>
-                <td>${fmtDate(it.due)}</td>
-                <td><span class="mpr-pill ${paid ? '' : 'due'}">${paid ? 'Paid' : 'Due'}</span></td>
-                <td>${fmtMoney(it.amount || 0)}</td>
-              </tr>
-            `;
-          }).join('')}
-          <!-- Exam Fee (if exists) -->
-          ${(student.examFee || student.feeSnapshot?.exam) ? `
-            <tr class="${isExam ? 'cur' : ''}">
-              <td>Board Examination fee ${isExam ? '(this receipt)' : ''}</td>
+          ${isExam ? `
+            <tr class="cur">
+              <td>Board Examination fee (this receipt)</td>
               <td>Exam registration</td>
-              <td><span class="mpr-pill ${isExam || student.examPaid ? '' : 'due'}">${isExam || student.examPaid ? 'Paid' : 'Due'}</span></td>
-              <td>${fmtMoney(student.examFee || student.feeSnapshot?.exam || 0)}</td>
+              <td><span class="mpr-pill">Paid</span></td>
+              <td>${fmtMoney(paidAmount)}</td>
             </tr>
-          ` : ''}
+          ` : `
+            <!-- Admission Fee -->
+            <tr>
+              <td>Admission fee</td>
+              <td>At admission</td>
+              <td><span class="mpr-pill">Paid</span></td>
+              <td>${fmtMoney(student.admissionFee || student.feeSnapshot?.admission || 1000)}</td>
+            </tr>
+            <!-- Installments (NO exam fee row on monthly/installment receipts) -->
+            ${sched.map(it => {
+              const itNo = Number(it.no ?? it.installmentNo);
+              const isCur = isInstallment && itNo === instNo;
+              const paid = isInstallmentPaid(it, allPayments, student);
+              return `
+                <tr class="${isCur ? 'cur' : ''}">
+                  <td>Instalment ${itNo} of ${sched.length || 4} ${isCur ? '(this receipt)' : ''}</td>
+                  <td>${fmtDate(it.due)}</td>
+                  <td><span class="mpr-pill ${paid ? '' : 'due'}">${paid ? 'Paid' : 'Due'}</span></td>
+                  <td>${fmtMoney(it.amount || 0)}</td>
+                </tr>
+              `;
+            }).join('')}
+          `}
         </tbody>
       </table>
     </div>
@@ -381,7 +423,7 @@ function renderReceiptHTML({ student, payment, org, branch, allPayments, photoUr
       <div>Authorised signatory</div>
     </div>
     <div class="mpr-ft">
-      <span>${escapeHtml(orgName)} &nbsp;|&nbsp; Generated on ${fmtDate(todayISO())}</span>
+      <span>${escapeHtml(orgName)} &nbsp;|&nbsp; Generated on ${fmtDate(payment.paidOn || payment.date || todayISO())}</span>
       <span>Page 1 of 1</span>
     </div>
   `;
@@ -412,10 +454,22 @@ async function downloadReceiptPdf() {
     }
 
     const page = $('mpr-sheet');
+    // Ensure all images are fully loaded before rendering canvas
+    const imgs = Array.from(page.querySelectorAll('img'));
+    await Promise.all(imgs.map(img => {
+      if (img.complete && img.naturalWidth > 0) return Promise.resolve();
+      return new Promise(resolve => {
+        img.addEventListener('load', resolve, { once: true });
+        img.addEventListener('error', resolve, { once: true });
+        setTimeout(resolve, 2500);
+      });
+    }));
+
     const canvas = await window.html2canvas(page, {
       scale: 3,
-      backgroundColor: '#ffffff',
       useCORS: true,
+      allowTaint: true,
+      backgroundColor: '#ffffff',
       scrollX: 0,
       scrollY: 0,
       onclone: (clonedDoc) => {

@@ -9,20 +9,20 @@ import {
   collection, getDocs, query, where, doc, getDoc, addDoc, updateDoc, serverTimestamp,
   runTransaction, deleteField, writeBatch, deleteDoc
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.101';
-import { registerDirty, confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.101';
-import { buildStats, buildToolbar, renderPager } from '../components/list-page.js?v=1.8.101';
-import { createSelect } from '../components/ui-select.js?v=1.8.101';
-import { openMenu } from '../components/ui-menu.js?v=1.8.101';
-import { openPopup } from '../components/modal.js?v=1.8.101';
-import { createDatePicker, createMonthPicker } from '../components/ui-datepicker.js?v=1.8.101';
-import { confirmDialog } from '../components/ui-confirm.js?v=1.8.101';
-import { formatINR, formatDateIN, initials } from '../utils/formatter.js?v=1.8.101';
-import { validatePhone, validateEmail, validateDOB, validateName, validateRequired } from '../utils/validator.js?v=1.8.101';
-import { readStudentId, readReceiptNo, writeCounter } from '../services/admission.service.js?v=1.8.101';
-import { isCourseActive, batchAllowsCourse, todayISO } from '../utils/session-rules.js?v=1.8.101';
-import { compressTo100KB, readAsDataURL, blobToDataURL, isImageFile } from '../utils/image-compress.js?v=1.8.101';
-import { firstMonthlyMonth } from '../utils/school-receipt.js?v=1.8.101';
+import { showToast } from '../components/toast.js?v=1.8.107';
+import { registerDirty, confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.107';
+import { buildStats, buildToolbar, renderPager } from '../components/list-page.js?v=1.8.107';
+import { createSelect } from '../components/ui-select.js?v=1.8.107';
+import { openMenu } from '../components/ui-menu.js?v=1.8.107';
+import { openPopup } from '../components/modal.js?v=1.8.107';
+import { createDatePicker, createMonthPicker } from '../components/ui-datepicker.js?v=1.8.107';
+import { confirmDialog } from '../components/ui-confirm.js?v=1.8.107';
+import { formatINR, formatDateIN, initials } from '../utils/formatter.js?v=1.8.107';
+import { validatePhone, validateEmail, validateDOB, validateName, validateRequired } from '../utils/validator.js?v=1.8.107';
+import { readStudentId, readReceiptNo, writeCounter } from '../services/admission.service.js?v=1.8.107';
+import { isCourseActive, batchAllowsCourse, todayISO } from '../utils/session-rules.js?v=1.8.107';
+import { compressTo100KB, readAsDataURL, blobToDataURL, isImageFile } from '../utils/image-compress.js?v=1.8.107';
+import { firstMonthlyMonth } from '../utils/school-receipt.js?v=1.8.107';
 
 const COL = 'students';
 const GENDERS = [

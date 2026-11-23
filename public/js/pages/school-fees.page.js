@@ -4,16 +4,16 @@
 // 10th, late fine Rs 1/day from the 11th.
 import { db } from '../config/firebase-config.js';
 import { collection, getDocs, query, where, doc, getDoc, updateDoc, runTransaction, serverTimestamp } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.101';
-import { registerDirty, confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.101';
-import { buildStats, buildToolbar } from '../components/list-page.js?v=1.8.101';
-import { createSelect } from '../components/ui-select.js?v=1.8.101';
-import { openMenu } from '../components/ui-menu.js?v=1.8.101';
-import { confirmDialog } from '../components/ui-confirm.js?v=1.8.101';
-import { formatINR, formatDateIN } from '../utils/formatter.js?v=1.8.101';
-import { isCourseActive } from '../utils/session-rules.js?v=1.8.101';
-import { localToday, monthSeq, nextMonth } from '../utils/school-lifecycle.js?v=1.8.101';
-import { daysLate, computeLateFee } from '../utils/school-billing.js?v=1.8.101';
+import { showToast } from '../components/toast.js?v=1.8.107';
+import { registerDirty, confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.107';
+import { buildStats, buildToolbar } from '../components/list-page.js?v=1.8.107';
+import { createSelect } from '../components/ui-select.js?v=1.8.107';
+import { openMenu } from '../components/ui-menu.js?v=1.8.107';
+import { confirmDialog } from '../components/ui-confirm.js?v=1.8.107';
+import { formatINR, formatDateIN } from '../utils/formatter.js?v=1.8.107';
+import { isCourseActive } from '../utils/session-rules.js?v=1.8.107';
+import { localToday, monthSeq, nextMonth } from '../utils/school-lifecycle.js?v=1.8.107';
+import { daysLate, computeLateFee } from '../utils/school-billing.js?v=1.8.107';
 
 const COL = 'students';
 const BILLS_COL = 'bills';

@@ -1,4 +1,4 @@
-import { confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.101';
+import { confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.107';
 
 export const ROLE_LABELS = {
   superadmin: 'Super Admin',
@@ -490,7 +490,7 @@ export function startRouter({ profile, getContext, setContext, onRouteChange }) 
     }
   }
 
-  async function render(key) {
+  async function render(fullKey) {
     const thisNav = ++navCounter;
     try {
       if (currentModule && typeof currentModule.unmount === 'function') {
@@ -503,54 +503,56 @@ export function startRouter({ profile, getContext, setContext, onRouteChange }) 
     clearDirty();
     resetScroll();
 
+    // Strip query string for route pattern matching while preserving fullKey
+    const [key] = (fullKey || '').split('?');
     const route = Object.prototype.hasOwnProperty.call(ROUTES, key) ? ROUTES[key] : null;
     const ctx = getContext();
 
     // Dynamic student profile route #/students/<studentId>
     if (key.startsWith('students/') && key.length > 'students/'.length) {
-      renderStudentProfile(key.slice('students/'.length), key);
+      renderStudentProfile(key.slice('students/'.length), fullKey);
       return;
     }
 
     // T1: dynamic admission receipt route #/admissions/<admissionId>/receipt
     if (key.startsWith('admissions/') && key.endsWith('/receipt') && key.length > 'admissions/'.length + '/receipt'.length) {
-      renderAdmissionReceipt(key);
+      renderAdmissionReceipt(fullKey);
       return;
     }
 
     // Dynamic payment receipt route #/payments/<studentDocId>/<paymentId>/receipt
     if (key.startsWith('payments/') && key.endsWith('/receipt')) {
-      renderPaymentReceipt(key);
+      renderPaymentReceipt(fullKey);
       return;
     }
 
     // Kids admission receipt route #/school-admissions/<studentId>/receipt
     if (key.startsWith('school-admissions/') && key.endsWith('/receipt') && key.length > 'school-admissions/'.length + '/receipt'.length) {
-      renderSchoolAdmissionReceipt(key);
+      renderSchoolAdmissionReceipt(fullKey);
       return;
     }
 
     // Kids/Youth batch transfer route #/school-transfer/<studentId> or #/youth-transfer/<studentId>
     if ((key.startsWith('school-transfer/') || key.startsWith('youth-transfer/')) && key.length > 'school-transfer/'.length + 1) {
-      renderSchoolTransfer(key);
+      renderSchoolTransfer(fullKey);
       return;
     }
 
     // Kids/Youth end course route #/school-end/<studentId> or #/youth-end/<studentId>
     if ((key.startsWith('school-end/') || key.startsWith('youth-end/')) && key.length > 'school-end/'.length + 1) {
-      renderSchoolEnd(key);
+      renderSchoolEnd(fullKey);
       return;
     }
 
     // Kids/Youth permanent delete route #/school-delete/<studentId> or #/youth-delete/<studentId>
     if ((key.startsWith('school-delete/') || key.startsWith('youth-delete/')) && key.length > 'school-delete/'.length + 1) {
-      renderSchoolDelete(key);
+      renderSchoolDelete(fullKey);
       return;
     }
 
     // Kids monthly fee payment route #/school-fees/pay/<billId>
     if (key.startsWith('school-fees/pay/') && key.length > 'school-fees/pay/'.length + 1) {
-      renderSchoolFeePayment(key);
+      renderSchoolFeePayment(fullKey);
       return;
     }
 

@@ -11,23 +11,25 @@ import {
   serverTimestamp,
   runTransaction
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.101';
-import { openPopup } from '../components/modal.js?v=1.8.101';
-import { createSelect } from '../components/ui-select.js?v=1.8.101';
-import { confirmDialog } from '../components/ui-confirm.js?v=1.8.101';
-import { openMenu } from '../components/ui-menu.js?v=1.8.101';
-import { formatINR, formatDateIN, initials } from '../utils/formatter.js?v=1.8.101';
-import { validatePhone, validateEmail, validateDOB, validateName } from '../utils/validator.js?v=1.8.101';
-import { registerDirty } from '../utils/unsaved-guard.js?v=1.8.101';
-import { compressTo100KB, blobToDataURL, isImageFile, formatBytes } from '../utils/image-compress.js?v=1.8.101';
-import { todayISO } from '../utils/session-rules.js?v=1.8.101';
-import { getSelectedSessionId } from '../core/sessions.js?v=1.8.101';
+import { showToast } from '../components/toast.js?v=1.8.107';
+import { openPopup } from '../components/modal.js?v=1.8.107';
+import { createSelect } from '../components/ui-select.js?v=1.8.107';
+import { confirmDialog } from '../components/ui-confirm.js?v=1.8.107';
+import { openMenu } from '../components/ui-menu.js?v=1.8.107';
+import { formatINR, formatDateIN, initials } from '../utils/formatter.js?v=1.8.107';
+import { validatePhone, validateEmail, validateDOB, validateName } from '../utils/validator.js?v=1.8.107';
+import { registerDirty } from '../utils/unsaved-guard.js?v=1.8.107';
+import { compressTo100KB, blobToDataURL, isImageFile, formatBytes } from '../utils/image-compress.js?v=1.8.107';
+import { todayISO } from '../utils/session-rules.js?v=1.8.107';
+import { getSelectedSessionId } from '../core/sessions.js?v=1.8.107';
 import {
   fetchStudentPayments,
   recordPaymentTx,
   logStudentActivity,
-  calculateLateFee
-} from '../services/payment.service.js?v=1.8.101';
+  calculateLateFee,
+  courseFeeWithoutExam,
+  courseBalanceWithoutExam
+} from '../services/payment.service.js?v=1.8.107';
 
 const COL = 'students';
 const QUALIFICATIONS = ['VIII Pass', 'Secondary (X) Pass', 'Higher Secondary (XII) Pass', 'ITI', 'Diploma', 'Undergraduate (Graduate)', 'Postgraduate', 'Other'];
@@ -535,18 +537,47 @@ function renderHeader() {
     }
   }
 
-  // 4th action button: View Admission Receipt (User requested)
+  // 4th action button: View Receipts Menu
   const receiptBtn = $('sp-btn-receipt');
   if (receiptBtn) {
-    receiptBtn.onclick = () => {
-      location.hash = '#/admissions/' + (s.id || s.studentId) + '/receipt';
+    receiptBtn.onclick = async () => {
+      const payments = paymentsCache && paymentsCache.length ? paymentsCache : await fetchStudentPayments(s.id).catch(() => []);
+      if (!payments || payments.length === 0) {
+        location.hash = (s.ctx === 'school' ? '#/school-admissions/' : '#/admissions/') + (s.id || s.studentId) + '/receipt';
+        return;
+      }
+      const receiptItems = [
+        {
+          label: 'Admission receipt',
+          icon: 'file-text',
+          onClick: () => { location.hash = (s.ctx === 'school' ? '#/school-admissions/' : '#/admissions/') + (s.id || s.studentId) + '/receipt'; }
+        }
+      ];
+      payments.forEach(p => {
+        const type = String(p.type || '').toUpperCase();
+        let label = '';
+        if (type === 'EX') {
+          label = `Exam fee - ${p.receiptNo || 'Receipt'}`;
+        } else {
+          const no = p.installmentNo || 1;
+          const mo = p.month ? ` - ${p.month}` : '';
+          label = `Installment ${no}${mo} - ${p.receiptNo || 'Receipt'}`;
+        }
+        receiptItems.push({
+          label,
+          icon: 'receipt',
+          onClick: () => {
+            location.hash = `#/payments/${s.id}/${p.id}/receipt?from=profile`;
+          }
+        });
+      });
+      openMenu(receiptBtn, receiptItems);
     };
   }
 
   // Payment Notify Button (Always visible per AI reference layout)
-  const total = Number(s.feeTotal || 0);
-  const paid = Number(s.paidAmount ?? s.totalPaid ?? 0);
-  const outstanding = Math.max(0, total - paid);
+  const total = courseFeeWithoutExam(s);
+  const outstanding = courseBalanceWithoutExam(s, paymentsCache);
 
   const notifyBtn = $('sp-btn-notify');
   if (notifyBtn) {
@@ -634,9 +665,9 @@ function renderMetrics() {
   const s = currentStudent;
   if (!s) return;
 
-  const total = Number(s.feeTotal || 0);
-  const paid = Number(s.paidAmount ?? s.totalPaid ?? 0);
-  const outstanding = Math.max(0, total - paid);
+  const total = courseFeeWithoutExam(s);
+  const outstanding = courseBalanceWithoutExam(s, paymentsCache);
+  const paid = Math.max(0, total - outstanding);
 
   setTxt('sp-m-total-fee', formatINR(total));
   setTxt('sp-m-paid', formatINR(paid));
@@ -1688,12 +1719,18 @@ async function renderCourseTab() {
   tbody.textContent = '';
   const snap = s.feeSnapshot || {};
 
+  const studentSess = (sessionsCache && (sessionsCache.byId?.[s.sessionId] || sessionsCache.byName?.[(s.sessionName || '').toLowerCase().trim()])) || null;
+  const examStarted = studentSess?.examFeeCollection?.started === true;
+  let lockedExamFee = 0;
+  if (examStarted && studentSess?.examFeeCollection?.fees && s.courseId && Object.prototype.hasOwnProperty.call(studentSess.examFeeCollection.fees, s.courseId)) {
+    lockedExamFee = Number(studentSess.examFeeCollection.fees[s.courseId]);
+  }
+
   const rows = [
     { label: 'Admission Fee', amount: snap.admission || s.admissionFee || 0 },
     { label: 'Study Material & Kit', amount: snap.material || s.materialFee || 0 },
     { label: 'Tuition Fee (Per Installment)', amount: snap.installment || 0 },
-    { label: 'Total Scheduled Installments', amount: (snap.installment || 0) * (s.feeSchedule?.length || 4) },
-    { label: 'Board Examination Fee', amount: snap.exam || s.examFee || 0 }
+    { label: 'Total Scheduled Installments', amount: (snap.installment || 0) * (s.feeSchedule?.length || 4) }
   ];
 
   rows.forEach((r) => {
@@ -1705,9 +1742,19 @@ async function renderCourseTab() {
   const totalTr = mk('tr');
   totalTr.append(
     mk('td', 'font-bold', 'Total Course Package Fee'),
-    mk('td', 'num font-bold text-success', formatINR(s.feeTotal || 0))
+    mk('td', 'num font-bold text-success', formatINR(courseFeeWithoutExam(s)))
   );
   tbody.appendChild(totalTr);
+
+  if (examStarted) {
+    const examPaid = isExamFeePaid(lockedExamFee, paymentsCache, s);
+    const examTr = mk('tr');
+    examTr.append(
+      mk('td', 'font-semibold', `Exam fee (locked): Rs ${formatINR(lockedExamFee)} — ${examPaid ? 'Paid' : 'Due'}`),
+      mk('td', 'num font-bold', formatINR(lockedExamFee))
+    );
+    tbody.appendChild(examTr);
+  }
 
   // Scheduled installment table
   const schedTbody = $('sp-sched-tbody');
@@ -1775,7 +1822,7 @@ function renderPaymentsTab() {
   if (typeof lucide !== 'undefined') lucide.createIcons();
 }
 
-function renderFeeActionCell(actionTd, { isPaid, isWaived, payType, label, icon }) {
+function renderFeeActionCell(actionTd, { isPaid, isWaived, payType, label, icon, paymentId, isAdmission }) {
   if (!isPaid && !isWaived) {
     const payBtn = mk('button', 'ui-btn primary sm sp-table-action-btn');
     payBtn.type = 'button';
@@ -1789,10 +1836,15 @@ function renderFeeActionCell(actionTd, { isPaid, isWaived, payType, label, icon 
     receiptBtn.title = `View receipt for ${label}`;
     receiptBtn.innerHTML = '<i data-lucide="receipt"></i><span>Receipt</span>';
     receiptBtn.onclick = () => {
-      const receiptRoute = currentStudent?.ctx === 'school'
-        ? '#/school-admissions/' + currentStudent.id + '/receipt'
-        : '#/admissions/' + currentStudent.id + '/receipt';
-      location.hash = receiptRoute;
+      if (isAdmission) {
+        const receiptRoute = currentStudent?.ctx === 'school'
+          ? '#/school-admissions/' + currentStudent.id + '/receipt'
+          : '#/admissions/' + currentStudent.id + '/receipt';
+        location.hash = receiptRoute;
+      } else {
+        const pId = paymentId || 'latest';
+        location.hash = `#/payments/${currentStudent.id}/${pId}/receipt?from=profile`;
+      }
     };
     actionTd.appendChild(receiptBtn);
   }
@@ -1846,7 +1898,8 @@ function renderInstallmentStatusTable(sched) {
       isWaived,
       payType: 'AD',
       label: 'Admission Fee',
-      icon: 'credit-card'
+      icon: 'credit-card',
+      isAdmission: true
     });
 
     tr.append(noTd, monthTd, dueTd, schedTd, paidTd, paidOnTd, statusTd, actionTd);
@@ -1882,7 +1935,9 @@ function renderInstallmentStatusTable(sched) {
       isWaived,
       payType: 'MAT',
       label: 'Study Material Fee',
-      icon: 'credit-card'
+      icon: 'credit-card',
+      paymentId: matTxn?.id,
+      isAdmission: !matTxn
     });
 
     tr.append(noTd, monthTd, dueTd, schedTd, paidTd, paidOnTd, statusTd, actionTd);
@@ -1943,43 +1998,65 @@ function renderInstallmentStatusTable(sched) {
       isWaived,
       payType: it.no,
       label: 'Installment ' + it.no,
-      icon: 'credit-card'
+      icon: 'credit-card',
+      paymentId: paidRec?.id
     });
 
     tr.append(noTd, monthTd, dueTd, schedTd, paidTd, paidOnTd, statusTd, actionTd);
     tbody.appendChild(tr);
   });
 
-  // 4. Examination Fee row
-  if (examFee > 0) {
+  // 4. Examination Fee row: only show if exam fee collection has started
+  let sessionExamFee = 0;
+  let examFeeNotSetInSession = false;
+  let showExamFeeRow = false;
+  if (s.ctx === 'youth') {
+    const studentSess = (sessionsCache && (sessionsCache.byId?.[s.sessionId] || sessionsCache.byName?.[(s.sessionName || '').toLowerCase().trim()])) || null;
+    if (studentSess && studentSess.examFeeCollection?.started === true) {
+      showExamFeeRow = true;
+      if (studentSess.examFeeCollection.fees && s.courseId && Object.prototype.hasOwnProperty.call(studentSess.examFeeCollection.fees, s.courseId)) {
+        sessionExamFee = Number(studentSess.examFeeCollection.fees[s.courseId]);
+      } else {
+        examFeeNotSetInSession = true;
+      }
+    }
+  }
+
+  if (showExamFeeRow) {
     const tr = mk('tr');
     const examTxn = paymentsCache.find(p => {
       const t = String(p.type || '').toUpperCase().trim();
       return t === 'EX' || t === 'EXAM' || t === 'EXAMINATION';
     });
-    const isPaid = isExamFeePaid(examFee, paymentsCache, s);
+    const isPaid = isExamFeePaid(sessionExamFee, paymentsCache, s);
     const isWaived = examTxn && examTxn.waived;
-    const paidAmt = examTxn ? (examTxn.amount || examFee) : 0;
+    const paidAmt = examTxn ? (examTxn.amount || sessionExamFee) : 0;
     const paidDate = examTxn?.date || null;
 
     const noTd = mk('td', 'font-semibold', 'Examination Fee');
     const monthTd = mk('td', 'text-mute', 'Pre-Exam');
     const dueTd = mk('td', '', '—');
-    const schedTd = mk('td', 'num', formatINR(examFee));
+    const schedTd = mk('td', 'num', examFeeNotSetInSession ? '—' : formatINR(sessionExamFee));
     const paidTd = mk('td', 'num font-semibold text-success', isPaid ? formatINR(paidAmt) : '—');
     const paidOnTd = mk('td', '', isPaid && paidDate ? formatDateIN(paidDate) : '—');
 
     const statusTd = mk('td');
-    statusTd.appendChild(mk('span', 'pill ' + (isPaid ? 'up' : 'neutral'), isWaived ? 'Waived' : (isPaid ? 'Paid' : 'Pending')));
+    statusTd.appendChild(mk('span', 'pill ' + (isPaid ? 'up' : (examFeeNotSetInSession ? 'down' : 'neutral')), isWaived ? 'Waived' : (isPaid ? 'Paid' : (examFeeNotSetInSession ? 'Not Set' : 'Pending'))));
 
     const actionTd = mk('td', 'act');
-    renderFeeActionCell(actionTd, {
-      isPaid,
-      isWaived,
-      payType: 'EX',
-      label: 'Examination Fee',
-      icon: 'credit-card'
-    });
+    if (examFeeNotSetInSession && !isPaid) {
+      const errMsg = mk('span', 'pf-action-disabled text-danger text-xs', 'Exam fee not set for this course in this session. Contact Super Admin.');
+      actionTd.appendChild(errMsg);
+    } else {
+      renderFeeActionCell(actionTd, {
+        isPaid,
+        isWaived,
+        payType: 'EX',
+        label: 'Examination Fee',
+        icon: 'credit-card',
+        paymentId: examTxn?.id
+      });
+    }
 
     tr.append(noTd, monthTd, dueTd, schedTd, paidTd, paidOnTd, statusTd, actionTd);
     tbody.appendChild(tr);
@@ -2101,10 +2178,15 @@ function renderTransactionsLedger() {
     receiptBtn.title = 'View Receipt';
     receiptBtn.innerHTML = '<i data-lucide="receipt"></i><span>Receipt</span>';
     receiptBtn.onclick = () => {
-      const receiptRoute = currentStudent?.ctx === 'school'
-        ? '#/school-admissions/' + currentStudent.id + '/receipt'
-        : '#/admissions/' + currentStudent.id + '/receipt';
-      location.hash = receiptRoute;
+      if (t.type === 'AD') {
+        const receiptRoute = currentStudent?.ctx === 'school'
+          ? '#/school-admissions/' + currentStudent.id + '/receipt'
+          : '#/admissions/' + currentStudent.id + '/receipt';
+        location.hash = receiptRoute;
+      } else {
+        const paymentId = t.id || 'latest';
+        location.hash = `#/payments/${currentStudent.id}/${paymentId}/receipt?from=profile`;
+      }
     };
     actionTd.appendChild(receiptBtn);
 
@@ -2168,13 +2250,31 @@ async function openRecordPaymentModal(preselectedOption) {
     }
   });
 
-  // 4. Examination Fee (only if not yet collected and amount > 0)
-  if (examFee > 0 && !isExamFeePaid(examFee, paymentsCache, s)) {
+  // 4. Examination Fee (only if not yet collected and amount > 0, and not blocked by session fees)
+  let sessionExamFee = examFee;
+  let canCollectExam = examFee > 0;
+  if (s.ctx === 'youth') {
+    const studentSess = (sessionsCache && (sessionsCache.byId?.[s.sessionId] || sessionsCache.byName?.[(s.sessionName || '').toLowerCase().trim()])) || null;
+    if (studentSess && studentSess.examFeeCollection?.started === true) {
+      if (studentSess.examFeeCollection.fees && s.courseId && Object.prototype.hasOwnProperty.call(studentSess.examFeeCollection.fees, s.courseId)) {
+        sessionExamFee = Number(studentSess.examFeeCollection.fees[s.courseId]);
+      } else {
+        canCollectExam = false; // Exam fee not set for this course in this session.
+      }
+    }
+  }
+
+  if (canCollectExam && sessionExamFee > 0 && !isExamFeePaid(sessionExamFee, paymentsCache, s)) {
     typeOptions.push({
       value: 'EX',
-      label: `Examination Fee — ${formatINR(examFee)}`,
+      label: `Examination Fee — ${formatINR(sessionExamFee)}`,
       icon: 'award'
     });
+  }
+
+  if (preselectedOption === 'EX' && !canCollectExam) {
+    showToast({ type: 'error', message: 'Exam fee not set for this course in this session. Contact Super Admin.' });
+    return;
   }
 
   // If all fee heads are already collected, notify user
@@ -2393,7 +2493,7 @@ async function openRecordPaymentModal(preselectedOption) {
       baseAmt = admFee;
       fineAmt = 0;
     } else if (val === 'EX') {
-      baseAmt = examFee;
+      baseAmt = sessionExamFee;
       fineAmt = 0;
     } else if (val === 'MAT') {
       baseAmt = matFee;

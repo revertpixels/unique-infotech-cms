@@ -11,19 +11,21 @@ import {
   runTransaction,
   serverTimestamp
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { createSelect } from '../components/ui-select.js?v=1.8.101';
-import { openPopup } from '../components/modal.js?v=1.8.101';
-import { confirmDialog } from '../components/ui-confirm.js?v=1.8.101';
-import { showToast } from '../components/toast.js?v=1.8.101';
-import { getSelectedSessionId, getCachedSessions } from '../core/sessions.js?v=1.8.101';
-import { todayISO, fmtDate, examWindowOf } from '../utils/session-rules.js?v=1.8.101';
+import { createSelect } from '../components/ui-select.js?v=1.8.107';
+import { openPopup } from '../components/modal.js?v=1.8.107';
+import { confirmDialog } from '../components/ui-confirm.js?v=1.8.107';
+import { showToast } from '../components/toast.js?v=1.8.107';
+import { getSelectedSessionId, getCachedSessions } from '../core/sessions.js?v=1.8.107';
+import { todayISO, fmtDate, examWindowOf, installmentSchedule } from '../utils/session-rules.js?v=1.8.107';
 import {
   calculateLateFee,
   fetchStudentPayments,
   isInstallmentPaid,
   isExamFeePaid,
-  recordPaymentTx
-} from '../services/payment.service.js?v=1.8.101';
+  recordPaymentTx,
+  courseFeeWithoutExam,
+  courseBalanceWithoutExam
+} from '../services/payment.service.js?v=1.8.107';
 
 let currentUserProfile = null;
 let currentCtx = 'youth';
@@ -32,6 +34,32 @@ let youthCourses = [];
 let allStudentsCache = [];
 let currentStudent = null;
 let currentPayments = [];
+
+const studentPhotoCache = new Map();
+
+async function getStudentPhoto(studentDocId) {
+  if (!studentDocId) return null;
+  if (studentPhotoCache.has(studentDocId)) {
+    return studentPhotoCache.get(studentDocId);
+  }
+  const fetchPromise = (async () => {
+    try {
+      const snap = await getDoc(doc(db, 'students', studentDocId, 'docs', 'photo'));
+      if (snap.exists()) {
+        const d = snap.data();
+        const url = d && (d.data || d.dataUrl || d.url);
+        return url || null;
+      }
+    } catch (e) {
+      console.warn('[pay-fees] failed to load student photo', studentDocId, e);
+    }
+    return null;
+  })();
+  studentPhotoCache.set(studentDocId, fetchPromise);
+  const res = await fetchPromise;
+  studentPhotoCache.set(studentDocId, res);
+  return res;
+}
 let sessionChangeListener = null;
 
 function $(id) {
@@ -52,6 +80,28 @@ function formatINR(val) {
 
 function formatDateIN(iso) {
   return fmtDate(iso);
+}
+
+function formatAnyDate(val) {
+  if (!val) return '';
+  let d = null;
+  if (typeof val?.toDate === 'function') {
+    d = val.toDate();
+  } else if (val?.seconds) {
+    d = new Date(val.seconds * 1000);
+  } else if (val instanceof Date) {
+    d = val;
+  } else if (typeof val === 'string') {
+    if (val.includes('T')) {
+      d = new Date(val);
+    } else {
+      return fmtDate(val);
+    }
+  }
+  if (d && !isNaN(d.getTime())) {
+    return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  }
+  return fmtDate(val);
 }
 
 function getAuthEmail() {
@@ -79,6 +129,47 @@ export async function mount({ container, profile, ctx }) {
 
   await initData();
   bindEvents();
+
+  // Check if URL has ?student=<studentDocId>
+  const rawHash = location.hash || '';
+  const qIdx = rawHash.indexOf('?');
+  if (qIdx !== -1) {
+    const params = new URLSearchParams(rawHash.slice(qIdx));
+    const studentDocIdParam = params.get('student');
+    if (studentDocIdParam) {
+      await loadStudentDirectly(studentDocIdParam);
+    }
+  }
+}
+
+async function loadStudentDirectly(docId) {
+  if (!docId) return;
+  let st = allStudentsCache.find(s => s.id === docId || s.studentId === docId);
+  if (!st) {
+    try {
+      const snap = await getDoc(doc(db, 'students', docId));
+      if (snap.exists()) {
+        st = Object.assign({ id: snap.id }, snap.data());
+      }
+    } catch (_) {}
+  }
+  if (!st) return;
+
+  const isBranchHead = currentUserProfile && currentUserProfile.role === 'branch_head';
+  const myBranch = currentUserProfile && currentUserProfile.branchId;
+  if (isBranchHead && myBranch && st.branchId && st.branchId !== myBranch) {
+    showToast({ type: 'error', message: 'You do not have access to students from other branches.' });
+    return;
+  }
+
+  const searchInput = $('pf-search-input');
+  if (searchInput) {
+    searchInput.value = st.studentId || st.name || '';
+    const clearBtn = $('pf-search-clear');
+    if (clearBtn) clearBtn.hidden = false;
+  }
+
+  openStudentPanel(st);
 }
 
 export function unmount() {
@@ -122,6 +213,7 @@ async function initData() {
 
   // Load students for active session
   await loadStudents();
+  updateExamFeeButtonDot();
 }
 
 /**
@@ -151,6 +243,100 @@ async function loadStudents() {
   }
 }
 
+let currentSuggestions = [];
+let highlightedSuggestionIndex = -1;
+
+function closeSearchDropdown() {
+  const dd = $('pf-search-dropdown');
+  if (dd) {
+    dd.hidden = true;
+    dd.textContent = '';
+  }
+  currentSuggestions = [];
+  highlightedSuggestionIndex = -1;
+}
+
+function updateSuggestionHighlight() {
+  const dd = $('pf-search-dropdown');
+  if (!dd) return;
+  const items = dd.querySelectorAll('.pf-suggest-item');
+  items.forEach((item, idx) => {
+    if (idx === highlightedSuggestionIndex) {
+      item.classList.add('is-selected');
+      item.scrollIntoView({ block: 'nearest' });
+    } else {
+      item.classList.remove('is-selected');
+    }
+  });
+}
+
+function renderSearchDropdown(matches) {
+  const dd = $('pf-search-dropdown');
+  if (!dd) return;
+  dd.textContent = '';
+  currentSuggestions = matches.slice(0, 10);
+  highlightedSuggestionIndex = -1;
+
+  if (currentSuggestions.length === 0) {
+    closeSearchDropdown();
+    return;
+  }
+
+  currentSuggestions.forEach((st, idx) => {
+    const item = mk('div', 'pf-suggest-item');
+    item.dataset.index = idx;
+
+    const avatar = mk('div', 'pf-suggest-avatar');
+    const inits = (st.name || 'ST').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+    avatar.textContent = inits;
+    getStudentPhoto(st.id).then(photoUrl => {
+      if (photoUrl && avatar.isConnected) {
+        const img = document.createElement('img');
+        img.src = photoUrl;
+        img.alt = st.name || '';
+        img.onload = () => {
+          if (avatar.isConnected) {
+            avatar.textContent = '';
+            avatar.appendChild(img);
+          }
+        };
+      }
+    });
+
+    const info = mk('div', 'pf-suggest-info');
+    const top = mk('div', 'pf-suggest-top');
+    const name = mk('span', 'pf-suggest-name', st.name || 'Unnamed');
+    const id = mk('span', 'pf-suggest-id', st.studentId || st.id);
+    top.append(name, id);
+
+    const sub = mk('div', 'pf-suggest-sub');
+    const crs = mk('span', '', st.courseName || st.courseCode || '—');
+    const dot = mk('span', 'pf-suggest-dot', '•');
+    const bch = mk('span', '', st.batchName || 'Standard');
+    sub.append(crs, dot, bch);
+
+    info.append(top, sub);
+    item.append(avatar, info);
+
+    item.addEventListener('mouseenter', () => {
+      highlightedSuggestionIndex = idx;
+      updateSuggestionHighlight();
+    });
+
+    item.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      const input = $('pf-search-input');
+      if (input) input.value = st.studentId || st.name || '';
+      closeSearchDropdown();
+      openStudentPanel(st);
+    });
+
+    dd.appendChild(item);
+  });
+
+  dd.hidden = false;
+}
+
 function bindEvents() {
   const searchInput = $('pf-search-input');
   const searchBtn = $('pf-search-btn');
@@ -158,19 +344,89 @@ function bindEvents() {
 
   if (searchInput) {
     searchInput.oninput = () => {
-      if (clearBtn) clearBtn.hidden = !searchInput.value.trim();
+      const val = searchInput.value.trim();
+      if (clearBtn) clearBtn.hidden = !val;
+      if (!val) {
+        closeSearchDropdown();
+        return;
+      }
+
+      const selectedSessionId = getSelectedSessionId('youth');
+      let scoped = allStudentsCache.filter(s => {
+        if (selectedSessionId && s.sessionId && s.sessionId !== selectedSessionId) {
+          return false;
+        }
+        return true;
+      });
+
+      const digitsOnly = val.replace(/\D/g, '');
+      let matches = [];
+      if (digitsOnly.length === 8 && /^\d{8}$/.test(val)) {
+        matches = scoped.filter(s => String(s.studentId || '').trim() === val);
+      } else if (digitsOnly.length >= 3 && /^\d+$/.test(val)) {
+        matches = scoped.filter(s => {
+          const sid = String(s.studentId || '');
+          const p1 = String(s.phone || '').replace(/\D/g, '');
+          const p2 = String(s.altPhone || s.guardianPhone || '').replace(/\D/g, '');
+          return sid.includes(val) || p1.includes(val) || p2.includes(val);
+        });
+      } else {
+        const lower = val.toLowerCase();
+        matches = scoped.filter(s => {
+          const name = String(s.name || '').toLowerCase();
+          const sid = String(s.studentId || '').toLowerCase();
+          return name.includes(lower) || sid.includes(lower);
+        });
+      }
+      renderSearchDropdown(matches);
     };
 
     searchInput.onkeydown = (e) => {
-      if (e.key === 'Enter') {
+      const dd = $('pf-search-dropdown');
+      const isDropdownOpen = dd && !dd.hidden && currentSuggestions.length > 0;
+
+      if (e.key === 'ArrowDown') {
+        if (isDropdownOpen) {
+          e.preventDefault();
+          highlightedSuggestionIndex = (highlightedSuggestionIndex + 1) % currentSuggestions.length;
+          updateSuggestionHighlight();
+        }
+      } else if (e.key === 'ArrowUp') {
+        if (isDropdownOpen) {
+          e.preventDefault();
+          highlightedSuggestionIndex = (highlightedSuggestionIndex - 1 + currentSuggestions.length) % currentSuggestions.length;
+          updateSuggestionHighlight();
+        }
+      } else if (e.key === 'Escape') {
+        closeSearchDropdown();
+      } else if (e.key === 'Enter') {
         e.preventDefault();
-        executeSearch();
+        if (isDropdownOpen && highlightedSuggestionIndex >= 0 && currentSuggestions[highlightedSuggestionIndex]) {
+          const chosen = currentSuggestions[highlightedSuggestionIndex];
+          if (searchInput) searchInput.value = chosen.studentId || chosen.name || '';
+          closeSearchDropdown();
+          openStudentPanel(chosen);
+        } else {
+          closeSearchDropdown();
+          executeSearch();
+        }
       }
     };
   }
 
+  // Close dropdown on outside click
+  document.addEventListener('click', (e) => {
+    const wrap = document.querySelector('.pf-search-input-wrap');
+    if (wrap && !wrap.contains(e.target)) {
+      closeSearchDropdown();
+    }
+  });
+
   if (searchBtn) {
-    searchBtn.onclick = () => executeSearch();
+    searchBtn.onclick = () => {
+      closeSearchDropdown();
+      executeSearch();
+    };
   }
 
   if (clearBtn) {
@@ -180,6 +436,7 @@ function bindEvents() {
         searchInput.focus();
       }
       clearBtn.hidden = true;
+      closeSearchDropdown();
       resetSearchResults();
     };
   }
@@ -204,6 +461,18 @@ function bindEvents() {
         location.hash = '#/students/' + currentStudent.id;
       }
     };
+  }
+
+  // Exam fee collection mode toggle (top-right header)
+  const examModeBtn = $('pf-btn-exam-mode');
+  if (examModeBtn) {
+    examModeBtn.onclick = () => showExamFeeView();
+  }
+
+  // Back to payments button from exam view
+  const evBackBtn = $('pf-ev-back-btn');
+  if (evBackBtn) {
+    evBackBtn.onclick = () => showPaymentsView();
   }
 
   // View all payments button
@@ -232,6 +501,12 @@ function resetSearchResults() {
   $('pf-panel').hidden = true;
   $('pf-multi-card').hidden = true;
   $('pf-empty-state').hidden = true;
+  closeSearchDropdown();
+  try {
+    if (location.hash.startsWith('#/pay-fees')) {
+      history.replaceState(null, '', '#/pay-fees');
+    }
+  } catch (_) {}
 }
 
 /**
@@ -322,17 +597,24 @@ function renderMultiStudentList(students) {
   students.forEach(st => {
     const item = mk('div', 'pf-student-choice');
 
-    // Avatar
+    // Avatar (initials first, swap photo when loaded without blocking)
     const avatar = mk('div', 'pf-choice-avatar');
-    if (st.photoUrl) {
-      const img = document.createElement('img');
-      img.src = st.photoUrl;
-      img.alt = st.name || '';
-      avatar.appendChild(img);
-    } else {
-      const initials = (st.name || 'ST').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
-      avatar.textContent = initials;
-    }
+    const initials = (st.name || 'ST').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+    avatar.textContent = initials;
+
+    getStudentPhoto(st.id).then(photoUrl => {
+      if (photoUrl && avatar.isConnected) {
+        const img = document.createElement('img');
+        img.src = photoUrl;
+        img.alt = st.name || '';
+        img.onload = () => {
+          if (avatar.isConnected) {
+            avatar.textContent = '';
+            avatar.appendChild(img);
+          }
+        };
+      }
+    });
 
     const body = mk('div', 'pf-choice-body');
     const nameEl = mk('div', 'pf-choice-name', st.name || 'Unnamed Student');
@@ -362,6 +644,13 @@ function renderMultiStudentList(students) {
  */
 async function openStudentPanel(student) {
   currentStudent = student;
+  closeSearchDropdown();
+  try {
+    const newHash = `#/pay-fees?student=${encodeURIComponent(student.id)}`;
+    if (location.hash !== newHash) {
+      history.replaceState(null, '', newHash);
+    }
+  } catch (_) {}
   $('pf-multi-card').hidden = true;
   $('pf-empty-state').hidden = true;
   const panel = $('pf-panel');
@@ -380,19 +669,31 @@ async function openStudentPanel(student) {
   statusEl.textContent = stStatus.charAt(0).toUpperCase() + stStatus.slice(1);
   statusEl.className = 'pill ' + (stStatus === 'active' ? 'up' : 'neutral');
 
-  // Photo / Initials
+  // Photo / Initials (Show initials first, swap in photo from docs/photo when loaded)
   const avatarText = $('pf-avatar-text');
   const avatarImg = $('pf-avatar-img');
-  if (student.photoUrl) {
-    avatarImg.src = student.photoUrl;
-    avatarImg.hidden = false;
-    avatarText.hidden = true;
-  } else {
-    avatarImg.hidden = true;
-    avatarText.hidden = false;
-    const initials = (student.name || 'ST').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
-    avatarText.textContent = initials;
-  }
+  const initials = (student.name || 'ST').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+  avatarText.textContent = initials;
+  avatarText.hidden = false;
+  avatarImg.hidden = true;
+  avatarImg.src = '';
+
+  const thisStudentDocId = student.id;
+  getStudentPhoto(thisStudentDocId).then(photoUrl => {
+    if (currentStudent && currentStudent.id === thisStudentDocId && photoUrl) {
+      avatarImg.onload = () => {
+        if (currentStudent && currentStudent.id === thisStudentDocId) {
+          avatarImg.hidden = false;
+          avatarText.hidden = true;
+        }
+      };
+      avatarImg.onerror = () => {
+        avatarImg.hidden = true;
+        avatarText.hidden = false;
+      };
+      avatarImg.src = photoUrl;
+    }
+  });
 
   // Load payments
   currentPayments = await fetchStudentPayments(student.id);
@@ -412,9 +713,9 @@ function renderPaymentSummary() {
   const s = currentStudent;
   if (!s) return;
 
-  const total = Number(s.feeTotal || 0);
-  const paid = Number(s.paidAmount ?? s.totalPaid ?? 0);
-  const outstanding = Math.max(0, total - paid);
+  const total = courseFeeWithoutExam(s);
+  const outstanding = courseBalanceWithoutExam(s, currentPayments);
+  const paid = Math.max(0, total - outstanding);
 
   // Calculate late fee as of today for all overdue unpaid installments
   let totalLateFeeToday = 0;
@@ -507,10 +808,36 @@ function renderInstallmentScheduleTable() {
     const totalTd = mk('td', 'num font-semibold', isPaid ? formatINR(paidRec?.amount || schedAmt) : formatINR(schedAmt + lateFine));
 
     const statusTd = mk('td');
+    let subDateText = '';
+    if (isWaived) {
+      statusLabel = 'Waived';
+      statusClass = 'pill violet';
+      subDateText = (paidRec?.paidOn || paidRec?.date || it.waivedOn) ? 'on ' + formatDateIN(paidRec?.paidOn || paidRec?.date || it.waivedOn) : '';
+    } else if (isPaid) {
+      statusLabel = 'Paid';
+      statusClass = 'pill up';
+      subDateText = (paidRec?.paidOn || paidRec?.date) ? 'on ' + formatDateIN(paidRec.paidOn || paidRec.date) : '';
+    } else {
+      if (today > it.due) {
+        lateFine = calculateLateFee(it.due, today);
+        statusLabel = 'Overdue';
+        statusClass = 'pill down';
+        subDateText = 'since ' + formatDateIN(it.due);
+      } else if (today >= it.opens) {
+        statusLabel = 'Due';
+        statusClass = 'pill warn';
+        subDateText = 'by ' + formatDateIN(it.due);
+      } else {
+        statusLabel = 'Upcoming';
+        statusClass = 'pill';
+        subDateText = it.opens ? 'from ' + formatDateIN(it.opens) : (it.due ? 'due ' + formatDateIN(it.due) : '');
+      }
+    }
+
     const pill = mk('span', statusClass, statusLabel);
     statusTd.appendChild(pill);
-    if (isPaid && paidRec) {
-      const sub = mk('div', 'text-xs text-mute mt-1', `${paidRec.receiptNo || ''} (${formatDateIN(paidRec.paidOn || paidRec.date)})`);
+    if (subDateText) {
+      const sub = mk('div', 'pf-status-sub', subDateText);
       statusTd.appendChild(sub);
     }
 
@@ -520,10 +847,13 @@ function renderInstallmentScheduleTable() {
     if (isPaid) {
       const receiptBtn = mk('button', 'ui-btn ghost sm pf-btn-receipt');
       receiptBtn.type = 'button';
+      if (paidRec?.receiptNo) {
+        receiptBtn.title = `Receipt: ${paidRec.receiptNo}`;
+      }
       receiptBtn.innerHTML = '<i data-lucide="receipt"></i><span>Receipt</span>';
       receiptBtn.onclick = () => {
         const paymentId = paidRec?.id || 'latest';
-        location.hash = `#/payments/${s.id}/${paymentId}/receipt`;
+        location.hash = `#/payments/${s.id}/${paymentId}/receipt?from=pay-fees`;
       };
       actTd.appendChild(receiptBtn);
     } else if (!foundOldestUnpaid) {
@@ -543,10 +873,9 @@ function renderInstallmentScheduleTable() {
       });
       actTd.appendChild(collectBtn);
     } else {
-      // Later unpaid installment -> DISABLED
-      tr.classList.add('pf-row-locked');
-      const hint = mk('span', 'pf-action-disabled', 'Pay previous first');
-      actTd.appendChild(hint);
+      // Later unpaid installment -> muted dash
+      const dash = mk('span', 'text-mute', '—');
+      actTd.appendChild(dash);
     }
 
     tr.append(headTd, monthTd, dueTd, amtTd, lateTd, totalTd, statusTd, actTd);
@@ -582,36 +911,38 @@ function renderExamFeeSection() {
   }
 
   const isSuper = currentUserProfile && currentUserProfile.role === 'superadmin';
+  const isBranchHead = currentUserProfile && currentUserProfile.role === 'branch_head';
   const session = activeSession;
   const examCollectionStarted = session?.examFeeCollection?.started === true;
   const examWindow = examWindowOf(session);
+  const sessionSched = installmentSchedule(session);
+  const lastDue = sessionSched.length ? sessionSched[sessionSched.length - 1].due : (examWindow.from || session?.endDate || '');
   const today = todayISO();
 
   // If exam fee collection is NOT started
   if (!examCollectionStarted) {
     const banner = mk('div', 'pf-exam-banner');
     const left = mk('div', 'pf-exam-banner-left');
+    const availText = examWindow.from ? `Available from ${formatDateIN(examWindow.from)}` : 'Available from session end';
     left.innerHTML = `<div class="pf-exam-banner-icon"><i data-lucide="lock"></i></div>
       <div>
         <div class="pf-exam-banner-title">Exam Fee Collection Not Started</div>
-        <div class="pf-exam-banner-sub">Exam fee collection for ${session?.name || 'this session'} has not started yet. Opens on ${formatDateIN(examWindow.from)}.</div>
+        <div class="pf-exam-banner-sub">Exam fee collection for ${session?.name || 'this session'} has not started yet. ${availText}.</div>
       </div>`;
     banner.appendChild(left);
-
-    // If Super Admin and today >= examWindow.from, allow starting exam fee collection
-    if (isSuper) {
-      const canStart = !examWindow.from || today >= examWindow.from;
-      if (canStart) {
-        const startBtn = mk('button', 'ui-btn primary sm');
-        startBtn.type = 'button';
-        startBtn.innerHTML = '<i data-lucide="play-circle"></i><span>Start Exam Fee Collection</span>';
-        startBtn.onclick = () => handleStartExamFeeCollection();
-        banner.appendChild(startBtn);
-      }
-    }
-
     container.appendChild(banner);
     return;
+  }
+
+  // When exam fee collection IS started:
+  // For Branch Head, show a small read-only line:
+  // "Started on <date> - exam fee can be collected"
+  if (isBranchHead) {
+    const startedRaw = session?.examFeeCollection?.startedAt;
+    const startedDateStr = formatAnyDate(startedRaw) || formatDateIN(examWindow.from) || 'recently';
+    const statusLine = mk('div', 'pf-exam-status-line success');
+    statusLine.innerHTML = `<i data-lucide="check-circle"></i><span>Started on ${startedDateStr} - exam fee can be collected</span>`;
+    container.appendChild(statusLine);
   }
 
   // Exam fee collection IS started: show exam fee table row
@@ -633,7 +964,32 @@ function renderExamFeeSection() {
   const tbody = mk('tbody');
   const tr = mk('tr');
 
-  const lockedFee = session.examFeeCollection?.fees?.[s.courseId] ?? examFee;
+  // Verify courseId is in session.examFeeCollection.fees without fallback
+  const feesMap = session.examFeeCollection?.fees;
+  const isCourseInFees = feesMap && s.courseId && Object.prototype.hasOwnProperty.call(feesMap, s.courseId);
+
+  if (!isCourseInFees) {
+    const headTd = mk('td', 'font-semibold', 'Board Examination Fee');
+    const sessTd = mk('td', '', session.name || '-');
+    const dueTd = mk('td', '', session.endDate ? formatDateIN(session.endDate) : '—');
+    const amtTd = mk('td', 'num text-mute', '—');
+    const lateTd = mk('td', 'num text-mute', '—');
+    const totalTd = mk('td', 'num text-mute', '—');
+    const statusTd = mk('td');
+    statusTd.appendChild(mk('span', 'pill down', 'Not Set'));
+    const actTd = mk('td', 'act');
+    const errMsg = mk('span', 'pf-action-disabled text-danger', 'Exam fee not set for this course in this session. Contact Super Admin.');
+    actTd.appendChild(errMsg);
+
+    tr.append(headTd, sessTd, dueTd, amtTd, lateTd, totalTd, statusTd, actTd);
+    tbody.appendChild(tr);
+    table.appendChild(tbody);
+    tableWrap.appendChild(table);
+    container.appendChild(tableWrap);
+    return;
+  }
+
+  const lockedFee = Number(feesMap[s.courseId]);
   const isPaid = isExamFeePaid(lockedFee, currentPayments, s);
 
   const examTxn = currentPayments.find(p => {
@@ -655,7 +1011,7 @@ function renderExamFeeSection() {
   const pill = mk('span', 'pill ' + (isPaid ? 'up' : 'neutral'), isPaid ? 'Paid' : 'Unpaid');
   statusTd.appendChild(pill);
   if (isPaid && examTxn) {
-    const sub = mk('div', 'text-xs text-mute mt-1', `${examTxn.receiptNo || ''} (${formatDateIN(examTxn.paidOn || examTxn.date)})`);
+    const sub = mk('div', 'pf-status-sub', `on ${formatDateIN(examTxn.paidOn || examTxn.date)}`);
     statusTd.appendChild(sub);
   }
 
@@ -663,10 +1019,13 @@ function renderExamFeeSection() {
   if (isPaid) {
     const receiptBtn = mk('button', 'ui-btn ghost sm pf-btn-receipt');
     receiptBtn.type = 'button';
+    if (examTxn?.receiptNo) {
+      receiptBtn.title = `Receipt: ${examTxn.receiptNo}`;
+    }
     receiptBtn.innerHTML = '<i data-lucide="receipt"></i><span>Receipt</span>';
     receiptBtn.onclick = () => {
       const paymentId = examTxn?.id || 'latest';
-      location.hash = `#/payments/${s.id}/${paymentId}/receipt`;
+      location.hash = `#/payments/${s.id}/${paymentId}/receipt?from=pay-fees`;
     };
     actTd.appendChild(receiptBtn);
   } else if (!allInstPaid) {
@@ -738,7 +1097,9 @@ async function handleStartExamFeeCollection() {
     };
 
     showToast({ type: 'success', message: 'Exam fee collection started and fees locked for this session.' });
+    updateExamFeeButtonDot();
     renderExamFeeSection();
+    renderExamFeeManagementView();
     if (typeof lucide !== 'undefined') lucide.createIcons();
   } catch (e) {
     console.error('[pay-fees] handleStartExamFeeCollection error', e);
@@ -747,11 +1108,232 @@ async function handleStartExamFeeCollection() {
 }
 
 /**
+ * Updates status dot on top-right "Exam fee" button
+ */
+function updateExamFeeButtonDot() {
+  const dot = $('pf-exam-dot');
+  if (!dot) return;
+  const isStarted = activeSession?.examFeeCollection?.started === true;
+  dot.className = 'pf-status-dot ' + (isStarted ? 'dot-green' : 'dot-grey');
+  dot.title = isStarted ? 'Exam fee collection active' : 'Exam fee collection not started';
+}
+
+/**
+ * Toggles view to the dedicated Exam Fee Collection management panel
+ */
+function showExamFeeView() {
+  const paymentsContainer = $('pf-payments-container');
+  const examView = $('pf-exam-view');
+  if (paymentsContainer) paymentsContainer.hidden = true;
+  if (examView) examView.hidden = false;
+
+  renderExamFeeManagementView();
+  if (typeof lucide !== 'undefined') lucide.createIcons();
+}
+
+/**
+ * Toggles view back to normal Payments & search view
+ */
+function showPaymentsView() {
+  const paymentsContainer = $('pf-payments-container');
+  const examView = $('pf-exam-view');
+  if (examView) examView.hidden = true;
+  if (paymentsContainer) paymentsContainer.hidden = false;
+
+  if (typeof lucide !== 'undefined') lucide.createIcons();
+}
+
+/**
+ * Renders the dedicated Exam Fee Collection management panel (Item 5)
+ */
+function renderExamFeeManagementView() {
+  const session = activeSession;
+  const isSuper = currentUserProfile && currentUserProfile.role === 'superadmin';
+  const isStarted = session?.examFeeCollection?.started === true;
+  const examWindow = examWindowOf(session);
+  const today = todayISO();
+  const canStart = !examWindow.from || today >= examWindow.from;
+
+  updateExamFeeButtonDot();
+
+  // Session titles
+  const nameEl = $('pf-ev-session-name');
+  if (nameEl) nameEl.textContent = session ? (session.name || session.id) : 'Active Session';
+  const titleEl = $('pf-ev-session-title');
+  if (titleEl) titleEl.textContent = session ? (session.name || session.id) : '—';
+
+  // Status pill
+  const pill = $('pf-ev-status-pill');
+  if (pill) {
+    pill.textContent = isStarted ? 'Started' : 'Not Started';
+    pill.className = 'pill ' + (isStarted ? 'up' : 'neutral');
+  }
+
+  // Consistent date wording: "Available from <day after last due date>"
+  const availEl = $('pf-ev-availability');
+  if (availEl) {
+    availEl.textContent = examWindow.from ? `Available from ${formatDateIN(examWindow.from)}` : 'Available from session end';
+  }
+
+  // Calculate students paid vs pending for active session
+  const sessionStudents = allStudentsCache.filter(st => {
+    if (!session) return false;
+    return st.sessionId === session.id;
+  });
+  const paidCount = sessionStudents.filter(st => {
+    return st.examPaid === true || (Array.isArray(st.payments) && st.payments.some(p => p.type === 'EX'));
+  }).length;
+  const pendingCount = Math.max(0, sessionStudents.length - paidCount);
+
+  const paidEl = $('pf-ev-stats-paid');
+  if (paidEl) paidEl.textContent = String(paidCount);
+  const pendingEl = $('pf-ev-stats-pending');
+  if (pendingEl) pendingEl.textContent = String(pendingCount);
+
+  // Started metadata
+  const metaLine = $('pf-ev-started-meta');
+  if (metaLine) {
+    if (isStarted) {
+      metaLine.hidden = false;
+      const startedAtStr = formatAnyDate(session?.examFeeCollection?.startedAt) || (examWindow.from ? formatDateIN(examWindow.from) : 'Recently');
+      const startedByStr = session?.examFeeCollection?.startedBy || 'Super Admin';
+      metaLine.innerHTML = `<i data-lucide="check-circle" class="text-success"></i><span>Collection started on <strong>${startedAtStr}</strong> by <strong>${startedByStr}</strong>. Locked fees apply to all students.</span>`;
+    } else {
+      metaLine.hidden = true;
+      metaLine.textContent = '';
+    }
+  }
+
+  // Actions area
+  const actionsArea = $('pf-ev-actions');
+  if (actionsArea) {
+    actionsArea.textContent = '';
+    if (isSuper) {
+      if (!isStarted) {
+        const startBtn = mk('button', 'ui-btn primary sm');
+        startBtn.type = 'button';
+        if (canStart) {
+          startBtn.innerHTML = '<i data-lucide="play-circle"></i><span>Start Exam Fee Collection</span>';
+          startBtn.onclick = () => handleStartExamFeeCollection();
+        } else {
+          startBtn.disabled = true;
+          startBtn.style.opacity = '0.65';
+          startBtn.style.cursor = 'not-allowed';
+          const availText = examWindow.from ? formatDateIN(examWindow.from) : 'end of session';
+          startBtn.innerHTML = `<i data-lucide="lock"></i><span>Available from ${availText}</span>`;
+        }
+        actionsArea.appendChild(startBtn);
+      } else {
+        const badge = mk('span', 'pill up', 'Collection Active');
+        actionsArea.appendChild(badge);
+      }
+    }
+  }
+
+  // Courses Table
+  const tbody = $('pf-ev-courses-tbody');
+  if (tbody) {
+    tbody.textContent = '';
+    const hintEl = $('pf-ev-lock-hint');
+    if (hintEl) {
+      hintEl.textContent = isStarted ? 'Fees locked for this session' : 'Super Admin can edit fees before collection starts';
+    }
+
+    youthCourses.forEach(c => {
+      const tr = mk('tr');
+      const codeTd = mk('td', 'font-semibold font-mono', c.code || c.courseCode || '-');
+      const nameTd = mk('td', '', c.name || '-');
+      const levelTd = mk('td', '', c.level ? `Sem ${c.level}` : '-');
+
+      const feeAmount = isStarted
+        ? Number(session?.examFeeCollection?.fees?.[c.id] ?? c.fees?.exam ?? 0)
+        : Number(c.fees?.exam ?? 0);
+
+      const feeTd = mk('td', 'num font-semibold');
+      const statusTd = mk('td');
+      const actTd = mk('td', 'adm-actions');
+
+      if (isStarted) {
+        feeTd.textContent = formatINR(feeAmount);
+        statusTd.innerHTML = '<span class="pill up"><i data-lucide="lock"></i> Locked</span>';
+        actTd.innerHTML = '<span class="text-xs text-mute">—</span>';
+      } else if (isSuper) {
+        // Editable for Super Admin until started
+        feeTd.textContent = formatINR(feeAmount);
+        statusTd.innerHTML = '<span class="pill warn">Editable</span>';
+
+        const editBtn = mk('button', 'ui-btn ghost sm');
+        editBtn.type = 'button';
+        editBtn.innerHTML = '<i data-lucide="edit-2"></i><span>Edit</span>';
+        editBtn.onclick = () => {
+          feeTd.textContent = '';
+          const inp = mk('input', 'pf-fee-edit-input');
+          inp.type = 'number';
+          inp.min = '0';
+          inp.step = '10';
+          inp.value = feeAmount;
+
+          const saveBtn = mk('button', 'ui-btn primary sm');
+          saveBtn.type = 'button';
+          saveBtn.textContent = 'Save';
+          saveBtn.onclick = async () => {
+            const newFee = Number(inp.value || 0);
+            try {
+              await updateDoc(doc(db, 'courses', c.id), {
+                'fees.exam': newFee,
+                updatedAt: serverTimestamp()
+              });
+              c.fees = c.fees || {};
+              c.fees.exam = newFee;
+              showToast({ type: 'success', message: `Exam fee updated for ${c.code || c.name}` });
+              renderExamFeeManagementView();
+            } catch (err) {
+              console.error('[pay-fees] update course exam fee failed', err);
+              showToast({ type: 'error', message: 'Failed to update exam fee: ' + (err.message || err) });
+            }
+          };
+
+          const cancelBtn = mk('button', 'ui-btn ghost sm');
+          cancelBtn.type = 'button';
+          cancelBtn.textContent = 'Cancel';
+          cancelBtn.onclick = () => renderExamFeeManagementView();
+
+          feeTd.appendChild(inp);
+          actTd.textContent = '';
+          actTd.append(saveBtn, cancelBtn);
+          inp.focus();
+        };
+        actTd.appendChild(editBtn);
+      } else {
+        // Branch Head: read-only
+        feeTd.textContent = formatINR(feeAmount);
+        statusTd.innerHTML = '<span class="pill neutral">Configured</span>';
+        actTd.innerHTML = '<span class="text-xs text-mute">Read-only</span>';
+      }
+
+      tr.append(codeTd, nameTd, levelTd, feeTd, statusTd, actTd);
+      tbody.appendChild(tr);
+    });
+  }
+
+  if (typeof lucide !== 'undefined') lucide.createIcons();
+}
+
+/**
  * Opens Collect Payment Popup (Part 2.3)
  */
 function openCollectPaymentModal({ type, installmentNo, month, due, amount, lateFee, title }) {
   const s = currentStudent;
   if (!s) return;
+
+  if (type === 'EX') {
+    const feesMap = activeSession?.examFeeCollection?.fees;
+    const isCourseInFees = feesMap && s.courseId && Object.prototype.hasOwnProperty.call(feesMap, s.courseId);
+    if (!isCourseInFees) {
+      showToast({ type: 'error', message: 'Exam fee not set for this course in this session. Contact Super Admin.' });
+      return;
+    }
+  }
 
   const isSuper = currentUserProfile && currentUserProfile.role === 'superadmin';
   const popup = openPopup({
@@ -967,8 +1549,26 @@ function openCollectPaymentModal({ type, installmentNo, month, due, amount, late
       renderInstallmentScheduleTable();
       renderExamFeeSection();
 
-      // Show receipt view confirmation
-      promptOpenReceipt(res.studentDocId, res.paymentId, res.receiptNo);
+      // Show redesigned receipt view confirmation
+      const actualLateFee = isWaived ? 0 : lateFee;
+      const totalPaid = amount + actualLateFee;
+      const forText = type === 'EX'
+        ? 'Board Examination Fee'
+        : `Installment ${installmentNo}${month ? ` - ${month}` : ''}`;
+
+      promptOpenReceipt({
+        studentDocId: res.studentDocId,
+        paymentId: res.paymentId,
+        receiptNo: res.receiptNo,
+        student: currentStudent || s,
+        forText,
+        amount,
+        lateFee: actualLateFee,
+        totalPaid,
+        mode,
+        txnId: txnVal,
+        date: new Date()
+      });
     } catch (err) {
       console.error('[pay-fees] payment transaction failed', err);
       showToast({ type: 'error', message: 'Payment failed: ' + (err.message || 'Transaction error') });
@@ -978,37 +1578,100 @@ function openCollectPaymentModal({ type, installmentNo, month, due, amount, late
   };
 }
 
+function formatDateTime(d) {
+  const dt = d instanceof Date ? d : new Date(d);
+  if (isNaN(dt.getTime())) return '-';
+  const day = String(dt.getDate()).padStart(2, '0');
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const month = months[dt.getMonth()];
+  const year = dt.getFullYear();
+  let hours = dt.getHours();
+  const minutes = String(dt.getMinutes()).padStart(2, '0');
+  const ampm = hours >= 12 ? 'PM' : 'AM';
+  hours = hours % 12 || 12;
+  return `${day} ${month} ${year}, ${hours}:${minutes} ${ampm}`;
+}
+
 /**
- * Prompts user to view receipt immediately
+ * Prompts user to view receipt immediately with redesigned modal dialog (Part 6)
  */
-function promptOpenReceipt(studentDocId, paymentId, receiptNo) {
-  const receiptHash = `#/payments/${studentDocId}/${paymentId}/receipt`;
+function promptOpenReceipt({
+  studentDocId,
+  paymentId,
+  receiptNo,
+  student,
+  forText,
+  amount,
+  lateFee,
+  totalPaid,
+  mode,
+  txnId,
+  date
+}) {
   const confirmPopup = openPopup({
-    title: 'Payment Receipt Ready',
-    subtitle: `Receipt No: ${receiptNo}`,
-    icon: 'check-circle'
+    title: '',
+    subtitle: '',
+    hideClose: false
   });
 
-  const body = mk('div', 'p-4 text-center');
-  body.innerHTML = `
-    <p style="font-size:14.5px; margin-bottom:18px;">Payment successfully collected and recorded with receipt <strong>${receiptNo}</strong>.</p>
-    <div style="display:flex; justify-content:center; gap:12px;">
-      <button type="button" id="pf-rec-stay" class="ui-btn ghost">Stay on page</button>
-      <button type="button" id="pf-rec-open" class="ui-btn primary"><i data-lucide="receipt"></i> Open Receipt</button>
-    </div>
-  `;
-  confirmPopup.container.appendChild(body);
+  const body = mk('div', 'pf-success-dialog');
 
-  const stayBtn = document.getElementById('pf-rec-stay');
-  const openBtn = document.getElementById('pf-rec-open');
+  const iconWrap = mk('div', 'pf-success-icon-wrap');
+  iconWrap.innerHTML = '<i data-lucide="check"></i>';
 
-  if (stayBtn) stayBtn.onclick = () => confirmPopup.close();
-  if (openBtn) {
-    openBtn.onclick = () => {
-      confirmPopup.close();
-      location.hash = receiptHash;
-    };
+  const title = mk('h3', 'pf-success-title', 'Payment recorded');
+
+  const summary = mk('div', 'pf-success-summary');
+
+  function addRow(label, value, isTotal) {
+    const row = mk('div', 'pf-success-row');
+    const lbl = mk('span', 'pf-success-label', label);
+    const val = mk('span', 'pf-success-val' + (isTotal ? ' is-total' : ''), value);
+    row.append(lbl, val);
+    summary.appendChild(row);
   }
+
+  const stName = student?.name || 'Student';
+  const stId = student?.studentId || '';
+
+  addRow('Receipt no.', receiptNo || '—');
+  addRow('Student', `${stName}${stId ? ` (${stId})` : ''}`);
+  addRow('For', forText || 'Fee payment');
+  addRow('Amount', formatINR(amount));
+  addRow('Late fee', lateFee > 0 ? formatINR(lateFee) : 'Rs. 0.00');
+  addRow('Total paid', formatINR(totalPaid), true);
+  addRow('Mode', `${mode || 'Cash'}${txnId ? ` (Txn: ${txnId})` : ''}`);
+  addRow('Date & time', formatDateTime(date || new Date()));
+
+  const actions = mk('div', 'pf-success-actions');
+
+  const openBtn = mk('button', 'ui-btn primary');
+  openBtn.type = 'button';
+  openBtn.innerHTML = '<i data-lucide="receipt"></i><span>Open receipt</span>';
+  openBtn.onclick = () => {
+    confirmPopup.close();
+    location.hash = `#/payments/${studentDocId}/${paymentId}/receipt?from=pay-fees`;
+  };
+
+  const printBtn = mk('button', 'ui-btn secondary');
+  printBtn.type = 'button';
+  printBtn.innerHTML = '<i data-lucide="printer"></i><span>Print</span>';
+  printBtn.onclick = () => {
+    confirmPopup.close();
+    location.hash = `#/payments/${studentDocId}/${paymentId}/receipt?from=pay-fees&print=1`;
+  };
+
+  const doneBtn = mk('button', 'ui-btn ghost', 'Done');
+  doneBtn.type = 'button';
+  doneBtn.onclick = () => {
+    confirmPopup.close();
+  };
+
+  actions.append(openBtn, printBtn, doneBtn);
+  body.append(iconWrap, title, summary, actions);
+
+  confirmPopup.container.textContent = '';
+  confirmPopup.container.appendChild(body);
 
   if (typeof lucide !== 'undefined') lucide.createIcons();
 }

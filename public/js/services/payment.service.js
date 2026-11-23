@@ -7,8 +7,8 @@ import {
   setDoc,
   serverTimestamp
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { readReceiptNo, writeCounter } from './admission.service.js?v=1.8.101';
-import { fineFor, todayISO } from '../utils/session-rules.js?v=1.8.101';
+import { readReceiptNo, writeCounter } from './admission.service.js?v=1.8.107';
+import { fineFor, todayISO } from '../utils/session-rules.js?v=1.8.107';
 
 const COL = 'students';
 
@@ -61,6 +61,45 @@ export async function fetchStudentActivities(studentDocId) {
   } catch (e) {
     console.error('[payment.service] fetchStudentActivities failed', e);
     return [];
+  }
+}
+
+
+
+
+/**
+ * Logs an activity entry to students/{studentDocId}/activity/
+ * Supports both standalone execution and batch writes.
+ */
+export async function logStudentActivity(studentDocId, {
+  action,
+  summary,
+  changes,
+  userEmail,
+  userRole,
+  branchId
+}, batch) {
+  if (!studentDocId) return null;
+  const payload = {
+    action: action || 'activity',
+    summary: summary || '',
+    changes: changes || {},
+    by: (userEmail || '').toLowerCase(),
+    byRole: userRole || '',
+    branchId: branchId || '',
+    at: serverTimestamp()
+  };
+  try {
+    const actRef = doc(collection(db, COL, studentDocId, 'activity'));
+    if (batch && typeof batch.set === 'function') {
+      batch.set(actRef, payload);
+      return actRef;
+    }
+    await setDoc(actRef, payload);
+    return actRef;
+  } catch (err) {
+    console.warn('[payment.service] logStudentActivity failed', err);
+    return null;
   }
 }
 
@@ -136,6 +175,43 @@ export function isExamFeePaid(examFee, paymentsList, student) {
   if (examTxn) return true;
   if (student?.examPaid === true || student?.isExamPaid === true) return true;
   return false;
+}
+
+
+
+/**
+ * Calculates the total course package fee EXCLUDING examination fee.
+ * Sum of: admission fee + study material fee + scheduled installments.
+ * Used for all course fee, balance due, and progress percentage displays.
+ */
+export function courseFeeWithoutExam(student) {
+  if (!student) return 0;
+  const sched = Array.isArray(student.feeSchedule) ? student.feeSchedule : [];
+  const instSum = sched.reduce((sum, it) => sum + Number(it.amount || 0), 0);
+  const adm = Number(student.admissionFee ?? student.feeSnapshot?.admission ?? 0);
+  const mat = Number(student.materialFee ?? student.feeSnapshot?.material ?? 0);
+  if (instSum > 0 || adm > 0 || mat > 0) {
+    return instSum + adm + mat;
+  }
+  const exam = Number(student.examFee ?? student.feeSnapshot?.exam ?? 0);
+  const total = Number(student.feeTotal ?? 0);
+  return Math.max(0, total - exam);
+}
+
+/**
+ * Calculates student balance due EXCLUDING examination fee.
+ * Subtracts payments made towards admission, material, and installments.
+ */
+export function courseBalanceWithoutExam(student, allPayments) {
+  if (!student) return 0;
+  const total = courseFeeWithoutExam(student);
+  const payments = Array.isArray(allPayments) ? allPayments : [];
+  const examPaymentsSum = payments
+    .filter(p => ['EX', 'EXAM', 'EXAMINATION'].includes(String(p.type || '').toUpperCase()))
+    .reduce((sum, p) => sum + Number(p.amount || 0), 0);
+  const rawPaid = Number(student.paidAmount ?? student.totalPaid ?? 0);
+  const paidWithoutExam = Math.max(0, rawPaid - examPaymentsSum);
+  return Math.max(0, total - paidWithoutExam);
 }
 
 /**

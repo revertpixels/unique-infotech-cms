@@ -1,19 +1,75 @@
 /* pay-fees.css — Styling for the Pay Fees page matching CMS design language */
 
 .pf-wrap {
+  width: 100%;
   display: flex;
   flex-direction: column;
-  gap: 20px;
-  max-width: 1300px;
-  margin: 0 auto;
-  padding: 24px;
+  gap: 16px;
 }
 
 .pf-head-row {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
-  gap: 16px;
+  align-items: flex-end;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.pf-head-row .pg-head {
+  margin-bottom: 0;
+}
+
+.pf-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.pf-exam-mode-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  font-weight: 600;
+  border: 1px solid var(--border-subtle, #e2e4ed);
+  background: var(--surface, #ffffff);
+}
+
+.pf-exam-mode-btn:hover {
+  background: var(--surface-hover, #f8fafc);
+  border-color: var(--primary, #333b84);
+}
+
+/* Button & table header icon sizing (14-16px) */
+.pf-wrap button svg.lucide,
+.pf-wrap button i,
+.pf-btn-collect svg.lucide,
+.pf-btn-receipt svg.lucide,
+.pf-exam-mode-btn svg.lucide,
+.pf-clear-btn svg.lucide,
+.pf-table th svg.lucide,
+.pf-table th i,
+.pf-wrap .lp-card-head svg.lucide,
+.pf-wrap .lp-card-head i {
+  width: 15px;
+  height: 15px;
+}
+
+.pf-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  flex: none;
+}
+
+.pf-status-dot.dot-grey {
+  background: #94a3b8;
+}
+
+.pf-status-dot.dot-green {
+  background: #16a34a;
+  box-shadow: 0 0 0 2px rgba(22, 163, 74, 0.2);
 }
 
 /* Search Card */
@@ -41,8 +97,8 @@
 .pf-search-icon {
   position: absolute;
   left: 14px;
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   color: var(--text-muted, #64748b);
   pointer-events: none;
 }
@@ -111,9 +167,10 @@
   gap: 5px;
 }
 
-.pf-hint-item i, .pf-hint-session i {
-  width: 13px;
-  height: 13px;
+.pf-hint-item svg.lucide, .pf-hint-item i,
+.pf-hint-session svg.lucide, .pf-hint-session i {
+  width: 14px;
+  height: 14px;
 }
 
 .pf-hint-sep {
@@ -184,13 +241,13 @@
 }
 
 .pf-choice-avatar {
-  width: 44px;
-  height: 44px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
   background: #eceefa;
   color: var(--primary, #333b84);
   font-weight: 700;
-  font-size: 15px;
+  font-size: 13px;
   display: grid;
   place-items: center;
   flex: none;
@@ -202,6 +259,7 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
+  border-radius: 50%;
 }
 
 .pf-choice-body {
@@ -353,7 +411,7 @@
   background: #e2e8f0;
 }
 
-.pf-icon-action i {
+.pf-icon-action svg.lucide, .pf-icon-action i {
   width: 14px;
   height: 14px;
 }
@@ -373,7 +431,7 @@
   gap: 5px;
 }
 
-.pf-meta-pill i {
+.pf-meta-pill svg.lucide, .pf-meta-pill i {
   width: 14px;
   height: 14px;
 }
@@ -397,17 +455,18 @@
 }
 
 .pf-metric-icon {
-  width: 44px;
-  height: 44px;
-  border-radius: 10px;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
   display: grid;
   place-items: center;
   flex: none;
 }
 
+.pf-metric-icon svg.lucide,
 .pf-metric-icon i {
-  width: 22px;
-  height: 22px;
+  width: 18px;
+  height: 18px;
 }
 
 .pf-metric-icon.bg-indigo {
@@ -534,8 +593,8 @@
 }
 
 .pf-exam-banner-icon {
-  width: 40px;
-  height: 40px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
   background: #e2e8f0;
   color: #475569;
@@ -544,9 +603,10 @@
   flex: none;
 }
 
+.pf-exam-banner-icon svg.lucide,
 .pf-exam-banner-icon i {
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
 }
 
 .pf-exam-banner-title {
@@ -565,6 +625,138 @@
   border: 1px solid var(--border-subtle, #e2e4ed);
   border-radius: 8px;
   overflow: hidden;
+}
+
+.pf-exam-status-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13.5px;
+  color: var(--text-muted, #64748b);
+  padding: 4px 0;
+}
+
+.pf-exam-status-line i {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+
+.pf-exam-status-line.success {
+  color: #15803d;
+  font-weight: 500;
+  margin-bottom: 12px;
+}
+
+/* Receipt number link in tables */
+.pf-receipt-link {
+  color: var(--primary, #333b84);
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.pf-receipt-link:hover {
+  color: #1e1b4b;
+  text-decoration: underline;
+}
+
+/* Exam Fee Dedicated Management View */
+.pf-exam-view {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+}
+
+.pf-exam-view-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  background: var(--surface, #ffffff);
+  border: 1px solid var(--border-subtle, #e2e4ed);
+  border-radius: var(--radius-lg, 12px);
+  padding: 14px 18px;
+}
+
+.pf-exam-view-header-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.pf-exam-view-title-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.pf-exam-view-title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--text-main, #1e293b);
+}
+
+.pf-exam-summary-card {
+  padding: 18px 20px;
+}
+
+.pf-exam-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+
+.pf-exam-summary-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.pf-exam-summary-item .pf-label {
+  font-size: 11.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted, #64748b);
+  font-weight: 600;
+}
+
+.pf-exam-summary-item strong {
+  font-size: 15px;
+  color: var(--text-main, #1e293b);
+}
+
+.pf-exam-meta-line {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--border-subtle, #e2e4ed);
+  font-size: 13px;
+  color: var(--text-muted, #64748b);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pf-fee-edit-input {
+  width: 90px;
+  padding: 4px 8px;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: right;
+  border: 1px solid var(--border-subtle, #e2e4ed);
+  border-radius: 6px;
+}
+
+.pf-fee-edit-input:focus {
+  border-color: var(--primary, #333b84);
+  outline: none;
 }
 
 /* Collect Payment Modal Custom Form Styling */
@@ -647,4 +839,215 @@
   .pf-modal-row-2 {
     grid-template-columns: 1fr;
   }
+}
+
+/* Installment Table Status Subtext */
+.pf-status-sub {
+  font-size: 11px;
+  color: var(--text-muted, #64748b);
+  margin-top: 3px;
+  white-space: nowrap;
+}
+
+/* Search Dropdown directly under Search Input */
+.pf-search-dropdown {
+  position: absolute;
+  top: calc(100% + 5px);
+  left: 0;
+  width: 100%;
+  background: var(--surface, #ffffff);
+  border: 1px solid var(--border-subtle, #e2e4ed);
+  border-radius: 8px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.05);
+  max-height: 320px;
+  overflow-y: auto;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+}
+
+.pf-search-dropdown[hidden] {
+  display: none !important;
+}
+
+.pf-suggest-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--border-subtle, #f1f5f9);
+  transition: background 0.12s ease;
+}
+
+.pf-suggest-item:last-child {
+  border-bottom: none;
+}
+
+.pf-suggest-item:hover,
+.pf-suggest-item.is-selected {
+  background: var(--surface-hover, #f8f9ff);
+}
+
+.pf-suggest-item.is-selected {
+  outline: 2px solid var(--primary, #333b84);
+  outline-offset: -2px;
+}
+
+.pf-suggest-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #e0e7ff;
+  color: #3730a3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  flex: none;
+  overflow: hidden;
+}
+
+.pf-suggest-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.pf-suggest-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.pf-suggest-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13.5px;
+}
+
+.pf-suggest-name {
+  font-weight: 600;
+  color: var(--text-main, #1e293b);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pf-suggest-id {
+  font-size: 12px;
+  color: var(--primary, #333b84);
+  font-weight: 700;
+  background: #eef2ff;
+  padding: 1px 6px;
+  border-radius: 4px;
+  flex: none;
+}
+
+.pf-suggest-sub {
+  font-size: 12px;
+  color: var(--text-muted, #64748b);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 1px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pf-suggest-dot {
+  color: #cbd5e1;
+}
+
+/* Redesigned Payment Success Dialog */
+.pf-success-dialog {
+  max-width: 440px;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 8px 4px 4px;
+}
+
+.pf-success-icon-wrap {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: #dcfce7;
+  color: #16a34a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 12px;
+}
+
+.pf-success-icon-wrap svg.lucide,
+.pf-success-icon-wrap i {
+  width: 26px;
+  height: 26px;
+}
+
+.pf-success-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-main, #1e293b);
+  margin: 0 0 16px;
+}
+
+.pf-success-summary {
+  width: 100%;
+  background: var(--bg-surface-alt, #f8fafc);
+  border: 1px solid var(--border-subtle, #e2e4ed);
+  border-radius: 8px;
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  margin-bottom: 20px;
+  text-align: left;
+}
+
+.pf-success-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+  gap: 12px;
+}
+
+.pf-success-label {
+  color: var(--text-muted, #64748b);
+  flex: none;
+}
+
+.pf-success-val {
+  color: var(--text-main, #1e293b);
+  font-weight: 500;
+  text-align: right;
+  word-break: break-word;
+}
+
+.pf-success-val.is-total {
+  font-weight: 700;
+  font-size: 14.5px;
+  color: var(--text-main, #0f172a);
+}
+
+.pf-success-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+}
+
+.pf-success-actions .ui-btn {
+  flex: 1;
+  justify-content: center;
+  white-space: nowrap;
 }

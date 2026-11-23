@@ -1,13 +1,13 @@
 import { db } from '../config/firebase-config.js';
-import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.101';
+import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.107';
 import { collection, getDocs, query, where, doc, addDoc, updateDoc, deleteDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
 import { createSelect } from '../components/ui-select.js';
 import { openMenu } from '../components/ui-menu.js';
 import { confirmDialog } from '../components/ui-confirm.js';
 import { showToast } from '../components/toast.js';
-import { buildStats, buildToolbar, renderEmptyTableState } from '../components/list-page.js?v=1.8.101';
-import { INST_PER_SEM, feeTotal } from '../utils/fees.js?v=1.8.101';
-import { isCourseActive } from '../utils/session-rules.js?v=1.8.101';
+import { buildStats, buildToolbar, renderEmptyTableState } from '../components/list-page.js?v=1.8.107';
+import { INST_PER_SEM, feeTotal } from '../utils/fees.js?v=1.8.107';
+import { isCourseActive } from '../utils/session-rules.js?v=1.8.107';
 
 const ENDED = ['ended', 'closed', 'completed', 'archived', 'cancelled'];
 const LOCK_FIELDS = { admission: 'Admission fee', installment: 'Installment amount', material: 'Material fee' };
@@ -86,9 +86,15 @@ export async function mount({ ctx, profile }) {
         if (el.parentElement) el.parentElement.classList.toggle('is-locked', locked);
       });
 
-      // Check if any active/running session has exam fee collection locked
-      const activeSessionWithExamLock = (sessions || []).find((s) => (s.status === 'running' || s.status === 'upcoming') && s.examFeeCollection?.started);
-      const isExamLocked = !!activeSessionWithExamLock;
+      // Lock the exam fee field ONLY for a course whose id is in examFeeCollection.fees of a session where examFeeCollection.started == true
+      const sessionWithLockedExam = (sessions || []).find((s) =>
+        s.examFeeCollection &&
+        s.examFeeCollection.started === true &&
+        s.examFeeCollection.fees &&
+        editId &&
+        Object.prototype.hasOwnProperty.call(s.examFeeCollection.fees, editId)
+      );
+      const isExamLocked = !!sessionWithLockedExam;
       if (f.exam) {
         f.exam.readOnly = isExamLocked;
         if (f.exam.parentElement) f.exam.parentElement.classList.toggle('is-locked', isExamLocked);
@@ -96,16 +102,16 @@ export async function mount({ ctx, profile }) {
 
       banner.hidden = !locked && !isExamLocked;
       if (locked || isExamLocked) {
-        let msg = '';
+        let parts = [];
         if (locked) {
           const frozen = examFrozenBatchesFor(editId);
-          msg += 'This course is locked for fee edits. ' + run.length + ' active batch(es) use this course. Edit fees only after those batches are closed.'
-            + (frozen.length ? ' Exam fee is frozen inside: ' + frozen.map((b) => b.name || b.id).join(', ') + ' - a new exam fee applies only to other batches.' : ' Exam fee can still be updated.');
+          parts.push('This course is locked for fee edits. ' + run.length + ' active batch(es) use this course. Edit fees only after those batches are closed.'
+            + (frozen.length ? ' Exam fee is frozen inside: ' + frozen.map((b) => b.name || b.id).join(', ') + ' - a new exam fee applies only to other batches.' : ' Exam fee can still be updated.'));
         }
         if (isExamLocked) {
-          msg += (msg ? ' ' : '') + `Exam fee is locked for ${activeSessionWithExamLock.name || 'the active session'} (exam fee collection started). Changes to exam fee will not affect this session.`;
+          parts.push(`Locked - exam fee collection started for ${sessionWithLockedExam.name || 'this session'}`);
         }
-        banner.textContent = msg;
+        banner.textContent = parts.join(' ');
       }
     }
     async function loadBatches() {

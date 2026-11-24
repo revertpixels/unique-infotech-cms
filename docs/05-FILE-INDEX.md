@@ -62,6 +62,7 @@ unique-infotech-cms/
     │   │   ├── confirm.js
     │   │   ├── dropdown.js
     │   │   ├── modal.js
+    │   │   ├── payment-popup.js
     │   │   ├── sidebar.js
     │   │   ├── toast.js
     │   │   └── topbar.js
@@ -100,6 +101,7 @@ unique-infotech-cms/
     │       ├── formatter.js
     │       ├── helpers.js
     │       ├── pdf.utils.js
+    │       ├── sound.js
     │       └── validator.js
     └── pages/
         ├── admissions.html

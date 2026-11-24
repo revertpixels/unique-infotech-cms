@@ -12,19 +12,70 @@
   </div>
 
   <!-- Loading Skeleton -->
-  <div class="lp-card sp-loading-card" id="sp-loading">
-    <div class="sp-skel-hero">
-      <div class="skel sp-skel-avatar"></div>
-      <div class="sp-skel-lines">
-        <div class="skel" style="width: 260px; height: 26px;"></div>
-        <div class="skel" style="width: 420px; height: 16px;"></div>
+  <div class="sp-loading-wrap" id="sp-loading">
+    <!-- 1. Hero Card Skeleton -->
+    <div class="lp-card sp-hero-card">
+      <div class="sp-hero-inner">
+        <div class="sp-hero-left">
+          <div class="skel sp-skel-avatar-round"></div>
+          <div class="sp-skel-lines">
+            <div class="skel" style="width: 220px; height: 26px; border-radius: 6px;"></div>
+            <div class="skel" style="width: 320px; height: 16px; border-radius: 6px; margin-top: 4px;"></div>
+            <div class="skel" style="width: 180px; height: 14px; border-radius: 6px; margin-top: 4px;"></div>
+          </div>
+        </div>
+        <div class="sp-hero-divider" aria-hidden="true"></div>
+        <div class="sp-hero-actions">
+          <div class="skel" style="width: 120px; height: 38px; border-radius: 20px;"></div>
+          <div style="display: flex; gap: 8px;">
+            <div class="skel" style="width: 38px; height: 38px; border-radius: 50%;"></div>
+            <div class="skel" style="width: 38px; height: 38px; border-radius: 50%;"></div>
+            <div class="skel" style="width: 38px; height: 38px; border-radius: 50%;"></div>
+            <div class="skel" style="width: 38px; height: 38px; border-radius: 50%;"></div>
+          </div>
+        </div>
       </div>
     </div>
-    <div class="sp-skel-stats">
-      <div class="skel" style="height: 72px;"></div>
-      <div class="skel" style="height: 72px;"></div>
-      <div class="skel" style="height: 72px;"></div>
-      <div class="skel" style="height: 72px;"></div>
+
+    <!-- 2. Consolidated Stats Card Skeleton -->
+    <div class="lp-card sp-stats-card" style="padding: 20px;">
+      <div class="sp-skel-stats-grid">
+        <div class="sp-skel-stat-col">
+          <div class="skel" style="width: 80px; height: 12px; border-radius: 4px;"></div>
+          <div class="skel" style="width: 110px; height: 24px; border-radius: 6px;"></div>
+        </div>
+        <div class="sp-skel-stat-col">
+          <div class="skel" style="width: 80px; height: 12px; border-radius: 4px;"></div>
+          <div class="skel" style="width: 110px; height: 24px; border-radius: 6px;"></div>
+        </div>
+        <div class="sp-skel-stat-col">
+          <div class="skel" style="width: 80px; height: 12px; border-radius: 4px;"></div>
+          <div class="skel" style="width: 110px; height: 24px; border-radius: 6px;"></div>
+        </div>
+        <div class="sp-skel-stat-col">
+          <div class="skel" style="width: 80px; height: 12px; border-radius: 4px;"></div>
+          <div class="skel" style="width: 110px; height: 24px; border-radius: 6px;"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 3. Tabs Nav Skeleton -->
+    <div class="sp-tabs-nav" style="pointer-events: none;">
+      <div class="skel" style="height: 44px; border-radius: 10px;"></div>
+      <div class="skel" style="height: 44px; border-radius: 10px;"></div>
+      <div class="skel" style="height: 44px; border-radius: 10px;"></div>
+      <div class="skel" style="height: 44px; border-radius: 10px;"></div>
+    </div>
+
+    <!-- 4. Tab Content Card Skeleton -->
+    <div class="lp-card" style="padding: 24px;">
+      <div class="skel" style="width: 160px; height: 20px; border-radius: 6px; margin-bottom: 20px;"></div>
+      <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px;">
+        <div class="skel" style="height: 60px; border-radius: 8px;"></div>
+        <div class="skel" style="height: 60px; border-radius: 8px;"></div>
+        <div class="skel" style="height: 60px; border-radius: 8px;"></div>
+        <div class="skel" style="height: 60px; border-radius: 8px;"></div>
+      </div>
     </div>
   </div>
 

@@ -1,4 +1,4 @@
-﻿// Shared popup helper used by all status-based three-dots menu popups on Students pages (v1.8.90)
+// Shared popup helper used by all status-based three-dots menu popups on Students pages (v1.8.90)
 // Usage:
 //   const popup = openPopup({
 //     title: 'View details',
@@ -110,8 +110,14 @@ export function openPopup({ title = '', subtitle = '', icon = '', tone = 'defaul
   if (typeof lucide !== 'undefined') lucide.createIcons();
 
   requestAnimationFrame(() => {
-    const focusable = box.querySelector('input:not([disabled]), button:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])');
-    if (focusable) focusable.focus();
+    // Focus first interactive element inside content container (avoiding header action/close buttons)
+    const focusable = container.querySelector('input:not([disabled]):not([type="hidden"]), textarea:not([disabled]), select:not([disabled]), button:not([disabled]), [tabindex]:not([tabindex="-1"])');
+    if (focusable) {
+      focusable.focus();
+    } else {
+      box.tabIndex = -1;
+      box.focus({ preventScroll: true });
+    }
   });
 
   return { el: box, box, head, actions: actionsWrap, close, container, backdrop: back };

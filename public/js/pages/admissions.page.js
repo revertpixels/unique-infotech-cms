@@ -14,22 +14,23 @@ import {
   arrayUnion,
   addDoc
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.105';
-import { registerDirty, confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.105';
-import { buildStats, buildToolbar, renderPager, renderEmptyTableState } from '../components/list-page.js?v=1.8.105';
-import { createSelect } from '../components/ui-select.js?v=1.8.105';
-import { openMenu } from '../components/ui-menu.js?v=1.8.105';
-import { confirmDialog } from '../components/ui-confirm.js?v=1.8.105';
-import { openPopup } from '../components/modal.js?v=1.8.105';
-import { createDatePicker } from '../components/ui-datepicker.js?v=1.8.105';
-import { getSelectedSessionId, getCachedSessions, loadSessions, todayISO } from '../core/sessions.js?v=1.8.105';
-import { firstInstallmentOf, admissionState, sessionLabel, installmentSchedule, batchAllowsCourse, batchCourseLabel, isCourseActive } from '../utils/session-rules.js?v=1.8.105';
-import { formatINR, formatDateIN, initials } from '../utils/formatter.js?v=1.8.105';
-import { validatePhone, validateEmail, validateDOB, validateName, validateRequired } from '../utils/validator.js?v=1.8.105';
-import { listStudentsRaw, checkDuplicatePhone, readStudentId, readReceiptNo, writeCounter, createStudentWithDocs, updateStudentWithDocs, updateStudent, deleteStudent } from '../services/admission.service.js?v=1.8.105';
-import { feeTotal } from '../utils/fees.js?v=1.8.105';
-import { compressTo100KB, readAsDataURL, blobToDataURL, isImageFile, formatBytes } from '../utils/image-compress.js?v=1.8.105';
-import { fetchStudentPayments } from '../services/payment.service.js?v=1.8.105';
+import { showToast } from '../components/toast.js?v=1.8.125';
+import { registerDirty, confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.125';
+import { buildStats, buildToolbar, renderPager, renderEmptyTableState } from '../components/list-page.js?v=1.8.125';
+import { createSelect } from '../components/ui-select.js?v=1.8.125';
+import { openMenu } from '../components/ui-menu.js?v=1.8.125';
+import { confirmDialog } from '../components/ui-confirm.js?v=1.8.125';
+import { openPopup } from '../components/modal.js?v=1.8.125';
+import { createDatePicker } from '../components/ui-datepicker.js?v=1.8.125';
+import { getSelectedSessionId, getCachedSessions, loadSessions, todayISO } from '../core/sessions.js?v=1.8.125';
+import { firstInstallmentOf, admissionState, sessionLabel, installmentSchedule, batchAllowsCourse, batchCourseLabel, isCourseActive } from '../utils/session-rules.js?v=1.8.125';
+import { formatINR, formatDateIN, initials } from '../utils/formatter.js?v=1.8.125';
+import { validatePhone, validateEmail, validateDOB, validateName, validateRequired } from '../utils/validator.js?v=1.8.125';
+import { listStudentsRaw, checkDuplicatePhone, readStudentId, readReceiptNo, writeCounter, createStudentWithDocs, updateStudentWithDocs, updateStudent, deleteStudent } from '../services/admission.service.js?v=1.8.125';
+import { feeTotal } from '../utils/fees.js?v=1.8.125';
+import { compressTo100KB, readAsDataURL, blobToDataURL, isImageFile, formatBytes } from '../utils/image-compress.js?v=1.8.125';
+import { fetchStudentPayments } from '../services/payment.service.js?v=1.8.125';
+import { playPaymentSuccessSound } from '../utils/sound.js?v=1.8.125';
 
 const COL = 'students';
 
@@ -1492,1342 +1493,1340 @@ export async function mount({ container, profile, ctx }) {
                       }
                     }
                   ];
-              payments.forEach(p => {
-                const type = String(p.type || '').toUpperCase();
-                let label = '';
-                if (type === 'EX') {
-                  label = `Exam fee - ${p.receiptNo || 'Receipt'}`;
-                } else {
-                  const no = p.installmentNo || 1;
-                  const mo = p.month ? ` - ${p.month}` : '';
-                  label = `Installment ${no}${mo} - ${p.receiptNo || 'Receipt'}`;
+                  payments.forEach(p => {
+                    const type = String(p.type || '').toUpperCase();
+                    let label = '';
+                    if (type === 'EX') {
+                      label = `Exam fee - ${p.receiptNo || 'Receipt'}`;
+                    } else {
+                      const no = p.installmentNo || 1;
+                      const mo = p.month ? ` - ${p.month}` : '';
+                      label = `Installment ${no}${mo} - ${p.receiptNo || 'Receipt'}`;
+                    }
+                    receiptItems.push({
+                      label,
+                      icon: 'receipt',
+                      onClick: () => {
+                        location.hash = `#/payments/${s.id}/${p.id}/receipt`;
+                      }
+                    });
+                  });
+                  setTimeout(() => openMenu(kebab, receiptItems), 10);
                 }
-                receiptItems.push({
-                  label,
-                  icon: 'receipt',
-                  onClick: () => {
-                    location.hash = `#/payments/${s.id}/${p.id}/receipt`;
-                  }
-                });
-              });
-              setTimeout(() => openMenu(kebab, receiptItems), 10);
-            }
               }
             ];
-          if (viewItems.length > 0) {
-            baseItems.push({ section: 'View' });
-            baseItems.push(...viewItems);
-          }
+            if (viewItems.length > 0) {
+              baseItems.push({ section: 'View' });
+              baseItems.push(...viewItems);
+            }
 
-          // SECTION: Manage (Super Admin; Branch Head for own branch)
-          const canManage = isSuperAdmin || (isHead && s.branchId === profile.branchId);
-          const isActiveOrBreak = st === 'active' || st === 'break';
-          const manageItems = [];
-          if (canManage && isActiveOrBreak) {
-            manageItems.push({
-              label: 'Change batch',
-              icon: 'shuffle',
-              onClick: () => changeBatchPopup(s)
-            });
-          }
-          if (manageItems.length > 0) {
-            baseItems.push({ section: 'Manage' });
-            baseItems.push(...manageItems);
-          }
-
-          // SECTION: Danger zone (Super Admin only)
-          if (isSuperAdmin) {
-            const dangerItems = [];
-            if (isActiveOrBreak) {
-              dangerItems.push({
-                label: 'Drop student',
-                icon: 'user-x',
-                danger: true,
-                onClick: () => removeStudentPopup(s, 'drop')
+            // SECTION: Manage (Super Admin; Branch Head for own branch)
+            const canManage = isSuperAdmin || (isHead && s.branchId === profile.branchId);
+            const isActiveOrBreak = st === 'active' || st === 'break';
+            const manageItems = [];
+            if (canManage && isActiveOrBreak) {
+              manageItems.push({
+                label: 'Change batch',
+                icon: 'shuffle',
+                onClick: () => changeBatchPopup(s)
               });
             }
-            dangerItems.push({
-              label: 'Delete permanently',
-              icon: 'trash-2',
-              danger: true,
-              onClick: () => removeStudentPopup(s, 'delete')
-            });
-
-            if (dangerItems.length > 0) {
-              baseItems.push({ section: 'Danger zone' });
-              baseItems.push(...dangerItems);
+            if (manageItems.length > 0) {
+              baseItems.push({ section: 'Manage' });
+              baseItems.push(...manageItems);
             }
+
+            // SECTION: Danger zone (Super Admin only)
+            if (isSuperAdmin) {
+              const dangerItems = [];
+              if (isActiveOrBreak) {
+                dangerItems.push({
+                  label: 'Drop student',
+                  icon: 'user-x',
+                  danger: true,
+                  onClick: () => removeStudentPopup(s, 'drop')
+                });
+              }
+              dangerItems.push({
+                label: 'Delete permanently',
+                icon: 'trash-2',
+                danger: true,
+                onClick: () => removeStudentPopup(s, 'delete')
+              });
+
+              if (dangerItems.length > 0) {
+                baseItems.push({ section: 'Danger zone' });
+                baseItems.push(...dangerItems);
+              }
+            }
+
+            kebab.addEventListener('click', () => openMenu(kebab, baseItems));
+            tdAct.appendChild(kebab);
+            tr.appendChild(tdAct);
+
+            rowsHost.appendChild(tr);
+          } catch (e) {
+            console.warn('[admissions] row failed', s.id, e);
           }
+        });
 
-          kebab.addEventListener('click', () => openMenu(kebab, baseItems));
-          tdAct.appendChild(kebab);
-          tr.appendChild(tdAct);
-
-          rowsHost.appendChild(tr);
-        } catch (e) {
-          console.warn('[admissions] row failed', s.id, e);
-        }
-      });
-
-      if (footEl) {
-        if (T === 0) {
-          footEl.hidden = true;
-        } else {
-          const a = (page - 1) * PAGE_SIZE + 1;
-          const b = Math.min(page * PAGE_SIZE, N);
-          const range = a + '–' + b;
-          let summary;
-          if (N === T) {
-            summary = totalPages <= 1 ? ('Showing all ' + N) : ('Showing ' + range + ' of ' + N);
+        if (footEl) {
+          if (T === 0) {
+            footEl.hidden = true;
           } else {
-            summary = totalPages <= 1 ? ('Showing ' + N + ' of ' + T) : ('Showing ' + range + ' of ' + N + ' (filtered from ' + T + ')');
+            const a = (page - 1) * PAGE_SIZE + 1;
+            const b = Math.min(page * PAGE_SIZE, N);
+            const range = a + '–' + b;
+            let summary;
+            if (N === T) {
+              summary = totalPages <= 1 ? ('Showing all ' + N) : ('Showing ' + range + ' of ' + N);
+            } else {
+              summary = totalPages <= 1 ? ('Showing ' + N + ' of ' + T) : ('Showing ' + range + ' of ' + N + ' (filtered from ' + T + ')');
+            }
+            renderPager(footEl, { page, pageSize: PAGE_SIZE, totalItems: N, summary, showWhenSingle: true, onPageChange: (p) => { page = p; render(); } });
           }
-          renderPager(footEl, { page, pageSize: PAGE_SIZE, totalItems: N, summary, showWhenSingle: true, onPageChange: (p) => { page = p; render(); } });
         }
       }
-    }
 
       if (typeof lucide !== 'undefined') lucide.createIcons();
-  } catch (e) {
-    console.error('[admissions] render failed', e);
-    const msg = e && e.message ? e.message : String(e);
-    rowsHost.innerHTML = '';
-    const tr = mk('tr');
-    const td = mk('td', 'adm-empty');
-    td.colSpan = 7;
-    td.innerHTML = 'Could not load students: ' + msg + '. <button type="button" id="adm-retry" class="ui-btn primary" style="margin-top:8px;display:inline-flex;align-items:center;gap:6px;"><i data-lucide="rotate-ccw"></i>Retry</button>';
-    tr.appendChild(td);
-    rowsHost.appendChild(tr);
-    const retryBtn = $('adm-retry');
-    if (retryBtn) retryBtn.addEventListener('click', () => { load(); render(); });
+    } catch (e) {
+      console.error('[admissions] render failed', e);
+      const msg = e && e.message ? e.message : String(e);
+      rowsHost.innerHTML = '';
+      const tr = mk('tr');
+      const td = mk('td', 'adm-empty');
+      td.colSpan = 7;
+      td.innerHTML = 'Could not load students: ' + msg + '. <button type="button" id="adm-retry" class="ui-btn primary" style="margin-top:8px;display:inline-flex;align-items:center;gap:6px;"><i data-lucide="rotate-ccw"></i>Retry</button>';
+      tr.appendChild(td);
+      rowsHost.appendChild(tr);
+      const retryBtn = $('adm-retry');
+      if (retryBtn) retryBtn.addEventListener('click', () => { load(); render(); });
+    }
   }
-}
 
-// ---------- form actions ----------
-async function openForm(r) {
-  try {
+  // ---------- form actions ----------
+  async function openForm(r) {
+    try {
+      clearReturnState();
+      DOC_KEYS.forEach((k) => { docFiles[k] = null; docOriginals[k] = null; });
+      DOC_KEYS.forEach((k) => { const p = $('adm-' + k + '-preview'); if (p) p.innerHTML = ''; });
+      DOC_KEYS.forEach((k) => { const s = $('adm-' + k + '-size'); if (s) s.textContent = ''; });
+
+      editId = r ? r.id : null;
+      editRow = r || null;
+      const v = r ? {
+        name: r.name || '', guardianName: r.guardianName || '', phone: r.phone || '',
+        altPhone: r.altPhone || '', email: r.email || '', aadhaar: '', dob: r.dob || '',
+        admissionDate: r.admissionDate || '', gender: r.gender || '',
+        qualification: r.qualification || '', address: r.address || '',
+        branchId: isSuper ? (r.branchId || '') : (fixedBranch || ''), courseId: r.courseId || '', batchId: r.batchId || ''
+      } : {
+        name: '', guardianName: '', phone: '', altPhone: '', email: '', aadhaar: '', dob: '',
+        admissionDate: new Date().toISOString().slice(0, 10), gender: '',
+        qualification: '', address: '', branchId: fixedBranch || '', courseId: '', batchId: '', sessionId: '', sessionName: ''
+      };
+      fillForm(v);
+      onBranchChange();
+      $t('adm-form-title', r ? 'Edit admission' : 'New admission');
+      $t('adm-save-label', r ? 'Save changes' : 'Admit student');
+      form.hidden = false;
+      touched = false;
+      showErrors({});
+      saved = snapshot();
+      refreshForm();
+      form.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      const nameEl = $('adm-name');
+      if (nameEl && nameEl.focus) nameEl.focus({ preventScroll: true });
+
+      if (r) {
+        try {
+          const [docsSnap, aadhaarSnap] = await Promise.all([
+            getDocs(query(collection(db, 'students', r.id, 'docs'))),
+            getDoc(doc(db, 'students', r.id, 'aadhaar', 'aadhaar'))
+          ]);
+          docsSnap.docs.forEach((d) => {
+            const data = d.data();
+            docOriginals[d.id] = data;
+          });
+          if (aadhaarSnap.exists()) {
+            const aData = aadhaarSnap.data();
+            v.aadhaar = aData.aadhaar || '';
+          }
+          fillForm(v);
+          saved = snapshot();
+        } catch (e) {
+          // non-fatal
+        }
+      }
+    } catch (e) {
+      console.error('[admissions] openForm failed', e);
+      showToast('Could not open the form (' + (e.message || 'error') + ').', 'error');
+    }
+  }
+
+  function closeForm() {
+    form.hidden = true;
+    editId = null;
+    editRow = null;
     clearReturnState();
+    $v('adm-aadhaar', '');
     DOC_KEYS.forEach((k) => { docFiles[k] = null; docOriginals[k] = null; });
-    DOC_KEYS.forEach((k) => { const p = $('adm-' + k + '-preview'); if (p) p.innerHTML = ''; });
-    DOC_KEYS.forEach((k) => { const s = $('adm-' + k + '-size'); if (s) s.textContent = ''; });
-
-    editId = r ? r.id : null;
-    editRow = r || null;
-    const v = r ? {
-      name: r.name || '', guardianName: r.guardianName || '', phone: r.phone || '',
-      altPhone: r.altPhone || '', email: r.email || '', aadhaar: '', dob: r.dob || '',
-      admissionDate: r.admissionDate || '', gender: r.gender || '',
-      qualification: r.qualification || '', address: r.address || '',
-      branchId: isSuper ? (r.branchId || '') : (fixedBranch || ''), courseId: r.courseId || '', batchId: r.batchId || ''
-    } : {
-      name: '', guardianName: '', phone: '', altPhone: '', email: '', aadhaar: '', dob: '',
-      admissionDate: new Date().toISOString().slice(0, 10), gender: '',
-      qualification: '', address: '', branchId: fixedBranch || '', courseId: '', batchId: '', sessionId: '', sessionName: ''
-    };
-    fillForm(v);
-    onBranchChange();
-    $t('adm-form-title', r ? 'Edit admission' : 'New admission');
-    $t('adm-save-label', r ? 'Save changes' : 'Admit student');
-    form.hidden = false;
-    touched = false;
+    DOC_KEYS.forEach((k) => {
+      const preview = $('adm-' + k + '-preview');
+      if (preview) preview.innerHTML = '';
+      const size = $('adm-' + k + '-size');
+      if (size) size.textContent = '';
+    });
     showErrors({});
-    saved = snapshot();
-    refreshForm();
-    form.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    const nameEl = $('adm-name');
-    if (nameEl && nameEl.focus) nameEl.focus({ preventScroll: true });
-
-    if (r) {
-      try {
-        const [docsSnap, aadhaarSnap] = await Promise.all([
-          getDocs(query(collection(db, 'students', r.id, 'docs'))),
-          getDoc(doc(db, 'students', r.id, 'aadhaar', 'aadhaar'))
-        ]);
-        docsSnap.docs.forEach((d) => {
-          const data = d.data();
-          docOriginals[d.id] = data;
-        });
-        if (aadhaarSnap.exists()) {
-          const aData = aadhaarSnap.data();
-          v.aadhaar = aData.aadhaar || '';
-        }
-        fillForm(v);
-        saved = snapshot();
-      } catch (e) {
-        // non-fatal
-      }
-    }
-  } catch (e) {
-    console.error('[admissions] openForm failed', e);
-    showToast('Could not open the form (' + (e.message || 'error') + ').', 'error');
   }
-}
 
-function closeForm() {
-  form.hidden = true;
-  editId = null;
-  editRow = null;
-  clearReturnState();
-  $v('adm-aadhaar', '');
-  DOC_KEYS.forEach((k) => { docFiles[k] = null; docOriginals[k] = null; });
-  DOC_KEYS.forEach((k) => {
-    const preview = $('adm-' + k + '-preview');
-    if (preview) preview.innerHTML = '';
-    const size = $('adm-' + k + '-size');
-    if (size) size.textContent = '';
-  });
-  showErrors({});
-}
-
-function focusFirstError(err) {
-  const order = ['name', 'guardianName', 'phone', 'email', 'aadhaar', 'dob', 'admissionDate', 'gender', 'qualification', 'address', 'session', 'branch', 'course', 'batch', ...DOC_KEYS];
-  const map = {
-    name: 'adm-name', guardianName: 'adm-guardianName', phone: 'adm-phone', email: 'adm-email', aadhaar: 'adm-aadhaar',
-    dob: 'adm-dob', admissionDate: 'adm-admissionDate', gender: 'adm-gender-host', qualification: 'adm-qualification-host',
-    address: 'adm-address', session: 'adm-session-host', branch: 'adm-branch-host', course: 'adm-course-host', batch: 'adm-batch-host'
-  };
-  DOC_KEYS.forEach((k) => { map[k] = 'adm-' + k + '-upload'; });
-  for (const k of order) {
-    if (err[k]) { const el = $(map[k]); if (el && el.focus) { el.focus(); return; } }
-  }
-}
-
-async function save() {
-  const v = readForm();
-  touched = true;
-  const err = validate(v);
-  showErrors(err);
-  const firstBad = Object.keys(err).find(k => err[k]);
-  if (firstBad) {
-    $t('adm-state', 'Please fix the highlighted fields');
-    const stateEl = $('adm-state');
-    if (stateEl) stateEl.className = 'save-state error';
-    showToast('Please fix the highlighted fields.', 'error');
-    focusFirstError(err);
-    return;
-  }
-  // ---------- T2/T5: prerequisite gate on Admit (new admissions only) ----------
-  if (!editId) {
-    const cForSave = courseOf(v.courseId);
-    if (cForSave && getPrereq(cForSave) && !prereqCheck) {
-      const p = getPrereq(cForSave);
-      const ok = await confirmDialog({
-        title: 'Prerequisite not found',
-        message: 'This student is not eligible as per the data currently in the system. Older records may be archived. Have you verified that the student completed ' + p.code + ' - ' + p.name + '?',
-        confirmText: 'Yes, verify', cancelText: 'Cancel'
-      });
-      if (!ok) return; // Cancel -> stay on form, do not clear course
-      prereqCheck = {
-        status: 'manual',
-        courseId: p.id,
-        verifiedBy: (profile && profile.email) || '',
-        verifiedAt: serverTimestamp()
-      };
+  function focusFirstError(err) {
+    const order = ['name', 'guardianName', 'phone', 'email', 'aadhaar', 'dob', 'admissionDate', 'gender', 'qualification', 'address', 'session', 'branch', 'course', 'batch', ...DOC_KEYS];
+    const map = {
+      name: 'adm-name', guardianName: 'adm-guardianName', phone: 'adm-phone', email: 'adm-email', aadhaar: 'adm-aadhaar',
+      dob: 'adm-dob', admissionDate: 'adm-admissionDate', gender: 'adm-gender-host', qualification: 'adm-qualification-host',
+      address: 'adm-address', session: 'adm-session-host', branch: 'adm-branch-host', course: 'adm-course-host', batch: 'adm-batch-host'
+    };
+    DOC_KEYS.forEach((k) => { map[k] = 'adm-' + k + '-upload'; });
+    for (const k of order) {
+      if (err[k]) { const el = $(map[k]); if (el && el.focus) { el.focus(); return; } }
     }
   }
-  // ---------- T3: confirm admission before saving (new admissions) ----------
-  if (!editId) {
-    const cc = courseOf(v.courseId);
-    const bb = batchOf(v.batchId);
-    const ss = sessions.find(s => s.id === v.sessionId);
-    const totalFee = feeTotal(cc.fees || {});
-    const ff = cc ? cc.fees || {} : {};
-    const dueNow = Number(ff.admission || 0) + Number(ff.material || 0);
-    const summary =
-      'Student: ' + v.name + '\n' +
-      'Course: ' + (cc.courseCode || cc.code || '') + ' - ' + (cc.name || '') + '\n' +
-      'Batch: ' + (bb.name || '-') + '\n' +
-      'Session: ' + (ss ? ss.name : '-') + '\n' +
-      'Total fee: Rs. ' + formatINR(totalFee) + '\n' +
-      'Due now: Rs. ' + formatINR(dueNow);
-    const ok = await confirmDialog({
-      title: 'Confirm admission',
-      message: summary,
-      confirmText: 'Admit', cancelText: 'Back'
-    });
-    if (!ok) return; // Back -> stay on form
-  }
-  const b = batchOf(v.batchId);
-  if (b && b.capacity) {
-    const cap = Number(b.capacity);
-    const filled = students.filter(s => s.batchId === b.id && s.status === 'active' && s.id !== editId).length;
-    if (filled >= cap) {
-      $t('adm-batch-err', 'This batch is full (0 seats left).');
-      batchSel.focus();
+
+  async function save() {
+    const v = readForm();
+    touched = true;
+    const err = validate(v);
+    showErrors(err);
+    const firstBad = Object.keys(err).find(k => err[k]);
+    if (firstBad) {
+      $t('adm-state', 'Please fix the highlighted fields');
+      const stateEl = $('adm-state');
+      if (stateEl) stateEl.className = 'save-state error';
+      showToast('Please fix the highlighted fields.', 'error');
+      focusFirstError(err);
       return;
     }
-  }
-  const selS = sessions.find(s => s.id === v.sessionId);
-  if (selS) {
-    const st = admissionState(selS, todayISO());
-    if (!st.open) {
-      $t('adm-session-err', 'Admission closed for ' + selS.name + ': ' + st.reason + '.');
-      $('adm-session-host').classList.add('is-invalid');
-      showToast('Admission closed for ' + selS.name + ': first installment date has passed. Please choose another session.', 'error');
-      sessionSel.focus();
-      return;
-    }
-  }
-  if (!editId) {
-    const dup = await checkDuplicatePhone({ branchId: v.branchId, courseId: v.courseId, phone: v.phone });
-    if (dup) {
-      const ok = await confirmDialog({
-        title: 'Duplicate phone',
-        message: 'A student with this phone is already admitted to this course. Save anyway?',
-        confirmText: 'Save anyway', cancelText: 'Cancel'
-      });
-      if (!ok) return;
-    }
-  }
-  const who = (profile && profile.email) ? profile.email : '';
-  const c = courseOf(v.courseId);
-  const bObj = batchOf(v.batchId);
-  const br = branchOf(v.branchId);
-  const sched = selS ? installmentSchedule(selS) : [];
-  const f = c ? c.fees || {} : {};
-  const today = new Date().toISOString().slice(0, 10);
-
-  const branchCode = br.code || br.id || '';
-  const sessionYear = (selS && selS.startDate) ? selS.startDate.slice(0, 4) : today.slice(0, 4);
-  const courseLevel = c ? Number(c.level) : null;
-  let studentId, receiptNo, previousStudentIds, newStudentRefId;
-  const sourceAdmissionRef = returnDoc ? { sessionId: returnDoc.sessionId, admissionId: returnDoc.id } : null;
-
-  // ---------- documents (read/compress OUTSIDE transaction) ----------
-  const docs = {};
-  try {
-    await Promise.all(DOC_KEYS.map(async (k) => {
-      const action = docAction[k] || 'new';
-      const df = docFiles[k];
-      const old = keptDocs[k];
-      if (action === 'remove') { docs[k] = false; return; }
-      if (action === 'keep' && old) {
-        docs[k] = Object.assign({}, old, { updatedAt: serverTimestamp() });
-        return;
-      }
-      if (df && df.compressedBlob) {
-        docs[k] = {
-          type: 'image/jpeg',
-          mime: 'image/jpeg',
-          name: df.file.name,
-          sizeBytes: df.compressedBlob.size,
-          data: await blobToDataURL(df.compressedBlob),
-          updatedAt: serverTimestamp()
-        };
-        return;
-      }
-      docs[k] = false;
-    }));
-  } catch (e) {
-    throw e;
-  }
-
-  try {
-    const saveResult = await runTransaction(db, async (tx) => {
-      // ALL reads first (counters), then ALL writes below
-      if (editId) {
-        studentId = (editRow && editRow.studentId ? editRow.studentId : '');
-        receiptNo = (editRow && editRow.receiptNo ? editRow.receiptNo : '');
-        previousStudentIds = (editRow && editRow.previousStudentIds) || [];
-      } else if (returnDoc) {
-        const sid = await readStudentId(tx, { org: 'youth', sessionYear, level: courseLevel });
-        const rc = await readReceiptNo(tx, { org: 'youth', type: 'AD', branchCode, date: v.admissionDate });
-        studentId = sid.studentId;
-        receiptNo = rc.receiptNo;
-        previousStudentIds = [returnDoc.studentId, ...(returnDoc.previousStudentIds || [])];
-        previousStudentIds = [...new Set(previousStudentIds)];
-        writeCounter(tx, sid.ref, sid.next, { org: 'youth', sessionYear, level: courseLevel });
-        writeCounter(tx, rc.ref, rc.next, { org: 'youth', type: 'AD', branchCode: branchCode, date: v.admissionDate });
-      } else {
-        const sid = await readStudentId(tx, { org: 'youth', sessionYear, level: courseLevel });
-        const rc = await readReceiptNo(tx, { org: 'youth', type: 'AD', branchCode, date: v.admissionDate });
-        studentId = sid.studentId;
-        receiptNo = rc.receiptNo;
-        previousStudentIds = undefined;
-        writeCounter(tx, sid.ref, sid.next, { org: 'youth', sessionYear, level: courseLevel });
-        writeCounter(tx, rc.ref, rc.next, { org: 'youth', type: 'AD', branchCode: branchCode, date: v.admissionDate });
-      }
-
-      const data = {
-        studentId: studentId,
-        receiptNo: receiptNo,
-        name: v.name,
-        guardianName: v.guardianName,
-        phone: v.phone,
-        altPhone: v.altPhone || '',
-        email: v.email || '',
-        dob: v.dob,
-        gender: v.gender,
-        qualification: v.qualification,
-        address: v.address,
-        ctx: 'youth',
-        status: 'active',
-        docs: {},
-        createdAt: editId ? undefined : serverTimestamp(),
-        createdBy: editId ? undefined : who,
-        updatedAt: serverTimestamp(),
-        updatedBy: who,
-        branchId: v.branchId,
-        branchName: branchNameOf(v.branchId),
-        branchCode: branchCode,
-        courseId: v.courseId,
-        courseCode: c.courseCode || c.code || '',
-        courseName: c.name || '',
-        batchId: v.batchId,
-        batchName: bObj.name || '',
-        sessionId: v.sessionId,
-        sessionName: selS ? (selS.name || '') : '',
-        admissionDate: v.admissionDate || today,
-        feeTotal: feeTotal(c ? c.fees || {} : {}),
-        feeSnapshot: c ? c.fees || {} : {},
-        feeSchedule: sched.map(function (it) { return { no: it.no, month: it.month, opens: it.opens, due: it.due, amount: f.installment || 0 }; }),
-        examFee: f.exam || 0,
-        dueAtAdmission: { admission: Number(f.admission || 0), material: Number(f.material || 0), total: Number(f.admission || 0) + Number(f.material || 0) },
-        prereqCheck: (c && getPrereq(c)) ? prereqCheck : null,
-        ...(previousStudentIds !== undefined ? { previousStudentIds: previousStudentIds } : {}),
-        ...(sourceAdmissionRef ? { sourceAdmission: sourceAdmissionRef } : {})
-      };
-
-      // Remove undefined values (Firestore rejects undefined)
-      Object.keys(data).forEach((k) => { if (data[k] === undefined) delete data[k]; });
-
-      DOC_KEYS.forEach((k) => { data.docs[k] = !!docs[k]; });
-
-      const studentRef = editId ? doc(db, COL, editId) : doc(collection(db, COL));
-      newStudentRefId = studentRef.id;
-      tx.set(studentRef, data, { merge: !!editId });
-
-      Object.entries(docs).forEach(([key, docData]) => {
-        if (docData) {
-          const docRef = doc(collection(studentRef, 'docs'), key);
-          tx.set(docRef, Object.assign({}, docData, { updatedAt: serverTimestamp() }));
-        } else {
-          const docRef = doc(collection(studentRef, 'docs'), key);
-          tx.delete(docRef);
-        }
-      });
-
-      if (v.aadhaar) {
-        const aadhaarRef = doc(db, COL, studentRef.id, 'aadhaar', 'aadhaar');
-        tx.set(aadhaarRef, {
-          studentId: studentId,
-          aadhaar: v.aadhaar,
-          updatedAt: serverTimestamp()
-        });
-      }
-
-      return { studentId: studentId, receiptNo: receiptNo, id: newStudentRefId };
-    });
-    studentId = saveResult.studentId;
-    receiptNo = saveResult.receiptNo;
-    const admissionId = saveResult.id;
-
-    saving = false;
-    saveBtn.disabled = false;
-    cancelBtn.disabled = false;
-    const saveIcon = saveBtn.querySelector('i');
-    if (saveIcon) saveIcon.setAttribute('data-lucide', 'save');
-    if (typeof lucide !== 'undefined') lucide.createIcons();
-    $t('adm-state', 'Saved.');
-    const stateEl = $('adm-state');
-    if (stateEl) stateEl.className = 'save-state saved';
-
+    // ---------- T2/T5: prerequisite gate on Admit (new admissions only) ----------
     if (!editId) {
-      // T1: navigate to receipt route instead of showing a dialog
-      saved = snapshot();
-      clearDirty();
-      location.hash = '#/admissions/' + admissionId + '/receipt';
-    } else {
-      saved = snapshot();
-      clearDirty();
-      closeForm();
-      await load();
-      showToast('Admission saved - ' + studentId, 'success');
-    }
-  } catch (e) {
-    console.error('[admissions] save failed', e);
-    saving = false;
-    refreshForm();
-    const saveIcon2 = saveBtn.querySelector('i');
-    if (saveIcon2) saveIcon2.setAttribute('data-lucide', 'save');
-    if (typeof lucide !== 'undefined') lucide.createIcons();
-    $t('adm-state', 'Save failed (' + (e.code || 'error') + ')');
-    const stateEl2 = $('adm-state');
-    if (stateEl2) stateEl2.className = 'save-state error';
-    showToast('Save failed (' + (e.code || 'error') + ').', 'error');
-  }
-}
-
-async function viewStudent(s) {
-  const c = courseOf(s.courseId);
-  const b = batchOf(s.batchId);
-  const selS = sessions.find(x => x.id === s.sessionId) || {};
-  const back = document.createElement('div');
-  back.className = 'ui-modal-back';
-  const box = document.createElement('div');
-  box.className = 'ui-modal view-student-modal';
-  box.setAttribute('role', 'dialog');
-  box.setAttribute('aria-modal', 'true');
-
-  // Header row
-  const head = document.createElement('div');
-  head.className = 'adm-view-head';
-  const photo = document.createElement('div');
-  photo.className = 'adm-view-photo';
-  photo.textContent = initials(s.name || '');
-  head.appendChild(photo);
-
-  // T1: load photo from students/<id>/docs/photo (one getDoc, not whole subcollection)
-  try {
-    const photoSnap = await getDoc(doc(db, 'students', s.id, 'docs', 'photo'));
-    if (photoSnap.exists()) {
-      const data = photoSnap.data();
-      const photoUrl = data && data.data ? data.data : null;
-      if (photoUrl && isDataUrl(photoUrl)) {
-        photo.textContent = '';
-        const img = document.createElement('img');
-        img.src = photoUrl;
-        img.style.width = '100%';
-        img.style.height = '100%';
-        img.style.objectFit = 'cover';
-        img.style.display = 'block';
-        photo.appendChild(img);
+      const cForSave = courseOf(v.courseId);
+      if (cForSave && getPrereq(cForSave) && !prereqCheck) {
+        const p = getPrereq(cForSave);
+        const ok = await confirmDialog({
+          title: 'Prerequisite not found',
+          message: 'This student is not eligible as per the data currently in the system. Older records may be archived. Have you verified that the student completed ' + p.code + ' - ' + p.name + '?',
+          confirmText: 'Yes, verify', cancelText: 'Cancel'
+        });
+        if (!ok) return; // Cancel -> stay on form, do not clear course
+        prereqCheck = {
+          status: 'manual',
+          courseId: p.id,
+          verifiedBy: (profile && profile.email) || '',
+          verifiedAt: serverTimestamp()
+        };
       }
     }
-  } catch (e) {
-    // non-fatal, keep initials
+    // ---------- T3: confirm admission before saving (new admissions) ----------
+    if (!editId) {
+      const cc = courseOf(v.courseId);
+      const bb = batchOf(v.batchId);
+      const ss = sessions.find(s => s.id === v.sessionId);
+      const totalFee = feeTotal(cc.fees || {});
+      const ff = cc ? cc.fees || {} : {};
+      const dueNow = Number(ff.admission || 0) + Number(ff.material || 0);
+      const summary =
+        'Student: ' + v.name + '\n' +
+        'Course: ' + (cc.courseCode || cc.code || '') + ' - ' + (cc.name || '') + '\n' +
+        'Batch: ' + (bb.name || '-') + '\n' +
+        'Session: ' + (ss ? ss.name : '-') + '\n' +
+        'Total fee: Rs. ' + formatINR(totalFee) + '\n' +
+        'Due now: Rs. ' + formatINR(dueNow);
+      const ok = await confirmDialog({
+        title: 'Confirm admission',
+        message: summary,
+        confirmText: 'Admit', cancelText: 'Back'
+      });
+      if (!ok) return; // Back -> stay on form
+    }
+    const b = batchOf(v.batchId);
+    if (b && b.capacity) {
+      const cap = Number(b.capacity);
+      const filled = students.filter(s => s.batchId === b.id && s.status === 'active' && s.id !== editId).length;
+      if (filled >= cap) {
+        $t('adm-batch-err', 'This batch is full (0 seats left).');
+        batchSel.focus();
+        return;
+      }
+    }
+    const selS = sessions.find(s => s.id === v.sessionId);
+    if (selS) {
+      const st = admissionState(selS, todayISO());
+      if (!st.open) {
+        $t('adm-session-err', 'Admission closed for ' + selS.name + ': ' + st.reason + '.');
+        $('adm-session-host').classList.add('is-invalid');
+        showToast('Admission closed for ' + selS.name + ': first installment date has passed. Please choose another session.', 'error');
+        sessionSel.focus();
+        return;
+      }
+    }
+    if (!editId) {
+      const dup = await checkDuplicatePhone({ branchId: v.branchId, courseId: v.courseId, phone: v.phone });
+      if (dup) {
+        const ok = await confirmDialog({
+          title: 'Duplicate phone',
+          message: 'A student with this phone is already admitted to this course. Save anyway?',
+          confirmText: 'Save anyway', cancelText: 'Cancel'
+        });
+        if (!ok) return;
+      }
+    }
+    const who = (profile && profile.email) ? profile.email : '';
+    const c = courseOf(v.courseId);
+    const bObj = batchOf(v.batchId);
+    const br = branchOf(v.branchId);
+    const sched = selS ? installmentSchedule(selS) : [];
+    const f = c ? c.fees || {} : {};
+    const today = new Date().toISOString().slice(0, 10);
+
+    const branchCode = br.code || br.id || '';
+    const sessionYear = (selS && selS.startDate) ? selS.startDate.slice(0, 4) : today.slice(0, 4);
+    const courseLevel = c ? Number(c.level) : null;
+    let studentId, receiptNo, previousStudentIds, newStudentRefId;
+    const sourceAdmissionRef = returnDoc ? { sessionId: returnDoc.sessionId, admissionId: returnDoc.id } : null;
+
+    // ---------- documents (read/compress OUTSIDE transaction) ----------
+    const docs = {};
+    try {
+      await Promise.all(DOC_KEYS.map(async (k) => {
+        const action = docAction[k] || 'new';
+        const df = docFiles[k];
+        const old = keptDocs[k];
+        if (action === 'remove') { docs[k] = false; return; }
+        if (action === 'keep' && old) {
+          docs[k] = Object.assign({}, old, { updatedAt: serverTimestamp() });
+          return;
+        }
+        if (df && df.compressedBlob) {
+          docs[k] = {
+            type: 'image/jpeg',
+            mime: 'image/jpeg',
+            name: df.file.name,
+            sizeBytes: df.compressedBlob.size,
+            data: await blobToDataURL(df.compressedBlob),
+            updatedAt: serverTimestamp()
+          };
+          return;
+        }
+        docs[k] = false;
+      }));
+    } catch (e) {
+      throw e;
+    }
+
+    try {
+      const saveResult = await runTransaction(db, async (tx) => {
+        // ALL reads first (counters), then ALL writes below
+        if (editId) {
+          studentId = (editRow && editRow.studentId ? editRow.studentId : '');
+          receiptNo = (editRow && editRow.receiptNo ? editRow.receiptNo : '');
+          previousStudentIds = (editRow && editRow.previousStudentIds) || [];
+        } else if (returnDoc) {
+          const sid = await readStudentId(tx, { org: 'youth', sessionYear, level: courseLevel });
+          const rc = await readReceiptNo(tx, { org: 'youth', type: 'AD', branchCode, date: v.admissionDate });
+          studentId = sid.studentId;
+          receiptNo = rc.receiptNo;
+          previousStudentIds = [returnDoc.studentId, ...(returnDoc.previousStudentIds || [])];
+          previousStudentIds = [...new Set(previousStudentIds)];
+          writeCounter(tx, sid.ref, sid.next, { org: 'youth', sessionYear, level: courseLevel });
+          writeCounter(tx, rc.ref, rc.next, { org: 'youth', type: 'AD', branchCode: branchCode, date: v.admissionDate });
+        } else {
+          const sid = await readStudentId(tx, { org: 'youth', sessionYear, level: courseLevel });
+          const rc = await readReceiptNo(tx, { org: 'youth', type: 'AD', branchCode, date: v.admissionDate });
+          studentId = sid.studentId;
+          receiptNo = rc.receiptNo;
+          previousStudentIds = undefined;
+          writeCounter(tx, sid.ref, sid.next, { org: 'youth', sessionYear, level: courseLevel });
+          writeCounter(tx, rc.ref, rc.next, { org: 'youth', type: 'AD', branchCode: branchCode, date: v.admissionDate });
+        }
+
+        const data = {
+          studentId: studentId,
+          receiptNo: receiptNo,
+          name: v.name,
+          guardianName: v.guardianName,
+          phone: v.phone,
+          altPhone: v.altPhone || '',
+          email: v.email || '',
+          dob: v.dob,
+          gender: v.gender,
+          qualification: v.qualification,
+          address: v.address,
+          ctx: 'youth',
+          status: 'active',
+          docs: {},
+          createdAt: editId ? undefined : serverTimestamp(),
+          createdBy: editId ? undefined : who,
+          updatedAt: serverTimestamp(),
+          updatedBy: who,
+          branchId: v.branchId,
+          branchName: branchNameOf(v.branchId),
+          branchCode: branchCode,
+          courseId: v.courseId,
+          courseCode: c.courseCode || c.code || '',
+          courseName: c.name || '',
+          batchId: v.batchId,
+          batchName: bObj.name || '',
+          sessionId: v.sessionId,
+          sessionName: selS ? (selS.name || '') : '',
+          admissionDate: v.admissionDate || today,
+          feeTotal: feeTotal(c ? c.fees || {} : {}),
+          feeSnapshot: c ? c.fees || {} : {},
+          feeSchedule: sched.map(function (it) { return { no: it.no, month: it.month, opens: it.opens, due: it.due, amount: f.installment || 0 }; }),
+          examFee: f.exam || 0,
+          dueAtAdmission: { admission: Number(f.admission || 0), material: Number(f.material || 0), total: Number(f.admission || 0) + Number(f.material || 0) },
+          prereqCheck: (c && getPrereq(c)) ? prereqCheck : null,
+          ...(previousStudentIds !== undefined ? { previousStudentIds: previousStudentIds } : {}),
+          ...(sourceAdmissionRef ? { sourceAdmission: sourceAdmissionRef } : {})
+        };
+
+        // Remove undefined values (Firestore rejects undefined)
+        Object.keys(data).forEach((k) => { if (data[k] === undefined) delete data[k]; });
+
+        DOC_KEYS.forEach((k) => { data.docs[k] = !!docs[k]; });
+
+        const studentRef = editId ? doc(db, COL, editId) : doc(collection(db, COL));
+        newStudentRefId = studentRef.id;
+        tx.set(studentRef, data, { merge: !!editId });
+
+        Object.entries(docs).forEach(([key, docData]) => {
+          if (docData) {
+            const docRef = doc(collection(studentRef, 'docs'), key);
+            tx.set(docRef, Object.assign({}, docData, { updatedAt: serverTimestamp() }));
+          } else {
+            const docRef = doc(collection(studentRef, 'docs'), key);
+            tx.delete(docRef);
+          }
+        });
+
+        if (v.aadhaar) {
+          const aadhaarRef = doc(db, COL, studentRef.id, 'aadhaar', 'aadhaar');
+          tx.set(aadhaarRef, {
+            studentId: studentId,
+            aadhaar: v.aadhaar,
+            updatedAt: serverTimestamp()
+          });
+        }
+
+        return { studentId: studentId, receiptNo: receiptNo, id: newStudentRefId };
+      });
+      studentId = saveResult.studentId;
+      receiptNo = saveResult.receiptNo;
+      const admissionId = saveResult.id;
+
+      if (typeof lucide !== 'undefined') lucide.createIcons();
+      $t('adm-state', 'Saved.');
+      const stateEl = $('adm-state');
+      if (stateEl) stateEl.className = 'save-state saved';
+
+      if (!editId) {
+        // T1: navigate to receipt route instead of showing a dialog
+        playPaymentSuccessSound();
+        saved = snapshot();
+        clearDirty();
+        location.hash = '#/admissions/' + admissionId + '/receipt';
+      } else {
+        saved = snapshot();
+        clearDirty();
+        closeForm();
+        await load();
+        showToast('Admission saved - ' + studentId, 'success');
+      }
+    } catch (e) {
+      console.error('[admissions] save failed', e);
+      saving = false;
+      refreshForm();
+      const saveIcon2 = saveBtn.querySelector('i');
+      if (saveIcon2) saveIcon2.setAttribute('data-lucide', 'save');
+      if (typeof lucide !== 'undefined') lucide.createIcons();
+      $t('adm-state', 'Save failed (' + (e.code || 'error') + ')');
+      const stateEl2 = $('adm-state');
+      if (stateEl2) stateEl2.className = 'save-state error';
+      showToast('Save failed (' + (e.code || 'error') + ').', 'error');
+    }
   }
 
-  const info = document.createElement('div');
-  info.className = 'adm-view-info';
-  const nameEl = document.createElement('h2');
-  nameEl.className = 'adm-view-name';
-  nameEl.textContent = s.name || ' - ';
-  // T2: status dot next to name
-  const stValue = (s.status || 'active');
-  const statusLabel = stValue.charAt(0).toUpperCase() + stValue.slice(1);
-  const nameDot = document.createElement('span');
-  nameDot.className = 'adm-view-status-dot ' + (stValue === 'active' ? 'active' : stValue === 'dropped' ? 'dropped' : 'completed');
-  nameDot.title = statusLabel;
-  nameDot.setAttribute('aria-label', statusLabel);
-  nameEl.appendChild(nameDot);
-  const noEl = document.createElement('div');
-  noEl.className = 'adm-view-no';
-  noEl.textContent = 'Student ID: ' + (s.studentId || ' - ');
-  const rcptEl = document.createElement('div');
-  rcptEl.className = 'adm-view-no';
-  rcptEl.style.fontSize = '12px';
-  rcptEl.style.color = 'var(--text-mute)';
-  rcptEl.textContent = 'Receipt: ' + (s.receiptNo || ' - ');
-  info.appendChild(nameEl);
-  info.appendChild(noEl);
-  info.appendChild(rcptEl);
-  head.appendChild(info);
+  async function viewStudent(s) {
+    const c = courseOf(s.courseId);
+    const b = batchOf(s.batchId);
+    const selS = sessions.find(x => x.id === s.sessionId) || {};
+    const back = document.createElement('div');
+    back.className = 'ui-modal-back';
+    const box = document.createElement('div');
+    box.className = 'ui-modal view-student-modal';
+    box.setAttribute('role', 'dialog');
+    box.setAttribute('aria-modal', 'true');
 
-  // T3: header buttons in ONE flex container, equal gaps, no button margins
-  const btns = document.createElement('div');
-  btns.className = 'adm-view-actions';
-  const viewRcpt = document.createElement('button');
-  viewRcpt.type = 'button';
-  viewRcpt.className = 'ui-btn ghost';
-  viewRcpt.textContent = 'View receipt';
-  viewRcpt.addEventListener('click', async (ev) => {
-    ev.stopPropagation();
-    const payments = await fetchStudentPayments(s.id).catch(() => []);
-    if (!payments || payments.length === 0) {
-      back.remove();
-      location.hash = '#/admissions/' + s.id + '/receipt';
-      return;
+    // Header row
+    const head = document.createElement('div');
+    head.className = 'adm-view-head';
+    const photo = document.createElement('div');
+    photo.className = 'adm-view-photo';
+    photo.textContent = initials(s.name || '');
+    head.appendChild(photo);
+
+    // T1: load photo from students/<id>/docs/photo (one getDoc, not whole subcollection)
+    try {
+      const photoSnap = await getDoc(doc(db, 'students', s.id, 'docs', 'photo'));
+      if (photoSnap.exists()) {
+        const data = photoSnap.data();
+        const photoUrl = data && data.data ? data.data : null;
+        if (photoUrl && isDataUrl(photoUrl)) {
+          photo.textContent = '';
+          const img = document.createElement('img');
+          img.src = photoUrl;
+          img.style.width = '100%';
+          img.style.height = '100%';
+          img.style.objectFit = 'cover';
+          img.style.display = 'block';
+          photo.appendChild(img);
+        }
+      }
+    } catch (e) {
+      // non-fatal, keep initials
     }
-    const receiptItems = [
+
+    const info = document.createElement('div');
+    info.className = 'adm-view-info';
+    const nameEl = document.createElement('h2');
+    nameEl.className = 'adm-view-name';
+    nameEl.textContent = s.name || ' - ';
+    // T2: status dot next to name
+    const stValue = (s.status || 'active');
+    const statusLabel = stValue.charAt(0).toUpperCase() + stValue.slice(1);
+    const nameDot = document.createElement('span');
+    nameDot.className = 'adm-view-status-dot ' + (stValue === 'active' ? 'active' : stValue === 'dropped' ? 'dropped' : 'completed');
+    nameDot.title = statusLabel;
+    nameDot.setAttribute('aria-label', statusLabel);
+    nameEl.appendChild(nameDot);
+    const noEl = document.createElement('div');
+    noEl.className = 'adm-view-no';
+    noEl.textContent = 'Student ID: ' + (s.studentId || ' - ');
+    const rcptEl = document.createElement('div');
+    rcptEl.className = 'adm-view-no';
+    rcptEl.style.fontSize = '12px';
+    rcptEl.style.color = 'var(--text-mute)';
+    rcptEl.textContent = 'Receipt: ' + (s.receiptNo || ' - ');
+    info.appendChild(nameEl);
+    info.appendChild(noEl);
+    info.appendChild(rcptEl);
+    head.appendChild(info);
+
+    // T3: header buttons in ONE flex container, equal gaps, no button margins
+    const btns = document.createElement('div');
+    btns.className = 'adm-view-actions';
+    const viewRcpt = document.createElement('button');
+    viewRcpt.type = 'button';
+    viewRcpt.className = 'ui-btn ghost';
+    viewRcpt.textContent = 'View receipt';
+    viewRcpt.addEventListener('click', async (ev) => {
+      ev.stopPropagation();
+      const payments = await fetchStudentPayments(s.id).catch(() => []);
+      if (!payments || payments.length === 0) {
+        back.remove();
+        location.hash = '#/admissions/' + s.id + '/receipt';
+        return;
+      }
+      const receiptItems = [
+        {
+          label: 'Admission receipt',
+          icon: 'file-text',
+          onClick: () => { back.remove(); location.hash = '#/admissions/' + s.id + '/receipt'; }
+        }
+      ];
+      payments.forEach(p => {
+        const type = String(p.type || '').toUpperCase();
+        let label = '';
+        if (type === 'EX') {
+          label = `Exam fee - ${p.receiptNo || 'Receipt'}`;
+        } else {
+          const no = p.installmentNo || 1;
+          const mo = p.month ? ` - ${p.month}` : '';
+          label = `Installment ${no}${mo} - ${p.receiptNo || 'Receipt'}`;
+        }
+        receiptItems.push({
+          label,
+          icon: 'receipt',
+          onClick: () => {
+            back.remove();
+            location.hash = `#/payments/${s.id}/${p.id}/receipt?from=profile`;
+          }
+        });
+      });
+      openMenu(viewRcpt, receiptItems);
+    });
+    const editBtn = document.createElement('button');
+    editBtn.type = 'button';
+    editBtn.className = 'ui-btn primary';
+    editBtn.textContent = 'Edit';
+    editBtn.addEventListener('click', (ev) => { ev.stopPropagation(); back.remove(); openForm(s); });
+    const xBtn = document.createElement('button');
+    xBtn.type = 'button';
+    xBtn.className = 'ui-btn ghost adm-view-close';
+    xBtn.setAttribute('aria-label', 'Close');
+    xBtn.innerHTML = '<i data-lucide="x" width="18" height="18" stroke-width="2"></i>';
+    xBtn.addEventListener('click', (ev) => { ev.stopPropagation(); back.remove(); });
+    btns.appendChild(viewRcpt);
+    btns.appendChild(editBtn);
+    btns.appendChild(xBtn);
+    head.appendChild(btns);
+    box.appendChild(head);
+
+    // Card grid sections
+    const body = document.createElement('div');
+    body.className = 'adm-view-body';
+    const grid = document.createElement('div');
+    grid.className = 'adm-view-grid';
+
+    const pc = s.prereqCheck || null;
+    let prereqText = 'Not required';
+    if (pc && pc.status === 'auto') prereqText = 'Verified automatically';
+    else if (pc && pc.status === 'manual') prereqText = 'Verified manually';
+
+    const feeTotal = Number(s.feeTotal || 0);
+    const paid = Number((s.dueAtAdmission && s.dueAtAdmission.total) || 0);
+    const balance = feeTotal - paid;
+    const nextDue = (s.feeSchedule && Array.isArray(s.feeSchedule) && s.feeSchedule.length > 0) ? formatDateIN(s.feeSchedule[0].due) || '-' : '-';
+
+    const sections = [
       {
-        label: 'Admission receipt',
-        icon: 'file-text',
-        onClick: () => { back.remove(); location.hash = '#/admissions/' + s.id + '/receipt'; }
+        id: 'personal', icon: 'user', title: 'Personal', rows: [
+          ['Guardian', s.guardianName || '-'],
+          ['DOB', formatDateIN(s.dob)],
+          ['Gender', s.gender ? (s.gender.charAt(0).toUpperCase() + s.gender.slice(1)) : '-'],
+          ['Highest qualification', s.qualification || '-']
+        ]
+      },
+      {
+        id: 'contact', icon: 'phone', title: 'Contact', rows: [
+          ['Phone', s.phone || '-'],
+          ['Alt phone', s.altPhone || '-'],
+          ['Email', s.email || '-'],
+          ['Address', s.address || '-']
+        ]
+      },
+      {
+        id: 'course', icon: 'book-open', title: 'Course & batch', rows: [
+          ['Session', selS.name || '-'],
+          ['Branch', (s.branchName && s.branchName !== s.branchId) ? s.branchName : (branchNameOf(s.branchId) || 'Unknown branch')],
+          ['Course', ((c.courseCode || c.code || '') + '  -  ' + (c.name || '')) || '-'],
+          ['Batch', b.name || '-'],
+          ['Admission date', formatDateIN(s.admissionDate)],
+          ['Prerequisite status', prereqText]
+        ]
+      },
+      {
+        id: 'fees', icon: 'wallet', title: 'Fees', rows: [
+          ['Total course fee', formatINR(feeTotal)],
+          ['Paid at admission', formatINR(paid)],
+          ['Balance', formatINR(balance)],
+          ['Next due instalment', nextDue]
+        ]
       }
     ];
-    payments.forEach(p => {
-      const type = String(p.type || '').toUpperCase();
-      let label = '';
-      if (type === 'EX') {
-        label = `Exam fee - ${p.receiptNo || 'Receipt'}`;
-      } else {
-        const no = p.installmentNo || 1;
-        const mo = p.month ? ` - ${p.month}` : '';
-        label = `Installment ${no}${mo} - ${p.receiptNo || 'Receipt'}`;
-      }
-      receiptItems.push({
-        label,
-        icon: 'receipt',
-        onClick: () => {
-          back.remove();
-          location.hash = `#/payments/${s.id}/${p.id}/receipt?from=profile`;
-        }
+
+    sections.forEach(sec => {
+      const card = document.createElement('div');
+      card.className = 'adm-view-card';
+      const ch = document.createElement('div');
+      ch.className = 'adm-view-card-head';
+      const ico = document.createElement('i');
+      ico.setAttribute('data-lucide', sec.icon);
+      const title = document.createElement('span');
+      title.className = 'adm-view-card-title';
+      title.textContent = sec.title;
+      ch.appendChild(ico);
+      ch.appendChild(title);
+      card.appendChild(ch);
+
+      const body = document.createElement('div');
+      body.className = 'adm-view-card-body';
+
+      const tbl = document.createElement('table');
+      tbl.className = 'adm-view-table';
+      sec.rows.forEach(([label, value]) => {
+        const tr = document.createElement('tr');
+        const tdL = document.createElement('td');
+        tdL.className = 'adm-view-label';
+        tdL.textContent = label;
+        const tdV = document.createElement('td');
+        tdV.className = 'adm-view-value';
+        tdV.textContent = value;
+        tr.appendChild(tdL);
+        tr.appendChild(tdV);
+        tbl.appendChild(tr);
       });
+      body.appendChild(tbl);
+      card.appendChild(body);
+      grid.appendChild(card);
     });
-    openMenu(viewRcpt, receiptItems);
-  });
-  const editBtn = document.createElement('button');
-  editBtn.type = 'button';
-  editBtn.className = 'ui-btn primary';
-  editBtn.textContent = 'Edit';
-  editBtn.addEventListener('click', (ev) => { ev.stopPropagation(); back.remove(); openForm(s); });
-  const xBtn = document.createElement('button');
-  xBtn.type = 'button';
-  xBtn.className = 'ui-btn ghost adm-view-close';
-  xBtn.setAttribute('aria-label', 'Close');
-  xBtn.innerHTML = '<i data-lucide="x" width="18" height="18" stroke-width="2"></i>';
-  xBtn.addEventListener('click', (ev) => { ev.stopPropagation(); back.remove(); });
-  btns.appendChild(viewRcpt);
-  btns.appendChild(editBtn);
-  btns.appendChild(xBtn);
-  head.appendChild(btns);
-  box.appendChild(head);
+    body.appendChild(grid);
+    box.appendChild(body);
 
-  // Card grid sections
-  const body = document.createElement('div');
-  body.className = 'adm-view-body';
-  const grid = document.createElement('div');
-  grid.className = 'adm-view-grid';
+    back.appendChild(box);
+    document.body.appendChild(back);
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+    back.addEventListener('click', (ev) => { if (ev.target === back) back.remove(); });
+  }
 
-  const pc = s.prereqCheck || null;
-  let prereqText = 'Not required';
-  if (pc && pc.status === 'auto') prereqText = 'Verified automatically';
-  else if (pc && pc.status === 'manual') prereqText = 'Verified manually';
-
-  const feeTotal = Number(s.feeTotal || 0);
-  const paid = Number((s.dueAtAdmission && s.dueAtAdmission.total) || 0);
-  const balance = feeTotal - paid;
-  const nextDue = (s.feeSchedule && Array.isArray(s.feeSchedule) && s.feeSchedule.length > 0) ? formatDateIN(s.feeSchedule[0].due) || '-' : '-';
-
-  const sections = [
-    {
-      id: 'personal', icon: 'user', title: 'Personal', rows: [
-        ['Guardian', s.guardianName || '-'],
-        ['DOB', formatDateIN(s.dob)],
-        ['Gender', s.gender ? (s.gender.charAt(0).toUpperCase() + s.gender.slice(1)) : '-'],
-        ['Highest qualification', s.qualification || '-']
-      ]
-    },
-    {
-      id: 'contact', icon: 'phone', title: 'Contact', rows: [
-        ['Phone', s.phone || '-'],
-        ['Alt phone', s.altPhone || '-'],
-        ['Email', s.email || '-'],
-        ['Address', s.address || '-']
-      ]
-    },
-    {
-      id: 'course', icon: 'book-open', title: 'Course & batch', rows: [
-        ['Session', selS.name || '-'],
-        ['Branch', (s.branchName && s.branchName !== s.branchId) ? s.branchName : (branchNameOf(s.branchId) || 'Unknown branch')],
-        ['Course', ((c.courseCode || c.code || '') + '  -  ' + (c.name || '')) || '-'],
-        ['Batch', b.name || '-'],
-        ['Admission date', formatDateIN(s.admissionDate)],
-        ['Prerequisite status', prereqText]
-      ]
-    },
-    {
-      id: 'fees', icon: 'wallet', title: 'Fees', rows: [
-        ['Total course fee', formatINR(feeTotal)],
-        ['Paid at admission', formatINR(paid)],
-        ['Balance', formatINR(balance)],
-        ['Next due instalment', nextDue]
-      ]
-    }
-  ];
-
-  sections.forEach(sec => {
-    const card = document.createElement('div');
-    card.className = 'adm-view-card';
-    const ch = document.createElement('div');
-    ch.className = 'adm-view-card-head';
-    const ico = document.createElement('i');
-    ico.setAttribute('data-lucide', sec.icon);
-    const title = document.createElement('span');
-    title.className = 'adm-view-card-title';
-    title.textContent = sec.title;
-    ch.appendChild(ico);
-    ch.appendChild(title);
-    card.appendChild(ch);
-
-    const body = document.createElement('div');
-    body.className = 'adm-view-card-body';
-
-    const tbl = document.createElement('table');
-    tbl.className = 'adm-view-table';
-    sec.rows.forEach(([label, value]) => {
-      const tr = document.createElement('tr');
-      const tdL = document.createElement('td');
-      tdL.className = 'adm-view-label';
-      tdL.textContent = label;
-      const tdV = document.createElement('td');
-      tdV.className = 'adm-view-value';
-      tdV.textContent = value;
-      tr.appendChild(tdL);
-      tr.appendChild(tdV);
-      tbl.appendChild(tr);
+  async function changeStatus(s) {
+    const next = s.status === 'active' ? 'dropped' : (s.status === 'dropped' ? 'active' : s.status);
+    const ok = await confirmDialog({
+      title: 'Change status',
+      message: 'Set "' + (s.name || 'this student') + '" to ' + next + '?',
+      confirmText: next.charAt(0).toUpperCase() + next.slice(1), cancelText: 'Cancel'
     });
-    body.appendChild(tbl);
-    card.appendChild(body);
-    grid.appendChild(card);
-  });
-  body.appendChild(grid);
-  box.appendChild(body);
-
-  back.appendChild(box);
-  document.body.appendChild(back);
-  if (typeof lucide !== 'undefined') lucide.createIcons();
-  back.addEventListener('click', (ev) => { if (ev.target === back) back.remove(); });
-}
-
-async function changeStatus(s) {
-  const next = s.status === 'active' ? 'dropped' : (s.status === 'dropped' ? 'active' : s.status);
-  const ok = await confirmDialog({
-    title: 'Change status',
-    message: 'Set "' + (s.name || 'this student') + '" to ' + next + '?',
-    confirmText: next.charAt(0).toUpperCase() + next.slice(1), cancelText: 'Cancel'
-  });
-  if (!ok) return;
-  try {
-    await updateStudent(s.id, { status: next });
-    await load();
-    showToast('Status changed to ' + next + '.', 'success');
-  } catch (e) {
-    showToast('Status change failed (' + (e.code || 'error') + ').', 'error');
-  }
-}
-
-async function tryDelete(s) {
-  if (isHead) return;
-  if (!form.hidden && !saveBtn.disabled && editId !== s.id && !(await confirmLeave({ clear: false }))) return;
-  const ok = await confirmDialog({
-    title: 'Delete admission?',
-    message: 'Delete "' + (s.name || 'this student') + '" (' + (s.studentId || '') + ')? This cannot be undone. Type DELETE to confirm.',
-    confirmText: 'Delete', danger: true, requireText: 'DELETE'
-  });
-  if (!ok) return;
-  try {
-    await deleteStudent(s.id);
-    if (editId === s.id) closeForm();
-    await load();
-    showToast('Admission deleted.', 'success');
-  } catch (e) {
-    showToast('Delete failed (' + (e.code || 'error') + ').', 'error');
-  }
-}
-
-// ---------- status history helper ----------
-async function appendStatusHistory(studentId, action, fromStatus, toStatus, details) {
-  try {
-    const snap = await getDoc(doc(db, COL, studentId));
-    if (!snap.exists()) return;
-    const data = snap.data();
-    const hist = Array.isArray(data.statusHistory) ? data.statusHistory.slice() : [];
-    hist.push({
-      action: action,
-      fromStatus: fromStatus,
-      toStatus: toStatus,
-      changedBy: (profile && profile.email) || '',
-      changedAt: serverTimestamp(),
-      details: details || ''
-    });
-    await updateDoc(doc(db, COL, studentId), { statusHistory: hist, updatedAt: serverTimestamp() });
-  } catch (e) {
-    console.error('[statusHistory] failed', e);
-  }
-}
-
-// ---------- Popup Helpers ----------
-function courseNameOf(s) {
-  const c = (courses && courses.find ? courses.find(x => x.id === s.courseId) : null) || {};
-  return c.name || s.courseName || c.courseCode || c.code || s.courseCode || s.courseId || '-';
-}
-
-function studentSub(s) {
-  return `${s.name || 'Student'} - ${s.studentId || '-'} - ${courseNameOf(s)} / ${s.batchName || 'Batch'} / ${s.sessionName || 'Session'}`;
-}
-
-function formatTiming(b) {
-  if (!b) return '';
-  return b.timing || b.time || b.slot || b.schedule || '';
-}
-
-function pField(label, el, { half = false, required = false } = {}) {
-  const w = mk('div', 'pk-field' + (half ? ' half' : ''));
-  const lr = mk('div', 'pk-label-row');
-  const lab = mk('label', null, label);
-  if (required) {
-    const em = mk('span', 'pk-req', '*');
-    em.style.color = 'var(--danger)';
-    em.style.marginLeft = '4px';
-    lab.appendChild(em);
-  }
-  lr.appendChild(lab);
-  w.appendChild(lr);
-  w.appendChild(el);
-  return w;
-}
-
-function pFieldRow(f1, f2) {
-  const row = mk('div', 'pk-field-row-2');
-  row.appendChild(f1);
-  row.appendChild(f2);
-  return row;
-}
-
-function pTextarea(placeholder = '') {
-  const wrap = mk('div', 'ui-input-wrap top');
-  const ic = document.createElement('i');
-  ic.setAttribute('data-lucide', 'file-text');
-  wrap.appendChild(ic);
-  const ta = document.createElement('textarea');
-  ta.className = 'ui-input';
-  ta.rows = 2;
-  if (placeholder) ta.placeholder = placeholder;
-  wrap.appendChild(ta);
-  return { wrap, textarea: ta };
-}
-
-function pTypeConfirm(targetId) {
-  const wrap = mk('div', 'ui-input-wrap');
-  const ic = document.createElement('i');
-  ic.setAttribute('data-lucide', 'key-round');
-  wrap.appendChild(ic);
-  const inp = document.createElement('input');
-  inp.type = 'text';
-  inp.className = 'ui-input pk-confirm-id';
-  inp.placeholder = targetId || '';
-  inp.autocomplete = 'off';
-  inp.addEventListener('input', () => {
-    if (inp.value.trim() === String(targetId || '')) {
-      inp.classList.add('matched');
-    } else {
-      inp.classList.remove('matched');
-    }
-  });
-  wrap.appendChild(inp);
-  return { wrap, input: inp };
-}
-
-function pInfoGrid3(rows) {
-  const g = mk('div', 'pk-info-grid pk-info-grid-3');
-  rows.forEach(([label, value]) => {
-    const cell = mk('div', 'pk-info-cell');
-    cell.appendChild(mk('div', 'pk-info-label', label));
-    cell.appendChild(mk('div', 'pk-info-value', String(value ?? '-')));
-    g.appendChild(cell);
-  });
-  return g;
-}
-
-function pWarn(text) {
-  const w = mk('div', 'pk-warn');
-  w.innerHTML = `<i data-lucide="alert-triangle"></i><span>${text}</span>`;
-  return w;
-}
-
-function pNote(text) {
-  const n = mk('div', 'pk-note');
-  n.innerHTML = `<i data-lucide="info"></i><span>${text}</span>`;
-  return n;
-}
-
-function pButtons(popup, label, { icon = '', tone = 'default' } = {}) {
-  const foot = mk('div', 'adm-view-foot');
-  const c = mk('button', 'ui-btn ghost', 'Cancel');
-  c.type = 'button';
-  c.addEventListener('click', () => popup.close());
-  const ok = mk('button', 'ui-btn ' + (tone === 'danger' ? 'danger' : (tone === 'success' ? 'success' : 'primary')));
-  ok.type = 'button';
-  ok.disabled = true;
-  let originalHtml = '';
-  if (icon) {
-    originalHtml = `<i data-lucide="${icon}"></i><span>${label}</span>`;
-  } else {
-    originalHtml = `<span>${label}</span>`;
-  }
-  ok.innerHTML = originalHtml;
-  foot.appendChild(c);
-  foot.appendChild(ok);
-  popup.container.appendChild(foot);
-  if (typeof lucide !== 'undefined') lucide.createIcons();
-
-  function setSaving(isSaving) {
-    if (isSaving) {
-      ok.disabled = true;
-      c.disabled = true;
-      ok.innerHTML = '<i data-lucide="loader-2" class="spin"></i><span>Saving...</span>';
-      if (typeof lucide !== 'undefined') lucide.createIcons();
-    } else {
-      ok.innerHTML = originalHtml;
-      c.disabled = false;
-      if (typeof lucide !== 'undefined') lucide.createIcons();
-    }
-  }
-
-  return { cancelBtn: c, okBtn: ok, setSaving };
-}
-
-// ---------- popup: change batch ----------
-async function changeBatchPopup(s) {
-  // Eligible batches list:
-  // b.ctx === 'youth'
-  // b.branchId === s.branchId
-  // b.sessionId === s.sessionId
-  // b.status === 'active'
-  // batchAllowsCourse(b, s.courseId, courses)
-  // Exclude current batch (b.id !== s.batchId)
-  const eligibleBatches = batches.filter((b) => {
-    const isYouth = (b.ctx || 'youth') === 'youth';
-    const sameBranch = b.branchId === s.branchId;
-    const sameSession = b.sessionId === s.sessionId;
-    const isActive = (b.status || 'active') === 'active';
-    const allowsCourse = batchAllowsCourse(b, s.courseId, courses);
-    const notCurrent = b.id !== s.batchId;
-    return isYouth && sameBranch && sameSession && isActive && allowsCourse && notCurrent;
-  });
-
-  if (eligibleBatches.length === 0) {
-    showToast({ type: 'warning', message: 'No other open batch for this course in this branch and session' });
-    return;
-  }
-
-  let saving = false;
-  const popup = openPopup({
-    title: 'Change batch',
-    subtitle: studentSub(s),
-    icon: 'shuffle',
-    tone: 'default',
-    saving: () => saving
-  });
-  const c = popup.container;
-
-  // Target batch dropdown using createSelect
-  const batchSelectHost = document.createElement('div');
-  const batchOpts = [{ value: '', label: 'Select destination batch' }].concat(
-    eligibleBatches.map((b) => {
-      const timing = formatTiming(b);
-      const name = b.name || b.id;
-      return {
-        value: b.id,
-        label: timing ? `${name} (${timing})` : name,
-        icon: 'layers'
-      };
-    })
-  );
-
-  let selectedBatchId = '';
-  const capInfo = mk('div', 'pk-cap-info');
-  capInfo.style.fontSize = '12px';
-  capInfo.style.marginTop = '6px';
-  capInfo.style.color = 'var(--text-mute)';
-
-  const capWarn = pWarn('');
-  capWarn.hidden = true;
-
-  const bSelect = createSelect(batchSelectHost, {
-    options: batchOpts,
-    value: '',
-    ariaLabel: 'New batch',
-    onChange: (v) => {
-      selectedBatchId = v;
-      updateCapacityDisplay();
-      check();
-    }
-  });
-
-  function updateCapacityDisplay() {
-    if (!selectedBatchId) {
-      capInfo.textContent = '';
-      capWarn.hidden = true;
-      return;
-    }
-    const targetB = eligibleBatches.find(b => b.id === selectedBatchId);
-    if (!targetB) return;
-
-    const activeCount = students.filter(
-      st => (st.ctx || 'youth') === 'youth' &&
-        st.batchId === targetB.id &&
-        (st.status === 'active' || st.status === 'break')
-    ).length;
-    const cap = Number(targetB.capacity || targetB.maxStudents || 0);
-
-    if (cap > 0) {
-      capInfo.textContent = `Batch capacity: ${activeCount} / ${cap} students`;
-      if (activeCount >= cap) {
-        capWarn.querySelector('span').textContent = `This batch is at capacity (${activeCount}/${cap}). You can still proceed if needed.`;
-        capWarn.hidden = false;
-      } else {
-        capWarn.hidden = true;
-      }
-    } else {
-      capInfo.textContent = `Current batch strength: ${activeCount} students`;
-      capWarn.hidden = true;
-    }
-  }
-
-  const dateHost = document.createElement('div');
-  const dPicker = createDatePicker(dateHost, { value: todayISO(), ariaLabel: 'Effective date', onChange: () => check() });
-
-  const fBatch = pField('New batch', batchSelectHost, { required: true });
-  fBatch.appendChild(capInfo);
-  const fDate = pField('Effective date', dateHost, { required: true });
-  c.appendChild(pFieldRow(fBatch, fDate));
-  c.appendChild(capWarn);
-
-  const { wrap: reasonWrap, textarea: reasonTa } = pTextarea('Reason for batch change');
-  c.appendChild(pField('Reason', reasonWrap, { required: true }));
-
-  c.appendChild(pNote('Past payments and receipts will remain unchanged. Only the student\'s batch will change.'));
-
-  const { cancelBtn, okBtn, setSaving } = pButtons(popup, 'Change batch', { icon: 'shuffle', tone: 'default' });
-
-  const check = () => {
-    okBtn.disabled = saving || !selectedBatchId || !reasonTa.value.trim() || !dPicker.value;
-  };
-  reasonTa.addEventListener('input', check);
-  check();
-
-  okBtn.addEventListener('click', async () => {
-    const destBatchId = selectedBatchId;
-    const effectiveDate = dPicker.value;
-    const reason = reasonTa.value.trim();
-    const destBatch = eligibleBatches.find((b) => b.id === destBatchId);
-    if (!destBatch) return;
-
-    saving = true;
-    setSaving(true);
-
+    if (!ok) return;
     try {
-      await updateDoc(doc(db, COL, s.id), {
-        batchId: destBatch.id,
-        batchName: destBatch.name || destBatch.id,
-        batchHistory: arrayUnion({
-          fromBatchId: s.batchId || '',
-          fromBatchName: s.batchName || '',
-          toBatchId: destBatch.id,
-          toBatchName: destBatch.name || destBatch.id,
-          date: effectiveDate,
-          reason: reason,
-          by: (profile && profile.email) || 'admin',
-          at: new Date().toISOString()
-        }),
-        updatedAt: serverTimestamp()
-      });
-
-      showToast({ type: 'success', message: `Batch changed to ${destBatch.name || destBatch.id}` });
-      popup.close();
+      await updateStudent(s.id, { status: next });
       await load();
-      render();
-    } catch (err) {
-      console.error('[admissions] change batch failed', err);
-      showToast({ type: 'error', message: 'Could not change batch: ' + (err.message || 'error') });
-      saving = false;
-      setSaving(false);
+      showToast('Status changed to ' + next + '.', 'success');
+    } catch (e) {
+      showToast('Status change failed (' + (e.code || 'error') + ').', 'error');
     }
-  });
-}
-
-// ---------- Session-Scoped Youth Drop & Delete ----------
-async function purgeYouthAdmission(s, meta) {
-  // 1. Gather all subcollection documents of students/{s.id}: docs, payment, aadhaar
-  const subcols = ['docs', 'payment', 'aadhaar'];
-  const subRefs = [];
-  for (const sc of subcols) {
-    try {
-      const snap = await getDocs(collection(db, COL, s.id, sc));
-      snap.docs.forEach(d => subRefs.push(d.ref));
-    } catch (_) { /* non-fatal */ }
   }
 
-  // 2. Gather root collection documents: bills, payments, waivers, breaks, transfers, enrolments
-  // Strictly session-scoped: delete only records where studentId == s.id OR (studentId == s.studentId && sessionId == s.sessionId)
-  const rootCols = ['bills', 'payments', 'waivers', 'breaks', 'transfers', 'enrolments'];
-  const rootRefs = [];
-  for (const rc of rootCols) {
-    try {
-      const snap1 = await getDocs(query(collection(db, rc), where('studentId', '==', s.id)));
-      snap1.docs.forEach(d => {
-        if (!rootRefs.some(r => r.path === d.ref.path)) rootRefs.push(d.ref);
-      });
-
-      if (s.studentId && s.studentId !== s.id && s.sessionId) {
-        const snap2 = await getDocs(query(collection(db, rc), where('studentId', '==', s.studentId)));
-        snap2.docs.forEach(d => {
-          const data = d.data();
-          if (data.sessionId === s.sessionId) {
-            if (!rootRefs.some(r => r.path === d.ref.path)) rootRefs.push(d.ref);
-          }
-        });
-      }
-    } catch (_) { /* non-fatal */ }
-  }
-
-  const totalRecords = subRefs.length + rootRefs.length + 1;
-
-  // 3. Log to root collection /deletionLog BEFORE deleting
-  try {
-    await addDoc(collection(db, 'deletionLog'), {
-      ctx: 'youth',
-      type: meta.mode,
-      studentCode: s.studentId || '',
-      name: s.name || '',
-      sessionName: s.sessionName || '',
-      courseName: courseNameOf(s),
-      branchName: s.branchName || '',
-      reason: meta.reason || '',
-      lastDay: meta.lastDay || '',
-      recordsDeleted: totalRecords,
-      by: (profile && profile.email) || 'admin',
-      at: new Date().toISOString()
+  async function tryDelete(s) {
+    if (isHead) return;
+    if (!form.hidden && !saveBtn.disabled && editId !== s.id && !(await confirmLeave({ clear: false }))) return;
+    const ok = await confirmDialog({
+      title: 'Delete admission?',
+      message: 'Delete "' + (s.name || 'this student') + '" (' + (s.studentId || '') + ')? This cannot be undone. Type DELETE to confirm.',
+      confirmText: 'Delete', danger: true, requireText: 'DELETE'
     });
-  } catch (err) {
-    console.warn('[youth] deletion log failed', err);
-  }
-
-  // 4. Delete in chunks of max 400
-  const allRefs = [...subRefs, ...rootRefs];
-  for (let i = 0; i < allRefs.length; i += 400) {
-    const wb = writeBatch(db);
-    allRefs.slice(i, i + 400).forEach(r => wb.delete(r));
-    await wb.commit();
-  }
-
-  // 5. Delete the student document itself
-  await deleteDoc(doc(db, COL, s.id));
-
-  return totalRecords;
-}
-
-// ---------- popup: drop / delete ----------
-async function removeStudentPopup(s, mode) {
-  const isDrop = mode === 'drop';
-  let saving = false;
-  const popup = openPopup({
-    title: isDrop ? 'Drop student' : 'Delete permanently',
-    subtitle: studentSub(s),
-    icon: isDrop ? 'user-x' : 'trash-2',
-    tone: 'danger',
-    wide: true,
-    saving: () => saving
-  });
-  const c = popup.container;
-
-  // 3-column info grid
-  const infoRows = [
-    ['Student ID', s.studentId || '-'],
-    ['Session', s.sessionName || s.sessionId || '-'],
-    ['Course', courseNameOf(s)]
-  ];
-  c.appendChild(pInfoGrid3(infoRows));
-
-  // Warning line explaining session-scoped action
-  const warn = pWarn(
-    isDrop
-      ? `This drops the student from the ${s.sessionName || 'current'} session ONLY. Records from other sessions will not be affected.`
-      : `Permanent deletion: this completely removes the admission and all fee records for ${s.sessionName || 'current'} ONLY. Other sessions of this student are kept. This action cannot be undone.`
-  );
-  c.appendChild(warn);
-
-  let reasonTa = null;
-  let lastDayPicker = null;
-
-  if (isDrop) {
-    const lastDayHost = document.createElement('div');
-    lastDayPicker = createDatePicker(lastDayHost, {
-      value: todayISO(),
-      max: todayISO(),
-      ariaLabel: 'Last day of attendance',
-      onChange: () => check()
-    });
-    c.appendChild(pField('Last day attended', lastDayHost, { half: true, required: true }));
-
-    const { wrap: reasonWrap, textarea } = pTextarea('Reason for dropping');
-    reasonTa = textarea;
-    c.appendChild(pField('Reason for dropping', reasonWrap, { required: true }));
-  }
-
-  // Type student ID to confirm
-  const { wrap: confirmWrap, input: confirmInp } = pTypeConfirm(s.studentId);
-  c.appendChild(pField(`Type student ID (${s.studentId || ''}) to confirm`, confirmWrap, { required: true }));
-
-  const { cancelBtn, okBtn, setSaving } = pButtons(
-    popup,
-    isDrop ? 'Drop student' : 'Delete permanently',
-    { icon: isDrop ? 'user-x' : 'trash-2', tone: 'danger' }
-  );
-
-  const check = () => {
-    const idOk = confirmInp.value.trim() === String(s.studentId || '');
-    if (isDrop) {
-      okBtn.disabled = saving || !idOk || !reasonTa.value.trim() || !lastDayPicker.value;
-    } else {
-      okBtn.disabled = saving || !idOk;
-    }
-  };
-
-  confirmInp.addEventListener('input', check);
-  if (isDrop && reasonTa) reasonTa.addEventListener('input', check);
-  check();
-
-  okBtn.addEventListener('click', async () => {
-    saving = true;
-    setSaving(true);
+    if (!ok) return;
     try {
-      await purgeYouthAdmission(s, {
-        mode,
-        reason: isDrop ? reasonTa.value.trim() : 'Permanent deletion via menu',
-        lastDay: isDrop ? lastDayPicker.value : ''
-      });
-
-      showToast({
-        type: 'success',
-        message: isDrop ? `Student dropped from ${s.sessionName || 'session'}` : 'Admission deleted permanently'
-      });
-      popup.close();
+      await deleteStudent(s.id);
       if (editId === s.id) closeForm();
       await load();
-      render();
-    } catch (err) {
-      console.error('[admissions] purgeYouthAdmission failed', err);
-      showToast({ type: 'error', message: 'Operation failed: ' + (err.message || 'unknown error') });
-      saving = false;
-      setSaving(false);
+      showToast('Admission deleted.', 'success');
+    } catch (e) {
+      showToast('Delete failed (' + (e.code || 'error') + ').', 'error');
     }
-  });
-}
+  }
 
-// ---------- event listeners ----------
-addBtn.addEventListener('click', async () => {
-  if (!form.hidden && !saveBtn.disabled && !(await confirmLeave({ clear: false }))) return;
-  openForm(null);
-});
-findBtn.addEventListener('click', () => findStudent());
-lookupInp.addEventListener('input', () => { lookupStatus.textContent = ''; lookupStatus.className = ''; });
-lookupInp.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); findStudent(); } });
-cancelBtn.addEventListener('click', async () => {
-  if (!form.hidden && !saveBtn.disabled && !(await confirmLeave({ clear: false }))) return;
-  closeForm();
-});
-if (emptyAdd) {
-  emptyAdd.addEventListener('click', async () => {
+  // ---------- status history helper ----------
+  async function appendStatusHistory(studentId, action, fromStatus, toStatus, details) {
+    try {
+      const snap = await getDoc(doc(db, COL, studentId));
+      if (!snap.exists()) return;
+      const data = snap.data();
+      const hist = Array.isArray(data.statusHistory) ? data.statusHistory.slice() : [];
+      hist.push({
+        action: action,
+        fromStatus: fromStatus,
+        toStatus: toStatus,
+        changedBy: (profile && profile.email) || '',
+        changedAt: serverTimestamp(),
+        details: details || ''
+      });
+      await updateDoc(doc(db, COL, studentId), { statusHistory: hist, updatedAt: serverTimestamp() });
+    } catch (e) {
+      console.error('[statusHistory] failed', e);
+    }
+  }
+
+  // ---------- Popup Helpers ----------
+  function courseNameOf(s) {
+    const c = (courses && courses.find ? courses.find(x => x.id === s.courseId) : null) || {};
+    return c.name || s.courseName || c.courseCode || c.code || s.courseCode || s.courseId || '-';
+  }
+
+  function studentSub(s) {
+    return `${s.name || 'Student'} - ${s.studentId || '-'} - ${courseNameOf(s)} / ${s.batchName || 'Batch'} / ${s.sessionName || 'Session'}`;
+  }
+
+  function formatTiming(b) {
+    if (!b) return '';
+    return b.timing || b.time || b.slot || b.schedule || '';
+  }
+
+  function pField(label, el, { half = false, required = false } = {}) {
+    const w = mk('div', 'pk-field' + (half ? ' half' : ''));
+    const lr = mk('div', 'pk-label-row');
+    const lab = mk('label', null, label);
+    if (required) {
+      const em = mk('span', 'pk-req', '*');
+      em.style.color = 'var(--danger)';
+      em.style.marginLeft = '4px';
+      lab.appendChild(em);
+    }
+    lr.appendChild(lab);
+    w.appendChild(lr);
+    w.appendChild(el);
+    return w;
+  }
+
+  function pFieldRow(f1, f2) {
+    const row = mk('div', 'pk-field-row-2');
+    row.appendChild(f1);
+    row.appendChild(f2);
+    return row;
+  }
+
+  function pTextarea(placeholder = '') {
+    const wrap = mk('div', 'ui-input-wrap top');
+    const ic = document.createElement('i');
+    ic.setAttribute('data-lucide', 'file-text');
+    wrap.appendChild(ic);
+    const ta = document.createElement('textarea');
+    ta.className = 'ui-input';
+    ta.rows = 2;
+    if (placeholder) ta.placeholder = placeholder;
+    wrap.appendChild(ta);
+    return { wrap, textarea: ta };
+  }
+
+  function pTypeConfirm(targetId) {
+    const wrap = mk('div', 'ui-input-wrap');
+    const ic = document.createElement('i');
+    ic.setAttribute('data-lucide', 'key-round');
+    wrap.appendChild(ic);
+    const inp = document.createElement('input');
+    inp.type = 'text';
+    inp.className = 'ui-input pk-confirm-id';
+    inp.placeholder = targetId || '';
+    inp.autocomplete = 'off';
+    inp.addEventListener('input', () => {
+      if (inp.value.trim() === String(targetId || '')) {
+        inp.classList.add('matched');
+      } else {
+        inp.classList.remove('matched');
+      }
+    });
+    wrap.appendChild(inp);
+    return { wrap, input: inp };
+  }
+
+  function pInfoGrid3(rows) {
+    const g = mk('div', 'pk-info-grid pk-info-grid-3');
+    rows.forEach(([label, value]) => {
+      const cell = mk('div', 'pk-info-cell');
+      cell.appendChild(mk('div', 'pk-info-label', label));
+      cell.appendChild(mk('div', 'pk-info-value', String(value ?? '-')));
+      g.appendChild(cell);
+    });
+    return g;
+  }
+
+  function pWarn(text) {
+    const w = mk('div', 'pk-warn');
+    w.innerHTML = `<i data-lucide="alert-triangle"></i><span>${text}</span>`;
+    return w;
+  }
+
+  function pNote(text) {
+    const n = mk('div', 'pk-note');
+    n.innerHTML = `<i data-lucide="info"></i><span>${text}</span>`;
+    return n;
+  }
+
+  function pButtons(popup, label, { icon = '', tone = 'default' } = {}) {
+    const foot = mk('div', 'adm-view-foot');
+    const c = mk('button', 'ui-btn ghost', 'Cancel');
+    c.type = 'button';
+    c.addEventListener('click', () => popup.close());
+    const ok = mk('button', 'ui-btn ' + (tone === 'danger' ? 'danger' : (tone === 'success' ? 'success' : 'primary')));
+    ok.type = 'button';
+    ok.disabled = true;
+    let originalHtml = '';
+    if (icon) {
+      originalHtml = `<i data-lucide="${icon}"></i><span>${label}</span>`;
+    } else {
+      originalHtml = `<span>${label}</span>`;
+    }
+    ok.innerHTML = originalHtml;
+    foot.appendChild(c);
+    foot.appendChild(ok);
+    popup.container.appendChild(foot);
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+
+    function setSaving(isSaving) {
+      if (isSaving) {
+        ok.disabled = true;
+        c.disabled = true;
+        ok.innerHTML = '<i data-lucide="loader-2" class="spin"></i><span>Saving...</span>';
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+      } else {
+        ok.innerHTML = originalHtml;
+        c.disabled = false;
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+      }
+    }
+
+    return { cancelBtn: c, okBtn: ok, setSaving };
+  }
+
+  // ---------- popup: change batch ----------
+  async function changeBatchPopup(s) {
+    const eligibleBatches = batches.filter((b) => {
+      const isYouth = (b.ctx || 'youth') === 'youth';
+      const sameBranch = b.branchId === s.branchId;
+      const sameSession = b.sessionId === s.sessionId;
+      const isActive = (b.status || 'active') === 'active';
+      const allowsCourse = batchAllowsCourse(b, s.courseId, courses);
+      const notCurrent = b.id !== s.batchId;
+      return isYouth && sameBranch && sameSession && isActive && allowsCourse && notCurrent;
+    });
+
+    if (eligibleBatches.length === 0) {
+      showToast({ type: 'warning', message: 'No other open batch for this course in this branch and session' });
+      return;
+    }
+
+    const curBatch = batches.find((b) => b.id === s.batchId) || {};
+    const curTiming = formatTiming(curBatch);
+
+    let saving = false;
+    const popup = openPopup({
+      title: 'Change Batch',
+      subtitle: studentSub(s),
+      icon: 'shuffle',
+      tone: 'default',
+      saving: () => saving
+    });
+    const c = popup.container;
+
+    // Subtle current batch indicator
+    const curRow = mk('div', 'pk-badge-row');
+    const curBadge = mk('div', 'pk-current-badge');
+    curBadge.innerHTML = `Current Batch: <strong>${curBatch.name || s.batchName || 'None'}</strong>${curTiming ? ' (' + curTiming + ')' : ''}`;
+    curRow.appendChild(curBadge);
+    c.appendChild(curRow);
+
+    // Target batch dropdown using createSelect
+    const batchSelectHost = document.createElement('div');
+    const batchOpts = [{ value: '', label: 'Select destination batch' }].concat(
+      eligibleBatches.map((b) => {
+        const timing = formatTiming(b);
+        const name = b.name || b.id;
+        return {
+          value: b.id,
+          label: timing ? `${name} (${timing})` : name,
+          icon: 'layers'
+        };
+      })
+    );
+
+    let selectedBatchId = '';
+    const capInfo = mk('div', 'pk-cap-info');
+    createSelect(batchSelectHost, {
+      options: batchOpts,
+      value: '',
+      ariaLabel: 'New batch',
+      onChange: (v) => {
+        selectedBatchId = v;
+        const targetB = eligibleBatches.find(b => b.id === v);
+        if (targetB) {
+          const activeCount = students.filter(
+            st => (st.ctx || 'youth') === 'youth' &&
+              st.batchId === targetB.id &&
+              (st.status === 'active' || st.status === 'break')
+          ).length;
+          const cap = Number(targetB.capacity || targetB.maxStudents || 0);
+          if (cap > 0) {
+            capInfo.textContent = `Batch capacity: ${activeCount} / ${cap} seats filled`;
+          } else {
+            capInfo.textContent = `Active students: ${activeCount}`;
+          }
+        } else {
+          capInfo.textContent = '';
+        }
+        check();
+      }
+    });
+
+    const dateHost = document.createElement('div');
+    const dPicker = createDatePicker(dateHost, { value: todayISO(), ariaLabel: 'Effective date', onChange: () => check() });
+
+    const fBatch = pField('New destination batch', batchSelectHost, { required: true });
+    fBatch.appendChild(capInfo);
+    const fDate = pField('Effective transfer date', dateHost, { required: true });
+    c.appendChild(pFieldRow(fBatch, fDate));
+
+    // Reason
+    const { wrap: reasonWrap, textarea: reasonTa } = pTextarea('Enter reason for batch change...');
+    const fReason = pField('Reason for batch change', reasonWrap, { required: true });
+    c.appendChild(fReason);
+
+    // Reassurance note
+    c.appendChild(pNote('Past payments and receipts remain intact. Only the batch assignment and class schedule will change.'));
+
+    // Footer buttons
+    const { cancelBtn, okBtn, setSaving } = pButtons(popup, 'Change Batch', { icon: 'shuffle', tone: 'default' });
+
+    const check = () => {
+      okBtn.disabled = saving || !selectedBatchId || !reasonTa.value.trim() || !dPicker.value;
+    };
+    reasonTa.addEventListener('input', check);
+    check();
+
+    okBtn.addEventListener('click', async () => {
+      const destBatchId = selectedBatchId;
+      const effectiveDate = dPicker.value;
+      const reason = reasonTa.value.trim();
+      const destBatch = eligibleBatches.find((b) => b.id === destBatchId);
+      if (!destBatch) return;
+
+      saving = true;
+      setSaving(true);
+
+      try {
+        await updateDoc(doc(db, COL, s.id), {
+          batchId: destBatch.id,
+          batchName: destBatch.name || destBatch.id,
+          batchChangedAt: serverTimestamp(),
+          batchHistory: arrayUnion({
+            fromBatchId: s.batchId || null,
+            fromBatchName: curBatch.name || s.batchName || null,
+            toBatchId: destBatch.id,
+            toBatchName: destBatch.name || destBatch.id,
+            effectiveDate,
+            reason,
+            by: (profile && profile.email) || 'admin',
+            at: new Date().toISOString()
+          }),
+          updatedAt: serverTimestamp()
+        });
+
+        showToast({ type: 'success', message: `Batch changed to ${destBatch.name || destBatch.id}` });
+        popup.close();
+        await load();
+        render();
+      } catch (err) {
+        console.error('[admissions] change batch failed', err);
+        showToast({ type: 'error', message: 'Could not change batch: ' + (err.message || 'error') });
+        saving = false;
+        setSaving(false);
+      }
+    });
+  }
+
+  // ---------- Session-Scoped Youth Drop & Delete ----------
+  async function purgeYouthAdmission(s, meta) {
+    const subcols = ['docs', 'payment', 'aadhaar'];
+    const subRefs = [];
+    for (const sc of subcols) {
+      try {
+        const snap = await getDocs(collection(db, COL, s.id, sc));
+        snap.docs.forEach(d => subRefs.push(d.ref));
+      } catch (_) { /* non-fatal */ }
+    }
+
+    const rootCols = ['bills', 'payments', 'waivers', 'breaks', 'transfers', 'enrolments'];
+    const rootRefs = [];
+    for (const rc of rootCols) {
+      try {
+        const snap1 = await getDocs(query(collection(db, rc), where('studentId', '==', s.id)));
+        snap1.docs.forEach(d => {
+          if (!rootRefs.some(r => r.path === d.ref.path)) rootRefs.push(d.ref);
+        });
+
+        if (s.studentId && s.studentId !== s.id && s.sessionId) {
+          const snap2 = await getDocs(query(collection(db, rc), where('studentId', '==', s.studentId)));
+          snap2.docs.forEach(d => {
+            const data = d.data();
+            if (data.sessionId === s.sessionId) {
+              if (!rootRefs.some(r => r.path === d.ref.path)) rootRefs.push(d.ref);
+            }
+          });
+        }
+      } catch (_) { /* non-fatal */ }
+    }
+
+    const totalRecords = subRefs.length + rootRefs.length + 1;
+
+    try {
+      await addDoc(collection(db, 'deletionLog'), {
+        ctx: 'youth',
+        type: meta.mode,
+        studentCode: s.studentId || '',
+        name: s.name || '',
+        sessionName: s.sessionName || '',
+        courseName: courseNameOf(s),
+        branchName: s.branchName || '',
+        reason: meta.reason || '',
+        lastDay: meta.lastDay || '',
+        recordsDeleted: totalRecords,
+        by: (profile && profile.email) || 'admin',
+        at: new Date().toISOString()
+      });
+    } catch (err) {
+      console.warn('[youth] deletion log failed', err);
+    }
+
+    const allRefs = [...subRefs, ...rootRefs];
+    for (let i = 0; i < allRefs.length; i += 400) {
+      const wb = writeBatch(db);
+      allRefs.slice(i, i + 400).forEach(r => wb.delete(r));
+      await wb.commit();
+    }
+
+    await deleteDoc(doc(db, COL, s.id));
+
+    return totalRecords;
+  }
+
+  // ---------- popup: drop / delete ----------
+  async function removeStudentPopup(s, mode) {
+    const isDrop = mode === 'drop';
+    let saving = false;
+    const popup = openPopup({
+      title: isDrop ? 'Drop Student' : 'Delete Permanently',
+      subtitle: studentSub(s),
+      icon: isDrop ? 'user-x' : 'trash-2',
+      tone: 'danger',
+      saving: () => saving
+    });
+    const c = popup.container;
+
+    // Single-sentence alert notice
+    if (isDrop) {
+      const alert = mk('div', 'pk-alert warning');
+      alert.innerHTML = `<i data-lucide="alert-triangle"></i><span>Dropping marks student as Dropped for <strong>${s.sessionName || 'current'}</strong> session only. Future billing stops; historical payments remain preserved.</span>`;
+      c.appendChild(alert);
+    } else {
+      const alert = mk('div', 'pk-alert danger');
+      alert.innerHTML = `<i data-lucide="alert-octagon"></i><span>Permanent deletion completely removes this admission and all fee records for <strong>${s.sessionName || 'current'}</strong> session only. This action cannot be undone.</span>`;
+      c.appendChild(alert);
+    }
+
+    let reasonTa = null;
+    let lastDayPicker = null;
+
+    if (isDrop) {
+      const lastDayHost = document.createElement('div');
+      lastDayPicker = createDatePicker(lastDayHost, {
+        value: todayISO(),
+        max: todayISO(),
+        ariaLabel: 'Last day of attendance',
+        onChange: () => check()
+      });
+      const fLast = pField('Last day attended', lastDayHost, { required: true });
+
+      const { wrap: reasonWrap, textarea } = pTextarea('Explain reason for dropping student...');
+      reasonTa = textarea;
+      const fReason = pField('Reason for dropping', reasonWrap, { required: true });
+
+      c.appendChild(pFieldRow(fLast, fReason));
+      reasonTa.addEventListener('input', check);
+    }
+
+    // Type student ID to confirm
+    const { wrap: confirmWrap, input: confirmInp } = pTypeConfirm(s.studentId);
+    const fConfirm = pField(`Type student ID (${s.studentId || ''}) to confirm`, confirmWrap, { required: true });
+    c.appendChild(fConfirm);
+
+    const { cancelBtn, okBtn, setSaving } = pButtons(
+      popup,
+      isDrop ? 'Drop Student' : 'Delete Permanently',
+      { icon: isDrop ? 'user-x' : 'trash-2', tone: 'danger' }
+    );
+
+    const check = () => {
+      const idOk = confirmInp.value.trim() === String(s.studentId || '');
+      if (isDrop) {
+        const reasonOk = !!(reasonTa && reasonTa.value.trim());
+        const dateOk = !!(lastDayPicker && lastDayPicker.value);
+        okBtn.disabled = saving || !idOk || !reasonOk || !dateOk;
+      } else {
+        okBtn.disabled = saving || !idOk;
+      }
+    };
+    confirmInp.addEventListener('input', check);
+    check();
+
+    okBtn.addEventListener('click', async () => {
+      saving = true;
+      setSaving(true);
+
+      try {
+        if (isDrop) {
+          const lastDay = lastDayPicker ? lastDayPicker.value : todayISO();
+          const reason = reasonTa ? reasonTa.value.trim() : '';
+          await updateDoc(doc(db, COL, s.id), {
+            status: 'dropped',
+            droppedAt: serverTimestamp(),
+            dropReason: reason,
+            dropLastDay: lastDay,
+            updatedAt: serverTimestamp()
+          });
+
+          try {
+            await addDoc(collection(db, 'deletionLog'), {
+              ctx: 'youth',
+              type: 'drop',
+              studentCode: s.studentId || '',
+              name: s.name || '',
+              sessionName: s.sessionName || '',
+              courseName: courseNameOf(s),
+              branchName: s.branchName || '',
+              reason,
+              lastDay,
+              recordsDeleted: 0,
+              by: (profile && profile.email) || 'admin',
+              at: new Date().toISOString()
+            });
+          } catch (_) {}
+
+          showToast({ type: 'success', message: `Student marked as dropped from ${s.sessionName || 'session'}` });
+        } else {
+          await purgeYouthAdmission(s, { mode: 'delete' });
+          showToast({ type: 'success', message: 'Admission deleted permanently' });
+        }
+
+        popup.close();
+        if (editId === s.id) closeForm();
+        await load();
+        render();
+      } catch (err) {
+        console.error('[admissions] purgeYouthAdmission failed', err);
+        showToast({ type: 'error', message: 'Operation failed: ' + (err.message || 'unknown error') });
+        saving = false;
+        setSaving(false);
+      }
+    });
+  }
+
+  // ---------- event listeners ----------
+  addBtn.addEventListener('click', async () => {
     if (!form.hidden && !saveBtn.disabled && !(await confirmLeave({ clear: false }))) return;
     openForm(null);
   });
-}
-registerDirty(() => !form.hidden && !saveBtn.disabled && !saving);
-const aadhInp = $('adm-aadhaar');
-if (aadhInp) {
-  aadhInp.addEventListener('blur', () => {
-    aadhInp.value = aadhInp.value.replace(/\s+/g, '');
+  findBtn.addEventListener('click', () => findStudent());
+  lookupInp.addEventListener('input', () => { lookupStatus.textContent = ''; lookupStatus.className = ''; });
+  lookupInp.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); findStudent(); } });
+  cancelBtn.addEventListener('click', async () => {
+    if (!form.hidden && !saveBtn.disabled && !(await confirmLeave({ clear: false }))) return;
+    closeForm();
   });
-}
-form.addEventListener('input', (ev) => {
-  touched = true;
-  refreshForm();
-  const id = ev.target && ev.target.id;
-  if (id === 'adm-name' || id === 'adm-dob' || id === 'adm-phone' || id === 'adm-student-id-lookup') {
-    prereqCheck = null;
-    runPrereqCheck();
+  if (emptyAdd) {
+    emptyAdd.addEventListener('click', async () => {
+      if (!form.hidden && !saveBtn.disabled && !(await confirmLeave({ clear: false }))) return;
+      openForm(null);
+    });
   }
-});
-form.addEventListener('change', () => { touched = true; refreshForm(); });
-form.addEventListener('submit', (ev) => { ev.preventDefault(); save(); });
-
-// Document upload: click, drag/drop, compress immediately
-DOC_KEYS.forEach((k) => {
-  const box = $('adm-' + k + '-upload');
-  const input = $('adm-' + k + '-file');
-  if (!box || !input) return;
-
-  box.addEventListener('click', (ev) => {
-    if (ev.target.tagName === 'BUTTON') return;
-    input.click();
-  });
-
-  box.addEventListener('dragover', (ev) => { ev.preventDefault(); box.classList.add('dragover'); });
-  box.addEventListener('dragleave', () => box.classList.remove('dragover'));
-  box.addEventListener('drop', (ev) => {
-    ev.preventDefault();
-    box.classList.remove('dragover');
-    const file = ev.dataTransfer.files[0];
-    if (file) handleFileSelect(k, file);
-  });
-
-  input.addEventListener('change', (ev) => {
-    const file = ev.target.files && ev.target.files[0];
-    if (file) handleFileSelect(k, file);
-  });
-});
-
-async function handleFileSelect(k, file) {
-  if (!isImageFile(file)) {
-    const errBox = $('adm-' + k + '-err');
-    if (errBox) errBox.textContent = 'Only JPG, PNG or WEBP allowed';
-    return;
+  registerDirty(() => !form.hidden && !saveBtn.disabled && !saving);
+  const aadhInp = $('adm-aadhaar');
+  if (aadhInp) {
+    aadhInp.addEventListener('blur', () => {
+      aadhInp.value = aadhInp.value.replace(/\s+/g, '');
+    });
   }
-  if (/^image\/(heic|heif)$/i.test(file.type)) {
-    const errBox = $('adm-' + k + '-err');
-    if (errBox) errBox.textContent = 'Only JPG, PNG or WEBP allowed';
-    return;
-  }
-  if (file.size > MAX_UPLOAD_BYTES) {
-    const errBox = $('adm-' + k + '-err');
-    if (errBox) errBox.textContent = 'File too large (max 10 MB).';
-    showToast('File too large (max 10 MB).', 'error');
-    return;
-  }
-  const upload = $('adm-' + k + '-upload');
-  const preview = $('adm-' + k + '-preview');
-  const emptyEl = upload ? upload.querySelector('.adm-upload-empty') : null;
-  const sizeEl = $('adm-' + k + '-size');
-  if (emptyEl) emptyEl.style.display = 'none';
-  preview.style.display = 'none';
-  preview.innerHTML = '';
-  upload.classList.add('compressing');
-  const spin = mk('div', 'adm-doc-spinner');
-  spin.textContent = 'Compressing...';
-  upload.appendChild(spin);
-  try {
-    docFiles[k] = { file, compressedBlob: null, dataUrl: null };
-    const blob = await compressFile(k);
-    preview.style.display = 'flex';
-    const box = mk('div', 'adm-doc-box');
-    box.style.position = 'relative';
-    box.style.overflow = 'visible';
-    const img = mk('img', 'adm-doc-thumb');
-    if (isDataUrl(docFiles[k].dataUrl)) {
-      img.src = docFiles[k].dataUrl;
-      img.style.objectFit = (k === 'photo') ? 'cover' : 'contain';
-      if (k === 'signature') img.style.background = '#FFFFFF';
-      box.appendChild(img);
-    }
-    const remove = mk('button', 'adm-doc-remove');
-    remove.type = 'button';
-    remove.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>';
-    remove.setAttribute('aria-label', 'Remove file');
-    remove.addEventListener('click', (ev) => { ev.stopPropagation(); setDocPreview(k, null); });
-    box.appendChild(remove);
-    preview.appendChild(box);
-    upload.classList.add('has-preview');
-    if (sizeEl) {
-      sizeEl.textContent = 'Saved: ' + formatBytes(blob.size);
-      sizeEl.className = 'adm-doc-size saved';
-    }
+  form.addEventListener('input', (ev) => {
     touched = true;
     refreshForm();
-  } catch (e) {
-    // error already shown in compressFile
-    if (emptyEl) emptyEl.style.display = 'flex';
-    upload.classList.remove('compressing', 'has-preview');
-  } finally {
-    upload.classList.remove('compressing');
-    if (spin && spin.parentNode === upload) upload.removeChild(spin);
-  }
-}
+    const id = ev.target && ev.target.id;
+    if (id === 'adm-name' || id === 'adm-dob' || id === 'adm-phone' || id === 'adm-student-id-lookup') {
+      prereqCheck = null;
+      runPrereqCheck();
+    }
+  });
+  form.addEventListener('change', () => { touched = true; refreshForm(); });
+  form.addEventListener('submit', (ev) => { ev.preventDefault(); save(); });
 
-await load();
+  // Document upload: click, drag/drop, compress immediately
+  DOC_KEYS.forEach((k) => {
+    const box = $('adm-' + k + '-upload');
+    const input = $('adm-' + k + '-file');
+    if (!box || !input) return;
+
+    box.addEventListener('click', (ev) => {
+      if (ev.target.tagName === 'BUTTON') return;
+      input.click();
+    });
+
+    box.addEventListener('dragover', (ev) => { ev.preventDefault(); box.classList.add('dragover'); });
+    box.addEventListener('dragleave', () => box.classList.remove('dragover'));
+    box.addEventListener('drop', (ev) => {
+      ev.preventDefault();
+      box.classList.remove('dragover');
+      const file = ev.dataTransfer.files[0];
+      if (file) handleFileSelect(k, file);
+    });
+
+    input.addEventListener('change', (ev) => {
+      const file = ev.target.files && ev.target.files[0];
+      if (file) handleFileSelect(k, file);
+    });
+  });
+
+  async function handleFileSelect(k, file) {
+    if (!isImageFile(file)) {
+      const errBox = $('adm-' + k + '-err');
+      if (errBox) errBox.textContent = 'Only JPG, PNG or WEBP allowed';
+      return;
+    }
+    if (/^image\/(heic|heif)$/i.test(file.type)) {
+      const errBox = $('adm-' + k + '-err');
+      if (errBox) errBox.textContent = 'Only JPG, PNG or WEBP allowed';
+      return;
+    }
+    if (file.size > MAX_UPLOAD_BYTES) {
+      const errBox = $('adm-' + k + '-err');
+      if (errBox) errBox.textContent = 'File too large (max 10 MB).';
+      showToast('File too large (max 10 MB).', 'error');
+      return;
+    }
+    const upload = $('adm-' + k + '-upload');
+    const preview = $('adm-' + k + '-preview');
+    const emptyEl = upload ? upload.querySelector('.adm-upload-empty') : null;
+    const sizeEl = $('adm-' + k + '-size');
+    if (emptyEl) emptyEl.style.display = 'none';
+    preview.style.display = 'none';
+    preview.innerHTML = '';
+    upload.classList.add('compressing');
+    const spin = mk('div', 'adm-doc-spinner');
+    spin.textContent = 'Compressing...';
+    upload.appendChild(spin);
+    try {
+      docFiles[k] = { file, compressedBlob: null, dataUrl: null };
+      const blob = await compressFile(k);
+      preview.style.display = 'flex';
+      const box = mk('div', 'adm-doc-box');
+      box.style.position = 'relative';
+      box.style.overflow = 'visible';
+      const img = mk('img', 'adm-doc-thumb');
+      if (isDataUrl(docFiles[k].dataUrl)) {
+        img.src = docFiles[k].dataUrl;
+        img.style.objectFit = (k === 'photo') ? 'cover' : 'contain';
+        if (k === 'signature') img.style.background = '#FFFFFF';
+        box.appendChild(img);
+      }
+      const remove = mk('button', 'adm-doc-remove');
+      remove.type = 'button';
+      remove.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+      remove.setAttribute('aria-label', 'Remove file');
+      remove.addEventListener('click', (ev) => { ev.stopPropagation(); setDocPreview(k, null); });
+      box.appendChild(remove);
+      preview.appendChild(box);
+      upload.classList.add('has-preview');
+      if (sizeEl) {
+        sizeEl.textContent = 'Saved: ' + formatBytes(blob.size);
+        sizeEl.className = 'adm-doc-size saved';
+      }
+      touched = true;
+      refreshForm();
+    } catch (e) {
+      // error already shown in compressFile
+      if (emptyEl) emptyEl.style.display = 'flex';
+      upload.classList.remove('compressing', 'has-preview');
+    } finally {
+      upload.classList.remove('compressing');
+      if (spin && spin.parentNode === upload) upload.removeChild(spin);
+    }
+  }
+
+  await load();
 }
 
 export function unmount() {

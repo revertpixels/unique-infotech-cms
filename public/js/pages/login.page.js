@@ -95,10 +95,10 @@ tabHead.addEventListener('click', () => switchTab(false));
 togglePw.addEventListener('click', () => {
   if (adminPw.type === 'password') {
     adminPw.type = 'text';
-    togglePw.querySelector('i').setAttribute('data-lucide', 'eye-off');
+    togglePw.innerHTML = '<i data-lucide="eye-off"></i>';
   } else {
     adminPw.type = 'password';
-    togglePw.querySelector('i').setAttribute('data-lucide', 'eye');
+    togglePw.innerHTML = '<i data-lucide="eye"></i>';
   }
   if (typeof lucide !== 'undefined') {
     lucide.createIcons();

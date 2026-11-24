@@ -5,15 +5,15 @@ import {
   doc,
   getDoc
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { inWords } from '../utils/admission-receipt.js?v=1.8.107';
-import { showToast } from '../components/toast.js?v=1.8.107';
-import { fmtDate, todayISO } from '../utils/session-rules.js?v=1.8.107';
+import { inWords } from '../utils/admission-receipt.js?v=1.8.125';
+import { showToast } from '../components/toast.js?v=1.8.125';
+import { fmtDate, todayISO } from '../utils/session-rules.js?v=1.8.125';
 import {
   fetchStudentPayments,
   isInstallmentPaid,
-  courseFeeWithoutExam,
-  courseBalanceWithoutExam
-} from '../services/payment.service.js?v=1.8.107';
+  installmentCourseFee,
+  installmentBalanceDue
+} from '../services/payment.service.js?v=1.8.125';
 
 function $(id) {
   return document.getElementById(id);
@@ -225,16 +225,16 @@ function renderReceiptHTML({ student, payment, org, orgLogo, branch, allPayments
   const isInstallment = payType === 'IN' || payType === 'INST';
   const instNo = payment.installmentNo || 1;
 
-  // Course fee & balance calculations strictly excluding examination fee for installment receipts
+  // Course fee & balance calculations strictly for installments (excluding admission, material, and exam fees)
   const totalCourseFee = isExam
     ? Number(payment.amount || 0)
-    : courseFeeWithoutExam(student);
+    : installmentCourseFee(student);
   const paidAmount = Number(payment.amount || 0);
   const lateFee = Number(payment.lateFee || payment.lateFeeAmount || 0);
   const totalReceived = Number(payment.total ?? (paidAmount + (payment.waived ? 0 : lateFee)));
   const balanceDue = isExam
     ? 0
-    : courseBalanceWithoutExam(student, allPayments);
+    : installmentBalanceDue(student, allPayments);
 
   const pDateStr = fmtDate(payment.paidOn || payment.date);
   const rNo = payment.receiptNo || 'RCPT-PREVIEW';
@@ -363,7 +363,7 @@ function renderReceiptHTML({ student, payment, org, orgLogo, branch, allPayments
           <svg class="mpr-ic" viewBox="0 0 24 24"><path d="M6 3h12"/><path d="M6 8h12"/><path d="m6 13 8.5 8"/><path d="M6 13h3"/><path d="M9 13c6.667 0 6.667-10 0-10"/></svg>
           Fee ledger
         </span>
-        <small>${isExam ? `Examination fee ${fmtMoney(paidAmount)}` : `Total course fee ${fmtMoney(totalCourseFee)}`}</small>
+        <small>${isExam ? `Examination fee ${fmtMoney(paidAmount)}` : `Course fee (installments) ${fmtMoney(totalCourseFee)}`}</small>
       </h4>
       <table class="mpr-fe">
         <thead>
@@ -383,14 +383,7 @@ function renderReceiptHTML({ student, payment, org, orgLogo, branch, allPayments
               <td>${fmtMoney(paidAmount)}</td>
             </tr>
           ` : `
-            <!-- Admission Fee -->
-            <tr>
-              <td>Admission fee</td>
-              <td>At admission</td>
-              <td><span class="mpr-pill">Paid</span></td>
-              <td>${fmtMoney(student.admissionFee || student.feeSnapshot?.admission || 1000)}</td>
-            </tr>
-            <!-- Installments (NO exam fee row on monthly/installment receipts) -->
+            <!-- Installments only (no admission fee, no study material, no exam fee) -->
             ${sched.map(it => {
               const itNo = Number(it.no ?? it.installmentNo);
               const isCur = isInstallment && itNo === instNo;

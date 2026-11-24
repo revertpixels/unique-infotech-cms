@@ -11,17 +11,18 @@ import {
   serverTimestamp,
   runTransaction
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.107';
-import { openPopup } from '../components/modal.js?v=1.8.107';
-import { createSelect } from '../components/ui-select.js?v=1.8.107';
-import { confirmDialog } from '../components/ui-confirm.js?v=1.8.107';
-import { openMenu } from '../components/ui-menu.js?v=1.8.107';
-import { formatINR, formatDateIN, initials } from '../utils/formatter.js?v=1.8.107';
-import { validatePhone, validateEmail, validateDOB, validateName } from '../utils/validator.js?v=1.8.107';
-import { registerDirty } from '../utils/unsaved-guard.js?v=1.8.107';
-import { compressTo100KB, blobToDataURL, isImageFile, formatBytes } from '../utils/image-compress.js?v=1.8.107';
-import { todayISO } from '../utils/session-rules.js?v=1.8.107';
-import { getSelectedSessionId } from '../core/sessions.js?v=1.8.107';
+import { showToast } from '../components/toast.js?v=1.8.125';
+import { openPopup } from '../components/modal.js?v=1.8.125';
+import { createSelect } from '../components/ui-select.js?v=1.8.125';
+import { confirmDialog } from '../components/ui-confirm.js?v=1.8.125';
+import { openMenu } from '../components/ui-menu.js?v=1.8.125';
+import { formatINR, formatDateIN, initials } from '../utils/formatter.js?v=1.8.125';
+import { validatePhone, validateEmail, validateDOB, validateName } from '../utils/validator.js?v=1.8.125';
+import { registerDirty } from '../utils/unsaved-guard.js?v=1.8.125';
+import { compressTo100KB, blobToDataURL, isImageFile, formatBytes } from '../utils/image-compress.js?v=1.8.125';
+import { todayISO } from '../utils/session-rules.js?v=1.8.125';
+import { getSelectedSessionId } from '../core/sessions.js?v=1.8.125';
+import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.125';
 import {
   fetchStudentPayments,
   recordPaymentTx,
@@ -29,7 +30,7 @@ import {
   calculateLateFee,
   courseFeeWithoutExam,
   courseBalanceWithoutExam
-} from '../services/payment.service.js?v=1.8.107';
+} from '../services/payment.service.js?v=1.8.125';
 
 const COL = 'students';
 const QUALIFICATIONS = ['VIII Pass', 'Secondary (X) Pass', 'Higher Secondary (XII) Pass', 'ITI', 'Diploma', 'Undergraduate (Graduate)', 'Postgraduate', 'Other'];
@@ -1184,14 +1185,14 @@ function renderDocumentsTab() {
         const pdfWrap = mk('div', 'sp-doc-top-pdf');
         pdfWrap.title = 'Click to preview document';
         pdfWrap.innerHTML = '<i data-lucide="file-text"></i><span>PDF Document</span>';
-        pdfWrap.onclick = () => openDocPreviewModal(label, docData);
+        pdfWrap.onclick = () => openDocPreviewModal(key, label, docData);
         previewArea.appendChild(pdfWrap);
       } else {
         const img = mk('img', 'sp-doc-top-img');
         img.src = docData.data;
         img.alt = label;
         img.title = 'Click to preview document';
-        img.onclick = () => openDocPreviewModal(label, docData);
+        img.onclick = () => openDocPreviewModal(key, label, docData);
         previewArea.appendChild(img);
       }
       card.appendChild(previewArea);
@@ -1218,19 +1219,19 @@ function renderDocumentsTab() {
       const prevBtn = mk('button', 'ui-btn ghost sm');
       prevBtn.type = 'button';
       prevBtn.title = 'Preview document';
-      prevBtn.textContent = 'View';
-      prevBtn.onclick = () => openDocPreviewModal(label, docData);
+      prevBtn.innerHTML = '<i data-lucide="eye"></i><span>View</span>';
+      prevBtn.onclick = () => openDocPreviewModal(key, label, docData);
 
       const dlBtn = mk('button', 'ui-btn ghost sm');
       dlBtn.type = 'button';
       dlBtn.title = 'Download file';
-      dlBtn.textContent = 'Download';
+      dlBtn.innerHTML = '<i data-lucide="download"></i><span>Download</span>';
       dlBtn.onclick = () => downloadDocFile(docData, (currentStudent.studentId || currentStudent.id) + '_' + key);
 
       const repBtn = mk('button', 'ui-btn ghost sm');
       repBtn.type = 'button';
       repBtn.title = 'Replace document';
-      repBtn.textContent = 'Replace';
+      repBtn.innerHTML = '<i data-lucide="refresh-cw"></i><span>Replace</span>';
       repBtn.onclick = () => openDocReplaceModal(key, label, docData);
 
       foot.append(prevBtn, dlBtn, repBtn);
@@ -1280,7 +1281,20 @@ function renderDocumentsTab() {
   if (typeof lucide !== 'undefined') lucide.createIcons();
 }
 
-function openDocPreviewModal(label, docData) {
+function openDocPreviewModal(keyOrLabel, labelOrDocData, maybeDocData) {
+  let key, label, docData;
+  if (maybeDocData !== undefined) {
+    key = keyOrLabel;
+    label = labelOrDocData;
+    docData = maybeDocData;
+  } else {
+    label = keyOrLabel;
+    docData = labelOrDocData;
+    const found = DOC_KEYS.find(k => k.label === label);
+    key = found ? found.key : '';
+  }
+  if (!docData) return;
+
   const popup = openPopup({
     title: label,
     subtitle: docData.name || '',
@@ -1288,9 +1302,11 @@ function openDocPreviewModal(label, docData) {
     wide: true
   });
 
-  // Add download button to the left of the cross (close) icon in the header
+  // Add replace and download buttons to the left of the cross (close) icon in the header
   const xBtn = popup.el.querySelector('.adm-view-close');
   if (xBtn && xBtn.parentElement) {
+    const actionsWrap = xBtn.parentElement;
+
     const dlBtn = document.createElement('button');
     dlBtn.type = 'button';
     dlBtn.className = 'ui-btn ghost adm-view-close';
@@ -1299,9 +1315,30 @@ function openDocPreviewModal(label, docData) {
     dlBtn.innerHTML = '<i data-lucide="download" width="18" height="18"></i>';
     dlBtn.onclick = (e) => {
       e.stopPropagation();
-      downloadDocFile(docData, (currentStudent.studentId || currentStudent.id) + '_' + label);
+      downloadDocFile(docData, (currentStudent.studentId || currentStudent.id) + '_' + (key || label));
     };
-    xBtn.parentElement.insertBefore(dlBtn, xBtn);
+
+    const repBtn = document.createElement('button');
+    repBtn.type = 'button';
+    repBtn.className = 'ui-btn ghost adm-view-close';
+    repBtn.setAttribute('aria-label', 'Replace document');
+    repBtn.title = 'Replace document';
+    repBtn.innerHTML = '<i data-lucide="refresh-cw" width="18" height="18"></i>';
+    repBtn.onclick = (e) => {
+      e.stopPropagation();
+      popup.close();
+      openDocReplaceModal(key, label, docData || (key ? docsCache[key] : null));
+    };
+
+    actionsWrap.insertBefore(dlBtn, xBtn);
+    actionsWrap.insertBefore(repBtn, dlBtn);
+
+    // Prevent header icon buttons from getting focused or keeping focus ring on open
+    requestAnimationFrame(() => {
+      if (document.activeElement && actionsWrap.contains(document.activeElement)) {
+        document.activeElement.blur();
+      }
+    });
   }
 
   const isPdf = (docData.type || docData.mime || '').includes('pdf');
@@ -1344,31 +1381,67 @@ function downloadDocFile(docData, defaultName) {
  */
 function openDocReplaceModal(key, label, existingDoc, droppedFile) {
   const s = currentStudent;
+  const isReplacing = !!(existingDoc && existingDoc.data);
   const popup = openPopup({
-    title: (existingDoc ? 'Replace ' : 'Upload ') + label,
+    title: (isReplacing ? 'Replace ' : 'Upload ') + label,
     subtitle: `${s.name} • ${s.studentId || s.id}`,
-    icon: 'upload'
+    icon: 'upload',
+    wide: isReplacing
   });
 
   const container = mk('div', 'sp-modal-form');
 
-  if (existingDoc && existingDoc.data) {
-    const curRow = mk('div', 'pk-note');
-    curRow.innerHTML = `<i data-lucide="file-check"></i><span>Current file: <b>${existingDoc.name || label}</b> (${formatBytes(existingDoc.sizeBytes || 0)})</span>`;
+  let curRow = null;
+  if (isReplacing) {
+    curRow = mk('div', 'sp-doc-current-bar');
+    curRow.innerHTML = `
+      <div class="sp-doc-current-icon"><i data-lucide="file-check"></i></div>
+      <div class="sp-doc-current-text">
+        <span class="sp-doc-current-label">Current Document</span>
+        <span class="sp-doc-current-name">${existingDoc.name || label} <span class="sp-doc-current-size">(${formatBytes(existingDoc.sizeBytes || 0)})</span></span>
+      </div>
+    `;
     container.appendChild(curRow);
   }
 
   const dropZone = mk('div', 'sp-drop-zone');
-  dropZone.innerHTML = '<i data-lucide="upload-cloud" width="36" height="36" style="color:var(--primary);margin-bottom:8px;"></i>' +
-    '<div style="font-size:14px;font-weight:700;color:var(--text);">Choose a file or drag & drop here</div>' +
-    '<div style="font-size:12px;color:var(--text-mute);margin-top:2px;">JPG, PNG, PDF up to 10MB (auto-compressed to 100KB)</div>';
+
+  const emptyWrap = mk('div', 'sp-drop-empty');
+  emptyWrap.innerHTML = `
+    <div class="sp-drop-icon-tile">
+      <i data-lucide="upload-cloud"></i>
+    </div>
+    <div class="sp-drop-title">Choose a file or drag & drop here</div>
+    <div class="sp-drop-subtitle">JPG, PNG, PDF up to 10MB (auto-compressed to 100KB)</div>
+  `;
+
+  const loadingWrap = mk('div', 'sp-drop-loading');
+  loadingWrap.style.display = 'none';
+  loadingWrap.innerHTML = `
+    <i data-lucide="loader-2" class="spin"></i>
+    <span>Optimizing and compressing document...</span>
+  `;
+
+  const previewWrap = mk('div', isReplacing ? 'sp-doc-compare-grid' : 'sp-replace-preview-card');
+  previewWrap.style.display = 'none';
+
+  dropZone.append(emptyWrap, loadingWrap, previewWrap);
 
   const fileInput = document.createElement('input');
   fileInput.type = 'file';
   fileInput.accept = 'image/jpeg,image/png,application/pdf';
   fileInput.style.display = 'none';
 
-  dropZone.onclick = () => fileInput.click();
+  dropZone.onclick = (e) => {
+    if (e.target.closest('#sp-change-file-btn')) {
+      fileInput.click();
+      return;
+    }
+    if (!readyPayload) {
+      fileInput.click();
+    }
+  };
+
   dropZone.ondragover = (ev) => { ev.preventDefault(); dropZone.classList.add('dragover'); };
   dropZone.ondragleave = () => dropZone.classList.remove('dragover');
   dropZone.ondrop = (ev) => {
@@ -1387,18 +1460,12 @@ function openDocReplaceModal(key, label, existingDoc, droppedFile) {
 
   container.append(dropZone, fileInput);
 
-  const previewWrap = mk('div', '');
-  previewWrap.style.textAlign = 'center';
-  const sizeLine = mk('div', 'pk-note');
-  sizeLine.style.display = 'none';
-  container.append(previewWrap, sizeLine);
-
   const footer = mk('div', 'adm-view-foot');
   const cancelBtn = mk('button', 'ui-btn ghost', 'Cancel');
   cancelBtn.type = 'button';
   cancelBtn.onclick = () => popup.close();
 
-  const saveBtn = mk('button', 'ui-btn primary', existingDoc ? 'Replace Document' : 'Upload Document');
+  const saveBtn = mk('button', 'ui-btn primary', isReplacing ? 'Replace Document' : 'Upload Document');
   saveBtn.type = 'button';
   saveBtn.disabled = true;
 
@@ -1418,9 +1485,13 @@ function openDocReplaceModal(key, label, existingDoc, droppedFile) {
       return;
     }
 
-    sizeLine.style.display = 'flex';
-    sizeLine.textContent = 'Compressing and optimizing document...';
+    if (curRow) curRow.style.display = 'none';
+    emptyWrap.style.display = 'none';
+    previewWrap.style.display = 'none';
+    loadingWrap.style.display = 'flex';
+    dropZone.classList.remove('has-file');
     saveBtn.disabled = true;
+    if (typeof lucide !== 'undefined') lucide.createIcons();
 
     try {
       previewWrap.textContent = '';
@@ -1438,15 +1509,6 @@ function openDocReplaceModal(key, label, existingDoc, droppedFile) {
           sizeBytes: compressedBlob.size,
           data: dataUrl
         };
-
-        const nImg = mk('img');
-        nImg.src = dataUrl;
-        nImg.style.maxHeight = '140px';
-        nImg.style.borderRadius = 'var(--r)';
-        nImg.style.border = '1px solid var(--border)';
-        previewWrap.appendChild(nImg);
-
-        sizeLine.textContent = `Optimized size: ${formatBytes(compressedBlob.size)} (Original: ${formatBytes(file.size)})`;
       } else if (file.type === 'application/pdf') {
         const dataUrl = await blobToDataURL(file);
         readyPayload = {
@@ -1456,16 +1518,111 @@ function openDocReplaceModal(key, label, existingDoc, droppedFile) {
           sizeBytes: file.size,
           data: dataUrl
         };
-        previewWrap.innerHTML = `<div style="color:var(--danger);"><i data-lucide="file-text" width="28" height="28"></i><div style="font-size:12px;margin-top:4px;">${file.name}</div></div>`;
-        sizeLine.textContent = `PDF file size: ${formatBytes(file.size)}`;
-        if (typeof lucide !== 'undefined') lucide.createIcons();
       }
 
+      if (isReplacing) {
+        // Render Side-by-Side Comparison
+        const isOldPdf = (existingDoc.type || existingDoc.mime || '').includes('pdf') || String(existingDoc.name || '').endsWith('.pdf');
+        const isNewPdf = readyPayload.type === 'application/pdf';
+
+        const oldCol = mk('div', 'sp-compare-col old');
+        oldCol.innerHTML = `
+          <div class="sp-compare-header">
+            <span class="sp-compare-badge old">Current Document</span>
+            <span class="sp-compare-filename" title="${existingDoc.name || label}">${existingDoc.name || label}</span>
+          </div>
+          <div class="sp-compare-preview">
+            ${isOldPdf 
+              ? `<div class="sp-replace-pdf-wrap"><i data-lucide="file-text"></i><span>PDF Document</span></div>`
+              : `<img src="${existingDoc.data}" alt="Current">`
+            }
+          </div>
+          <div class="sp-compare-footer">
+            <span class="sp-compare-pill old">Will be replaced</span>
+            <span class="text-xs text-mute">${formatBytes(existingDoc.sizeBytes || 0)}</span>
+          </div>
+        `;
+
+        const arrow = mk('div', 'sp-compare-arrow');
+        arrow.innerHTML = '<i data-lucide="arrow-right"></i>';
+
+        const newCol = mk('div', 'sp-compare-col new');
+        newCol.innerHTML = `
+          <div class="sp-compare-header">
+            <span class="sp-compare-badge new">New Document</span>
+            <span class="sp-compare-filename" title="${readyPayload.name}">${readyPayload.name}</span>
+          </div>
+          <div class="sp-compare-preview">
+            ${isNewPdf
+              ? `<div class="sp-replace-pdf-wrap"><i data-lucide="file-text"></i><span>${readyPayload.name}</span></div>`
+              : `<img src="${readyPayload.data}" alt="New">`
+            }
+          </div>
+          <div class="sp-compare-footer">
+            <span class="sp-replace-meta-pill"><i data-lucide="check-circle-2"></i> Ready · ${formatBytes(readyPayload.sizeBytes)}</span>
+            <button type="button" class="ui-btn ghost sm" id="sp-change-file-btn">
+              <i data-lucide="refresh-cw"></i><span>Change</span>
+            </button>
+          </div>
+        `;
+
+        previewWrap.className = 'sp-doc-compare-grid';
+        previewWrap.append(oldCol, arrow, newCol);
+      } else {
+        // Single preview card for fresh upload
+        const isNewPdf = readyPayload.type === 'application/pdf';
+        previewWrap.className = 'sp-replace-preview-card';
+        if (isNewPdf) {
+          const pdfWrap = mk('div', 'sp-replace-pdf-wrap');
+          pdfWrap.innerHTML = `
+            <i data-lucide="file-text"></i>
+            <span style="font-weight:600;font-size:13px;max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${file.name}</span>
+          `;
+          const pill = mk('div', 'sp-replace-meta-pill');
+          pill.innerHTML = `<i data-lucide="check-circle-2"></i><span>Ready · PDF ${formatBytes(file.size)}</span>`;
+          const actRow = mk('div', 'sp-replace-actions');
+          const changeBtn = mk('button', 'ui-btn ghost sm');
+          changeBtn.id = 'sp-change-file-btn';
+          changeBtn.type = 'button';
+          changeBtn.innerHTML = '<i data-lucide="refresh-cw"></i><span>Change file</span>';
+          actRow.appendChild(changeBtn);
+          previewWrap.append(pdfWrap, pill, actRow);
+        } else {
+          const imgWrap = mk('div', 'sp-replace-img-wrap');
+          const nImg = mk('img');
+          nImg.src = readyPayload.data;
+          nImg.alt = file.name;
+          imgWrap.appendChild(nImg);
+
+          const pill = mk('div', 'sp-replace-meta-pill');
+          pill.innerHTML = `<i data-lucide="check-circle-2"></i><span>Ready · ${formatBytes(readyPayload.sizeBytes)} (Original: ${formatBytes(file.size)})</span>`;
+
+          const actRow = mk('div', 'sp-replace-actions');
+          const changeBtn = mk('button', 'ui-btn ghost sm');
+          changeBtn.id = 'sp-change-file-btn';
+          changeBtn.type = 'button';
+          changeBtn.innerHTML = '<i data-lucide="refresh-cw"></i><span>Change file</span>';
+          actRow.appendChild(changeBtn);
+
+          previewWrap.append(imgWrap, pill, actRow);
+        }
+      }
+
+      loadingWrap.style.display = 'none';
+      previewWrap.style.display = isReplacing ? 'grid' : 'flex';
+      dropZone.classList.add('has-file');
       saveBtn.disabled = false;
+      if (typeof lucide !== 'undefined') lucide.createIcons();
     } catch (e) {
       console.error('[student-profile] processFile failed', e);
-      sizeLine.textContent = 'Optimization failed: ' + e.message;
+      loadingWrap.style.display = 'none';
+      emptyWrap.style.display = 'flex';
+      if (curRow) curRow.style.display = 'flex';
+      dropZone.classList.remove('has-file');
       showToast({ type: 'error', message: e.message || 'File processing failed' });
+      readyPayload = null;
+      saveBtn.disabled = true;
+      if (typeof lucide !== 'undefined') lucide.createIcons();
     }
   }
 
@@ -1476,17 +1633,8 @@ function openDocReplaceModal(key, label, existingDoc, droppedFile) {
   saveBtn.onclick = async () => {
     if (!readyPayload) return;
 
-    if (existingDoc) {
-      const ok = await confirmDialog({
-        title: 'Overwrite Existing Document?',
-        message: `Are you sure you want to replace "${label}" for ${s.name}? This will permanently update the stored document.`,
-        confirmText: 'Overwrite document'
-      });
-      if (!ok) return;
-    }
-
     saveBtn.disabled = true;
-    saveBtn.innerHTML = '<i data-lucide="loader-2" class="spin"></i> Uploading...';
+    saveBtn.innerHTML = '<i data-lucide="loader-2" class="spin"></i> Replacing...';
     if (typeof lucide !== 'undefined') lucide.createIcons();
 
     try {
@@ -1507,8 +1655,8 @@ function openDocReplaceModal(key, label, existingDoc, droppedFile) {
 
       await logStudentActivity(s.id, {
         action: 'document_replaced',
-        summary: `${existingDoc ? 'Replaced' : 'Uploaded'} ${label} (${readyPayload.name})`,
-        changes: { [key]: { from: existingDoc ? existingDoc.name : 'none', to: readyPayload.name } },
+        summary: `${isReplacing ? 'Replaced' : 'Uploaded'} ${label} (${readyPayload.name})`,
+        changes: { [key]: { from: isReplacing ? (existingDoc.name || label) : 'none', to: readyPayload.name } },
         userEmail: authEmail,
         userRole: currentUserProfile.role,
         branchId: currentUserProfile.branchId
@@ -1516,7 +1664,7 @@ function openDocReplaceModal(key, label, existingDoc, droppedFile) {
 
       await batch.commit();
 
-      showToast({ type: 'success', message: `${label} saved successfully.` });
+      showToast({ type: 'success', message: `${label} replaced successfully.` });
       popup.close();
 
       await loadDocs();
@@ -1525,7 +1673,7 @@ function openDocReplaceModal(key, label, existingDoc, droppedFile) {
       console.error('[student-profile] document upload failed', err);
       showToast({ type: 'error', message: 'Upload failed: ' + (err.message || 'Save error') });
       saveBtn.disabled = false;
-      saveBtn.textContent = existingDoc ? 'Replace Document' : 'Upload Document';
+      saveBtn.textContent = isReplacing ? 'Replace Document' : 'Upload Document';
     }
   };
 }
@@ -1824,10 +1972,10 @@ function renderPaymentsTab() {
 
 function renderFeeActionCell(actionTd, { isPaid, isWaived, payType, label, icon, paymentId, isAdmission }) {
   if (!isPaid && !isWaived) {
-    const payBtn = mk('button', 'ui-btn primary sm sp-table-action-btn');
+    const payBtn = mk('button', 'ui-btn primary sm pf-btn-collect sp-table-action-btn');
     payBtn.type = 'button';
-    payBtn.title = `Record payment for ${label}`;
-    payBtn.innerHTML = `<i data-lucide="${icon || 'credit-card'}"></i><span>Pay</span>`;
+    payBtn.title = `Collect payment for ${label}`;
+    payBtn.innerHTML = '<i data-lucide="wallet"></i><span>Collect</span>';
     payBtn.onclick = () => openRecordPaymentModal(payType);
     actionTd.appendChild(payBtn);
   } else {
@@ -2070,34 +2218,123 @@ function renderTransactionsLedger() {
   tbody.textContent = '';
 
   const txns = [];
+  const s = currentStudent;
+  if (!s) return;
+
+  const snap = s.feeSnapshot || {};
+  const dueAt = s.dueAtAdmission || {};
+  const admFee = Number(snap.admission ?? s.admissionFee ?? dueAt.admission ?? 0);
+  const matFee = Number(snap.material ?? s.materialFee ?? s.studyMaterialFee ?? dueAt.material ?? 0);
+
+  // Check if paymentsCache already has an explicit separate MAT payment
+  const hasSeparateMatDoc = paymentsCache.some(p => {
+    const t = String(p.type || '').toUpperCase().trim();
+    return t === 'MAT' || t === 'MATERIAL' || t === 'STUDY_MATERIAL';
+  });
+
+  // Study material fee was collected at admission if student was admitted, matFee > 0, and either:
+  // - isMaterialFeePaid returns true
+  // - or student has admission receiptNo and fee was set (admission fee & study material collected together at admission)
+  const isMatCollectedAtAdm = matFee > 0 && !hasSeparateMatDoc && (
+    isMaterialFeePaid(matFee, paymentsCache, s) ||
+    Number(dueAt.material || 0) > 0 ||
+    s.materialPaid === true ||
+    s.isMaterialPaid === true ||
+    Boolean(s.receiptNo)
+  );
 
   // Initial admission payment fallback if not in subcollection
   const hasAdDoc = paymentsCache.some(p => p.type === 'AD');
-  if (!hasAdDoc && currentStudent.receiptNo) {
-    const dueAt = currentStudent.dueAtAdmission || {};
-    const admPaid = Number(dueAt.total ?? ((dueAt.admission || 0) + (dueAt.material || 0)));
+  if (!hasAdDoc && s.receiptNo) {
+    const totalPaid = Number(dueAt.total ?? ((dueAt.admission || 0) + (isMatCollectedAtAdm ? matFee : 0)));
+    let admPaid = admFee;
+    if (dueAt.admission !== undefined && Number(dueAt.admission) > 0) {
+      admPaid = Number(dueAt.admission);
+    } else if (isMatCollectedAtAdm && totalPaid > matFee) {
+      admPaid = totalPaid - matFee;
+    } else if (totalPaid > 0 && !isMatCollectedAtAdm) {
+      admPaid = totalPaid;
+    }
+
     txns.push({
-      date: currentStudent.admissionDate || '',
-      receiptNo: currentStudent.receiptNo,
+      date: s.admissionDate || '',
+      receiptNo: s.receiptNo,
       type: 'AD',
       amount: admPaid,
-      mode: 'Cash / Bank',
-      txnId: 'Admission',
-      recordedAtBranchId: currentStudent.branchId || '',
-      recordedAtBranchCode: currentStudent.branchCode || '',
-      recordedAtBranchName: currentStudent.branchName || 'Branch',
-      recordedBy: currentStudent.createdBy || '-',
-      remarks: 'Admission fee & study material',
+      mode: s.paymentMode || 'Cash / Bank',
+      txnId: s.txnId || 'Admission',
+      recordedAtBranchId: s.branchId || '',
+      recordedAtBranchCode: s.branchCode || '',
+      recordedAtBranchName: s.branchName || 'Branch',
+      recordedBy: s.createdBy || '-',
+      remarks: 'Admission fee',
       waived: false
     });
+
+    if (isMatCollectedAtAdm) {
+      txns.push({
+        date: s.admissionDate || '',
+        receiptNo: s.receiptNo,
+        type: 'MAT',
+        amount: matFee,
+        mode: s.paymentMode || 'Cash / Bank',
+        txnId: s.txnId || 'Admission',
+        recordedAtBranchId: s.branchId || '',
+        recordedAtBranchCode: s.branchCode || '',
+        recordedAtBranchName: s.branchName || 'Branch',
+        recordedBy: s.createdBy || '-',
+        remarks: 'Study material fee',
+        waived: false,
+        isAdmissionMat: true
+      });
+    }
   }
 
-  paymentsCache.forEach((p) => txns.push(p));
+  // Payments from subcollection
+  paymentsCache.forEach((p) => {
+    if (p.type === 'AD') {
+      let admAmt = p.amount;
+      if (isMatCollectedAtAdm && p.amount > matFee) {
+        admAmt = p.amount - matFee;
+      }
+      txns.push(Object.assign({}, p, {
+        amount: admAmt,
+        remarks: p.remarks && p.remarks.includes('&') ? 'Admission fee' : (p.remarks || 'Admission fee')
+      }));
+
+      if (isMatCollectedAtAdm) {
+        txns.push({
+          date: p.date || s.admissionDate || '',
+          receiptNo: p.receiptNo || s.receiptNo || '',
+          type: 'MAT',
+          amount: matFee,
+          mode: p.mode || s.paymentMode || 'Cash / Bank',
+          txnId: p.txnId || 'Admission',
+          recordedAtBranchId: p.recordedAtBranchId || s.branchId || '',
+          recordedAtBranchCode: p.recordedAtBranchCode || s.branchCode || '',
+          recordedAtBranchName: p.recordedAtBranchName || s.branchName || 'Branch',
+          recordedBy: p.recordedBy || s.createdBy || '-',
+          recordedByName: p.recordedByName || '',
+          remarks: 'Study material fee',
+          waived: false,
+          isAdmissionMat: true
+        });
+      }
+    } else {
+      txns.push(p);
+    }
+  });
 
   txns.sort((a, b) => {
     const da = a.date || '';
     const dbDate = b.date || '';
-    return dbDate.localeCompare(da);
+    if (da !== dbDate) {
+      return dbDate.localeCompare(da);
+    }
+    const order = { AD: 1, MAT: 2, IN: 3, EX: 4 };
+    const oa = order[a.type] || 5;
+    const ob = order[b.type] || 5;
+    return oa - ob;
   });
 
   if (txns.length === 0) {
@@ -2178,7 +2415,7 @@ function renderTransactionsLedger() {
     receiptBtn.title = 'View Receipt';
     receiptBtn.innerHTML = '<i data-lucide="receipt"></i><span>Receipt</span>';
     receiptBtn.onclick = () => {
-      if (t.type === 'AD') {
+      if (t.type === 'AD' || (t.type === 'MAT' && (t.isAdmissionMat || !t.id || t.receiptNo === currentStudent.receiptNo))) {
         const receiptRoute = currentStudent?.ctx === 'school'
           ? '#/school-admissions/' + currentStudent.id + '/receipt'
           : '#/admissions/' + currentStudent.id + '/receipt';
@@ -2197,417 +2434,29 @@ function renderTransactionsLedger() {
 }
 
 /**
- * Record Payment Popup
+ * Record Payment Popup (Uses shared component)
  */
 async function openRecordPaymentModal(preselectedOption) {
-  const s = currentStudent;
-  if (!s) return;
-  const isSuper = currentUserProfile.role === 'superadmin';
-  const sched = s.feeSchedule || [];
-  const snap = s?.feeSnapshot || {};
-  const admFee = Number(snap.admission ?? s?.admissionFee ?? s?.dueAtAdmission?.admission ?? 0);
-  const instFee = Number(snap.installment ?? s?.feeSnapshot?.installment ?? 0);
-  const matFee = Number(snap.material ?? s?.materialFee ?? s?.studyMaterialFee ?? 0);
-  const examFee = Number(snap.exam ?? s?.examFee ?? 0);
-
-  // Refresh payments cache from Firestore to ensure latest accurate data
-  try {
-    const fresh = await fetchStudentPayments(s.id);
-    if (fresh && Array.isArray(fresh)) {
-      paymentsCache = fresh;
-    }
-  } catch (_) {}
-
-  const typeOptions = [];
-
-  // 1. Admission Fee (only if not yet collected and amount > 0)
-  if (admFee > 0 && !isAdmissionFeePaid(admFee, paymentsCache, s)) {
-    typeOptions.push({
-      value: 'AD',
-      label: `Admission Fee — ${formatINR(admFee)}`,
-      icon: 'credit-card'
-    });
-  }
-
-  // 2. Study Material Fee (only if not yet collected and amount > 0)
-  if (matFee > 0 && !isMaterialFeePaid(matFee, paymentsCache, s)) {
-    typeOptions.push({
-      value: 'MAT',
-      label: `Study Material Fee — ${formatINR(matFee)}`,
-      icon: 'book-open'
-    });
-  }
-
-  // 3. Installments (1..N) (only pending / uncollected installments)
-  sched.forEach((it) => {
-    const itNo = Number(it.no ?? it.installmentNo);
-    if (!isInstallmentPaid(it, paymentsCache, s)) {
-      typeOptions.push({
-        value: 'IN_' + itNo,
-        label: `Installment ${itNo} (${it.month || 'Month ' + itNo}) — ${formatINR(it.amount || instFee)}`,
-        icon: 'credit-card'
-      });
-    }
-  });
-
-  // 4. Examination Fee (only if not yet collected and amount > 0, and not blocked by session fees)
-  let sessionExamFee = examFee;
-  let canCollectExam = examFee > 0;
-  if (s.ctx === 'youth') {
-    const studentSess = (sessionsCache && (sessionsCache.byId?.[s.sessionId] || sessionsCache.byName?.[(s.sessionName || '').toLowerCase().trim()])) || null;
-    if (studentSess && studentSess.examFeeCollection?.started === true) {
-      if (studentSess.examFeeCollection.fees && s.courseId && Object.prototype.hasOwnProperty.call(studentSess.examFeeCollection.fees, s.courseId)) {
-        sessionExamFee = Number(studentSess.examFeeCollection.fees[s.courseId]);
-      } else {
-        canCollectExam = false; // Exam fee not set for this course in this session.
-      }
-    }
-  }
-
-  if (canCollectExam && sessionExamFee > 0 && !isExamFeePaid(sessionExamFee, paymentsCache, s)) {
-    typeOptions.push({
-      value: 'EX',
-      label: `Examination Fee — ${formatINR(sessionExamFee)}`,
-      icon: 'award'
-    });
-  }
-
-  if (preselectedOption === 'EX' && !canCollectExam) {
-    showToast({ type: 'error', message: 'Exam fee not set for this course in this session. Contact Super Admin.' });
-    return;
-  }
-
-  // If all fee heads are already collected, notify user
-  if (typeOptions.length === 0) {
-    showToast({ type: 'info', message: 'All scheduled fees for this student have already been collected.' });
-    return;
-  }
-
-  let initialTypeVal = typeOptions[0]?.value;
-  if (preselectedOption) {
-    let targetVal = '';
-    if (preselectedOption === 'AD') targetVal = 'AD';
-    else if (preselectedOption === 'MAT') targetVal = 'MAT';
-    else if (preselectedOption === 'EX') targetVal = 'EX';
-    else if (String(preselectedOption).startsWith('IN_')) targetVal = String(preselectedOption);
-    else targetVal = 'IN_' + preselectedOption;
-
-    const found = typeOptions.find(o => o.value === targetVal);
-    if (found) {
-      initialTypeVal = found.value;
-    } else {
-      showToast({ type: 'info', message: 'Selected fee item has already been collected.' });
-    }
-  }
-
-  const popup = openPopup({
-    title: 'Record Payment',
-    subtitle: `${s.name} • ${s.studentId || s.id}`,
-    icon: 'credit-card',
-    wide: true
-  });
-
-  const form = mk('form', 'sp-modal-form');
-  form.onsubmit = (e) => e.preventDefault();
-
-  // Payment Type (customized UI dropdown)
-  const typeGroup = mk('div', 'ui-field');
-  const typeLabelRow = mk('div', 'ui-label-row');
-  const typeLbl = mk('label', 'ui-label');
-  typeLbl.textContent = 'Payment Type ';
-  const typeEm = mk('em', '', '*');
-  typeLbl.appendChild(typeEm);
-  typeLabelRow.appendChild(typeLbl);
-
-  const typeHost = mk('div', '');
-  typeGroup.append(typeLabelRow, typeHost);
-
-  const typeSel = createSelect(typeHost, {
-    options: typeOptions,
-    value: initialTypeVal,
-    ariaLabel: 'Payment Type',
-    onChange: () => recalculate()
-  });
-
-  // Summary box (Soft tinted area, no harsh borders)
-  const infoBox = mk('div', 'sp-pay-summary-box');
-
-  const cellSched = mk('div', 'sp-stat-col');
-  cellSched.innerHTML = '<span class="sp-kv-label">Scheduled Fee</span><span class="sp-stat-val">Rs 0.00</span>';
-  const baseValEl = cellSched.querySelector('.sp-stat-val');
-
-  const cellFine = mk('div', 'sp-stat-col');
-  cellFine.innerHTML = '<span class="sp-kv-label">Late Fine</span><span class="sp-stat-val">Rs 0.00</span>';
-  const fineValEl = cellFine.querySelector('.sp-stat-val');
-
-  const cellTotal = mk('div', 'sp-stat-col');
-  cellTotal.innerHTML = '<span class="sp-kv-label">Total Payable</span><span class="sp-stat-val" style="font-weight:600;">Rs 0.00</span>';
-  const totalValEl = cellTotal.querySelector('.sp-stat-val');
-
-  infoBox.append(cellSched, cellFine, cellTotal);
-
-  const amtInput = document.createElement('input');
-  amtInput.type = 'hidden';
-  const lateInput = document.createElement('input');
-  lateInput.type = 'hidden';
-
-  // Super Admin Waiver Option
-  let waiveGroup = null;
-  let waiveCheckbox = null;
-  let waiveReasonInput = null;
-
-  if (isSuper) {
-    waiveGroup = mk('div', '');
-    waiveGroup.style.background = 'var(--warning-soft)';
-    waiveGroup.style.padding = '10px 14px';
-    waiveGroup.style.borderRadius = 'var(--r)';
-    waiveGroup.style.border = '1px solid color-mix(in srgb, var(--warning) 30%, transparent)';
-    waiveGroup.style.margin = '0';
-    waiveGroup.style.marginTop = '-4px';
-
-    const checkLabel = mk('label', 'pk-check-row');
-    checkLabel.style.margin = '0';
-    waiveCheckbox = document.createElement('input');
-    waiveCheckbox.type = 'checkbox';
-    checkLabel.append(waiveCheckbox, mk('span', 'font-semibold', 'Waive late fee fine (Super Admin)'));
-
-    const reasonWrap = mk('div', 'ui-field');
-    reasonWrap.style.marginTop = '10px';
-    reasonWrap.hidden = true;
-    const rLabelRow = mk('div', 'ui-label-row');
-    const rLbl = mk('label', 'ui-label', 'Audit Waiver Reason *');
-    rLabelRow.appendChild(rLbl);
-    const rInputWrap = mk('div', 'ui-input-wrap');
-    waiveReasonInput = document.createElement('input');
-    waiveReasonInput.type = 'text';
-    waiveReasonInput.placeholder = 'Enter justification for waiving fine';
-    waiveReasonInput.className = 'ui-input';
-    waiveReasonInput.style.paddingLeft = '12px';
-    rInputWrap.appendChild(waiveReasonInput);
-    reasonWrap.append(rLabelRow, rInputWrap);
-
-    waiveCheckbox.onchange = () => {
-      reasonWrap.hidden = !waiveCheckbox.checked;
-      recalculate();
-    };
-
-    waiveGroup.append(checkLabel, reasonWrap);
-  }
-
-  // Payment Mode (customized UI dropdown)
-  const modeGroup = mk('div', 'ui-field');
-  const modeLabelRow = mk('div', 'ui-label-row');
-  const modeLbl = mk('label', 'ui-label', 'Payment Mode *');
-  modeLabelRow.appendChild(modeLbl);
-  const modeHost = mk('div', '');
-  modeGroup.append(modeLabelRow, modeHost);
-
-  const MODE_OPTIONS = [
-    { value: 'cash', label: 'Cash', icon: 'banknote' },
-    { value: 'upi', label: 'UPI', icon: 'smartphone' },
-    { value: 'card', label: 'Card', icon: 'credit-card' },
-    { value: 'bank', label: 'Bank Transfer', icon: 'building' },
-    { value: 'cheque', label: 'Cheque', icon: 'file-text' }
-  ];
-
-  // Transaction ID
-  const txnGroup = mk('div', 'ui-field');
-  const txnLabelRow = mk('div', 'ui-label-row');
-  const txnLabel = mk('label', 'ui-label');
-  txnLabelRow.appendChild(txnLabel);
-  const txnWrap = mk('div', 'ui-input-wrap');
-  const txnInput = document.createElement('input');
-  txnInput.type = 'text';
-  txnInput.className = 'ui-input';
-  txnInput.style.paddingLeft = '12px';
-  txnWrap.appendChild(txnInput);
-  txnGroup.append(txnLabelRow, txnWrap);
-
-  const onModeChange = (modeVal) => {
-    const isCash = modeVal === 'cash';
-    txnInput.disabled = isCash;
-    txnInput.required = false;
-    if (isCash) {
-      txnInput.value = '';
-      txnLabel.innerHTML = 'Transaction / Reference ID <span style="font-weight: normal; color: var(--text-mute); font-size: 11.5px;">(N/A for Cash)</span>';
-      txnInput.placeholder = 'Not applicable for Cash payments';
-      txnWrap.classList.add('is-disabled');
-    } else {
-      txnLabel.innerHTML = 'Transaction / Reference ID <span style="font-weight: normal; color: var(--text-mute); font-size: 11.5px;">(Optional)</span>';
-      txnInput.placeholder = 'Optional for ' + modeVal.toUpperCase();
-      txnWrap.classList.remove('is-disabled');
-    }
-  };
-
-  const modeSel = createSelect(modeHost, {
-    options: MODE_OPTIONS,
-    value: 'cash',
-    ariaLabel: 'Payment Mode',
-    onChange: onModeChange
-  });
-
-  // Initialize Cash state (disabled)
-  onModeChange('cash');
-
-  // Mode & Transaction ID Row (Side by side)
-  const modeTxnRow = mk('div', 'sp-form-row-2');
-  modeTxnRow.append(modeGroup, txnGroup);
-
-  // Payment Date
-  const dateGroup = mk('div', 'ui-field');
-  const dateLabelRow = mk('div', 'ui-label-row');
-  const dateLbl = mk('label', 'ui-label', 'Payment Date *');
-  dateLabelRow.appendChild(dateLbl);
-  const dateWrap = mk('div', 'ui-input-wrap');
-  const dateInput = document.createElement('input');
-  dateInput.type = 'date';
-  dateInput.className = 'ui-input';
-  dateInput.style.paddingLeft = '12px';
-  dateInput.value = todayISO();
-  dateWrap.appendChild(dateInput);
-  dateGroup.append(dateLabelRow, dateWrap);
-
-  // Remarks
-  const remGroup = mk('div', 'ui-field');
-  const remLabelRow = mk('div', 'ui-label-row');
-  const remLbl = mk('label', 'ui-label', 'Remarks / Note');
-  remLabelRow.appendChild(remLbl);
-  const remWrap = mk('div', 'ui-input-wrap top');
-  const remInput = document.createElement('textarea');
-  remInput.className = 'ui-input';
-  remInput.rows = 3;
-  remInput.style.padding = '8px 12px';
-  remInput.style.height = '72px';
-  remInput.style.minHeight = '72px';
-  remInput.style.resize = 'vertical';
-  remInput.placeholder = 'Optional notes';
-  remWrap.appendChild(remInput);
-  remGroup.append(remLabelRow, remWrap);
-
-  function recalculate() {
-    const val = typeSel.value;
-    let baseAmt = 0;
-    let fineAmt = 0;
-
-    if (val === 'AD') {
-      baseAmt = admFee;
-      fineAmt = 0;
-    } else if (val === 'EX') {
-      baseAmt = sessionExamFee;
-      fineAmt = 0;
-    } else if (val === 'MAT') {
-      baseAmt = matFee;
-      fineAmt = 0;
-    } else if (val && val.startsWith('IN_')) {
-      const instNo = Number(val.slice(3));
-      const schedItem = sched.find(it => Number(it.no) === instNo);
-      baseAmt = schedItem ? Number(schedItem.amount || instFee) : instFee;
-      if (schedItem) {
-        fineAmt = calculateLateFee(schedItem.due, dateInput.value || todayISO());
-      }
-    }
-
-    if (waiveCheckbox && waiveCheckbox.checked) {
-      fineAmt = 0;
-    }
-
-    amtInput.value = baseAmt;
-    lateInput.value = fineAmt;
-    totalValEl.textContent = formatINR(baseAmt + fineAmt);
-    baseValEl.textContent = formatINR(baseAmt);
-    fineValEl.textContent = formatINR(fineAmt);
-    if (fineAmt > 0) {
-      fineValEl.style.color = '#c92a2a';
-    } else {
-      fineValEl.style.color = 'inherit';
-    }
-    if (typeof lucide !== 'undefined') lucide.createIcons();
-  }
-
-  dateInput.onchange = recalculate;
-  recalculate();
-
-  form.append(typeGroup, infoBox, amtInput, lateInput);
-  if (waiveGroup) form.appendChild(waiveGroup);
-  form.append(modeTxnRow, dateGroup, remGroup);
-
-  const footer = mk('div', 'adm-view-foot');
-  const cancelBtn = mk('button', 'ui-btn ghost', 'Cancel');
-  cancelBtn.type = 'button';
-  cancelBtn.onclick = () => popup.close();
-
-  const saveBtn = mk('button', 'ui-btn primary', 'Confirm & Record Payment');
-  saveBtn.type = 'button';
-
-  footer.append(cancelBtn, saveBtn);
-  form.appendChild(footer);
-  popup.container.appendChild(form);
-
-  saveBtn.onclick = async () => {
-    if (waiveCheckbox && waiveCheckbox.checked && !waiveReasonInput.value.trim()) {
-      showToast({ type: 'error', message: 'Waiver reason is required to waive late fine.' });
-      waiveReasonInput.focus();
-      return;
-    }
-
-    const val = typeSel.value;
-    if (!val) {
-      showToast({ type: 'error', message: 'Please select a valid payment type.' });
-      return;
-    }
-    const isExam = val === 'EX';
-    const isMat = val === 'MAT';
-    const isAdm = val === 'AD';
-    const instNo = (isExam || isMat || isAdm) ? null : Number(val.slice(3));
-    const payType = isExam ? 'EX' : (isMat ? 'MAT' : (isAdm ? 'AD' : 'IN'));
-    const baseAmount = Number(amtInput.value);
-    const lateAmount = Number(lateInput.value);
-
-    saveBtn.disabled = true;
-    saveBtn.innerHTML = '<i data-lucide="loader-2" class="spin"></i> Processing...';
-    if (typeof lucide !== 'undefined') lucide.createIcons();
-
-    try {
-      const authEmail = getAuthEmail();
-      const res = await runTransaction(db, async (tx) => {
-        return await recordPaymentTx(tx, {
-          studentDoc: s,
-          type: payType,
-          installmentNo: instNo,
-          amount: baseAmount,
-          lateFeeAmount: lateAmount,
-          mode: modeSel.value,
-          txnId: txnInput.value.trim(),
-          remarks: remInput.value.trim(),
-          waived: waiveCheckbox ? waiveCheckbox.checked : false,
-          waiverReason: waiveCheckbox && waiveCheckbox.checked ? waiveReasonInput.value.trim() : '',
-          paymentDate: dateInput.value,
-          userEmail: authEmail,
-          userName: currentUserProfile.name || '',
-          userRole: currentUserProfile.role,
-          branchId: currentUserProfile.branchId || s.branchId,
-          branchCode: s.branchCode || '',
-          branchName: s.branchName
-        });
-      });
-
-      showToast({ type: 'success', message: 'Payment recorded! Receipt No: ' + res.receiptNo });
-      popup.close();
-
+  if (!currentStudent) return;
+  await openPaymentPopup({
+    student: currentStudent,
+    profile: currentUserProfile,
+    preselectedOption,
+    sessionsCache: {
+      byId: (sessionDocsList || []).reduce((acc, s) => { acc[s.id] = s; return acc; }, {}),
+      byName: (sessionDocsList || []).reduce((acc, s) => { if (s.name) acc[s.name.toLowerCase().trim()] = s; return acc; }, {})
+    },
+    payments: paymentsCache,
+    from: 'profile',
+    onSuccess: async () => {
       await Promise.all([
-        resolveStudent(s.studentId || s.id).then(fresh => { if (fresh) currentStudent = fresh; }),
+        resolveStudent(currentStudent.studentId || currentStudent.id).then(fresh => { if (fresh) currentStudent = fresh; }),
         loadPayments()
       ]);
-
       renderMetrics();
       renderPaymentsTab();
-    } catch (err) {
-      console.error('[student-profile] payment transaction failed', err);
-      showToast({ type: 'error', message: 'Payment failed: ' + (err.message || 'Transaction error') });
-      saveBtn.disabled = false;
-      saveBtn.textContent = 'Confirm & Record Payment';
     }
-  };
+  });
 }
 
 /**

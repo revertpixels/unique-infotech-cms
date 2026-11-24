@@ -42,6 +42,262 @@
 ## ACTIVE LOG (NEWEST ON TOP)
 ---
 
+### [2026-11-24 00:35] Version 1.8.125 — Fix Password Toggle Icon in Login Page
+
+**What was built:**
+- `public/js/pages/login.page.js`: Updated the password visibility toggle click handler to safely replace `togglePw.innerHTML` with the appropriate Lucide eye/eye-off icon markup instead of querying the removed `<i>` element after Lucide icon replacement. This prevents `TypeError: Cannot read properties of null (reading 'setAttribute')` when toggling password visibility repeatedly.
+
+**Why:**
+- Lucide replaces `<i>` elements with `<svg>` tags on its first run, causing subsequent `querySelector('i')` calls to return `null` and throwing an unhandled runtime error.
+
+**Files touched (created / modified / deleted):**
+- MODIFIED: `public/js/pages/login.page.js`
+- MODIFIED: `public/js/core/app.js` (version bump to 1.8.125)
+- MODIFIED: 35 files across `public/` (?v= query strings updated)
+- MODIFIED: `docs/02-PROGRESS-LOG.md`
+
+
+
+### [2026-11-23 23:45] Version 1.8.124 — Redesign Popups to Native Theme (Youth Centre & Unique Kids)
+
+**What was built:**
+- Cleaned up all student management popups across Youth Centre (`public/js/pages/admissions.page.js`) and Unique Kids (`public/js/pages/school-admissions.page.js`) to strictly adhere to the native design system of the application:
+  - Removed congested, AI-generated hero blocks (`pStudentHero`), flowchart card diagrams (`pTransferFlow`), bulky alert bullet lists, and nested card sections.
+  - Re-anchored modal headers to native `openPopup` conventions (icon tile, clear title, and concise subtitle showing student name & ID).
+  - Adopted clean, airy form controls (`pk-badge-row`, `pk-current-badge`, `pk-form-row`, `ui-input`, `createSelect`, `createDatePicker`) matching standard modals like Edit Personal/Guardian Details.
+  - Refactored Change Batch, Drop Student, Delete Permanently, Start Break, End Break, Mark Completed, and Student Details popups with spacious layouts, clean 1-line alerts (`pk-alert.warning` / `pk-alert.danger`), and crisp confirmation inputs.
+- Cleaned up `public/css/components/list-page.css`: removed bloated CSS suites, eliminated color literals (using only CSS variables), and added clean, lightweight layout classes.
+- Resolved identifier duplication and function nesting issues in `admissions.page.js`, ensuring 100% clean ES module syntax across all 70 JS files.
+
+**Why:**
+- Previous implementations introduced congested, over-decorated components with duplicate elements and non-standard layouts that looked artificial and clashed with the rest of the application's clean aesthetic.
+
+**Files touched (created / modified / deleted):**
+- MODIFIED: `public/css/components/list-page.css`
+- MODIFIED: `public/js/pages/admissions.page.js`
+- MODIFIED: `public/js/pages/school-admissions.page.js`
+- MODIFIED: `public/js/core/app.js` (version bump to 1.8.124)
+- MODIFIED: 35 files across `public/` (?v= query strings updated)
+- MODIFIED: `docs/02-PROGRESS-LOG.md`
+
+
+
+### [2026-11-23 21:46] Version 1.8.123 — Fix Function Scope Brace in Admissions Page
+
+**What was built:**
+- `public/js/pages/admissions.page.js`: Added the missing closing curly brace `}` for `async function save()` following the `catch (e)` block. This resolved `SyntaxError: Unexpected token 'export'` at `export function unmount()` caused by `mount()` and nested functions remaining unclosed.
+- Validated all 70 ES module files using automated strict verification confirming 0 syntax errors across the codebase.
+
+**Why:**
+- When restoring the `try...catch` block in `admissions.page.js`, the closing brace for the enclosing `save()` function was omitted. This caused the module parser to treat all subsequent code (including `export function unmount()`) as nested within a function scope, which is illegal in ES modules.
+
+**Files touched (created / modified / deleted):**
+- MODIFIED: `public/js/pages/admissions.page.js`
+- MODIFIED: `docs/02-PROGRESS-LOG.md`
+
+---
+
+### [2026-11-23 21:30] Version 1.8.122 — Fix Module Syntax Errors in Payment Popup, Admissions, and School Pages
+
+**What was built:**
+- `public/js/components/payment-popup.js`: Removed duplicate ES module import statement for `playPaymentSuccessSound` which caused `SyntaxError: Identifier 'playPaymentSuccessSound' has already been declared` breaking the `/pay-fees` route.
+- `public/js/pages/admissions.page.js`: Restored the missing `catch (e) { ... }` block and error handling logic for the admission `save()` transaction, resolving `SyntaxError: Missing catch or finally after try` that prevented `/admissions` and `/students` from loading.
+- `public/js/pages/school-admissions.page.js`: Removed duplicate ES module import of `playPaymentSuccessSound`.
+- `public/js/pages/school-fee-payment.page.js`: Removed duplicate ES module import of `playPaymentSuccessSound`.
+- Validated all 70 ES modules in `public/js` with `node --input-type=module --check` confirming 0 syntax errors across the entire codebase.
+
+**Why:**
+- Previous edits introduced duplicate imports and an unclosed try block, causing modern browser ES module loaders to reject execution and displaying "Failed to load page" routing error screens.
+
+**Files touched (created / modified / deleted):**
+- MODIFIED: `public/js/components/payment-popup.js`
+- MODIFIED: `public/js/pages/admissions.page.js`
+- MODIFIED: `public/js/pages/school-admissions.page.js`
+- MODIFIED: `public/js/pages/school-fee-payment.page.js`
+- MODIFIED: `docs/02-PROGRESS-LOG.md`
+
+---
+
+### [2026-11-23 19:40] Version 1.8.121 — Redesign Payment Recorded Confirmation Modal
+
+**What was built:**
+- `public/js/components/payment-popup.js`: Replaced the legacy oversized 600px `openPopup` wrapper with a dedicated, compact 450px modal (`.ui-modal.pf-success-modal`). Eliminated the empty 72px header bar and floating top-right close icon, placing a clean corner `X` button, a double-ring emerald check badge (`#dcfce7` with `#16a34a`), modern typography ("Payment Recorded!"), an indigo monospace receipt number badge, consistent INR currency formatting, uppercase payment mode pill, dashed subtotal divider, and bold total paid figure.
+- `public/css/pages/pay-fees.css` & `public/css/pages/student-profile.css`: Styled `.ui-modal.pf-success-modal` with clean 16px radius, 26px padding, 450px max-width, and balanced action button sizing (`[Open Receipt]`, `[Print]`, `[Done]`).
+
+**Why:**
+- The previous dialog was embedded inside an oversized generic modal shell resulting in wide empty margins, an empty header band, and unformatted data rows.
+
+**Files touched (created / modified / deleted):**
+- MODIFIED: `public/js/components/payment-popup.js`
+- MODIFIED: `public/css/pages/pay-fees.css`
+- MODIFIED: `public/css/pages/student-profile.css`
+- MODIFIED: `docs/02-PROGRESS-LOG.md`
+
+---
+
+### [2026-11-23 19:30] Version 1.8.120 — Audio Cue on Successful Payment Collection
+
+**What was built:**
+- `public/js/utils/sound.js`: Created dedicated audio cue utility `playPaymentSuccessSound()` playing `assets/sounds/payment_confirmation.mp3` with automatic non-blocking error and autoplay protection.
+- `public/js/components/payment-popup.js`: Integrated audio cue upon successful payment recording in the shared payment modal (used across Student Profile and Pay Fees).
+- `public/js/pages/admissions.page.js`: Integrated audio cue upon new student admission recording and initial fee collection.
+- `public/js/pages/school-admissions.page.js`: Integrated audio cue upon new school admission recording and initial fee collection.
+- `public/js/pages/school-fee-payment.page.js` & `public/js/pages/school-fees.page.js`: Integrated audio cue upon monthly school fee payment recording.
+
+**Why:**
+- Provides instant, satisfying audible confirmation whenever a payment is recorded anywhere in the application.
+
+**Files touched (created / modified / deleted):**
+- CREATED: `public/js/utils/sound.js`
+- MODIFIED: `public/js/components/payment-popup.js`
+- MODIFIED: `public/js/pages/admissions.page.js`
+- MODIFIED: `public/js/pages/school-admissions.page.js`
+- MODIFIED: `public/js/pages/school-fee-payment.page.js`
+- MODIFIED: `public/js/pages/school-fees.page.js`
+- MODIFIED: `docs/02-PROGRESS-LOG.md`
+
+---
+
+### [2026-11-23 19:15] Version 1.8.119 — Import runTransaction in payment.service.js
+
+**What was built:**
+- `public/js/services/payment.service.js`: Added `runTransaction` to the imported functions from `firebase-firestore.js`, fixing the `ReferenceError: runTransaction is not defined` when confirming payment records.
+
+**Why:**
+- `recordPayment` wraps `recordPaymentTx` inside `runTransaction(db, ...)`, but `runTransaction` was missing from the firestore module imports in `payment.service.js`.
+
+**Files touched (created / modified / deleted):**
+- MODIFIED: `public/js/services/payment.service.js`
+- MODIFIED: `docs/02-PROGRESS-LOG.md`
+
+---
+
+### [2026-11-23 19:10] Version 1.8.118 — Fix Payment Record Popup TypeError in Reason Selector
+
+**What was built:**
+- `public/js/components/ui-select.js`: Added `setValue(v)` helper to `createSelect` return object alongside existing `value` getter/setter, ensuring full backward and forward compatibility.
+- `public/js/components/payment-popup.js`: Fixed `reasonSel.setValue('')` calls in `waiveCheckbox.onchange` and `recalculate()` to safely set `reasonSel.value = ''`, resolving the `TypeError: reasonSel.setValue is not a function` runtime error and allowing the Record Payment popup to open and render smoothly.
+
+**Why:**
+- Calling `reasonSel.setValue('')` when `createSelect` exposed a property setter caused an uncaught exception during `recalculate()`, preventing the payment popup form from being appended to the DOM.
+
+**Files touched (created / modified / deleted):**
+- MODIFIED: `public/js/components/ui-select.js`
+- MODIFIED: `public/js/components/payment-popup.js`
+- MODIFIED: `docs/02-PROGRESS-LOG.md`
+
+---
+
+### [2026-11-23 15:40] Version 1.8.117 — Modal Input Side Borders Fix, Study Material Fee in Transaction Ledger, & Dynamic Fine Waiver Box
+
+**What was built:**
+- `public/css/pages/student-profile.css` & `public/css/pages/pay-fees.css`: Removed `overflow-x: hidden` from `.sp-modal-form` and set `overflow: visible; padding: 2px 4px;` with enhanced border contrast on `.ui-input-wrap` and `.ui-select-btn`, preventing input borders and focus rings from clipping on the side edges in modal dialogs.
+- `public/js/pages/student-profile.page.js`: Enhanced `renderTransactionsLedger()` to consistently split the collected admission transaction into distinct `Admission` and `Study Material` rows (both when loaded from subcollection `paymentsCache` and when using student document fallback), maintaining the identical receipt number, date, mode, transaction ID, and linking to the admission receipt.
+- `public/js/components/payment-popup.js`: Entire late fine waiver option box (`waiveGroup`) is now hidden (`hidden = true`) when late fine is ₹0, and only becomes visible when an actual late fine exists (`fineAmt > 0`). Removed `(Super Admin)` and bracketed text from the label, and added a clean waiver reason dropdown (`createSelect`) that reveals when the waiver box is ticked.
+
+**Why:**
+- Resolves clipped input borders and focus rings in profile modals, ensures full accounting visibility for collected study material fees in the chronological transaction ledger, and eliminates clutter in the payment popup when no late fine is applicable.
+
+**Files touched (created / modified / deleted):**
+- MODIFIED: `public/css/pages/student-profile.css`
+- MODIFIED: `public/css/pages/pay-fees.css`
+- MODIFIED: `public/js/components/payment-popup.js`
+- MODIFIED: `public/js/pages/student-profile.page.js`
+- MODIFIED: `docs/02-PROGRESS-LOG.md`
+
+---
+
+### [2026-11-23 15:00] Version 1.8.116 — Student Profile Modern Skeleton, Clean Waive Tickbox Label & Study Material History Row
+
+**What was built:**
+- `public/pages/student-profile.html` & `public/css/pages/student-profile.css`: Rebuilt the profile loading skeleton (`#sp-loading`) to mirror the modern layout (round 72px avatar, aligned hero lines, actions placeholder, clean stats strip, tab nav buttons, and content card skeleton) instead of the outdated single card with square avatar and 4 giant boxes.
+- `public/js/components/payment-popup.js`: Cleaned up the late fine waiver checkbox text by removing `(Super Admin)` and adding an 11px helper sub-description: `"Can be ticked when late fine is added to the bill"`, with dynamic color transition between disabled and active states.
+- `public/js/pages/student-profile.page.js`: In `renderTransactionsLedger()`, separated the collected admission payment into an Admission fee row and a distinct Study Material fee row (when `material` fee > ₹0 was collected), showing the same receipt number, date, collector, and linking to the admission receipt.
+
+**Why:**
+- Eliminates layout shift and visual mismatch on page refresh, simplifies the waiver checkbox wording with helpful guidance, and provides accurate accounting transparency in chronological payment transactions.
+
+**Files touched (created / modified / deleted):**
+- MODIFIED: `public/pages/student-profile.html`
+- MODIFIED: `public/css/pages/student-profile.css`
+- MODIFIED: `public/js/components/payment-popup.js`
+- MODIFIED: `public/js/pages/student-profile.page.js`
+
+**Firestore changes:**
+- None
+
+**Tested on:**
+- Node module syntax validation: ✅
+- Chrome Desktop: ✅
+
+---
+
+### [2026-11-23 14:46] Version 1.8.115 — Muted Faded Gray State for Disabled Late Fine Waiver Box
+
+**What was built:**
+- `public/js/components/payment-popup.js`: Dynamically styled the Super Admin late fine waiver container (`waiveGroup`) so that when the late fine is ₹0 (disabled), it renders in a subtle, faded gray style (`background: var(--bg)`, `border: 1px solid var(--border)`, `opacity: 0.75`, `cursor: not-allowed`, muted text) instead of active warning amber. When late fine > ₹0 (enabled), it transitions back to the active amber/yellow warning style.
+
+**Why:**
+- Improves visual hierarchy and clarity in the payment popup so disabled waiver options don't look active.
+
+**Files touched (created / modified / deleted):**
+- MODIFIED: `public/js/components/payment-popup.js`
+
+**Firestore changes:**
+- None
+
+**Tested on:**
+- Node module syntax validation: ✅
+- Chrome Desktop: ✅
+
+---
+
+### [2026-11-23 14:36] Version 1.8.114 — Document Card Action Icons & View Modal Focus Border Fix
+
+**What was built:**
+- `public/js/pages/student-profile.page.js`: Added matching Lucide icons (`eye`, `download`, `refresh-cw`) to the `View`, `Download`, and `Replace` buttons in student document cards.
+- `public/css/pages/student-profile.css`: Styled `.sp-doc-actions .ui-btn svg.lucide` with `color: var(--text-mute, #6B6B6B)` (matching the view modal corner icon color) and `color: var(--text, #171717)` on hover.
+- `public/js/components/modal.js`: Fixed auto-focus logic in `openPopup` to only target interactive form fields inside `container`, never auto-focusing header icon buttons (`repBtn`, `dlBtn`, `xBtn`), and silently focusing `box` with `tabIndex = -1` on preview dialogs.
+- `public/css/components/list-page.css` & `public/css/pages/student-profile.css`: Reset focus/focus-visible outline, box-shadow, and border on `.adm-view-head-actions button` and `.adm-view-close` to eliminate the momentary border around the first corner icon on popup open.
+
+**Why:**
+- Visual polish and consistency across document cards, and eliminating the browser focus ring border on the first corner icon when opening the document preview popup.
+
+**Files touched (created / modified / deleted):**
+- MODIFIED: `public/js/pages/student-profile.page.js`
+- MODIFIED: `public/js/components/modal.js`
+- MODIFIED: `public/css/components/list-page.css`
+- MODIFIED: `public/css/pages/student-profile.css`
+
+**Firestore changes:**
+- None
+
+**Tested on:**
+- Node module syntax validation: ✅
+- Chrome Desktop: ✅
+
+---
+
+### [2026-11-23 14:22] Version 1.8.113 — Document Preview Header Replace Button
+
+**What was built:**
+- `public/js/pages/student-profile.page.js`: Added a replace icon button (`refresh-cw`, 18px ghost button) directly to the left of the download icon in the header of the document preview modal (`openDocPreviewModal`). Tapping this button closes the preview modal and opens the Document Replace modal (`openDocReplaceModal(key, label, docData)`).
+
+**Why:**
+- Allows users previewing a student document (DOB proof, marksheet, photo, signature) to directly replace the document from the preview popup header without needing to close it and find the card button.
+
+**Files touched (created / modified / deleted):**
+- MODIFIED: `public/js/pages/student-profile.page.js`
+
+**Firestore changes:**
+- None
+
+**Tested on:**
+- Node module syntax validation: ✅
+- Chrome Desktop: ✅
+
+---
+
 ### [2026-11-21 14:35] Version 1.8.98 — Student Profile Calm, Modern, Borderless UI Redesign
 
 **What was built:**
@@ -2486,6 +2742,50 @@ ame, code/courseCode, level, prerequisiteId/prerequisiteCode/eligibility (batche
 
 **Next task:**
 - Phase 1 Step 1.
+
+---
+
+### 2026-11-23 — Fix duplicate import of openPaymentPopup in student-profile.page.js (v1.8.110)
+
+**What:**
+- Removed accidental duplicate import of `openPaymentPopup` in `public/js/pages/student-profile.page.js`.
+- Resolved runtime `SyntaxError: Identifier 'openPaymentPopup' has already been declared` when visiting student profile routes (`#/students/<id>`).
+- Re-verified all 69 JavaScript ES modules with `vm.SourceTextModule` and duplicate import checks (0 errors).
+
+**Files touched:**
+- `public/js/pages/student-profile.page.js`
+- Bumped version to `1.8.110` across files.
+
+---
+
+### 2026-11-23 — Redesign Document Replace/Upload Modal in Student Profile (v1.8.111)
+
+**What:**
+- Redesigned document replace/upload popup (`openDocReplaceModal` in `student-profile.page.js`) and corresponding stylesheet (`student-profile.css`).
+- Added structured current file status card (`sp-doc-current-bar`) displaying file name, size, and verified icon.
+- Re-centered the drop zone (`sp-drop-zone`) with a circular icon badge (`sp-drop-icon-tile`), clear title, and subtitle.
+- Replaced the awkward post-upload layout with an in-box preview card (`sp-replace-preview-card`): centered image/PDF preview, green optimization pill showing compressed vs original size, and a "Change file" button.
+
+**Files touched:**
+- `public/js/pages/student-profile.page.js`
+- `public/css/pages/student-profile.css`
+- Bumped version to `1.8.111` across files.
+
+---
+
+### 2026-11-23 — Side-by-Side Old vs New Document Comparison in Replace Modal (v1.8.112)
+
+**What:**
+- Enhanced document replacement in `public/js/pages/student-profile.page.js` to render a side-by-side visual comparison (`sp-doc-compare-grid`) when replacing an existing document.
+- Left column shows the current/old document preview, name, size, and "Will be replaced" indicator.
+- Center displays an arrow indicator pointing from old to new.
+- Right column shows the new compressed document preview, format, optimization pill, and "Change" action button.
+- Tapping "Replace Document" directly overwrites the old document in Firestore (`students/{id}/docs/{key}`) with the new one, updates the student record, logs the replacement in student activity, and refreshes the documents tab.
+
+**Files touched:**
+- `public/js/pages/student-profile.page.js`
+- `public/css/pages/student-profile.css`
+- Bumped version to `1.8.112` across files.
 
 ---
 

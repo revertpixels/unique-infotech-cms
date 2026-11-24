@@ -963,55 +963,87 @@
   color: #cbd5e1;
 }
 
-/* Redesigned Payment Success Dialog */
-.pf-success-dialog {
-  max-width: 440px;
+/* Redesigned Payment Success Modal */
+.ui-modal.pf-success-modal {
+  max-width: 450px !important;
   width: 100%;
+  border-radius: 16px;
+  padding: 26px 24px 22px !important;
+  box-shadow: 0 24px 64px rgba(16, 24, 40, .28);
+  position: relative;
+  overflow: visible;
   display: flex;
   flex-direction: column;
   align-items: center;
-  text-align: center;
-  padding: 8px 4px 4px;
+  box-sizing: border-box;
 }
-
+.pf-success-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: var(--text-mute, #64748b);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all .15s ease;
+}
+.pf-success-close:hover {
+  background: var(--bg, #f1f5f9);
+  color: var(--text, #0f172a);
+}
+.pf-success-close svg.lucide {
+  width: 18px;
+  height: 18px;
+}
 .pf-success-icon-wrap {
-  width: 48px;
-  height: 48px;
+  width: 56px;
+  height: 56px;
   border-radius: 50%;
   background: #dcfce7;
   color: #16a34a;
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: 12px;
+  margin: 0 auto 12px;
+  box-shadow: 0 0 0 6px #f0fdf4;
 }
-
-.pf-success-icon-wrap svg.lucide,
-.pf-success-icon-wrap i {
-  width: 26px;
-  height: 26px;
+.pf-success-icon-wrap svg.lucide {
+  width: 28px;
+  height: 28px;
+  stroke-width: 2.5;
 }
-
 .pf-success-title {
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--text-main, #1e293b);
-  margin: 0 0 16px;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text, #0f172a);
+  margin: 0 0 4px;
+  text-align: center;
 }
-
+.pf-success-subtitle {
+  font-size: 13px;
+  color: var(--text-mute, #64748b);
+  margin: 0 0 16px;
+  text-align: center;
+}
 .pf-success-summary {
   width: 100%;
-  background: var(--bg-surface-alt, #f8fafc);
-  border: 1px solid var(--border-subtle, #e2e4ed);
-  border-radius: 8px;
-  padding: 12px 16px;
+  background: var(--bg, #f8fafc);
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 12px;
+  padding: 14px 16px;
   display: flex;
   flex-direction: column;
-  gap: 9px;
+  gap: 10px;
   margin-bottom: 20px;
   text-align: left;
+  box-sizing: border-box;
 }
-
 .pf-success-row {
   display: flex;
   justify-content: space-between;
@@ -1019,35 +1051,94 @@
   font-size: 13px;
   gap: 12px;
 }
-
 .pf-success-label {
-  color: var(--text-muted, #64748b);
+  color: var(--text-mute, #64748b);
+  font-weight: 500;
   flex: none;
 }
-
 .pf-success-val {
-  color: var(--text-main, #1e293b);
+  color: var(--text, #0f172a);
   font-weight: 500;
   text-align: right;
   word-break: break-word;
 }
-
 .pf-success-val.is-total {
-  font-weight: 700;
-  font-size: 14.5px;
-  color: var(--text-main, #0f172a);
+  font-weight: 800;
+  font-size: 18px;
+  color: var(--success, #16a34a);
 }
-
 .pf-success-actions {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 10px;
   width: 100%;
+  box-sizing: border-box;
 }
-
 .pf-success-actions .ui-btn {
-  flex: 1;
   justify-content: center;
   white-space: nowrap;
+  height: 40px;
+  font-size: 13.5px;
+}
+
+/* Shared Record Payment Modal Styles (matched with student-profile) */
+.sp-pay-summary-box {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  background: var(--bg, #F6F6F8);
+  border: 1px solid var(--border, #EAEAEA);
+  padding: 12px 16px;
+  border-radius: var(--r-ctrl, 8px);
+  margin: 0;
+}
+.sp-pay-summary-box .sp-stat-col {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.sp-pay-summary-box .sp-stat-val {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--text, #171717);
+}
+.sp-modal-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: 100%;
+  box-sizing: border-box;
+  overflow: visible;
+  padding: 2px 4px;
+}
+.sp-form-row-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  width: 100%;
+  box-sizing: border-box;
+}
+@media (max-width: 600px) {
+  .sp-form-row-2 {
+    grid-template-columns: 1fr;
+  }
+}
+.sp-modal-form .ui-input-wrap,
+.sp-modal-form .ui-select-btn {
+  border-color: var(--border-strong, #CBD5E1);
+}
+.sp-modal-form .ui-input-wrap:focus-within,
+.sp-modal-form .ui-select.open .ui-select-btn,
+.sp-modal-form .ui-select-btn:focus-visible {
+  border-color: var(--primary);
+}
+.ui-input-wrap.is-disabled {
+  background: var(--bg, #F6F6F8);
+  border-color: var(--border, #EAEAEA);
+  opacity: 0.75;
+  cursor: not-allowed;
+}
+.ui-input-wrap.is-disabled input {
+  cursor: not-allowed;
 }

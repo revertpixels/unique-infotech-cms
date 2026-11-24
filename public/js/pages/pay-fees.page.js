@@ -11,21 +11,21 @@ import {
   runTransaction,
   serverTimestamp
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { createSelect } from '../components/ui-select.js?v=1.8.107';
-import { openPopup } from '../components/modal.js?v=1.8.107';
-import { confirmDialog } from '../components/ui-confirm.js?v=1.8.107';
-import { showToast } from '../components/toast.js?v=1.8.107';
-import { getSelectedSessionId, getCachedSessions } from '../core/sessions.js?v=1.8.107';
-import { todayISO, fmtDate, examWindowOf, installmentSchedule } from '../utils/session-rules.js?v=1.8.107';
+import { createSelect } from '../components/ui-select.js?v=1.8.125';
+import { openPopup } from '../components/modal.js?v=1.8.125';
+import { confirmDialog } from '../components/ui-confirm.js?v=1.8.125';
+import { showToast } from '../components/toast.js?v=1.8.125';
+import { getSelectedSessionId, getCachedSessions } from '../core/sessions.js?v=1.8.125';
+import { todayISO, fmtDate, examWindowOf, installmentSchedule } from '../utils/session-rules.js?v=1.8.125';
+import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.125';
 import {
   calculateLateFee,
   fetchStudentPayments,
   isInstallmentPaid,
   isExamFeePaid,
-  recordPaymentTx,
   courseFeeWithoutExam,
   courseBalanceWithoutExam
-} from '../services/payment.service.js?v=1.8.107';
+} from '../services/payment.service.js?v=1.8.125';
 
 let currentUserProfile = null;
 let currentCtx = 'youth';
@@ -862,14 +862,24 @@ function renderInstallmentScheduleTable() {
       const collectBtn = mk('button', 'ui-btn primary sm pf-btn-collect');
       collectBtn.type = 'button';
       collectBtn.innerHTML = '<i data-lucide="wallet"></i><span>Collect</span>';
-      collectBtn.onclick = () => openCollectPaymentModal({
-        type: 'IN',
-        installmentNo: itNo,
-        month: it.month,
-        due: it.due,
-        amount: schedAmt,
-        lateFee: lateFine,
-        title: `Collect Installment ${itNo} (${it.month})`
+      collectBtn.onclick = () => openPaymentPopup({
+        student: currentStudent,
+        profile: currentUserProfile,
+        preselectedOption: 'IN_' + itNo,
+        activeSession,
+        payments: currentPayments,
+        from: 'pay-fees',
+        onSuccess: async () => {
+          await loadStudents();
+          const freshStudent = allStudentsCache.find(st => st.id === currentStudent?.id);
+          if (freshStudent) {
+            currentStudent = freshStudent;
+          }
+          currentPayments = await fetchStudentPayments(currentStudent.id);
+          renderPaymentSummary();
+          renderInstallmentScheduleTable();
+          renderExamFeeSection();
+        }
       });
       actTd.appendChild(collectBtn);
     } else {
@@ -1037,11 +1047,24 @@ function renderExamFeeSection() {
     const collectBtn = mk('button', 'ui-btn primary sm pf-btn-collect');
     collectBtn.type = 'button';
     collectBtn.innerHTML = '<i data-lucide="wallet"></i><span>Collect</span>';
-    collectBtn.onclick = () => openCollectPaymentModal({
-      type: 'EX',
-      amount: lockedFee,
-      lateFee: 0,
-      title: 'Collect Board Examination Fee'
+    collectBtn.onclick = () => openPaymentPopup({
+      student: currentStudent,
+      profile: currentUserProfile,
+      preselectedOption: 'EX',
+      activeSession,
+      payments: currentPayments,
+      from: 'pay-fees',
+      onSuccess: async () => {
+        await loadStudents();
+        const freshStudent = allStudentsCache.find(st => st.id === currentStudent?.id);
+        if (freshStudent) {
+          currentStudent = freshStudent;
+        }
+        currentPayments = await fetchStudentPayments(currentStudent.id);
+        renderPaymentSummary();
+        renderInstallmentScheduleTable();
+        renderExamFeeSection();
+      }
     });
     actTd.appendChild(collectBtn);
   }
@@ -1315,363 +1338,6 @@ function renderExamFeeManagementView() {
       tbody.appendChild(tr);
     });
   }
-
-  if (typeof lucide !== 'undefined') lucide.createIcons();
-}
-
-/**
- * Opens Collect Payment Popup (Part 2.3)
- */
-function openCollectPaymentModal({ type, installmentNo, month, due, amount, lateFee, title }) {
-  const s = currentStudent;
-  if (!s) return;
-
-  if (type === 'EX') {
-    const feesMap = activeSession?.examFeeCollection?.fees;
-    const isCourseInFees = feesMap && s.courseId && Object.prototype.hasOwnProperty.call(feesMap, s.courseId);
-    if (!isCourseInFees) {
-      showToast({ type: 'error', message: 'Exam fee not set for this course in this session. Contact Super Admin.' });
-      return;
-    }
-  }
-
-  const isSuper = currentUserProfile && currentUserProfile.role === 'superadmin';
-  const popup = openPopup({
-    title: title || 'Record Fee Payment',
-    subtitle: `${s.name} • ID: ${s.studentId}`,
-    icon: 'wallet'
-  });
-
-  const form = mk('div', 'pf-modal-form');
-
-  // Summary box showing read-only figures
-  const summaryBox = mk('div', 'pf-calc-summary-box');
-  summaryBox.innerHTML = `
-    <div class="pf-calc-cell">
-      <span class="pf-calc-label">Base Fee</span>
-      <span class="pf-calc-val" id="pf-f-base">${formatINR(amount)}</span>
-    </div>
-    <div class="pf-calc-cell">
-      <span class="pf-calc-label">Late Fee</span>
-      <span class="pf-calc-val ${lateFee > 0 ? 'text-danger' : ''}" id="pf-f-late">${formatINR(lateFee)}</span>
-    </div>
-    <div class="pf-calc-cell total">
-      <span class="pf-calc-label">Total Payable</span>
-      <span class="pf-calc-val" id="pf-f-total">${formatINR(amount + lateFee)}</span>
-    </div>
-  `;
-  form.appendChild(summaryBox);
-
-  // Waive Late Fee option (Super Admin only, and only if lateFee > 0)
-  let waiveCheckbox = null;
-  let waiveReasonInput = null;
-  let waiveGroup = null;
-
-  if (isSuper && lateFee > 0) {
-    waiveGroup = mk('div', 'pf-waive-box');
-    const label = document.createElement('label');
-    waiveCheckbox = document.createElement('input');
-    waiveCheckbox.type = 'checkbox';
-    label.append(waiveCheckbox, document.createTextNode('Waive late fee fine (Super Admin)'));
-    waiveGroup.appendChild(label);
-
-    const reasonWrap = mk('div', 'ui-field mt-2');
-    reasonWrap.hidden = true;
-    reasonWrap.innerHTML = '<div class="ui-label-row"><label class="ui-label">Waiver Reason <span class="text-danger">*</span></label></div>';
-    const reasonInputWrap = mk('div', 'ui-input-wrap');
-    waiveReasonInput = document.createElement('input');
-    waiveReasonInput.type = 'text';
-    waiveReasonInput.className = 'ui-input';
-    waiveReasonInput.placeholder = 'Provide reason for waiving late fine...';
-    reasonInputWrap.appendChild(waiveReasonInput);
-    reasonWrap.appendChild(reasonInputWrap);
-    waiveGroup.appendChild(reasonWrap);
-
-    waiveCheckbox.onchange = () => {
-      reasonWrap.hidden = !waiveCheckbox.checked;
-      if (waiveCheckbox.checked) {
-        $('pf-f-late').textContent = 'Rs. 0.00 (Waived)';
-        $('pf-f-total').textContent = formatINR(amount);
-      } else {
-        $('pf-f-late').textContent = formatINR(lateFee);
-        $('pf-f-total').textContent = formatINR(amount + lateFee);
-      }
-    };
-
-    form.appendChild(waiveGroup);
-  }
-
-  // Row with Payment Mode & Txn ID
-  const modeTxnRow = mk('div', 'pf-modal-row-2');
-
-  const modeGroup = mk('div', 'ui-field');
-  modeGroup.innerHTML = '<div class="ui-label-row"><label class="ui-label">Payment Mode <span class="text-danger">*</span></label></div>';
-  const modeHost = mk('div');
-  modeGroup.appendChild(modeHost);
-
-  const txnGroup = mk('div', 'ui-field');
-  txnGroup.innerHTML = '<div class="ui-label-row"><label class="ui-label">Transaction / Reference ID <span class="text-danger" id="pf-f-txn-req" hidden>*</span></label></div>';
-  const txnWrap = mk('div', 'ui-input-wrap');
-  const txnInput = document.createElement('input');
-  txnInput.type = 'text';
-  txnInput.className = 'ui-input';
-  txnInput.placeholder = 'Optional for cash';
-  txnWrap.appendChild(txnInput);
-  txnGroup.appendChild(txnWrap);
-
-  const modeOptions = [
-    { value: 'cash', label: 'Cash', icon: 'banknote' },
-    { value: 'upi', label: 'UPI / QR', icon: 'smartphone' },
-    { value: 'card', label: 'Debit / Credit Card', icon: 'credit-card' },
-    { value: 'bank', label: 'Bank Transfer (NEFT/IMPS)', icon: 'landmark' },
-    { value: 'cheque', label: 'Cheque / Draft', icon: 'file-text' }
-  ];
-
-  const modeSel = createSelect(modeHost, {
-    options: modeOptions,
-    value: 'cash',
-    ariaLabel: 'Payment Mode',
-    onChange: (val) => {
-      const mode = (val && val.value !== undefined) ? val.value : modeSel.value;
-      const isCash = mode === 'cash';
-      const reqStar = $('pf-f-txn-req');
-      if (reqStar) reqStar.hidden = isCash;
-      if (isCash) {
-        txnInput.placeholder = 'Optional for cash';
-      } else {
-        txnInput.placeholder = `Required for ${mode.toUpperCase()}`;
-      }
-    }
-  });
-
-  modeTxnRow.append(modeGroup, txnGroup);
-  form.appendChild(modeTxnRow);
-
-  // Payment Date & Remarks
-  const dateGroup = mk('div', 'ui-field');
-  dateGroup.innerHTML = '<div class="ui-label-row"><label class="ui-label">Payment Date <span class="text-danger">*</span></label></div>';
-  const dateWrap = mk('div', 'ui-input-wrap');
-  const dateInput = document.createElement('input');
-  dateInput.type = 'date';
-  dateInput.className = 'ui-input';
-  dateInput.value = todayISO();
-  dateWrap.appendChild(dateInput);
-  dateGroup.appendChild(dateWrap);
-
-  const remGroup = mk('div', 'ui-field');
-  remGroup.innerHTML = '<div class="ui-label-row"><label class="ui-label">Remarks / Note</label></div>';
-  const remWrap = mk('div', 'ui-input-wrap');
-  const remInput = document.createElement('textarea');
-  remInput.className = 'ui-input';
-  remInput.rows = 2;
-  remInput.placeholder = 'Optional transaction notes...';
-  remWrap.appendChild(remInput);
-  remGroup.appendChild(remWrap);
-
-  form.append(dateGroup, remGroup);
-
-  // Modal Footer
-  const foot = mk('div', 'adm-view-foot');
-  const cancelBtn = mk('button', 'ui-btn ghost', 'Cancel');
-  cancelBtn.type = 'button';
-  cancelBtn.onclick = () => popup.close();
-
-  const saveBtn = mk('button', 'ui-btn primary', 'Confirm & Record Payment');
-  saveBtn.type = 'button';
-
-  foot.append(cancelBtn, saveBtn);
-  form.appendChild(foot);
-  popup.container.appendChild(form);
-
-  if (typeof lucide !== 'undefined') lucide.createIcons();
-
-  // Save handler with validation and atomic transaction
-  saveBtn.onclick = async () => {
-    const mode = modeSel.value;
-    const isCash = mode === 'cash';
-    const txnVal = txnInput.value.trim();
-    const isWaived = waiveCheckbox ? waiveCheckbox.checked : false;
-    const waiverReason = waiveReasonInput ? waiveReasonInput.value.trim() : '';
-
-    if (!isCash && !txnVal) {
-      showToast({ type: 'error', message: 'Transaction / reference number is required for non-cash payment.' });
-      txnInput.focus();
-      return;
-    }
-
-    if (isWaived && !waiverReason) {
-      showToast({ type: 'error', message: 'Waiver reason is required when late fee is waived.' });
-      waiveReasonInput.focus();
-      return;
-    }
-
-    // Disable button to prevent double submission
-    saveBtn.disabled = true;
-    saveBtn.innerHTML = '<i data-lucide="loader-2" class="spin"></i> Processing...';
-    if (typeof lucide !== 'undefined') lucide.createIcons();
-
-    try {
-      const authEmail = getAuthEmail();
-      const res = await runTransaction(db, async (tx) => {
-        return await recordPaymentTx(tx, {
-          studentDoc: s,
-          type,
-          installmentNo: type === 'IN' ? installmentNo : null,
-          month: month || '',
-          amount,
-          lateFeeAmount: isWaived ? 0 : lateFee,
-          mode,
-          txnId: txnVal,
-          remarks: remInput.value.trim(),
-          waived: isWaived,
-          waiverReason,
-          paymentDate: dateInput.value || todayISO(),
-          userEmail: authEmail,
-          userName: currentUserProfile.name || '',
-          userRole: currentUserProfile.role,
-          branchId: currentUserProfile.branchId || s.branchId,
-          branchCode: s.branchCode || '',
-          branchName: s.branchName
-        });
-      });
-
-      popup.close();
-      showToast({ type: 'success', message: 'Payment recorded: ' + res.receiptNo });
-
-      // Refresh student panel & cache
-      await loadStudents();
-      const freshStudent = allStudentsCache.find(st => st.id === s.id);
-      if (freshStudent) {
-        currentStudent = freshStudent;
-      }
-      currentPayments = await fetchStudentPayments(s.id);
-      renderPaymentSummary();
-      renderInstallmentScheduleTable();
-      renderExamFeeSection();
-
-      // Show redesigned receipt view confirmation
-      const actualLateFee = isWaived ? 0 : lateFee;
-      const totalPaid = amount + actualLateFee;
-      const forText = type === 'EX'
-        ? 'Board Examination Fee'
-        : `Installment ${installmentNo}${month ? ` - ${month}` : ''}`;
-
-      promptOpenReceipt({
-        studentDocId: res.studentDocId,
-        paymentId: res.paymentId,
-        receiptNo: res.receiptNo,
-        student: currentStudent || s,
-        forText,
-        amount,
-        lateFee: actualLateFee,
-        totalPaid,
-        mode,
-        txnId: txnVal,
-        date: new Date()
-      });
-    } catch (err) {
-      console.error('[pay-fees] payment transaction failed', err);
-      showToast({ type: 'error', message: 'Payment failed: ' + (err.message || 'Transaction error') });
-      saveBtn.disabled = false;
-      saveBtn.textContent = 'Confirm & Record Payment';
-    }
-  };
-}
-
-function formatDateTime(d) {
-  const dt = d instanceof Date ? d : new Date(d);
-  if (isNaN(dt.getTime())) return '-';
-  const day = String(dt.getDate()).padStart(2, '0');
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  const month = months[dt.getMonth()];
-  const year = dt.getFullYear();
-  let hours = dt.getHours();
-  const minutes = String(dt.getMinutes()).padStart(2, '0');
-  const ampm = hours >= 12 ? 'PM' : 'AM';
-  hours = hours % 12 || 12;
-  return `${day} ${month} ${year}, ${hours}:${minutes} ${ampm}`;
-}
-
-/**
- * Prompts user to view receipt immediately with redesigned modal dialog (Part 6)
- */
-function promptOpenReceipt({
-  studentDocId,
-  paymentId,
-  receiptNo,
-  student,
-  forText,
-  amount,
-  lateFee,
-  totalPaid,
-  mode,
-  txnId,
-  date
-}) {
-  const confirmPopup = openPopup({
-    title: '',
-    subtitle: '',
-    hideClose: false
-  });
-
-  const body = mk('div', 'pf-success-dialog');
-
-  const iconWrap = mk('div', 'pf-success-icon-wrap');
-  iconWrap.innerHTML = '<i data-lucide="check"></i>';
-
-  const title = mk('h3', 'pf-success-title', 'Payment recorded');
-
-  const summary = mk('div', 'pf-success-summary');
-
-  function addRow(label, value, isTotal) {
-    const row = mk('div', 'pf-success-row');
-    const lbl = mk('span', 'pf-success-label', label);
-    const val = mk('span', 'pf-success-val' + (isTotal ? ' is-total' : ''), value);
-    row.append(lbl, val);
-    summary.appendChild(row);
-  }
-
-  const stName = student?.name || 'Student';
-  const stId = student?.studentId || '';
-
-  addRow('Receipt no.', receiptNo || '—');
-  addRow('Student', `${stName}${stId ? ` (${stId})` : ''}`);
-  addRow('For', forText || 'Fee payment');
-  addRow('Amount', formatINR(amount));
-  addRow('Late fee', lateFee > 0 ? formatINR(lateFee) : 'Rs. 0.00');
-  addRow('Total paid', formatINR(totalPaid), true);
-  addRow('Mode', `${mode || 'Cash'}${txnId ? ` (Txn: ${txnId})` : ''}`);
-  addRow('Date & time', formatDateTime(date || new Date()));
-
-  const actions = mk('div', 'pf-success-actions');
-
-  const openBtn = mk('button', 'ui-btn primary');
-  openBtn.type = 'button';
-  openBtn.innerHTML = '<i data-lucide="receipt"></i><span>Open receipt</span>';
-  openBtn.onclick = () => {
-    confirmPopup.close();
-    location.hash = `#/payments/${studentDocId}/${paymentId}/receipt?from=pay-fees`;
-  };
-
-  const printBtn = mk('button', 'ui-btn secondary');
-  printBtn.type = 'button';
-  printBtn.innerHTML = '<i data-lucide="printer"></i><span>Print</span>';
-  printBtn.onclick = () => {
-    confirmPopup.close();
-    location.hash = `#/payments/${studentDocId}/${paymentId}/receipt?from=pay-fees&print=1`;
-  };
-
-  const doneBtn = mk('button', 'ui-btn ghost', 'Done');
-  doneBtn.type = 'button';
-  doneBtn.onclick = () => {
-    confirmPopup.close();
-  };
-
-  actions.append(openBtn, printBtn, doneBtn);
-  body.append(iconWrap, title, summary, actions);
-
-  confirmPopup.container.textContent = '';
-  confirmPopup.container.appendChild(body);
 
   if (typeof lucide !== 'undefined') lucide.createIcons();
 }

@@ -219,6 +219,7 @@ export function createSelect(host, opts) {
   return {
     get value() { return current; },
     set value(v) { current = v; paint(); },
+    setValue(v) { current = v; paint(); },
     setOptions,
     focus() { btn.focus(); },
     close() { close(false); }

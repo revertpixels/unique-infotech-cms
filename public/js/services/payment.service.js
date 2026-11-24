@@ -5,10 +5,11 @@ import {
   doc,
   getDocs,
   setDoc,
+  runTransaction,
   serverTimestamp
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { readReceiptNo, writeCounter } from './admission.service.js?v=1.8.107';
-import { fineFor, todayISO } from '../utils/session-rules.js?v=1.8.107';
+import { readReceiptNo, writeCounter } from './admission.service.js?v=1.8.125';
+import { fineFor, todayISO } from '../utils/session-rules.js?v=1.8.125';
 
 const COL = 'students';
 
@@ -141,6 +142,7 @@ export function isAdmissionFeePaid(admFee, paymentsList, student) {
   if (admTxn) return true;
   const admPaidAtAdmission = Number(student?.dueAtAdmission?.admission ?? student?.dueAtAdmission?.total ?? 0);
   if (admPaidAtAdmission >= admFee && admFee > 0) return true;
+  if (student?.receiptNo) return true;
   if (student?.admissionPaid === true || student?.isAdmissionPaid === true) return true;
   return false;
 }
@@ -215,6 +217,34 @@ export function courseBalanceWithoutExam(student, allPayments) {
 }
 
 /**
+ * Calculates the course fee from scheduled installments ONLY.
+ * Sum of student.feeSchedule[].amount only (no admission fee, no study material fee, no exam fee).
+ */
+export function installmentCourseFee(student) {
+  if (!student) return 0;
+  const sched = Array.isArray(student.feeSchedule) ? student.feeSchedule : [];
+  return sched.reduce((sum, it) => sum + Number(it.amount || 0), 0);
+}
+
+/**
+ * Calculates the balance due for installments ONLY.
+ * installmentCourseFee(student) minus the sum of payments whose type is installment (IN / INST) only.
+ * Does not subtract admission, material, exam or late fee payments. Minimum 0.
+ */
+export function installmentBalanceDue(student, allPayments) {
+  if (!student) return 0;
+  const total = installmentCourseFee(student);
+  const payments = Array.isArray(allPayments) ? allPayments : [];
+  const instPaid = payments
+    .filter(p => {
+      const t = String(p.type || '').toUpperCase().trim();
+      return t === 'IN' || t === 'INST' || t === 'INSTALLMENT';
+    })
+    .reduce((sum, p) => sum + Number(p.amount || 0), 0);
+  return Math.max(0, total - instPaid);
+}
+
+/**
  * Records a payment inside a single atomic Firestore transaction.
  * - Reads student doc inside transaction to check if already paid
  * - Reads and increments receipt counter
@@ -242,7 +272,12 @@ export async function recordPaymentTx(tx, {
   branchCode,
   branchName
 }) {
-  const pDate = paymentDate || todayISO();
+  // Payment date is always todayISO(), ignoring any client-provided date
+  const pDate = todayISO();
+  const isSuperAdminUser = (userRole === 'superadmin');
+  const actualWaived = isSuperAdminUser && !!waived;
+  const actualWaiverReason = actualWaived ? (waiverReason || '') : '';
+
   const org = studentDoc.ctx || 'youth';
   const bCode = branchCode || studentDoc.branchCode || 'HO';
   const studentRef = doc(db, COL, studentDoc.id);
@@ -289,7 +324,7 @@ export async function recordPaymentTx(tx, {
 
   const numAmount = Number(amount || 0);
   const numLate = Number(lateFeeAmount || 0);
-  const totalAmount = numAmount + (waived ? 0 : numLate);
+  const totalAmount = numAmount + (actualWaived ? 0 : numLate);
 
   const currentPaid = Number(sData.paidAmount ?? sData.totalPaid ?? 0);
   const newPaid = currentPaid + numAmount;
@@ -299,9 +334,9 @@ export async function recordPaymentTx(tx, {
     amount: numAmount,
     lateFee: numLate,
     lateFeeAmount: numLate,
-    lateFeeWaived: !!waived,
-    waived: !!waived,
-    waiverReason: waived ? (waiverReason || '') : '',
+    lateFeeWaived: actualWaived,
+    waived: actualWaived,
+    waiverReason: actualWaiverReason,
     total: totalAmount,
     date: pDate,
     paidOn: pDate,
@@ -351,7 +386,7 @@ export async function recordPaymentTx(tx, {
             paidOn: pDate,
             receiptNo: rc.receiptNo,
             lateFee: numLate,
-            waived: !!waived
+            waived: actualWaived
           };
         }
         return item;
@@ -377,7 +412,7 @@ export async function recordPaymentTx(tx, {
     : (type === 'MAT' ? 'Study material fee' : (type === 'AD' ? 'Admission fee' : `Installment ${installmentNo}`));
 
   const summary = `Collected ${rc.receiptNo} - ${feeLabel} Rs ${numAmount}` +
-    (numLate > 0 ? (waived ? ` (late fee Rs ${numLate} waived)` : ` (+ Rs ${numLate} late fee)`) : '') +
+    (numLate > 0 ? (actualWaived ? ` (late fee Rs ${numLate} waived)` : ` (+ Rs ${numLate} late fee)`) : '') +
     ` via ${mode || 'cash'}`;
 
   tx.set(activityRef, {
@@ -388,7 +423,7 @@ export async function recordPaymentTx(tx, {
     installmentNo: installmentNo != null ? Number(installmentNo) : null,
     amount: numAmount,
     lateFee: numLate,
-    waived: !!waived,
+    waived: actualWaived,
     mode: mode || 'cash',
     changes: {
       paidAmount: { from: currentPaid, to: newPaid },
@@ -405,4 +440,11 @@ export async function recordPaymentTx(tx, {
     paymentId: paymentRef.id,
     studentDocId: studentDoc.id
   };
+}
+
+/**
+ * Convenience wrapper to execute recordPaymentTx within a Firestore transaction.
+ */
+export async function recordPayment(params) {
+  return await runTransaction(db, (tx) => recordPaymentTx(tx, params));
 }

@@ -14,9 +14,15 @@ service cloud.firestore {
 
     // Super Admin: ONE locked identity, email+password sign-in only
     function isSuperAdmin() {
+      // TEMPORARY (development only): Super Admin login = haranathsaha1@gmail.com
+      // BEFORE DELIVERY: change this back to 'utpal.goutam@gmail.com' (client's account).
+      // Super Admin must sign in with email + password only (provider 'password').
+      // NOTE FOR AGENTS: this is the ONLY place the Super Admin login email is set.
+      // Do NOT change 'utpal.goutam@gmail.com' in receipts / org details / PDFs -
+      // that is the business contact email printed on receipts, not a login.
       return signedIn()
         && provider() == 'password'
-        && authEmail() == 'utpal.goutam@gmail.com';
+        && authEmail() == 'haranathsaha1@gmail.com';
     }
 
     // Heads: Google sign-in only, verified email

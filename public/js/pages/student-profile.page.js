@@ -11,26 +11,27 @@ import {
   serverTimestamp,
   runTransaction
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.125';
-import { openPopup } from '../components/modal.js?v=1.8.125';
-import { createSelect } from '../components/ui-select.js?v=1.8.125';
-import { confirmDialog } from '../components/ui-confirm.js?v=1.8.125';
-import { openMenu } from '../components/ui-menu.js?v=1.8.125';
-import { formatINR, formatDateIN, initials } from '../utils/formatter.js?v=1.8.125';
-import { validatePhone, validateEmail, validateDOB, validateName } from '../utils/validator.js?v=1.8.125';
-import { registerDirty } from '../utils/unsaved-guard.js?v=1.8.125';
-import { compressTo100KB, blobToDataURL, isImageFile, formatBytes } from '../utils/image-compress.js?v=1.8.125';
-import { todayISO } from '../utils/session-rules.js?v=1.8.125';
-import { getSelectedSessionId } from '../core/sessions.js?v=1.8.125';
-import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.125';
+import { showToast } from '../components/toast.js?v=1.8.128';
+import { openPopup } from '../components/modal.js?v=1.8.128';
+import { createSelect } from '../components/ui-select.js?v=1.8.128';
+import { confirmDialog } from '../components/ui-confirm.js?v=1.8.128';
+import { openMenu } from '../components/ui-menu.js?v=1.8.128';
+import { formatINR, formatDateIN, initials } from '../utils/formatter.js?v=1.8.128';
+import { validatePhone, validateEmail, validateDOB, validateName } from '../utils/validator.js?v=1.8.128';
+import { registerDirty } from '../utils/unsaved-guard.js?v=1.8.128';
+import { compressTo100KB, blobToDataURL, isImageFile, formatBytes } from '../utils/image-compress.js?v=1.8.128';
+import { todayISO } from '../utils/session-rules.js?v=1.8.128';
+import { getSelectedSessionId } from '../core/sessions.js?v=1.8.128';
+import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.128';
 import {
   fetchStudentPayments,
   recordPaymentTx,
   logStudentActivity,
   calculateLateFee,
   courseFeeWithoutExam,
-  courseBalanceWithoutExam
-} from '../services/payment.service.js?v=1.8.125';
+  courseBalanceWithoutExam,
+  calculateStudentFinancials
+} from '../services/payment.service.js?v=1.8.128';
 
 const COL = 'students';
 const QUALIFICATIONS = ['VIII Pass', 'Secondary (X) Pass', 'Higher Secondary (XII) Pass', 'ITI', 'Diploma', 'Undergraduate (Graduate)', 'Postgraduate', 'Other'];
@@ -577,8 +578,7 @@ function renderHeader() {
   }
 
   // Payment Notify Button (Always visible per AI reference layout)
-  const total = courseFeeWithoutExam(s);
-  const outstanding = courseBalanceWithoutExam(s, paymentsCache);
+  const { total, outstanding } = calculateStudentFinancials(s, paymentsCache);
 
   const notifyBtn = $('sp-btn-notify');
   if (notifyBtn) {
@@ -666,30 +666,31 @@ function renderMetrics() {
   const s = currentStudent;
   if (!s) return;
 
-  const total = courseFeeWithoutExam(s);
-  const outstanding = courseBalanceWithoutExam(s, paymentsCache);
-  const paid = Math.max(0, total - outstanding);
+  const { total, paid, outstanding, percent: pct } = calculateStudentFinancials(s, paymentsCache);
 
   setTxt('sp-m-total-fee', formatINR(total));
   setTxt('sp-m-paid', formatINR(paid));
   setTxt('sp-m-outstanding', formatINR(outstanding));
 
-  const pct = total > 0 ? Math.min(100, Math.round((paid / total) * 100)) : 0;
   const barText = $('sp-progress-text');
   if (barText) barText.textContent = pct + '% of course total';
   const barFill = $('sp-stats-bar-fill');
   if (barFill) barFill.style.width = pct + '%';
 
   // Installment count
-  const sched = s.feeSchedule || [];
-  let instPaidCount = 0;
-  sched.forEach((it) => {
-    if (isInstallmentPaid(it, paymentsCache, s)) {
-      instPaidCount++;
-    }
-  });
+  if (s.paymentPlan === 'full') {
+    setTxt('sp-m-inst-paid', 'Paid in Full');
+  } else {
+    const sched = s.feeSchedule || [];
+    let instPaidCount = 0;
+    sched.forEach((it) => {
+      if (isInstallmentPaid(it, paymentsCache, s)) {
+        instPaidCount++;
+      }
+    });
 
-  setTxt('sp-m-inst-paid', instPaidCount + ' of ' + (sched.length || 4));
+    setTxt('sp-m-inst-paid', instPaidCount + ' of ' + (sched.length || 4));
+  }
 }
 
 /**
@@ -1874,25 +1875,45 @@ async function renderCourseTab() {
     lockedExamFee = Number(studentSess.examFeeCollection.fees[s.courseId]);
   }
 
-  const rows = [
-    { label: 'Admission Fee', amount: snap.admission || s.admissionFee || 0 },
-    { label: 'Study Material & Kit', amount: snap.material || s.materialFee || 0 },
-    { label: 'Tuition Fee (Per Installment)', amount: snap.installment || 0 },
-    { label: 'Total Scheduled Installments', amount: (snap.installment || 0) * (s.feeSchedule?.length || 4) }
-  ];
+  if (s.paymentPlan === 'full') {
+    const fullAmt = Number(s.fullPaymentAmount || s.feeTotal || 0);
+    const disc = Number(s.fullPaymentDiscount || 0);
+    const stdFee = snap.admission ? (Number(snap.admission || 0) + Number(snap.installment || 0) * 4 + Number(snap.material || 0)) : (fullAmt + disc);
+    const tr1 = mk('tr');
+    tr1.append(mk('td', '', 'Course Package Fee (Standard)'), mk('td', 'num font-semibold', formatINR(stdFee)));
+    tbody.appendChild(tr1);
+    if (disc > 0) {
+      const trDisc = mk('tr');
+      trDisc.append(mk('td', 'text-success', 'Full-Payment Discount Offer'), mk('td', 'num font-semibold text-success', '-' + formatINR(disc)));
+      tbody.appendChild(trDisc);
+    }
+    const totalTr = mk('tr');
+    totalTr.append(
+      mk('td', 'font-bold', 'Course Fee Paid in Full'),
+      mk('td', 'num font-bold text-success', formatINR(fullAmt))
+    );
+    tbody.appendChild(totalTr);
+  } else {
+    const rows = [
+      { label: 'Admission Fee', amount: snap.admission || s.admissionFee || 0 },
+      { label: 'Study Material & Kit', amount: snap.material || s.materialFee || 0 },
+      { label: 'Tuition Fee (Per Installment)', amount: snap.installment || 0 },
+      { label: 'Total Scheduled Installments', amount: (snap.installment || 0) * (s.feeSchedule?.length || 4) }
+    ];
 
-  rows.forEach((r) => {
-    const tr = mk('tr');
-    tr.append(mk('td', '', r.label), mk('td', 'num font-semibold', formatINR(r.amount)));
-    tbody.appendChild(tr);
-  });
+    rows.forEach((r) => {
+      const tr = mk('tr');
+      tr.append(mk('td', '', r.label), mk('td', 'num font-semibold', formatINR(r.amount)));
+      tbody.appendChild(tr);
+    });
 
-  const totalTr = mk('tr');
-  totalTr.append(
-    mk('td', 'font-bold', 'Total Course Package Fee'),
-    mk('td', 'num font-bold text-success', formatINR(courseFeeWithoutExam(s)))
-  );
-  tbody.appendChild(totalTr);
+    const totalTr = mk('tr');
+    totalTr.append(
+      mk('td', 'font-bold', 'Total Course Package Fee'),
+      mk('td', 'num font-bold text-success', formatINR(courseFeeWithoutExam(s)))
+    );
+    tbody.appendChild(totalTr);
+  }
 
   if (examStarted) {
     const examPaid = isExamFeePaid(lockedExamFee, paymentsCache, s);
@@ -1908,7 +1929,14 @@ async function renderCourseTab() {
   const schedTbody = $('sp-sched-tbody');
   schedTbody.textContent = '';
   const sched = s.feeSchedule || [];
-  if (sched.length === 0) {
+  if (s.paymentPlan === 'full') {
+    const tr = mk('tr');
+    const td = mk('td', 'text-center font-semibold text-success', `Course fee paid in full on ${formatDateIN(s.fullPaidOn || s.admissionDate || todayISO())}. Paid: Rs ${formatINR(Number(s.fullPaymentAmount || s.feeTotal || 0))}, Outstanding: Rs 0. Only the examination fee remains.`);
+    td.colSpan = 5;
+    td.style.padding = '16px 12px';
+    tr.appendChild(td);
+    schedTbody.appendChild(tr);
+  } else if (sched.length === 0) {
     const tr = mk('tr');
     const td = mk('td', 'text-mute text-center', 'No installment schedule configured.');
     td.colSpan = 5;
@@ -2092,67 +2120,100 @@ function renderInstallmentStatusTable(sched) {
     tbody.appendChild(tr);
   }
 
-  // 3. Installments (1..N)
-  sched.forEach((it) => {
+  // 3. Installments (1..N) or Paid in Full
+  if (s.paymentPlan === 'full') {
+    const fullAmt = Number(s.fullPaymentAmount || s.feeTotal || 0);
+    const paidOn = s.fullPaidOn || s.admissionDate || todayISO();
     const tr = mk('tr');
-    const itNo = Number(it.no ?? it.installmentNo);
-    const paidRec = paymentsCache.find(p => {
-      const t = String(p.type || '').toUpperCase().trim();
-      const pNo = Number(p.installmentNo ?? p.installment ?? p.no ?? p.instNo);
-      return (t === 'IN' || t === 'INST' || t === 'INSTALLMENT' || t === 'WA') && pNo === itNo;
-    });
-    const isPaid = isInstallmentPaid(it, paymentsCache, s);
-    const isWaived = (paidRec && paidRec.waived) || !!it.waived;
-
-    let statusLabel = 'Upcoming';
-    let statusClass = 'upcoming';
-    let lateFine = 0;
-
-    if (isWaived) {
-      statusLabel = 'Waived';
-      statusClass = 'success';
-    } else if (isPaid) {
-      statusLabel = 'Paid';
-      statusClass = 'success';
-    } else {
-      const today = todayISO();
-      if (today > it.due) {
-        lateFine = calculateLateFee(it.due, today);
-        statusLabel = 'Overdue' + (lateFine > 0 ? ` (+Rs ${lateFine})` : '');
-        statusClass = 'danger';
-      } else if (today >= it.opens) {
-        statusLabel = 'Due';
-        statusClass = 'warning';
-      } else {
-        statusLabel = 'Upcoming';
-        statusClass = 'neutral';
-      }
-    }
-
-    const noTd = mk('td', 'font-semibold', 'Installment ' + it.no);
-    const monthTd = mk('td', '', it.month || '-');
-    const dueTd = mk('td', 'font-semibold', formatDateIN(it.due));
-    const schedTd = mk('td', 'num', formatINR(it.amount || 0));
-    const paidTd = mk('td', 'num font-semibold text-success', isPaid ? formatINR(paidRec?.amount || it.amount || 0) : '—');
-    const paidOnTd = mk('td', '', isPaid && paidRec ? formatDateIN(paidRec.date) : '—');
-
+    const descTd = mk('td', 'font-semibold', 'Course fee paid in full on ' + formatDateIN(paidOn));
+    descTd.colSpan = 3;
+    const schedTd = mk('td', 'num font-semibold', formatINR(fullAmt));
+    const paidTd = mk('td', 'num font-semibold text-success', formatINR(fullAmt));
+    const paidOnTd = mk('td', '', formatDateIN(paidOn));
     const statusTd = mk('td');
-    const pill = mk('span', 'pill ' + (isPaid ? 'up' : (statusClass === 'danger' ? 'down' : 'neutral')), statusLabel);
-    statusTd.appendChild(pill);
-
+    statusTd.appendChild(mk('span', 'pill up', 'Paid in Full'));
     const actionTd = mk('td', 'act');
+    const fullPaymentRec = paymentsCache.find(p => p.type === 'FULL' || p.type === 'AD');
     renderFeeActionCell(actionTd, {
-      isPaid,
-      isWaived,
-      payType: it.no,
-      label: 'Installment ' + it.no,
-      icon: 'credit-card',
-      paymentId: paidRec?.id
+      isPaid: true,
+      isWaived: false,
+      payType: 'FULL',
+      label: 'Course Fee',
+      icon: 'receipt',
+      paymentId: fullPaymentRec?.id
     });
-
-    tr.append(noTd, monthTd, dueTd, schedTd, paidTd, paidOnTd, statusTd, actionTd);
+    tr.append(descTd, schedTd, paidTd, paidOnTd, statusTd, actionTd);
     tbody.appendChild(tr);
-  });
+
+    const noteTr = mk('tr');
+    const noteTd = mk('td', 'text-mute text-center', 'Paid = ' + formatINR(fullAmt) + ', Outstanding = Rs 0. Only the examination fee remains.');
+    noteTd.colSpan = 8;
+    noteTd.style.fontSize = '12px';
+    noteTd.style.padding = '8px';
+    noteTr.appendChild(noteTd);
+    tbody.appendChild(noteTr);
+  } else {
+    sched.forEach((it) => {
+      const tr = mk('tr');
+      const itNo = Number(it.no ?? it.installmentNo);
+      const paidRec = paymentsCache.find(p => {
+        const t = String(p.type || '').toUpperCase().trim();
+        const pNo = Number(p.installmentNo ?? p.installment ?? p.no ?? p.instNo);
+        return (t === 'IN' || t === 'INST' || t === 'INSTALLMENT' || t === 'WA') && pNo === itNo;
+      });
+      const isPaid = isInstallmentPaid(it, paymentsCache, s);
+      const isWaived = (paidRec && paidRec.waived) || !!it.waived;
+
+      let statusLabel = 'Upcoming';
+      let statusClass = 'upcoming';
+      let lateFine = 0;
+
+      if (isWaived) {
+        statusLabel = 'Waived';
+        statusClass = 'success';
+      } else if (isPaid) {
+        statusLabel = 'Paid';
+        statusClass = 'success';
+      } else {
+        const today = todayISO();
+        if (today > it.due) {
+          lateFine = calculateLateFee(it.due, today);
+          statusLabel = 'Overdue' + (lateFine > 0 ? ` (+Rs ${lateFine})` : '');
+          statusClass = 'danger';
+        } else if (today >= it.opens) {
+          statusLabel = 'Due';
+          statusClass = 'warning';
+        } else {
+          statusLabel = 'Upcoming';
+          statusClass = 'neutral';
+        }
+      }
+
+      const noTd = mk('td', 'font-semibold', 'Installment ' + it.no);
+      const monthTd = mk('td', '', it.month || '-');
+      const dueTd = mk('td', 'font-semibold', formatDateIN(it.due));
+      const schedTd = mk('td', 'num', formatINR(it.amount || 0));
+      const paidTd = mk('td', 'num font-semibold text-success', isPaid ? formatINR(paidRec?.amount || it.amount || 0) : '—');
+      const paidOnTd = mk('td', '', isPaid && paidRec ? formatDateIN(paidRec.date) : '—');
+
+      const statusTd = mk('td');
+      const pill = mk('span', 'pill ' + (isPaid ? 'up' : (statusClass === 'danger' ? 'down' : 'neutral')), statusLabel);
+      statusTd.appendChild(pill);
+
+      const actionTd = mk('td', 'act');
+      renderFeeActionCell(actionTd, {
+        isPaid,
+        isWaived,
+        payType: it.no,
+        label: 'Installment ' + it.no,
+        icon: 'credit-card',
+        paymentId: paidRec?.id
+      });
+
+      tr.append(noTd, monthTd, dueTd, schedTd, paidTd, paidOnTd, statusTd, actionTd);
+      tbody.appendChild(tr);
+    });
+  }
 
   // 4. Examination Fee row: only show if exam fee collection has started
   let sessionExamFee = 0;

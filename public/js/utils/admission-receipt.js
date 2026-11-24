@@ -2,7 +2,7 @@
 // Matching reference-templates/Ui.html.
 // Shared by the on-screen HTML sheet and the vector PDF builder.
 
-import { formatDateIN } from './formatter.js?v=1.8.125';
+import { formatDateIN } from './formatter.js?v=1.8.128';
 
 // Format currency as "Rs. 1,000.00"
 export function fmtRs(n) {
@@ -162,55 +162,93 @@ export function buildYouthReceiptData({ admission, photo, signature, org, paymen
   const materialFee = Number(feeSnapshot.material || 0);
 
   // Construct fee structure rows (Page 2)
-  // Total course fee = admission fee + sum of all instalments (material fee is NOT part of course fee)
   const feeStructureRows = [];
-  feeStructureRows.push({
-    head: 'Admission fee',
-    due: 'At admission',
-    amount: admissionFee
-  });
-  if (feeSchedule.length > 0) {
-    feeSchedule.forEach((it, idx) => {
-      const instNo = it.no || (idx + 1);
-      const totalInst = feeSchedule.length;
+  let totalCourseFee = 0;
+  let receivedAmount = 0;
+  let balanceDue = 0;
+  const paymentReceivedRows = [];
+
+  const dueAt = adm.dueAtAdmission || {};
+  const isFullPlan = adm.paymentPlan === 'full';
+
+  if (isFullPlan) {
+    const stdFee = Number(admissionFee + (Number(feeSnapshot.installment || 500) * 4));
+    const fullAmt = Number(adm.fullPaymentAmount || pay.amount || stdFee);
+    const disc = Number(adm.fullPaymentDiscount || Math.max(0, stdFee - fullAmt));
+
+    feeStructureRows.push({
+      head: 'Standard course fee',
+      due: 'Regular package',
+      amount: stdFee
+    });
+    if (disc > 0) {
       feeStructureRows.push({
-        head: `Instalment ${instNo} of ${totalInst}`,
-        due: it.due ? formatDateIN(it.due) : (it.opens ? formatDateIN(it.opens) : '-'),
-        amount: Number(it.amount || feeSnapshot.installment || 500)
+        head: 'Full-payment discount',
+        due: 'Instant offer',
+        amount: -disc
       });
+    }
+    feeStructureRows.push({
+      head: 'Amount payable (Paid in full)',
+      due: 'At admission',
+      amount: fullAmt
+    });
+
+    totalCourseFee = fullAmt;
+    receivedAmount = fullAmt;
+    balanceDue = 0;
+
+    paymentReceivedRows.push({
+      description: 'Course fee (Paid in full)',
+      status: 'Paid',
+      amount: fullAmt
     });
   } else {
-    // Default 4 installments if not explicitly scheduled
-    const instAmt = Number(feeSnapshot.installment || 500);
-    for (let i = 1; i <= 4; i++) {
-      feeStructureRows.push({
-        head: `Instalment ${i} of 4`,
-        due: `Month ${i + 2}`,
-        amount: instAmt
+    feeStructureRows.push({
+      head: 'Admission fee',
+      due: 'At admission',
+      amount: admissionFee
+    });
+    if (feeSchedule.length > 0) {
+      feeSchedule.forEach((it, idx) => {
+        const instNo = it.no || (idx + 1);
+        const totalInst = feeSchedule.length;
+        feeStructureRows.push({
+          head: `Instalment ${instNo} of ${totalInst}`,
+          due: it.due ? formatDateIN(it.due) : (it.opens ? formatDateIN(it.opens) : '-'),
+          amount: Number(it.amount || feeSnapshot.installment || 500)
+        });
       });
+    } else {
+      // Default 4 installments if not explicitly scheduled
+      const instAmt = Number(feeSnapshot.installment || 500);
+      for (let i = 1; i <= 4; i++) {
+        feeStructureRows.push({
+          head: `Instalment ${i} of 4`,
+          due: `Month ${i + 2}`,
+          amount: instAmt
+        });
+      }
+    }
+
+    // Total course fee = admissionFee + sum(instalments) (no material, no exam fee)
+    totalCourseFee = feeStructureRows.reduce((sum, r) => sum + Number(r.amount || 0), 0);
+
+    // Paid at admission from payment record or dueAtAdmission
+    const admissionFeePaid = Number(pay.admissionFee ?? dueAt.admission ?? admissionFee);
+    const materialFeePaid = Number(pay.materialFee ?? dueAt.material ?? materialFee);
+    const instalmentsPaid = Number(pay.instalmentsPaid || 0);
+
+    receivedAmount = admissionFeePaid + materialFeePaid;
+    balanceDue = Math.max(0, totalCourseFee - admissionFeePaid - instalmentsPaid);
+
+    paymentReceivedRows.push({ description: 'Admission fee', status: 'Paid', amount: admissionFeePaid });
+    if (materialFeePaid > 0) {
+      paymentReceivedRows.push({ description: 'Study material fee', status: 'Paid', amount: materialFeePaid });
     }
   }
 
-  // Total course fee = admissionFee + sum(instalments) (no material, no exam fee)
-  const totalCourseFee = feeStructureRows.reduce((sum, r) => sum + Number(r.amount || 0), 0);
   const feeTotal = totalCourseFee;
-
-  // Paid at admission from payment record or dueAtAdmission
-  const dueAt = adm.dueAtAdmission || {};
-  const admissionFeePaid = Number(pay.admissionFee ?? dueAt.admission ?? admissionFee);
-  const materialFeePaid = Number(pay.materialFee ?? dueAt.material ?? materialFee);
-  const instalmentsPaid = Number(pay.instalmentsPaid || 0);
-
-  const receivedAmount = admissionFeePaid + materialFeePaid;
-  const balanceDue = Math.max(0, totalCourseFee - admissionFeePaid - instalmentsPaid);
-
-  // Payment received table (Page 2)
-  const paymentReceivedRows = [
-    { description: 'Admission fee', status: 'Paid', amount: admissionFeePaid }
-  ];
-  if (materialFeePaid > 0) {
-    paymentReceivedRows.push({ description: 'Study material fee', status: 'Paid', amount: materialFeePaid });
-  }
 
   const photoUrl = imageSrc(photo);
   const signatureUrl = imageSrc(signature);

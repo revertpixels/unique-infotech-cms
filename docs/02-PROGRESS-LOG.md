@@ -42,6 +42,124 @@
 ## ACTIVE LOG (NEWEST ON TOP)
 ---
 
+### [2026-11-24 13:30] Version 1.8.128 — Fix Admissions Syntax Scope Error & Courses Full Payment Persistence
+
+**What was built:**
+- `public/js/pages/admissions.page.js`:
+  - Resolved `SyntaxError: Identifier 'saving' has already been declared` by removing duplicate declarations and restoring clean, non-duplicated popups for batch change, student drop, and deletion.
+  - Preserved the new shared payment popup admission flow (`openPaymentPopup`), plan selection ("Pay in installments" / "Pay in full"), and standard save flow.
+- `public/js/pages/courses.page.js`:
+  - Fixed persistence and reload of "Full payment amount (Rs)": ensures `fullPaymentAmount` and `fullPaymentDiscount` are populated in both `course.fees` and `course` root document on save.
+  - Hardened `fillForm(v)` and `readFees()` to check both map and root locations, dynamically fetch input elements if needed, and trigger `refresh()` on input to enable the "Save changes" button immediately.
+- `public/js/core/router.js`:
+  - Appended `?v=` version parameter to all page template HTML `fetch` calls to prevent browsers from caching stale HTML templates across version bumps.
+- Verification & Housekeeping:
+  - Ran ESM module syntax check across all 70 JavaScript files (0 errors).
+  - Ran `node tools/check-imports.js` (0 errors across 101 files and 247 imports).
+  - Bumped version to `1.8.128` with `node tools/bump-version.js`.
+
+**Why:**
+- Urgent fix for Students and Admissions page load crash caused by duplicate identifier declarations.
+- Ensuring full payment offer in Courses & Packages saves to Firestore and loads correctly into the form.
+
+**Files touched (created / modified / deleted):**
+- MODIFIED: `public/js/pages/admissions.page.js`
+- MODIFIED: `public/js/pages/courses.page.js`
+- MODIFIED: `public/js/core/router.js`
+- MODIFIED: `public/js/core/app.js`
+- MODIFIED: `docs/02-PROGRESS-LOG.md`
+- All files with `?v=` bumped by `tools/bump-version.js` to `1.8.128`.
+
+**Firestore changes:**
+- None. `match /courses/{courseId}` rules already allow write by superadmin.
+
+---
+
+### [2026-11-24 11:55] Version 1.8.127 — Unified Financials, Shared Admission Payment Popup, Paid in Full Discount, & Student Cleanup Tool
+
+**What was built:**
+- `public/js/services/payment.service.js`:
+  - Created single source of truth `calculateStudentFinancials(student, allPayments)`: calculates `total`, `paid`, `outstanding`, and `percent`. Sums actual payment records excluding exam and late fee payments. Handles legacy admissions where admission fee was recorded on student document before subcollection payment docs were introduced. Minimum outstanding 0.
+  - Re-exported `courseFeeWithoutExam` and `courseBalanceWithoutExam` to delegate directly to `calculateStudentFinancials`.
+  - Added support for payment type `'FULL'` in `recordPaymentTx` with double-payment guard and full course completion status.
+- `public/js/components/payment-popup.js`:
+  - Added support for `'FULL'` payment type, recalculating full course fee and zero fine.
+  - Linked "Open Receipt" and "Print" in `promptOpenReceipt` to `#admissions/<id>/receipt` when payment is for admission.
+- `public/js/pages/student-profile.page.js`:
+  - Unified metrics calculation with `calculateStudentFinancials(s, paymentsCache)` across header notification, key metrics cards, and progress bar.
+  - Added full payment plan support: suppresses installment rows, displays "Course fee paid in full on <date>", Paid = X, Outstanding = 0, noting only examination fee remains.
+- `public/js/pages/pay-fees.page.js`:
+  - Integrated `calculateStudentFinancials(s, currentPayments)`. For full-payment students, suppresses installment rows and dues (except exam fee).
+- `public/pages/courses.html` & `public/js/pages/courses.page.js`:
+  - Added optional "Full payment amount (Rs)" input field with auto-calculated read-only discount % display ("X% discount (saves Rs Y)" or "Empty = no offer").
+  - Saves `fullPaymentAmount` and `fullPaymentDiscount` on course document.
+- `public/js/pages/admissions.page.js`:
+  - Added plan selection choice ("Pay in installments" vs "Pay in full (Rs X)") when selected course has full payment amount.
+  - On "Admit" verification, opens the shared payment popup (`openPaymentPopup`), recording the admission or full payment through `recordPayment` in `payment.service.js`.
+  - Student document receives `paymentPlan: "full" | "installments"`, `fullPaymentAmount`, `fullPaymentDiscount`, and updated `paidAmount`.
+- `public/js/utils/admission-receipt.js`:
+  - Added full payment plan receipt data layout showing standard course fee, full payment discount, amount paid, and zero balance due.
+- `tools/delete-test-students.js`:
+  - Created Super Admin CLI script to authenticate, list test students, confirm deletion with strict "YES" prompt, delete students and subcollections (`payment`, `activity`, `docs`, `aadhaar`) and storage files, and reset receipt counters only if `--reset-counters` flag is passed.
+
+**Why:**
+- Fixed financial calculation bug where legacy students (such as RONI 27010005) showed 50% paid instead of 100% paid / 0 outstanding.
+- Enforced single unified calculation across all pages and unified the admission payment experience with the shared payment modal.
+
+**Files touched (created / modified / deleted):**
+- CREATED: `tools/delete-test-students.js`
+- MODIFIED: `public/js/services/payment.service.js`
+- MODIFIED: `public/js/components/payment-popup.js`
+- MODIFIED: `public/js/pages/student-profile.page.js`
+- MODIFIED: `public/js/pages/pay-fees.page.js`
+- MODIFIED: `public/pages/courses.html`
+- MODIFIED: `public/js/pages/courses.page.js`
+- MODIFIED: `public/js/pages/admissions.page.js`
+- MODIFIED: `public/js/utils/admission-receipt.js`
+- MODIFIED: `public/js/core/app.js` (bumped to 1.8.127)
+- MODIFIED: `docs/02-PROGRESS-LOG.md`
+- MODIFIED: `docs/04-DATABASE-MAP.md`
+- MODIFIED: `docs/05-FILE-INDEX.md`
+- MODIFIED: 35 files across `public/` (?v= query strings updated)
+
+---
+
+### [2026-11-24 11:10] Version 1.8.126 — Super Admin Google Sign-In Hard Block & Email Verification
+
+**What was built:**
+- `public/js/core/auth.js`:
+  - Added email verification check in `signInWithPassword()`: if `user.emailVerified` is false, calls `sendEmailVerification(user)` (throttled once per session) and sets a session notice without blocking sign-in.
+  - In `resolveSession()`: hardened role isolation so that if an account with Firestore role `superadmin` signs in with `google.com` (or any non-password provider), it immediately rejects with reason `superadmin-password-only` and calls `signOut()`.
+- `public/js/pages/login.page.js`:
+  - Added handling for `superadmin-password-only` displaying: "This account is a Super Admin. Please sign in on the Super Admin tab with your email and password. Google sign-in is not allowed for this account."
+  - Handled `SUPERADMIN_PASSWORD_ONLY` error from Cloud Function blocking in the Google sign-in catch handler.
+- `public/index.html`:
+  - Added pending email verification notice toast display on landing after successful sign-in.
+- `functions/index.js` & `functions/package.json`:
+  - Created Cloud Functions 2nd Gen Identity blocking function `beforeUserSignedIn` in region `asia-south1` using `firebase-functions/v2/identity`. If provider is `google.com` and Firestore `users/{email}` has `role == 'superadmin'`, throws `HttpsError('permission-denied', 'SUPERADMIN_PASSWORD_ONLY')`.
+- `firebase.json`:
+  - Added `functions` block targeting the `functions/` directory.
+- `tools/check-imports.js`:
+  - Created automated import resolution validator checking all module imports across `public/` (0 broken imports).
+
+**Why:**
+- To permanently prevent a Super Admin account from ever signing in via Google, preventing account provider linking or removal of the Super Admin's password credential, while keeping Branch Heads' Google sign-in fully operational.
+
+**Files touched (created / modified / deleted):**
+- CREATED: `functions/package.json`
+- CREATED: `functions/index.js`
+- CREATED: `tools/check-imports.js`
+- MODIFIED: `firebase.json`
+- MODIFIED: `public/js/core/auth.js`
+- MODIFIED: `public/js/pages/login.page.js`
+- MODIFIED: `public/index.html`
+- MODIFIED: `public/js/core/app.js` (version bump to 1.8.126)
+- MODIFIED: 35 files across `public/` (?v= query strings updated)
+- MODIFIED: `docs/02-PROGRESS-LOG.md`
+- MODIFIED: `docs/05-FILE-INDEX.md` (added functions/ and tools/check-imports.js)
+
+
+
 ### [2026-11-24 00:35] Version 1.8.125 — Fix Password Toggle Icon in Login Page
 
 **What was built:**

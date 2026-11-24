@@ -8,8 +8,8 @@ import {
   runTransaction,
   serverTimestamp
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { readReceiptNo, writeCounter } from './admission.service.js?v=1.8.125';
-import { fineFor, todayISO } from '../utils/session-rules.js?v=1.8.125';
+import { readReceiptNo, writeCounter } from './admission.service.js?v=1.8.128';
+import { fineFor, todayISO } from '../utils/session-rules.js?v=1.8.128';
 
 const COL = 'students';
 
@@ -182,38 +182,123 @@ export function isExamFeePaid(examFee, paymentsList, student) {
 
 
 /**
+ * Unified calculation of student course package financials.
+ * Used everywhere: Student Profile cards, Payment History, Pay Fees, Students list, Dashboard.
+ *
+ * Rules:
+ * - Paid = sum of all payments for this student EXCEPT exam fee and late fee
+ *   (admission + material + installments, from payment records, not a stale stored counter).
+ * - Total = admission + material + installments (no exam fee).
+ *   If paymentPlan === 'full', Total = fullPaymentAmount || feeTotal.
+ * - Outstanding = Total - Paid, never below 0.
+ * - Percent = Total > 0 ? min(100, round((Paid / Total) * 100)) : 0.
+ *
+ * Handles legacy admissions where admission fee was collected at admission (receiptNo / dueAtAdmission exists)
+ * but no separate 'AD' record was written into the payment subcollection.
+ */
+export function calculateStudentFinancials(student, allPayments = []) {
+  if (!student) {
+    return { total: 0, paid: 0, outstanding: 0, percent: 0 };
+  }
+
+  // 1. Total: course package fee EXCLUDING examination fee
+  let total = 0;
+  if (student.paymentPlan === 'full') {
+    total = Number(student.fullPaymentAmount ?? student.feeTotal ?? 0);
+  } else {
+    const sched = Array.isArray(student.feeSchedule) ? student.feeSchedule : [];
+    const instSum = sched.reduce((sum, it) => sum + Number(it.amount || 0), 0);
+    const adm = Number(student.admissionFee ?? student.dueAtAdmission?.admission ?? student.feeSnapshot?.admission ?? 0);
+    const mat = Number(student.materialFee ?? student.dueAtAdmission?.material ?? student.feeSnapshot?.material ?? 0);
+    if (instSum > 0 || adm > 0 || mat > 0) {
+      total = instSum + adm + mat;
+    } else {
+      const exam = Number(student.examFee ?? student.feeSnapshot?.exam ?? 0);
+      const feeTot = Number(student.feeTotal ?? 0);
+      total = Math.max(0, feeTot - exam);
+    }
+  }
+
+  // 2. Paid: sum of all payments EXCEPT exam fee and late fee
+  const payments = Array.isArray(allPayments) ? allPayments : [];
+  let paidFromRecords = 0;
+  let hasAdmissionInRecords = false;
+  let hasMaterialInRecords = false;
+  let hasFullPaymentInRecords = false;
+
+  for (const p of payments) {
+    const t = String(p.type || '').toUpperCase().trim();
+    // Exclude exam fee and late fee
+    if (t === 'EX' || t === 'EXAM' || t === 'EXAMINATION') continue;
+    if (t === 'LF' || t === 'LATE_FEE' || t === 'LATEFEE') continue;
+
+    if (t === 'AD' || t === 'ADM' || t === 'ADMISSION') {
+      hasAdmissionInRecords = true;
+    }
+    if (t === 'MAT' || t === 'MATERIAL' || t === 'STUDY_MATERIAL') {
+      hasMaterialInRecords = true;
+    }
+    if (t === 'FULL' || t === 'FULL_PAYMENT') {
+      hasFullPaymentInRecords = true;
+    }
+
+    paidFromRecords += Number(p.amount || 0);
+  }
+
+  let paid = paidFromRecords;
+
+  if (student.paymentPlan === 'full') {
+    if (hasFullPaymentInRecords || student.fullPaid === true) {
+      paid = total;
+    }
+  } else {
+    // Legacy support: if student was admitted under old flow where admission fee was collected
+    // but no separate 'AD' record was written to the payment subcollection:
+    if (!hasAdmissionInRecords) {
+      const legacyAdm = Number(
+        student.dueAtAdmission?.admission ??
+        (student.receiptNo || student.admissionPaid ? (student.admissionFee ?? student.feeSnapshot?.admission ?? 0) : 0)
+      );
+      if (legacyAdm > 0) {
+        paid += legacyAdm;
+      }
+    }
+    if (!hasMaterialInRecords) {
+      const legacyMat = Number(
+        student.dueAtAdmission?.material ??
+        (student.materialPaid ? (student.materialFee ?? student.feeSnapshot?.material ?? 0) : 0)
+      );
+      if (legacyMat > 0) {
+        paid += legacyMat;
+      }
+    }
+  }
+
+  // If allPayments was not provided (null / undefined), fall back to stored student.paidAmount if larger
+  if ((allPayments === null || allPayments === undefined) && Number(student.paidAmount ?? student.totalPaid ?? 0) > 0) {
+    paid = Math.max(paid, Number(student.paidAmount ?? student.totalPaid ?? 0));
+  }
+
+  const outstanding = Math.max(0, total - paid);
+  const percent = total > 0 ? Math.min(100, Math.round((paid / total) * 100)) : 0;
+
+  return { total, paid, outstanding, percent };
+}
+
+/**
  * Calculates the total course package fee EXCLUDING examination fee.
- * Sum of: admission fee + study material fee + scheduled installments.
- * Used for all course fee, balance due, and progress percentage displays.
+ * Delegates to calculateStudentFinancials for single source of truth.
  */
 export function courseFeeWithoutExam(student) {
-  if (!student) return 0;
-  const sched = Array.isArray(student.feeSchedule) ? student.feeSchedule : [];
-  const instSum = sched.reduce((sum, it) => sum + Number(it.amount || 0), 0);
-  const adm = Number(student.admissionFee ?? student.feeSnapshot?.admission ?? 0);
-  const mat = Number(student.materialFee ?? student.feeSnapshot?.material ?? 0);
-  if (instSum > 0 || adm > 0 || mat > 0) {
-    return instSum + adm + mat;
-  }
-  const exam = Number(student.examFee ?? student.feeSnapshot?.exam ?? 0);
-  const total = Number(student.feeTotal ?? 0);
-  return Math.max(0, total - exam);
+  return calculateStudentFinancials(student, []).total;
 }
 
 /**
  * Calculates student balance due EXCLUDING examination fee.
- * Subtracts payments made towards admission, material, and installments.
+ * Delegates to calculateStudentFinancials for single source of truth.
  */
 export function courseBalanceWithoutExam(student, allPayments) {
-  if (!student) return 0;
-  const total = courseFeeWithoutExam(student);
-  const payments = Array.isArray(allPayments) ? allPayments : [];
-  const examPaymentsSum = payments
-    .filter(p => ['EX', 'EXAM', 'EXAMINATION'].includes(String(p.type || '').toUpperCase()))
-    .reduce((sum, p) => sum + Number(p.amount || 0), 0);
-  const rawPaid = Number(student.paidAmount ?? student.totalPaid ?? 0);
-  const paidWithoutExam = Math.max(0, rawPaid - examPaymentsSum);
-  return Math.max(0, total - paidWithoutExam);
+  return calculateStudentFinancials(student, allPayments).outstanding;
 }
 
 /**
@@ -300,12 +385,17 @@ export async function recordPaymentTx(tx, {
     if (sData.examPaid === true) {
       throw new Error('Exam fee has already been paid for this student.');
     }
+  } else if (type === 'FULL') {
+    if (sData.fullPaid === true) {
+      throw new Error('Course fee has already been paid in full for this student.');
+    }
   }
 
   // 2. Transaction Read: Receipt counter
+  const counterType = type === 'FULL' ? 'AD' : (type || 'IN');
   const rc = await readReceiptNo(tx, {
     org,
-    type: type || 'IN',
+    type: counterType,
     branchCode: bCode,
     date: pDate
   });
@@ -314,7 +404,7 @@ export async function recordPaymentTx(tx, {
   // Write counter increment
   writeCounter(tx, rc.ref, rc.next, {
     org,
-    type: type || 'IN',
+    type: counterType,
     branchCode: bCode,
     date: pDate
   });
@@ -399,9 +489,18 @@ export async function recordPaymentTx(tx, {
   } else if (type === 'AD') {
     studentUpdate.admissionPaid = true;
     studentUpdate.admissionPaidOn = pDate;
+    studentUpdate.admissionReceiptNo = rc.receiptNo;
   } else if (type === 'MAT') {
     studentUpdate.materialPaid = true;
     studentUpdate.materialPaidOn = pDate;
+    studentUpdate.materialReceiptNo = rc.receiptNo;
+  } else if (type === 'FULL') {
+    studentUpdate.fullPaid = true;
+    studentUpdate.fullPaidOn = pDate;
+    studentUpdate.fullReceiptNo = rc.receiptNo;
+    studentUpdate.paymentPlan = 'full';
+    studentUpdate.admissionPaid = true;
+    studentUpdate.admissionPaidOn = pDate;
   }
 
   tx.update(studentRef, studentUpdate);
@@ -409,7 +508,7 @@ export async function recordPaymentTx(tx, {
   // Activity log entry (append-only)
   const feeLabel = type === 'EX'
     ? 'Exam fee'
-    : (type === 'MAT' ? 'Study material fee' : (type === 'AD' ? 'Admission fee' : `Installment ${installmentNo}`));
+    : (type === 'MAT' ? 'Study material fee' : (type === 'AD' ? 'Admission fee' : (type === 'FULL' ? 'Course fee (Paid in full)' : `Installment ${installmentNo}`)));
 
   const summary = `Collected ${rc.receiptNo} - ${feeLabel} Rs ${numAmount}` +
     (numLate > 0 ? (actualWaived ? ` (late fee Rs ${numLate} waived)` : ` (+ Rs ${numLate} late fee)`) : '') +

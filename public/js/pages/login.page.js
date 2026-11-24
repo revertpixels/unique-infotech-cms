@@ -8,6 +8,7 @@ const URL_REASONS = {
   disabled: true,
   'wrong-method-admin': true,
   'wrong-method-head': true,
+  'superadmin-password-only': true,
   network: true
 };
 
@@ -16,7 +17,8 @@ const MESSAGES = {
   signedout: 'You have been signed out.',
   'not-authorised': 'This account is not authorised to use this system. Please contact the Super Admin.',
   disabled: 'This account has been disabled. Please contact the Super Admin.',
-  'wrong-method-admin': 'The Super Admin must sign in with email and password.',
+  'wrong-method-admin': 'This account is a Super Admin. Please sign in on the Super Admin tab with your email and password. Google sign-in is not allowed for this account.',
+  'superadmin-password-only': 'This account is a Super Admin. Please sign in on the Super Admin tab with your email and password. Google sign-in is not allowed for this account.',
   'wrong-method-head': 'Branch and School Heads must sign in with Google.',
   network: 'Network problem. Check your internet connection and try again.',
   'bad-credentials': 'Incorrect email or password.',
@@ -156,7 +158,10 @@ googleBtn.addEventListener('click', async () => {
     await handleAuthResult(user);
   } catch (err) {
     const code = err && err.code ? err.code : '';
-    if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') {
+    const errDetails = ((err && err.message) || '') + ' ' + ((err && err.code) || '') + ' ' + JSON.stringify((err && err.customData) || '');
+    if (errDetails.includes('SUPERADMIN_PASSWORD_ONLY') || code === 'auth/blocking-cloud-function-error') {
+      showMessage('superadmin-password-only');
+    } else if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') {
       // show nothing
     } else if (code === 'auth/popup-blocked') {
       showMessage('popup-blocked');

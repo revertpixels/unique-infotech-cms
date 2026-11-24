@@ -11,21 +11,22 @@ import {
   runTransaction,
   serverTimestamp
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { createSelect } from '../components/ui-select.js?v=1.8.125';
-import { openPopup } from '../components/modal.js?v=1.8.125';
-import { confirmDialog } from '../components/ui-confirm.js?v=1.8.125';
-import { showToast } from '../components/toast.js?v=1.8.125';
-import { getSelectedSessionId, getCachedSessions } from '../core/sessions.js?v=1.8.125';
-import { todayISO, fmtDate, examWindowOf, installmentSchedule } from '../utils/session-rules.js?v=1.8.125';
-import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.125';
+import { createSelect } from '../components/ui-select.js?v=1.8.128';
+import { openPopup } from '../components/modal.js?v=1.8.128';
+import { confirmDialog } from '../components/ui-confirm.js?v=1.8.128';
+import { showToast } from '../components/toast.js?v=1.8.128';
+import { getSelectedSessionId, getCachedSessions } from '../core/sessions.js?v=1.8.128';
+import { todayISO, fmtDate, examWindowOf, installmentSchedule } from '../utils/session-rules.js?v=1.8.128';
+import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.128';
 import {
   calculateLateFee,
   fetchStudentPayments,
   isInstallmentPaid,
   isExamFeePaid,
   courseFeeWithoutExam,
-  courseBalanceWithoutExam
-} from '../services/payment.service.js?v=1.8.125';
+  courseBalanceWithoutExam,
+  calculateStudentFinancials
+} from '../services/payment.service.js?v=1.8.128';
 
 let currentUserProfile = null;
 let currentCtx = 'youth';
@@ -713,29 +714,28 @@ function renderPaymentSummary() {
   const s = currentStudent;
   if (!s) return;
 
-  const total = courseFeeWithoutExam(s);
-  const outstanding = courseBalanceWithoutExam(s, currentPayments);
-  const paid = Math.max(0, total - outstanding);
+  const { total, paid, outstanding, percent: pct } = calculateStudentFinancials(s, currentPayments);
 
   // Calculate late fee as of today for all overdue unpaid installments
   let totalLateFeeToday = 0;
-  const sched = s.feeSchedule || [];
-  const today = todayISO();
+  if (s.paymentPlan !== 'full') {
+    const sched = s.feeSchedule || [];
+    const today = todayISO();
 
-  sched.forEach(it => {
-    if (!isInstallmentPaid(it, currentPayments, s)) {
-      if (today > it.due) {
-        totalLateFeeToday += calculateLateFee(it.due, today);
+    sched.forEach(it => {
+      if (!isInstallmentPaid(it, currentPayments, s)) {
+        if (today > it.due) {
+          totalLateFeeToday += calculateLateFee(it.due, today);
+        }
       }
-    }
-  });
+    });
+  }
 
   $('pf-m-total').textContent = formatINR(total);
   $('pf-m-paid').textContent = formatINR(paid);
   $('pf-m-outstanding').textContent = formatINR(outstanding);
   $('pf-m-latefee').textContent = formatINR(totalLateFeeToday);
 
-  const pct = total > 0 ? Math.min(100, Math.round((paid / total) * 100)) : 0;
   $('pf-m-pct').textContent = pct + '% of total fee';
 }
 
@@ -749,6 +749,16 @@ function renderInstallmentScheduleTable() {
   tbody.textContent = '';
 
   const s = currentStudent;
+  if (s.paymentPlan === 'full') {
+    const tr = mk('tr');
+    const td = mk('td', 'text-center font-semibold text-success', `Course fee paid in full on ${formatDateIN(s.fullPaidOn || s.admissionDate || todayISO())}. No installments due. Only examination fee remains.`);
+    td.colSpan = 8;
+    td.style.padding = '18px 12px';
+    tr.appendChild(td);
+    tbody.appendChild(tr);
+    return;
+  }
+
   const sched = s.feeSchedule || [];
   const today = todayISO();
 

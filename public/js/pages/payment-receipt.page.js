@@ -5,15 +5,15 @@ import {
   doc,
   getDoc
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { inWords } from '../utils/admission-receipt.js?v=1.8.125';
-import { showToast } from '../components/toast.js?v=1.8.125';
-import { fmtDate, todayISO } from '../utils/session-rules.js?v=1.8.125';
+import { inWords } from '../utils/admission-receipt.js?v=1.8.128';
+import { showToast } from '../components/toast.js?v=1.8.128';
+import { fmtDate, todayISO } from '../utils/session-rules.js?v=1.8.128';
 import {
   fetchStudentPayments,
   isInstallmentPaid,
   installmentCourseFee,
   installmentBalanceDue
-} from '../services/payment.service.js?v=1.8.125';
+} from '../services/payment.service.js?v=1.8.128';
 
 function $(id) {
   return document.getElementById(id);

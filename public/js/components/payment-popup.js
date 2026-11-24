@@ -1,11 +1,11 @@
 // payment-popup.js — Single Shared Payment Popup for Student Profile and Pay Fees
 import { auth } from '../config/firebase-config.js';
-import { openPopup } from './modal.js?v=1.8.125';
-import { createSelect } from './ui-select.js?v=1.8.125';
-import { formatINR, formatDateIN } from '../utils/formatter.js?v=1.8.125';
-import { todayISO } from '../utils/session-rules.js?v=1.8.125';
-import { showToast } from './toast.js?v=1.8.125';
-import { playPaymentSuccessSound } from '../utils/sound.js?v=1.8.125';
+import { openPopup } from './modal.js?v=1.8.128';
+import { createSelect } from './ui-select.js?v=1.8.128';
+import { formatINR, formatDateIN } from '../utils/formatter.js?v=1.8.128';
+import { todayISO } from '../utils/session-rules.js?v=1.8.128';
+import { showToast } from './toast.js?v=1.8.128';
+import { playPaymentSuccessSound } from '../utils/sound.js?v=1.8.128';
 import {
   recordPayment,
   fetchStudentPayments,
@@ -14,7 +14,7 @@ import {
   isAdmissionFeePaid,
   isMaterialFeePaid,
   isExamFeePaid
-} from '../services/payment.service.js?v=1.8.125';
+} from '../services/payment.service.js?v=1.8.128';
 
 function formatDateTime(d) {
   const dt = d instanceof Date ? d : new Date(d);
@@ -191,7 +191,11 @@ export function promptOpenReceipt({
   openBtn.innerHTML = '<i data-lucide="receipt"></i><span>Open Receipt</span>';
   openBtn.onclick = () => {
     close();
-    location.hash = `#/payments/${studentDocId}/${paymentId}/receipt?from=${from}`;
+    if (from === 'admissions') {
+      location.hash = `#/admissions/${studentDocId}/receipt`;
+    } else {
+      location.hash = `#/payments/${studentDocId}/${paymentId}/receipt?from=${from}`;
+    }
   };
 
   const printBtn = document.createElement('button');
@@ -201,7 +205,11 @@ export function promptOpenReceipt({
   printBtn.innerHTML = '<i data-lucide="printer"></i><span>Print</span>';
   printBtn.onclick = () => {
     close();
-    location.hash = `#/payments/${studentDocId}/${paymentId}/receipt?from=${from}&print=1`;
+    if (from === 'admissions') {
+      location.hash = `#/admissions/${studentDocId}/receipt?print=1`;
+    } else {
+      location.hash = `#/payments/${studentDocId}/${paymentId}/receipt?from=${from}&print=1`;
+    }
   };
 
   const doneBtn = document.createElement('button');
@@ -267,8 +275,18 @@ export async function openPaymentPopup({
 
   const typeOptions = [];
 
-  // 1. Admission Fee (only if not yet collected and amount > 0)
-  if (admFee > 0 && !isAdmissionFeePaid(admFee, paymentsList, s)) {
+  // 0. Course Fee Paid in Full (if full payment plan and not yet paid)
+  if (s.paymentPlan === 'full' && !s.fullPaid) {
+    const fullAmt = Number(s.fullPaymentAmount || s.feeTotal || 0);
+    typeOptions.push({
+      value: 'FULL',
+      label: `Course Fee (Paid in Full) — ${formatINR(fullAmt)}`,
+      icon: 'award'
+    });
+  }
+
+  // 1. Admission Fee (only if not full-payment plan, not yet collected, and amount > 0)
+  if (s.paymentPlan !== 'full' && admFee > 0 && !isAdmissionFeePaid(admFee, paymentsList, s)) {
     typeOptions.push({
       value: 'AD',
       label: `Admission Fee — ${formatINR(admFee)}`,
@@ -276,8 +294,8 @@ export async function openPaymentPopup({
     });
   }
 
-  // 2. Study Material Fee (only if not yet collected and amount > 0)
-  if (matFee > 0 && !isMaterialFeePaid(matFee, paymentsList, s)) {
+  // 2. Study Material Fee (only if not full-payment plan, not yet collected, and amount > 0)
+  if (s.paymentPlan !== 'full' && matFee > 0 && !isMaterialFeePaid(matFee, paymentsList, s)) {
     typeOptions.push({
       value: 'MAT',
       label: `Study Material Fee — ${formatINR(matFee)}`,
@@ -285,18 +303,20 @@ export async function openPaymentPopup({
     });
   }
 
-  // 3. Installments (1..N) (only pending / uncollected installments)
-  sched.forEach((it) => {
-    const itNo = Number(it.no ?? it.installmentNo);
-    if (!isInstallmentPaid(it, paymentsList, s)) {
-      typeOptions.push({
-        value: 'IN_' + itNo,
-        label: `Installment ${itNo} (${it.month || 'Month ' + itNo}) — ${formatINR(it.amount || instFee)}`,
-        icon: 'credit-card',
-        schedItem: it
-      });
-    }
-  });
+  // 3. Installments (1..N) (only for installments plan)
+  if (s.paymentPlan !== 'full') {
+    sched.forEach((it) => {
+      const itNo = Number(it.no ?? it.installmentNo);
+      if (!isInstallmentPaid(it, paymentsList, s)) {
+        typeOptions.push({
+          value: 'IN_' + itNo,
+          label: `Installment ${itNo} (${it.month || 'Month ' + itNo}) — ${formatINR(it.amount || instFee)}`,
+          icon: 'credit-card',
+          schedItem: it
+        });
+      }
+    });
+  }
 
   // 4. Examination Fee (only if not yet collected and amount > 0, and not blocked by session fees)
   let sessionExamFee = examFee;
@@ -336,7 +356,8 @@ export async function openPaymentPopup({
   let initialTypeVal = typeOptions[0]?.value;
   if (preselectedOption) {
     let targetVal = '';
-    if (preselectedOption === 'AD') targetVal = 'AD';
+    if (preselectedOption === 'FULL') targetVal = 'FULL';
+    else if (preselectedOption === 'AD') targetVal = 'AD';
     else if (preselectedOption === 'MAT') targetVal = 'MAT';
     else if (preselectedOption === 'EX') targetVal = 'EX';
     else if (String(preselectedOption).startsWith('IN_')) targetVal = String(preselectedOption);
@@ -646,6 +667,9 @@ export async function openPaymentPopup({
     if (val === 'AD') {
       baseAmt = admFee;
       fineAmt = 0;
+    } else if (val === 'FULL') {
+      baseAmt = Number(s.fullPaymentAmount || s.feeTotal || 0);
+      fineAmt = 0;
     } else if (val === 'EX') {
       baseAmt = sessionExamFee;
       fineAmt = 0;
@@ -742,8 +766,9 @@ export async function openPaymentPopup({
     const isExam = val === 'EX';
     const isMat = val === 'MAT';
     const isAdm = val === 'AD';
-    const instNo = (isExam || isMat || isAdm) ? null : Number(val.slice(3));
-    const payType = isExam ? 'EX' : (isMat ? 'MAT' : (isAdm ? 'AD' : 'IN'));
+    const isFull = val === 'FULL';
+    const instNo = (isExam || isMat || isAdm || isFull) ? null : Number(val.slice(3));
+    const payType = isExam ? 'EX' : (isMat ? 'MAT' : (isAdm ? 'AD' : (isFull ? 'FULL' : 'IN')));
 
     let schedItem = null;
     if (payType === 'IN') {
@@ -787,7 +812,7 @@ export async function openPaymentPopup({
 
       const forText = isExam
         ? 'Board Examination Fee'
-        : (isMat ? 'Study Material Fee' : (isAdm ? 'Admission Fee' : `Installment ${instNo}${monthLabel ? ` - ${monthLabel}` : ''}`));
+        : (isMat ? 'Study Material Fee' : (isAdm ? 'Admission Fee' : (isFull ? 'Course Fee (Paid in Full)' : `Installment ${instNo}${monthLabel ? ` - ${monthLabel}` : ''}`)));
 
       const actualLate = waived ? 0 : lateAmount;
       const totalPaid = baseAmount + actualLate;

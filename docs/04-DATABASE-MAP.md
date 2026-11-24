@@ -75,6 +75,8 @@ Rules: Super Admin full access. A Branch Head can `get` only the branch whose ID
 | `isPackage` | boolean | `false` = base course, `true` = 12/18-month package |
 | `semesters` | array | `[{ semNumber, baseCourseId, admissionFee, installmentFee, installmentCount (4), examFee, studyMaterialFee }]` — a base course has exactly 1 entry; a 12-month package 2; an 18-month package 3 |
 | `totalFees` | number | Denormalised sum, calculated by the app |
+| `fees.fullPaymentAmount` | number | Optional. One-time course payment amount when paying in full |
+| `fees.fullPaymentDiscount` | number | Optional. Discount percentage auto-calculated from course fee and fullPaymentAmount |
 | `status` | string | `active` / `inactive` |
 
 Rules: Super Admin write. Read by Super Admin and active Branch Heads only (School Head cannot read Youth data).
@@ -115,6 +117,9 @@ Rules: Super Admin write. Read by Super Admin and the active School Head.
 | `tags` | e.g. `completedSem1Manual` for the manual Sem 2/3 entry of archived students |
 | `documents` | Storage PATHS: `{ photoPath, idProofPath, idProofType, marksheetPath, signaturePath }` |
 | `feePlan` | Snapshot of the fees at admission/upgrade, per semester, so later fee edits never change an existing student's dues |
+| `paymentPlan` | `'full'` or `'installments'`. Default is `'installments'`. When `'full'`, no installment schedule is created and course is paid in one transaction |
+| `fullPaymentAmount`, `fullPaymentDiscount` | Full payment cost and discount % if admitted under the full payment plan |
+| `fullPaid`, `fullPaidOn`, `fullReceiptNo` | Full payment tracking fields when paid in full |
 | `dues` | Per semester: admission, installments 1-4 (each with `amount`, `dueDate`, `paymentId` or null), exam, material. This lets Pay Fees work from ONE `getDoc` |
 | `archived` | boolean, default false |
 | `createdBy`, `createdAt`, `updatedAt` | Audit |

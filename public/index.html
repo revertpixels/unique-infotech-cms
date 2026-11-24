@@ -9,9 +9,9 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/main.css?v=1.8.125">
-  <link rel="stylesheet" href="css/components/multi-select.css?v=1.8.125">
-  <script>window.__BUILD__ = '1.8.125';</script>
+  <link rel="stylesheet" href="css/main.css?v=1.8.128">
+  <link rel="stylesheet" href="css/components/multi-select.css?v=1.8.128">
+  <script>window.__BUILD__ = '1.8.128';</script>
   <style>
     body.auth-pending {
       visibility: hidden;
@@ -29,17 +29,32 @@
     </div>
   </div>
   <script type="module">
-    import { getContext, setContext, loadSavedContext } from './js/core/app.js?v=1.8.125';
-    import { requireSession, logout } from './js/core/guard.js?v=1.8.125';
-    import { startRouter } from './js/core/router.js?v=1.8.125';
-    import { confirmLeave } from './js/utils/unsaved-guard.js?v=1.8.125';
-    import { renderSidebar, setActiveRoute, setCollapsed, toggleDrawer, closeDrawer, initSidebar } from './js/components/sidebar.js?v=1.8.125';
-    import { renderTopbar, setPageTitle, setSwitcherActive } from './js/components/topbar.js?v=1.8.125';
+    import { getContext, setContext, loadSavedContext } from './js/core/app.js?v=1.8.128';
+    import { requireSession, logout } from './js/core/guard.js?v=1.8.128';
+    import { startRouter } from './js/core/router.js?v=1.8.128';
+    import { confirmLeave } from './js/utils/unsaved-guard.js?v=1.8.128';
+    import { renderSidebar, setActiveRoute, setCollapsed, toggleDrawer, closeDrawer, initSidebar } from './js/components/sidebar.js?v=1.8.128';
+    import { renderTopbar, setPageTitle, setSwitcherActive } from './js/components/topbar.js?v=1.8.128';
     import { db } from './js/config/firebase-config.js';
     import { doc, getDoc } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
 
     (async () => {
       const profile = await requireSession();
+
+      try {
+        const pendingNotice = sessionStorage.getItem('pending_verification_notice');
+        if (pendingNotice) {
+          sessionStorage.removeItem('pending_verification_notice');
+          import('./js/components/toast.js?v=1.8.128').then(({ showToast }) => {
+            showToast({
+              type: 'info',
+              title: 'Email Verification',
+              message: pendingNotice,
+              duration: 8000
+            });
+          }).catch(() => {});
+        }
+      } catch (_) {}
 
       let startCtx;
       if (profile.role === 'superadmin') {
@@ -184,7 +199,7 @@ window.APP_CACHE = window.APP_CACHE || {};
       }
     })();
   </script>
-  <script type="module" src="js/core/app.js?v=1.8.125"></script>
+  <script type="module" src="js/core/app.js?v=1.8.128"></script>
 </body>
 </html>
 

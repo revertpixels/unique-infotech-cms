@@ -14,23 +14,25 @@ import {
   arrayUnion,
   addDoc
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.125';
-import { registerDirty, confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.125';
-import { buildStats, buildToolbar, renderPager, renderEmptyTableState } from '../components/list-page.js?v=1.8.125';
-import { createSelect } from '../components/ui-select.js?v=1.8.125';
-import { openMenu } from '../components/ui-menu.js?v=1.8.125';
-import { confirmDialog } from '../components/ui-confirm.js?v=1.8.125';
-import { openPopup } from '../components/modal.js?v=1.8.125';
-import { createDatePicker } from '../components/ui-datepicker.js?v=1.8.125';
-import { getSelectedSessionId, getCachedSessions, loadSessions, todayISO } from '../core/sessions.js?v=1.8.125';
-import { firstInstallmentOf, admissionState, sessionLabel, installmentSchedule, batchAllowsCourse, batchCourseLabel, isCourseActive } from '../utils/session-rules.js?v=1.8.125';
-import { formatINR, formatDateIN, initials } from '../utils/formatter.js?v=1.8.125';
-import { validatePhone, validateEmail, validateDOB, validateName, validateRequired } from '../utils/validator.js?v=1.8.125';
-import { listStudentsRaw, checkDuplicatePhone, readStudentId, readReceiptNo, writeCounter, createStudentWithDocs, updateStudentWithDocs, updateStudent, deleteStudent } from '../services/admission.service.js?v=1.8.125';
-import { feeTotal } from '../utils/fees.js?v=1.8.125';
-import { compressTo100KB, readAsDataURL, blobToDataURL, isImageFile, formatBytes } from '../utils/image-compress.js?v=1.8.125';
-import { fetchStudentPayments } from '../services/payment.service.js?v=1.8.125';
-import { playPaymentSuccessSound } from '../utils/sound.js?v=1.8.125';
+import { showToast } from '../components/toast.js?v=1.8.128';
+import { registerDirty, confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.128';
+import { buildStats, buildToolbar, renderPager, renderEmptyTableState } from '../components/list-page.js?v=1.8.128';
+import { createSelect } from '../components/ui-select.js?v=1.8.128';
+import { openMenu } from '../components/ui-menu.js?v=1.8.128';
+import { confirmDialog } from '../components/ui-confirm.js?v=1.8.128';
+import { openPopup } from '../components/modal.js?v=1.8.128';
+import { createDatePicker } from '../components/ui-datepicker.js?v=1.8.128';
+import { getSelectedSessionId, getCachedSessions, loadSessions, todayISO } from '../core/sessions.js?v=1.8.128';
+import { firstInstallmentOf, admissionState, sessionLabel, installmentSchedule, batchAllowsCourse, batchCourseLabel, isCourseActive } from '../utils/session-rules.js?v=1.8.128';
+import { formatINR, formatDateIN, initials } from '../utils/formatter.js?v=1.8.128';
+import { validatePhone, validateEmail, validateDOB, validateName, validateRequired } from '../utils/validator.js?v=1.8.128';
+import { listStudentsRaw, checkDuplicatePhone, readStudentId, readReceiptNo, writeCounter, createStudentWithDocs, updateStudentWithDocs, updateStudent, deleteStudent } from '../services/admission.service.js?v=1.8.128';
+import { feeTotal } from '../utils/fees.js?v=1.8.128';
+import { compressTo100KB, readAsDataURL, blobToDataURL, isImageFile, formatBytes } from '../utils/image-compress.js?v=1.8.128';
+import { fetchStudentPayments, calculateStudentFinancials } from '../services/payment.service.js?v=1.8.128';
+import { playPaymentSuccessSound } from '../utils/sound.js?v=1.8.128';
+import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.128';
+import { APP_CACHE } from '../core/app.js?v=1.8.128';
 
 const COL = 'students';
 
@@ -850,12 +852,20 @@ export async function mount({ container, profile, ctx }) {
   }
 
   let totalRowEl = null;
+  let selectedPaymentPlan = 'installments';
 
   function updateFees(c, s) {
     const host = $('adm-fee-grid');
     if (!host) return;
     host.innerHTML = '';
     if (totalRowEl) { totalRowEl.remove(); totalRowEl = null; }
+
+    const f = c ? c.fees || {} : {};
+    const hasFullOffer = !editId && f.fullPaymentAmount && Number(f.fullPaymentAmount) > 0;
+    if (!hasFullOffer && selectedPaymentPlan === 'full') {
+      selectedPaymentPlan = 'installments';
+    }
+    const isFull = (selectedPaymentPlan === 'full') && hasFullOffer;
 
     const items = [
       { label: 'Admission fee', key: 'admission', cls: 'adm-fee-admission' },
@@ -868,7 +878,6 @@ export async function mount({ container, profile, ctx }) {
       div.appendChild(mk('div', 'adm-fee-label', it.label));
       let val = '—';
       if (c) {
-        const f = c.fees || {};
         const amt = f[it.key] || 0;
         if (it.key === 'installment' && amt > 0) {
           val = formatINR(amt) + ' x 4 = ' + formatINR(amt * 4);
@@ -886,40 +895,119 @@ export async function mount({ container, profile, ctx }) {
       }
     });
 
-    const f = c ? c.fees || {} : {};
-    const total = feeTotal(f);
+    if (hasFullOffer) {
+      const fullAmt = Number(f.fullPaymentAmount);
+      const courseFeeTotal = Number(f.admission || 0) + Number(f.installment || 0) * 4 + Number(f.material || 0);
+      const disc = f.fullPaymentDiscount || (courseFeeTotal > fullAmt ? Math.round(((courseFeeTotal - fullAmt) / courseFeeTotal) * 100) : 0);
+
+      const planCard = mk('div', 'adm-plan-card');
+      planCard.style.gridColumn = '1 / -1';
+      planCard.style.marginTop = '10px';
+      planCard.style.padding = '12px 14px';
+      planCard.style.borderRadius = 'var(--r, 8px)';
+      planCard.style.border = '1px solid var(--border, #e2e8f0)';
+      planCard.style.background = 'var(--surface-muted, #f8fafc)';
+      planCard.style.display = 'flex';
+      planCard.style.flexDirection = 'column';
+      planCard.style.gap = '8px';
+
+      const planHeader = mk('div', 'font-semibold', 'Payment Plan Choice');
+      planHeader.style.fontSize = '13px';
+      planHeader.style.color = 'var(--text-main, #0f172a)';
+
+      const planOptions = mk('div', '');
+      planOptions.style.display = 'flex';
+      planOptions.style.gap = '20px';
+      planOptions.style.flexWrap = 'wrap';
+
+      const lblInst = document.createElement('label');
+      lblInst.style.display = 'flex';
+      lblInst.style.alignItems = 'center';
+      lblInst.style.gap = '6px';
+      lblInst.style.cursor = 'pointer';
+      lblInst.style.fontSize = '13px';
+      lblInst.style.fontWeight = selectedPaymentPlan === 'installments' ? '600' : 'normal';
+
+      const rInst = document.createElement('input');
+      rInst.type = 'radio';
+      rInst.name = 'adm_payment_plan';
+      rInst.value = 'installments';
+      rInst.checked = selectedPaymentPlan === 'installments';
+      rInst.onchange = () => {
+        selectedPaymentPlan = 'installments';
+        updateFees(c, s);
+      };
+      lblInst.append(rInst, document.createTextNode('Pay in installments'));
+
+      const lblFull = document.createElement('label');
+      lblFull.style.display = 'flex';
+      lblFull.style.alignItems = 'center';
+      lblFull.style.gap = '6px';
+      lblFull.style.cursor = 'pointer';
+      lblFull.style.fontSize = '13px';
+      lblFull.style.fontWeight = selectedPaymentPlan === 'full' ? '600' : 'normal';
+
+      const rFull = document.createElement('input');
+      rFull.type = 'radio';
+      rFull.name = 'adm_payment_plan';
+      rFull.value = 'full';
+      rFull.checked = selectedPaymentPlan === 'full';
+      rFull.onchange = () => {
+        selectedPaymentPlan = 'full';
+        updateFees(c, s);
+      };
+      lblFull.append(rFull, document.createTextNode(`Pay in full (Rs ${formatINR(fullAmt)})`));
+      if (disc > 0) {
+        const badge = mk('span', 'pill up font-semibold', `${disc}% off`);
+        badge.style.fontSize = '11px';
+        badge.style.marginLeft = '4px';
+        badge.style.padding = '1px 6px';
+        lblFull.appendChild(badge);
+      }
+
+      planOptions.append(lblInst, lblFull);
+      planCard.append(planHeader, planOptions);
+      host.appendChild(planCard);
+    }
+
+    const total = isFull ? (Number(f.fullPaymentAmount) + Number(f.exam || 0)) : feeTotal(f);
     const tr = mk('div', 'adm-fee-total-row');
     const left = mk('div', 'adm-fee-total-left');
     const label = mk('div', 'adm-fee-total-label', 'Total payable');
     let sentence;
     if (c) {
-      const payNowTotal = Number(f.admission || 0) + Number(f.material || 0);
-      let payNowPart;
-      if (f.material && f.material > 0) {
-        payNowPart = '<b>Pay ' + formatINR(payNowTotal) + ' now</b> (admission fee ' + formatINR(f.admission || 0) + ' + study material fee ' + formatINR(f.material || 0) + ')';
+      if (isFull) {
+        const fullAmt = Number(f.fullPaymentAmount);
+        sentence = `<b>Pay ${formatINR(fullAmt)} now</b> as full course package fee. No installment schedule is created` + (f.exam && f.exam > 0 ? `, and ${formatINR(f.exam)} exam fee before the session ends.` : '.');
       } else {
-        payNowPart = '<b>Pay ' + formatINR(f.admission || 0) + ' now</b> as admission fee';
-      }
-      if (s) {
-        const sched = installmentSchedule(s);
-        const monthNames = sched.map(function (it) {
-          const d = toDate(it.due);
-          return d ? d.toLocaleDateString('en-IN', { month: 'short' }) : '';
-        });
-        const dueItems = monthNames.map(function (m) { return '10 ' + m; });
-        const dueStr = dueItems.slice(0, 3).join(', ') + ' and ' + dueItems[3];
-        sentence = payNowPart + ', then 4 installments of ' + formatINR(f.installment || 0) + ' due on ' + dueStr;
-        if (f.exam && f.exam > 0) {
-          sentence += ', and ' + formatINR(f.exam || 0) + ' exam fee before the session ends. Late payment: ₹1 per day after the 10th.';
+        const payNowTotal = Number(f.admission || 0) + Number(f.material || 0);
+        let payNowPart;
+        if (f.material && f.material > 0) {
+          payNowPart = '<b>Pay ' + formatINR(payNowTotal) + ' now</b> (admission fee ' + formatINR(f.admission || 0) + ' + study material fee ' + formatINR(f.material || 0) + ')';
         } else {
-          sentence += '. Late payment: ₹1 per day after the 10th.';
+          payNowPart = '<b>Pay ' + formatINR(f.admission || 0) + ' now</b> as admission fee';
         }
-      } else {
-        sentence = payNowPart + ', then 4 installments of ' + formatINR(f.installment || 0) + ' due on the 10th of months 3-6 of the session';
-        if (f.exam && f.exam > 0) {
-          sentence += ', and ' + formatINR(f.exam || 0) + ' exam fee before the session ends. Late payment: ₹1 per day after the 10th.';
+        if (s) {
+          const sched = installmentSchedule(s);
+          const monthNames = sched.map(function (it) {
+            const d = toDate(it.due);
+            return d ? d.toLocaleDateString('en-IN', { month: 'short' }) : '';
+          });
+          const dueItems = monthNames.map(function (m) { return '10 ' + m; });
+          const dueStr = dueItems.slice(0, 3).join(', ') + ' and ' + dueItems[3];
+          sentence = payNowPart + ', then 4 installments of ' + formatINR(f.installment || 0) + ' due on ' + dueStr;
+          if (f.exam && f.exam > 0) {
+            sentence += ', and ' + formatINR(f.exam || 0) + ' exam fee before the session ends. Late payment: ₹1 per day after the 10th.';
+          } else {
+            sentence += '. Late payment: ₹1 per day after the 10th.';
+          }
         } else {
-          sentence += '. Late payment: ₹1 per day after the 10th.';
+          sentence = payNowPart + ', then 4 installments of ' + formatINR(f.installment || 0) + ' due on the 10th of months 3-6 of the session';
+          if (f.exam && f.exam > 0) {
+            sentence += ', and ' + formatINR(f.exam || 0) + ' exam fee before the session ends. Late payment: ₹1 per day after the 10th.';
+          } else {
+            sentence += '. Late payment: ₹1 per day after the 10th.';
+          }
         }
       }
     } else {
@@ -1731,14 +1819,16 @@ export async function mount({ container, profile, ctx }) {
       const cc = courseOf(v.courseId);
       const bb = batchOf(v.batchId);
       const ss = sessions.find(s => s.id === v.sessionId);
-      const totalFee = feeTotal(cc.fees || {});
       const ff = cc ? cc.fees || {} : {};
-      const dueNow = Number(ff.admission || 0) + Number(ff.material || 0);
+      const isFull = (selectedPaymentPlan === 'full') && (ff.fullPaymentAmount && Number(ff.fullPaymentAmount) > 0);
+      const totalFee = isFull ? (Number(ff.fullPaymentAmount) + Number(ff.exam || 0)) : feeTotal(cc.fees || {});
+      const dueNow = isFull ? Number(ff.fullPaymentAmount) : (Number(ff.admission || 0) + Number(ff.material || 0));
       const summary =
         'Student: ' + v.name + '\n' +
         'Course: ' + (cc.courseCode || cc.code || '') + ' - ' + (cc.name || '') + '\n' +
         'Batch: ' + (bb.name || '-') + '\n' +
         'Session: ' + (ss ? ss.name : '-') + '\n' +
+        (isFull ? 'Plan: Paid in full (Discounted)\n' : '') +
         'Total fee: Rs. ' + formatINR(totalFee) + '\n' +
         'Due now: Rs. ' + formatINR(dueNow);
       const ok = await confirmDialog({
@@ -1849,9 +1939,13 @@ export async function mount({ container, profile, ctx }) {
           writeCounter(tx, rc.ref, rc.next, { org: 'youth', type: 'AD', branchCode: branchCode, date: v.admissionDate });
         }
 
+        const isFull = !editId && (selectedPaymentPlan === 'full') && (f.fullPaymentAmount && Number(f.fullPaymentAmount) > 0);
         const data = {
           studentId: studentId,
           receiptNo: receiptNo,
+          paymentPlan: isFull ? 'full' : 'installments',
+          fullPaymentAmount: isFull ? Number(f.fullPaymentAmount) : null,
+          fullPaymentDiscount: isFull ? Number(f.fullPaymentDiscount || 0) : null,
           name: v.name,
           guardianName: v.guardianName,
           phone: v.phone,
@@ -1879,11 +1973,13 @@ export async function mount({ container, profile, ctx }) {
           sessionId: v.sessionId,
           sessionName: selS ? (selS.name || '') : '',
           admissionDate: v.admissionDate || today,
-          feeTotal: feeTotal(c ? c.fees || {} : {}),
+          feeTotal: isFull ? (Number(f.fullPaymentAmount) + Number(f.exam || 0)) : feeTotal(c ? c.fees || {} : {}),
           feeSnapshot: c ? c.fees || {} : {},
-          feeSchedule: sched.map(function (it) { return { no: it.no, month: it.month, opens: it.opens, due: it.due, amount: f.installment || 0 }; }),
+          feeSchedule: isFull ? [] : sched.map(function (it) { return { no: it.no, month: it.month, opens: it.opens, due: it.due, amount: f.installment || 0 }; }),
           examFee: f.exam || 0,
-          dueAtAdmission: { admission: Number(f.admission || 0), material: Number(f.material || 0), total: Number(f.admission || 0) + Number(f.material || 0) },
+          dueAtAdmission: isFull
+            ? { admission: Number(f.fullPaymentAmount), material: 0, total: Number(f.fullPaymentAmount) }
+            : { admission: Number(f.admission || 0), material: Number(f.material || 0), total: Number(f.admission || 0) + Number(f.material || 0) },
           prereqCheck: (c && getPrereq(c)) ? prereqCheck : null,
           ...(previousStudentIds !== undefined ? { previousStudentIds: previousStudentIds } : {}),
           ...(sourceAdmissionRef ? { sourceAdmission: sourceAdmissionRef } : {})
@@ -1917,11 +2013,13 @@ export async function mount({ container, profile, ctx }) {
           });
         }
 
-        return { studentId: studentId, receiptNo: receiptNo, id: newStudentRefId };
+        return { studentId: studentId, receiptNo: receiptNo, id: newStudentRefId, data: data, isFull: isFull };
       });
       studentId = saveResult.studentId;
       receiptNo = saveResult.receiptNo;
       const admissionId = saveResult.id;
+      const savedData = saveResult.data;
+      const wasFull = saveResult.isFull;
 
       if (typeof lucide !== 'undefined') lucide.createIcons();
       $t('adm-state', 'Saved.');
@@ -1929,11 +2027,22 @@ export async function mount({ container, profile, ctx }) {
       if (stateEl) stateEl.className = 'save-state saved';
 
       if (!editId) {
-        // T1: navigate to receipt route instead of showing a dialog
-        playPaymentSuccessSound();
         saved = snapshot();
         clearDirty();
-        location.hash = '#/admissions/' + admissionId + '/receipt';
+        closeForm();
+        await load();
+
+        // Open the SAME shared payment popup used in Student Profile / Pay Fees (Item 2)
+        const savedStudent = Object.assign({}, savedData, { id: admissionId });
+        openPaymentPopup({
+          student: savedStudent,
+          profile: APP_CACHE.currentUser,
+          preselectedOption: wasFull ? 'FULL' : 'AD',
+          from: 'admissions',
+          onSuccess: async () => {
+            await load();
+          }
+        });
       } else {
         saved = snapshot();
         clearDirty();
@@ -2092,9 +2201,7 @@ export async function mount({ container, profile, ctx }) {
     if (pc && pc.status === 'auto') prereqText = 'Verified automatically';
     else if (pc && pc.status === 'manual') prereqText = 'Verified manually';
 
-    const feeTotal = Number(s.feeTotal || 0);
-    const paid = Number((s.dueAtAdmission && s.dueAtAdmission.total) || 0);
-    const balance = feeTotal - paid;
+    const { total: feeTotal, paid, outstanding: balance } = calculateStudentFinancials(s);
     const nextDue = (s.feeSchedule && Array.isArray(s.feeSchedule) && s.feeSchedule.length > 0) ? formatDateIN(s.feeSchedule[0].due) || '-' : '-';
 
     const sections = [

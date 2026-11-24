@@ -122,3 +122,10 @@ unique-infotech-cms/
 router.js is added to public/js/core/ as the single source of truth for dashboard routes, menu, titles and access control.
 
 **TEMPORARY:** `temp_ref_dashboard.html` at the project root — owner's visual reference containing demo data; not deployed; delete after Phase 2.
+
+## Cloud Functions & Developer Tools
+- `functions/package.json`: Cloud Functions dependencies (`firebase-admin`, `firebase-functions`).
+- `functions/index.js`: 2nd Gen Identity blocking function `beforeUserSignedIn` (region `asia-south1`) to hard-block Google sign-in for Super Admin accounts before credentials/tokens are issued.
+- `tools/check-imports.js`: ES module import resolver validating that all relative imports across `public/` resolve to existing files (0 broken imports).
+- `tools/bump-version.js`: Automated version increment and query-parameter cache buster tool.
+- `tools/delete-test-students.js`: Super Admin Node CLI utility to safely list and delete test students, payment records, activities, and documents.

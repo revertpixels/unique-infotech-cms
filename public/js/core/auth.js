@@ -5,14 +5,33 @@ import {
   signInWithPopup,
   signOut,
   setPersistence,
-  browserSessionPersistence
+  browserSessionPersistence,
+  sendEmailVerification
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js';
 import { doc, getDoc } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
 
 export async function signInWithPassword(email, password) {
   await setPersistence(auth, browserSessionPersistence);
   const cred = await signInWithEmailAndPassword(auth, email.trim(), password);
-  return cred.user;
+  const user = cred.user;
+
+  // 1. Email verification (main protection for Super Admin)
+  if (user && !user.emailVerified) {
+    const sessionKey = 'email_verification_sent_' + (user.email || user.uid);
+    try {
+      if (!sessionStorage.getItem(sessionKey)) {
+        await sendEmailVerification(user);
+        sessionStorage.setItem(sessionKey, 'true');
+      }
+    } catch (err) {
+      console.warn('[auth] sendEmailVerification error:', err);
+    }
+    try {
+      sessionStorage.setItem('pending_verification_notice', 'Please open the verification email we sent and click the link.');
+    } catch (_) {}
+  }
+
+  return user;
 }
 
 export async function signInWithGoogle() {
@@ -53,8 +72,9 @@ export async function resolveSession(user) {
     return { ok: false, reason: 'disabled' };
   }
   if (data.role === 'superadmin') {
-    if (method !== 'password') {
-      return { ok: false, reason: 'wrong-method-admin' };
+    // Super Admin must NEVER be able to sign in with Google or any non-password method
+    if (method === 'google.com' || method !== 'password') {
+      return { ok: false, reason: 'superadmin-password-only' };
     }
   } else if (data.role === 'branch_head' || data.role === 'school_head') {
     if (method !== 'google.com') {

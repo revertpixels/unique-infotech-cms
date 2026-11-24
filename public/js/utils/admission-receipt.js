@@ -2,7 +2,8 @@
 // Matching reference-templates/Ui.html.
 // Shared by the on-screen HTML sheet and the vector PDF builder.
 
-import { formatDateIN } from './formatter.js?v=1.8.128';
+import { formatDateIN } from './formatter.js?v=1.8.136';
+import { courseFeeOf, discountOf } from './fees.js?v=1.8.136';
 
 // Format currency as "Rs. 1,000.00"
 export function fmtRs(n) {
@@ -172,37 +173,40 @@ export function buildYouthReceiptData({ admission, photo, signature, org, paymen
   const isFullPlan = adm.paymentPlan === 'full';
 
   if (isFullPlan) {
-    const stdFee = Number(admissionFee + (Number(feeSnapshot.installment || 500) * 4));
-    const fullAmt = Number(adm.fullPaymentAmount || pay.amount || stdFee);
-    const disc = Number(adm.fullPaymentDiscount || Math.max(0, stdFee - fullAmt));
+    const stdFee = courseFeeOf(adm.feeSnapshot || cs.fees || adm);
+    const fullAmt = Number(adm.fullPaymentAmount || dueAt.full || pay.amount || stdFee);
+    const disc = discountOf(adm.feeSnapshot || cs.fees || adm);
 
     feeStructureRows.push({
       head: 'Standard course fee',
       due: 'Regular package',
       amount: stdFee
     });
-    if (disc > 0) {
+    if (disc.rs > 0) {
       feeStructureRows.push({
         head: 'Full-payment discount',
-        due: 'Instant offer',
-        amount: -disc
+        due: `- Rs ${disc.rs.toLocaleString('en-IN')} (${disc.pct}%)`,
+        amount: -disc.rs
       });
     }
-    feeStructureRows.push({
-      head: 'Amount payable (Paid in full)',
-      due: 'At admission',
-      amount: fullAmt
-    });
 
     totalCourseFee = fullAmt;
-    receivedAmount = fullAmt;
+    const materialFeePaid = Number(pay.materialFee ?? dueAt.material ?? materialFee);
+    receivedAmount = fullAmt + materialFeePaid;
     balanceDue = 0;
 
     paymentReceivedRows.push({
-      description: 'Course fee (Paid in full)',
+      description: 'Course fee (paid in full)',
       status: 'Paid',
       amount: fullAmt
     });
+    if (materialFeePaid > 0) {
+      paymentReceivedRows.push({
+        description: 'Study material',
+        status: 'Paid',
+        amount: materialFeePaid
+      });
+    }
   } else {
     feeStructureRows.push({
       head: 'Admission fee',

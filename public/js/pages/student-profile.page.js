@@ -11,18 +11,18 @@ import {
   serverTimestamp,
   runTransaction
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.128';
-import { openPopup } from '../components/modal.js?v=1.8.128';
-import { createSelect } from '../components/ui-select.js?v=1.8.128';
-import { confirmDialog } from '../components/ui-confirm.js?v=1.8.128';
-import { openMenu } from '../components/ui-menu.js?v=1.8.128';
-import { formatINR, formatDateIN, initials } from '../utils/formatter.js?v=1.8.128';
-import { validatePhone, validateEmail, validateDOB, validateName } from '../utils/validator.js?v=1.8.128';
-import { registerDirty } from '../utils/unsaved-guard.js?v=1.8.128';
-import { compressTo100KB, blobToDataURL, isImageFile, formatBytes } from '../utils/image-compress.js?v=1.8.128';
-import { todayISO } from '../utils/session-rules.js?v=1.8.128';
-import { getSelectedSessionId } from '../core/sessions.js?v=1.8.128';
-import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.128';
+import { showToast } from '../components/toast.js?v=1.8.136';
+import { openPopup } from '../components/modal.js?v=1.8.136';
+import { createSelect } from '../components/ui-select.js?v=1.8.136';
+import { confirmDialog } from '../components/ui-confirm.js?v=1.8.136';
+import { openMenu } from '../components/ui-menu.js?v=1.8.136';
+import { formatINR, formatDateIN, initials } from '../utils/formatter.js?v=1.8.136';
+import { validatePhone, validateEmail, validateDOB, validateName } from '../utils/validator.js?v=1.8.136';
+import { registerDirty } from '../utils/unsaved-guard.js?v=1.8.136';
+import { compressTo100KB, blobToDataURL, isImageFile, formatBytes } from '../utils/image-compress.js?v=1.8.136';
+import { todayISO } from '../utils/session-rules.js?v=1.8.136';
+import { getSelectedSessionId } from '../core/sessions.js?v=1.8.136';
+import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.136';
 import {
   fetchStudentPayments,
   recordPaymentTx,
@@ -31,7 +31,8 @@ import {
   courseFeeWithoutExam,
   courseBalanceWithoutExam,
   calculateStudentFinancials
-} from '../services/payment.service.js?v=1.8.128';
+} from '../services/payment.service.js?v=1.8.136';
+import { courseFeeOf, discountOf } from '../utils/fees.js?v=1.8.136';
 
 const COL = 'students';
 const QUALIFICATIONS = ['VIII Pass', 'Secondary (X) Pass', 'Higher Secondary (XII) Pass', 'ITI', 'Diploma', 'Undergraduate (Graduate)', 'Postgraduate', 'Other'];
@@ -1876,27 +1877,41 @@ async function renderCourseTab() {
   }
 
   if (s.paymentPlan === 'full') {
-    const fullAmt = Number(s.fullPaymentAmount || s.feeTotal || 0);
-    const disc = Number(s.fullPaymentDiscount || 0);
-    const stdFee = snap.admission ? (Number(snap.admission || 0) + Number(snap.installment || 0) * 4 + Number(snap.material || 0)) : (fullAmt + disc);
+    const fullAmt = Number(s.fullPaymentAmount || s.dueAtAdmission?.full || s.feeTotal || 0);
+    const instFee = Number(snap.installment || 0);
+    const admFee = Number(snap.admission || 0);
+    const matFee = Number(snap.material || s.materialFee || s.studyMaterialFee || 0);
+    const stdFee = courseFeeOf(s) || ((admFee + instFee * 4 > 0) ? (admFee + instFee * 4) : Number(s.feeTotal || fullAmt));
+    const disc = discountOf(s);
+
     const tr1 = mk('tr');
     tr1.append(mk('td', '', 'Course Package Fee (Standard)'), mk('td', 'num font-semibold', formatINR(stdFee)));
     tbody.appendChild(tr1);
-    if (disc > 0) {
+    if (disc.rs > 0) {
       const trDisc = mk('tr');
-      trDisc.append(mk('td', 'text-success', 'Full-Payment Discount Offer'), mk('td', 'num font-semibold text-success', '-' + formatINR(disc)));
+      const discLabel = `Full-Payment Discount (${disc.pct}% off)`;
+      trDisc.append(mk('td', 'text-success', discLabel), mk('td', 'num font-semibold text-success', '-' + formatINR(disc.rs)));
       tbody.appendChild(trDisc);
     }
     const totalTr = mk('tr');
     totalTr.append(
-      mk('td', 'font-bold', 'Course Fee Paid in Full'),
+      mk('td', 'font-bold', 'Full Course Fee'),
       mk('td', 'num font-bold text-success', formatINR(fullAmt))
     );
     tbody.appendChild(totalTr);
+
+    if (matFee > 0) {
+      const trMat = mk('tr');
+      trMat.append(
+        mk('td', '', 'Study Material & Kit (Paid at admission)'),
+        mk('td', 'num font-semibold', formatINR(matFee))
+      );
+      tbody.appendChild(trMat);
+    }
   } else {
+    const matFee = Number(snap.material || s.materialFee || s.studyMaterialFee || 0);
     const rows = [
       { label: 'Admission Fee', amount: snap.admission || s.admissionFee || 0 },
-      { label: 'Study Material & Kit', amount: snap.material || s.materialFee || 0 },
       { label: 'Tuition Fee (Per Installment)', amount: snap.installment || 0 },
       { label: 'Total Scheduled Installments', amount: (snap.installment || 0) * (s.feeSchedule?.length || 4) }
     ];
@@ -1913,6 +1928,15 @@ async function renderCourseTab() {
       mk('td', 'num font-bold text-success', formatINR(courseFeeWithoutExam(s)))
     );
     tbody.appendChild(totalTr);
+
+    if (matFee > 0) {
+      const trMat = mk('tr');
+      trMat.append(
+        mk('td', '', 'Study Material & Kit (Paid at admission)'),
+        mk('td', 'num font-semibold', formatINR(matFee))
+      );
+      tbody.appendChild(trMat);
+    }
   }
 
   if (examStarted) {
@@ -2045,8 +2069,8 @@ function renderInstallmentStatusTable(sched) {
     return;
   }
 
-  // 1. Admission Fee row (At Admission)
-  if (admFee > 0) {
+  // 1. Admission Fee row (At Admission) — skip for full payment plan
+  if (admFee > 0 && s.paymentPlan !== 'full') {
     const tr = mk('tr');
     const admTxn = paymentsCache.find(p => {
       const t = String(p.type || '').toUpperCase().trim();
@@ -2305,8 +2329,9 @@ function renderTransactionsLedger() {
   );
 
   // Initial admission payment fallback if not in subcollection
-  const hasAdDoc = paymentsCache.some(p => p.type === 'AD');
-  if (!hasAdDoc && s.receiptNo) {
+  // ONLY for legacy students where no payments subcollection exists at all
+  const hasAdOrFullDoc = paymentsCache.some(p => p.type === 'AD' || p.type === 'FULL');
+  if (!hasAdOrFullDoc && s.receiptNo) {
     const totalPaid = Number(dueAt.total ?? ((dueAt.admission || 0) + (isMatCollectedAtAdm ? matFee : 0)));
     let admPaid = admFee;
     if (dueAt.admission !== undefined && Number(dueAt.admission) > 0) {
@@ -2320,7 +2345,7 @@ function renderTransactionsLedger() {
     txns.push({
       date: s.admissionDate || '',
       receiptNo: s.receiptNo,
-      type: 'AD',
+      type: s.paymentPlan === 'full' ? 'FULL' : 'AD',
       amount: admPaid,
       mode: s.paymentMode || 'Cash / Bank',
       txnId: s.txnId || 'Admission',
@@ -2328,7 +2353,7 @@ function renderTransactionsLedger() {
       recordedAtBranchCode: s.branchCode || '',
       recordedAtBranchName: s.branchName || 'Branch',
       recordedBy: s.createdBy || '-',
-      remarks: 'Admission fee',
+      remarks: s.paymentPlan === 'full' ? 'Full course fee' : 'Admission fee',
       waived: false
     });
 
@@ -2351,11 +2376,22 @@ function renderTransactionsLedger() {
     }
   }
 
+  const fullReceiptNos = new Set(
+    paymentsCache.filter(p => String(p.type || '').toUpperCase() === 'FULL').map(p => p.receiptNo).filter(Boolean)
+  );
+  const hasExplicitMatDoc = paymentsCache.some(p => p.type === 'MAT');
+
   // Payments from subcollection
   paymentsCache.forEach((p) => {
-    if (p.type === 'AD') {
+    const t = String(p.type || '').toUpperCase().trim();
+    if (t === 'AD') {
+      // Deduplicate: ignore duplicate AD if student is on Full plan or if FULL payment exists with same receiptNo
+      if (s.paymentPlan === 'full' || (p.receiptNo && fullReceiptNos.has(p.receiptNo))) {
+        return;
+      }
       let admAmt = p.amount;
-      if (isMatCollectedAtAdm && p.amount > matFee) {
+      // Only subtract matFee if matFee was bundled into p.amount and NOT recorded as a separate MAT doc
+      if (!hasExplicitMatDoc && isMatCollectedAtAdm && p.amount > matFee) {
         admAmt = p.amount - matFee;
       }
       txns.push(Object.assign({}, p, {
@@ -2363,7 +2399,7 @@ function renderTransactionsLedger() {
         remarks: p.remarks && p.remarks.includes('&') ? 'Admission fee' : (p.remarks || 'Admission fee')
       }));
 
-      if (isMatCollectedAtAdm) {
+      if (!hasExplicitMatDoc && isMatCollectedAtAdm) {
         txns.push({
           date: p.date || s.admissionDate || '',
           receiptNo: p.receiptNo || s.receiptNo || '',
@@ -2392,7 +2428,7 @@ function renderTransactionsLedger() {
     if (da !== dbDate) {
       return dbDate.localeCompare(da);
     }
-    const order = { AD: 1, MAT: 2, IN: 3, EX: 4 };
+    const order = { AD: 1, FULL: 1, MAT: 2, IN: 3, EX: 4 };
     const oa = order[a.type] || 5;
     const ob = order[b.type] || 5;
     return oa - ob;
@@ -2411,8 +2447,9 @@ function renderTransactionsLedger() {
     const tr = mk('tr');
 
     const typeLabel = t.type === 'AD' ? 'Admission' :
-      (t.type === 'IN' ? ('Inst #' + (t.installmentNo || '')) :
-        (t.type === 'EX' ? 'Exam Fee' : (t.type === 'MAT' ? 'Study Material' : (t.type || 'Payment'))));
+      (t.type === 'FULL' ? 'Full course fee' :
+        (t.type === 'IN' ? ('Inst #' + (t.installmentNo || '')) :
+          (t.type === 'EX' ? 'Exam Fee' : (t.type === 'MAT' ? 'Study Material' : (t.type || 'Payment')))));
 
     const amountStr = formatINR(t.amount || 0) + (t.lateFeeAmount ? ` (+ Rs ${t.lateFeeAmount})` : '');
 

@@ -133,6 +133,16 @@ td.adm-empty { display: table-cell !important; text-align: center !important; ve
 }
 
 /* ---------- fees grid (T4 redesign) ---------- */
+.adm-plan-card {
+  padding: 12px 14px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border);
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
 .adm-fee-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 8px; }
 .adm-fee-box {
   background: var(--surface);
@@ -148,6 +158,7 @@ td.adm-empty { display: table-cell !important; text-align: center !important; ve
 .adm-fee-label { font-size: 12px; color: var(--text-mute); margin-bottom: 4px; }
 .adm-fee-amt { font-size: 18px; font-weight: 700; color: var(--text); }
 .adm-fee-amt.muted { color: var(--text-mute); }
+.adm-fee-note-text { font-size: 13px; font-weight: 400; color: var(--text); line-height: 1.5; }
 
 /* Total payable row */
 .adm-fee-total-row {

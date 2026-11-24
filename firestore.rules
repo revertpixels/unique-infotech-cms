@@ -202,42 +202,42 @@ service cloud.firestore {
 
     match /enrolments/{enrolmentId} {
       allow read: if isSuperAdmin()
-        || (isBranchHead() && get(/databases/$(database)/documents/students/$(request.resource.data.studentId)).data.branchId == myBranchId());
+        || (isBranchHead() && get(/databases/$(database)/documents/students/$(resource.data.studentId)).data.branchId == myBranchId());
       allow create, update: if isSuperAdmin();
       allow delete: if isSuperAdmin();
     }
 
     match /bills/{billId} {
       allow read: if isSuperAdmin()
-        || (isBranchHead() && get(/databases/$(database)/documents/students/$(request.resource.data.studentId)).data.branchId == myBranchId());
+        || (isBranchHead() && get(/databases/$(database)/documents/students/$(resource.data.studentId)).data.branchId == myBranchId());
       allow create, update: if isSuperAdmin();
       allow delete: if isSuperAdmin();
     }
 
     match /payments/{paymentId} {
       allow read: if isSuperAdmin()
-        || (isBranchHead() && get(/databases/$(database)/documents/students/$(request.resource.data.studentId)).data.branchId == myBranchId());
+        || (isBranchHead() && get(/databases/$(database)/documents/students/$(resource.data.studentId)).data.branchId == myBranchId());
       allow create, update: if isSuperAdmin();
       allow delete: if isSuperAdmin();
     }
 
     match /waivers/{waiverId} {
       allow read: if isSuperAdmin()
-        || (isBranchHead() && get(/databases/$(database)/documents/students/$(request.resource.data.studentId)).data.branchId == myBranchId());
+        || (isBranchHead() && get(/databases/$(database)/documents/students/$(resource.data.studentId)).data.branchId == myBranchId());
       allow create, update: if isSuperAdmin();
       allow delete: if isSuperAdmin();
     }
 
     match /breaks/{breakId} {
       allow read: if isSuperAdmin()
-        || (isBranchHead() && get(/databases/$(database)/documents/students/$(request.resource.data.studentId)).data.branchId == myBranchId());
+        || (isBranchHead() && get(/databases/$(database)/documents/students/$(resource.data.studentId)).data.branchId == myBranchId());
       allow create, update: if isSuperAdmin();
       allow delete: if isSuperAdmin();
     }
 
     match /transfers/{transferId} {
       allow read: if isSuperAdmin()
-        || (isBranchHead() && get(/databases/$(database)/documents/students/$(request.resource.data.studentId)).data.branchId == myBranchId());
+        || (isBranchHead() && get(/databases/$(database)/documents/students/$(resource.data.studentId)).data.branchId == myBranchId());
       allow create, update: if isSuperAdmin();
       allow delete: if isSuperAdmin();
     }

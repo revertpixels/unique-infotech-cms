@@ -1,20 +1,21 @@
 // payment-popup.js — Single Shared Payment Popup for Student Profile and Pay Fees
 import { auth } from '../config/firebase-config.js';
-import { openPopup } from './modal.js?v=1.8.128';
-import { createSelect } from './ui-select.js?v=1.8.128';
-import { formatINR, formatDateIN } from '../utils/formatter.js?v=1.8.128';
-import { todayISO } from '../utils/session-rules.js?v=1.8.128';
-import { showToast } from './toast.js?v=1.8.128';
-import { playPaymentSuccessSound } from '../utils/sound.js?v=1.8.128';
+import { openPopup } from './modal.js?v=1.8.136';
+import { createSelect } from './ui-select.js?v=1.8.136';
+import { formatINR, formatDateIN } from '../utils/formatter.js?v=1.8.136';
+import { todayISO } from '../utils/session-rules.js?v=1.8.136';
+import { showToast } from './toast.js?v=1.8.136';
+import { playPaymentSuccessSound } from '../utils/sound.js?v=1.8.136';
 import {
   recordPayment,
+  recordAdmissionWithPayment,
   fetchStudentPayments,
   calculateLateFee,
   isInstallmentPaid,
   isAdmissionFeePaid,
   isMaterialFeePaid,
   isExamFeePaid
-} from '../services/payment.service.js?v=1.8.128';
+} from '../services/payment.service.js?v=1.8.136';
 
 function formatDateTime(d) {
   const dt = d instanceof Date ? d : new Date(d);
@@ -246,6 +247,8 @@ export function promptOpenReceipt({
  */
 export async function openPaymentPopup({
   student,
+  pendingAdmission,
+  isAdmission = false,
   profile,
   preselectedOption,
   sessionsCache,
@@ -264,88 +267,111 @@ export async function openPaymentPopup({
   const matFee = Number(snap.material ?? s?.materialFee ?? s?.studyMaterialFee ?? 0);
   const examFee = Number(snap.exam ?? s?.examFee ?? 0);
 
-  // Use provided payments or refresh fresh from Firestore
-  let paymentsList = Array.isArray(payments) ? payments : [];
-  try {
-    const fresh = await fetchStudentPayments(s.id);
-    if (fresh && Array.isArray(fresh)) {
-      paymentsList = fresh;
-    }
-  } catch (_) {}
-
   const typeOptions = [];
 
-  // 0. Course Fee Paid in Full (if full payment plan and not yet paid)
-  if (s.paymentPlan === 'full' && !s.fullPaid) {
-    const fullAmt = Number(s.fullPaymentAmount || s.feeTotal || 0);
-    typeOptions.push({
-      value: 'FULL',
-      label: `Course Fee (Paid in Full) — ${formatINR(fullAmt)}`,
-      icon: 'award'
-    });
-  }
-
-  // 1. Admission Fee (only if not full-payment plan, not yet collected, and amount > 0)
-  if (s.paymentPlan !== 'full' && admFee > 0 && !isAdmissionFeePaid(admFee, paymentsList, s)) {
-    typeOptions.push({
-      value: 'AD',
-      label: `Admission Fee — ${formatINR(admFee)}`,
-      icon: 'credit-card'
-    });
-  }
-
-  // 2. Study Material Fee (only if not full-payment plan, not yet collected, and amount > 0)
-  if (s.paymentPlan !== 'full' && matFee > 0 && !isMaterialFeePaid(matFee, paymentsList, s)) {
-    typeOptions.push({
-      value: 'MAT',
-      label: `Study Material Fee — ${formatINR(matFee)}`,
-      icon: 'book-open'
-    });
-  }
-
-  // 3. Installments (1..N) (only for installments plan)
-  if (s.paymentPlan !== 'full') {
-    sched.forEach((it) => {
-      const itNo = Number(it.no ?? it.installmentNo);
-      if (!isInstallmentPaid(it, paymentsList, s)) {
-        typeOptions.push({
-          value: 'IN_' + itNo,
-          label: `Installment ${itNo} (${it.month || 'Month ' + itNo}) — ${formatINR(it.amount || instFee)}`,
-          icon: 'credit-card',
-          schedItem: it
-        });
-      }
-    });
-  }
-
-  // 4. Examination Fee (only if not yet collected and amount > 0, and not blocked by session fees)
-  let sessionExamFee = examFee;
-  let canCollectExam = examFee > 0;
-  if (s.ctx === 'youth') {
-    let studentSess = activeSession || null;
-    if (!studentSess && sessionsCache) {
-      studentSess = sessionsCache.byId?.[s.sessionId] || sessionsCache.byName?.[(s.sessionName || '').toLowerCase().trim()] || null;
+  if (isAdmission || pendingAdmission) {
+    const pa = pendingAdmission || {};
+    if (pa.isFull || s.paymentPlan === 'full') {
+      const fullAmt = Number(pa.fullAmt || s.fullPaymentAmount || s.dueAtAdmission?.full || s.feeTotal || 0);
+      const actualMatFee = Number(pa.matFee ?? s.dueAtAdmission?.material ?? matFee ?? 0);
+      const totalFullCollection = fullAmt + actualMatFee;
+      const matLabel = actualMatFee > 0 ? ` + Study Material (Rs ${formatINR(actualMatFee)})` : '';
+      typeOptions.push({
+        value: 'FULL',
+        label: `Course Fee (Paid in Full: Rs ${formatINR(fullAmt)})${matLabel} — Total Rs ${formatINR(totalFullCollection)}`,
+        icon: 'award'
+      });
+    } else {
+      const admTotal = Number(pa.admFee ?? admFee) + Number(pa.matFee ?? matFee);
+      const isWithMat = Number(pa.matFee ?? matFee) > 0;
+      typeOptions.push({
+        value: 'AD',
+        label: `${isWithMat ? 'Admission & Material Fee' : 'Admission Fee'} — Rs ${formatINR(admTotal)}`,
+        icon: 'credit-card'
+      });
     }
-    if (studentSess && studentSess.examFeeCollection?.started === true) {
-      if (studentSess.examFeeCollection.fees && s.courseId && Object.prototype.hasOwnProperty.call(studentSess.examFeeCollection.fees, s.courseId)) {
-        sessionExamFee = Number(studentSess.examFeeCollection.fees[s.courseId]);
-      } else {
-        canCollectExam = false;
+  } else {
+    // Use provided payments or refresh fresh from Firestore
+    let paymentsList = Array.isArray(payments) ? payments : [];
+    try {
+      const fresh = await fetchStudentPayments(s.id);
+      if (fresh && Array.isArray(fresh)) {
+        paymentsList = fresh;
+      }
+    } catch (_) {}
+
+    // 0. Course Fee Paid in Full (if full payment plan and not yet paid)
+    if (s.paymentPlan === 'full' && !s.fullPaid) {
+      const fullAmt = Number(s.fullPaymentAmount || s.feeTotal || 0);
+      typeOptions.push({
+        value: 'FULL',
+        label: `Course Fee (Paid in Full) — ${formatINR(fullAmt)}`,
+        icon: 'award'
+      });
+    }
+
+    // 1. Admission Fee (only if not full-payment plan, not yet collected, and amount > 0)
+    if (s.paymentPlan !== 'full' && admFee > 0 && !isAdmissionFeePaid(admFee, paymentsList, s)) {
+      typeOptions.push({
+        value: 'AD',
+        label: `Admission Fee — ${formatINR(admFee)}`,
+        icon: 'credit-card'
+      });
+    }
+
+    // 2. Study Material Fee (only if not full-payment plan, not yet collected, and amount > 0)
+    if (s.paymentPlan !== 'full' && matFee > 0 && !isMaterialFeePaid(matFee, paymentsList, s)) {
+      typeOptions.push({
+        value: 'MAT',
+        label: `Study Material Fee — ${formatINR(matFee)}`,
+        icon: 'book-open'
+      });
+    }
+
+    // 3. Installments (1..N) (only for installments plan)
+    if (s.paymentPlan !== 'full') {
+      sched.forEach((it) => {
+        const itNo = Number(it.no ?? it.installmentNo);
+        if (!isInstallmentPaid(it, paymentsList, s)) {
+          typeOptions.push({
+            value: 'IN_' + itNo,
+            label: `Installment ${itNo} (${it.month || 'Month ' + itNo}) — ${formatINR(it.amount || instFee)}`,
+            icon: 'credit-card',
+            schedItem: it
+          });
+        }
+      });
+    }
+
+    // 4. Examination Fee (only if not yet collected and amount > 0, and not blocked by session fees)
+    let sessionExamFee = examFee;
+    let canCollectExam = examFee > 0;
+    if (s.ctx === 'youth') {
+      let studentSess = activeSession || null;
+      if (!studentSess && sessionsCache) {
+        studentSess = sessionsCache.byId?.[s.sessionId] || sessionsCache.byName?.[(s.sessionName || '').toLowerCase().trim()] || null;
+      }
+      if (studentSess && studentSess.examFeeCollection?.started === true) {
+        if (studentSess.examFeeCollection.fees && s.courseId && Object.prototype.hasOwnProperty.call(studentSess.examFeeCollection.fees, s.courseId)) {
+          sessionExamFee = Number(studentSess.examFeeCollection.fees[s.courseId]);
+        } else {
+          canCollectExam = false;
+        }
       }
     }
-  }
 
-  if (canCollectExam && sessionExamFee > 0 && !isExamFeePaid(sessionExamFee, paymentsList, s)) {
-    typeOptions.push({
-      value: 'EX',
-      label: `Examination Fee — ${formatINR(sessionExamFee)}`,
-      icon: 'award'
-    });
-  }
+    if (canCollectExam && sessionExamFee > 0 && !isExamFeePaid(sessionExamFee, paymentsList, s)) {
+      typeOptions.push({
+        value: 'EX',
+        label: `Examination Fee — ${formatINR(sessionExamFee)}`,
+        icon: 'award'
+      });
+    }
 
-  if (preselectedOption === 'EX' && !canCollectExam) {
-    showToast({ type: 'error', message: 'Exam fee not set for this course in this session. Contact Super Admin.' });
-    return;
+    if (preselectedOption === 'EX' && !canCollectExam) {
+      showToast({ type: 'error', message: 'Exam fee not set for this course in this session. Contact Super Admin.' });
+      return;
+    }
   }
 
   if (typeOptions.length === 0) {
@@ -371,9 +397,14 @@ export async function openPaymentPopup({
     }
   }
 
+  const courseCodeOrName = s.courseCode || s.courseName || pendingAdmission?.courseCode || pendingAdmission?.courseName || pendingAdmission?.studentData?.courseCode || pendingAdmission?.studentData?.courseName || '';
+  const studentSubtitle = (isAdmission || pendingAdmission)
+    ? `${s.name || 'New Student'} • ${courseCodeOrName || 'Admission'}`
+    : `${s.name || 'Student'} • ${s.studentId || s.id || courseCodeOrName || 'Student'}`;
+
   const popup = openPopup({
-    title: 'Record Payment',
-    subtitle: `${s.name} • ${s.studentId || s.id}`,
+    title: (isAdmission || pendingAdmission) ? 'Collect Admission Fee' : 'Record Payment',
+    subtitle: studentSubtitle,
     icon: 'wallet',
     wide: true
   });
@@ -664,11 +695,24 @@ export async function openPaymentPopup({
     let baseAmt = 0;
     let fineAmt = 0;
 
-    if (val === 'AD') {
+    if (isAdmission || pendingAdmission) {
+      const pa = pendingAdmission || {};
+      if (val === 'AD') {
+        baseAmt = Number(pa.admFee ?? admFee) + Number(pa.matFee ?? matFee);
+        fineAmt = 0;
+      } else if (val === 'FULL') {
+        const fullAmt = Number(pa.fullAmt || s.fullPaymentAmount || s.dueAtAdmission?.full || s.feeTotal || 0);
+        const actualMatFee = Number(pa.matFee ?? s.dueAtAdmission?.material ?? matFee ?? 0);
+        baseAmt = fullAmt + actualMatFee;
+        fineAmt = 0;
+      }
+    } else if (val === 'AD') {
       baseAmt = admFee;
       fineAmt = 0;
     } else if (val === 'FULL') {
-      baseAmt = Number(s.fullPaymentAmount || s.feeTotal || 0);
+      const fullAmt = Number(s.fullPaymentAmount || s.dueAtAdmission?.full || s.feeTotal || 0);
+      const actualMatFee = !s.materialPaid ? Number(s.dueAtAdmission?.material ?? matFee ?? 0) : 0;
+      baseAmt = fullAmt + actualMatFee;
       fineAmt = 0;
     } else if (val === 'EX') {
       baseAmt = sessionExamFee;
@@ -778,6 +822,64 @@ export async function openPaymentPopup({
 
     const baseAmount = Number(amtInput.value);
     const lateAmount = Number(lateInput.value);
+
+    if (isAdmission || pendingAdmission) {
+      saveBtn.disabled = true;
+      saveBtn.innerHTML = '<i data-lucide="loader-2" class="spin"></i> Processing...';
+      if (typeof lucide !== 'undefined') lucide.createIcons();
+
+      try {
+        const authEmail = auth?.currentUser?.email || profile?.email || '';
+        const res = await recordAdmissionWithPayment({
+          pendingAdmission,
+          paymentParams: {
+            mode: modeSel.value,
+            txnId: txnInput.value.trim(),
+            remarks: remInput.value.trim(),
+            userEmail: authEmail,
+            userName: profile?.name || '',
+            userRole: profile?.role || '',
+            branchId: profile?.branchId || pendingAdmission.branchId,
+            branchCode: pendingAdmission.branchCode,
+            branchName: pendingAdmission.branchName
+          }
+        });
+
+        showToast({ type: 'success', message: 'Admission & payment recorded! Student ID: ' + res.studentId + ' | Receipt No: ' + res.receiptNo });
+        playPaymentSuccessSound();
+        popup.close();
+
+        const forText = pendingAdmission.isFull
+          ? (Number(pendingAdmission.matFee || 0) > 0 ? 'Course Fee (Paid in Full) & Study Material' : 'Course Fee (Paid in Full)')
+          : (Number(pendingAdmission.matFee || 0) > 0 ? 'Admission & Material Fee' : 'Admission Fee');
+
+        promptOpenReceipt({
+          studentDocId: res.studentDocId,
+          paymentId: res.paymentId,
+          receiptNo: res.receiptNo,
+          student: { name: s.name, studentId: res.studentId },
+          forText,
+          amount: res.totalPaid,
+          lateFee: 0,
+          totalPaid: res.totalPaid,
+          mode: modeSel.value,
+          txnId: txnInput.value.trim(),
+          date: new Date(),
+          from: 'admissions'
+        });
+
+        if (typeof onSuccess === 'function') {
+          await onSuccess({ res, studentDocId: res.studentDocId, studentId: res.studentId, receiptNo: res.receiptNo, paymentId: res.paymentId });
+        }
+      } catch (err) {
+        console.error('[payment-popup] admission payment transaction failed', err);
+        showToast({ type: 'error', message: 'Admission save failed: ' + (err.message || 'Transaction error') });
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Confirm & Record Payment';
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+      }
+      return;
+    }
 
     saveBtn.disabled = true;
     saveBtn.innerHTML = '<i data-lucide="loader-2" class="spin"></i> Processing...';

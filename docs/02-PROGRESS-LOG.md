@@ -42,6 +42,153 @@
 ## ACTIVE LOG (NEWEST ON TOP)
 ---
 
+### [2026-11-24 16:50] Version 1.8.132 — Standard Course Fee Architecture, Full Payment Discount in Rupees, and Payment Deduplication
+
+**What was built:**
+- **Courses & Packages (`public/js/pages/courses.page.js`)**:
+  - Excluded study material fee (`material`) from standard `courseFee` (`admission + installment * 4`).
+  - Stored `fullPaymentDiscount` in RUPEES (e.g. Rs 500) and `fullPaymentDiscountPercent` in percentage (e.g. 17%) to permanently prevent percentages displaying as rupees.
+  - Live calculated and displayed `17% discount (saves Rs 500)` in form, card overview, and table meta lines.
+- **Admission Flow & Verification (`public/js/pages/admissions.page.js`)**:
+  - Full payment plan fee breakdown now accurately shows: Course fee (Rs 3,000), Full-payment discount (- Rs 500, 17% off), Full course fee (Rs 2,500), Study material fee (Rs 100), and Total payable now (Rs 2,600).
+  - Full plan radio badge displays `Pay in full (Rs 2,500)` with `17% discount (saves Rs 500)`.
+  - Verify confirmation modal accurately summarizes Standard course fee (Rs 3,000), Discount (- Rs 500), Full course fee (Rs 2,500), Study material (Rs 100), and Total payable now (Rs 2,600).
+  - Passed accurate fee fields (`courseFee`, `fullAmt`, `fullDisc`, `fullDiscPct`, `matFee`) to `pendingAdmission`.
+- **Payment Collection Popup (`public/js/components/payment-popup.js`)**:
+  - Full payment plan collects `fullAmt + matFee` (Rs 2,600) at admission with clear label: `Course Fee (Paid in Full: Rs 2,500) + Study Material (Rs 100) — Total Rs 2,600`.
+  - Recalculated base amount and receipt prompt appropriately.
+- **Payment Service & Financials Single Source of Truth (`public/js/services/payment.service.js`)**:
+  - In `recordAdmissionWithPayment`:
+    - Full plan writes two distinct, clean payment records under the same admission receipt: Item 1 (`type: 'FULL'`, `typeName: 'Full course fee'`, Rs 2,500) and Item 2 (`type: 'MAT'`, `typeName: 'Study material'`, Rs 100).
+    - Installments plan writes Item 1 (`type: 'AD'`, `typeName: 'Admission fee'`, Rs 1,000) and Item 2 (`type: 'MAT'`, `typeName: 'Study material'`, Rs 100).
+    - Student document stores `paidAmount: payAmt` (2,600 for full, 1,100 for installments), `feeTotal: fullAmt` (2,500), `balanceDue: 0`, and records material fee payment metadata.
+  - In `calculateStudentFinancials`:
+    - Full plan financial total is `fullPaymentAmount + materialFee` (Rs 2,600), paid = Rs 2,600, outstanding = Rs 0, percent = 100%.
+    - Added deduplication guard in payment summation loop to ignore any duplicate `AD` records recorded with the same receipt number as `FULL`.
+- **Admission Receipt (`public/js/utils/admission-receipt.js`)**:
+  - Fee structure table: Standard course fee Rs 3,000, Full-payment discount - Rs 500, Total course fee Rs 2,500.
+  - Payment received table: Course fee (paid in full) Rs 2,500 [Paid], Study material fee Rs 100 [Paid], Total received Rs 2,600, Balance due Rs 0.
+- **Student Profile (`public/js/pages/student-profile.page.js`)**:
+  - Fee Breakdown: Displays Course Package Fee (Standard) Rs 3,000, Full-Payment Discount - Rs 500 (17% off), Full Course Fee Rs 2,500, and Study Material & Kit (Paid at admission) Rs 100.
+  - Installment Schedule: Suppresses the redundant Admission Fee row for students on the full payment plan.
+  - Transactions Ledger: Fixed root cause of duplicate payment by ensuring legacy fallback checks `p.type === 'AD' || p.type === 'FULL'`. Filtered duplicate `AD` entries if `FULL` with the same receipt exists. Avoided synthesizing duplicate `MAT` when explicit `MAT` records are present.
+- **Verification**:
+  - `tools/check-imports.js` verified with 0 errors across 101 files and 247 imports.
+  - Strict syntax verification on all 70 JS files passed with 0 errors.
+  - Bumped version to `1.8.132`.
+
+**Why:**
+- Ensured strict domain rule consistency across the system: course fee is solely admission + installments, study material is a separate one-time fee collected at admission in both plans, discount is stored in rupees, and payment records are cleanly separated without phantom duplicates.
+
+**Files touched (created / modified / deleted):**
+- MODIFIED: `public/js/pages/courses.page.js`
+- MODIFIED: `public/js/pages/admissions.page.js`
+- MODIFIED: `public/js/components/payment-popup.js`
+- MODIFIED: `public/js/services/payment.service.js`
+- MODIFIED: `public/js/utils/admission-receipt.js`
+- MODIFIED: `public/js/pages/student-profile.page.js`
+- MODIFIED: `docs/02-PROGRESS-LOG.md`
+- MODIFIED: 35 files across `public/` (?v= query strings updated to 1.8.132)
+
+---
+
+### [2026-11-24 15:05] Version 1.8.131 — Single Total Payable Box, Small Note Text, and Exam Fee Removal from Course Total
+
+**What was built:**
+- `public/js/pages/admissions.page.js`:
+  - **Single Total Payable Box**: Unified total row generation inside `updateFees(c, s)` so only one `adm-fee-total-row` box ever exists in the DOM. Cleaned up any existing/stale total row elements before rendering. Before a course is chosen, displays "Select a course to see the full fee details." with "—". After a course is chosen, displays the exact plan summary and calculated payable amount (for both Installments and Full payment plans). Cleaned up total rows on form close and unmount.
+  - **Exam Fee Removal from Total Payable**: Fixed installments total payable calculation to strictly equal `Course total` (`admission + material + (installment * 4)`), removing examination fee (180) from Total payable. Full payment plan total payable strictly equals `fullPaymentAmount`. Updated `feeTotal` in `previewStudent` to match.
+  - **Note Box Styling**: Updated note boxes across all plans to use dedicated helper text element `adm-fee-note-text` instead of `adm-fee-amt`.
+- `public/css/pages/admissions.css`:
+  - Added `.adm-fee-note-text { font-size: 13px; font-weight: 400; color: var(--text); line-height: 1.5; }` matching helper text sizing (13-14px, normal weight, not bold) within the amber note box.
+- Verification & Housekeeping:
+  - Strict ESM syntax check across all 70 JS files (0 errors).
+  - `tools/check-imports.js` verified (0 errors across 101 files and 247 imports).
+  - Bumped version to `1.8.131` with `tools/bump-version.js`.
+
+**Why:**
+- Prevented duplicate "Total payable" elements in the fees section.
+- Made examination note text normal small helper text rather than bold heading-sized text.
+- Ensured "Total payable" always exactly equals "Course total" without incorrectly adding the separate examination fee.
+
+**Files touched (created / modified / deleted):**
+- MODIFIED: `public/js/pages/admissions.page.js`
+- MODIFIED: `public/css/pages/admissions.css`
+- MODIFIED: `public/js/core/app.js` (bumped to 1.8.131)
+- MODIFIED: `docs/02-PROGRESS-LOG.md`
+- MODIFIED: 35 files across `public/` (?v= bumped to 1.8.131)
+
+---
+
+### [2026-11-24 14:40] Version 1.8.130 — Deferred Admission Save, Full Plan Fee Total Fix, and Plan Choice Gate
+
+**What was built:**
+- `public/js/pages/admissions.page.js`:
+  - **Deferred Save Before Payment**: "Verify" validates the admission form and displays the verification modal, then directly opens the shared payment popup (`openPaymentPopup`) carrying unsaved `pendingAdmission` data. No student doc, student ID, or receipt number is created upfront. If cancelled or closed, zero Firestore writes or counter increments take place and the form remains intact.
+  - **Single Atomic Transaction**: Student document, auto-generated student ID, single admission receipt number, payment record, documents/aadhaar subcollections, and activity log are committed together in one atomic Firestore transaction upon payment confirmation.
+  - **Full Plan `feeTotal` Fix**: Corrected total fee calculation for full payment plan to strictly equal `fullPaymentAmount` (no examination fee added). Examination fee remains separate in `examFee`. Updated both the form fee summary and the Verify summary dialog.
+  - **Payment Plan Choice Gate**: `selectedPaymentPlan` initializes to `null` whenever a course offers full payment. The Verify button remains disabled with "Choose a payment plan" error state until the user actively selects either "Pay in installments" or "Pay in full".
+- `public/pages/admissions.html`:
+  - Updated submit button text to "Verify" (with ID `adm-save-label`).
+- `public/js/services/payment.service.js`:
+  - `recordAdmissionWithPayment` enforces `feeTotal = fullAmt` for full payment plan students.
+- Verification & Housekeeping:
+  - Strict ESM syntax check across all 70 JS files (0 errors).
+  - `tools/check-imports.js` verified (0 errors across 101 files and 247 imports).
+  - Bumped version to `1.8.130` with `tools/bump-version.js`.
+
+**Why:**
+- Fixed admission save ordering so students are never saved prior to payment.
+- Ensured full payment total excludes examination fee.
+- Enforced mandatory explicit choice between installments and full payment.
+
+**Files touched (created / modified / deleted):**
+- MODIFIED: `public/js/pages/admissions.page.js`
+- MODIFIED: `public/pages/admissions.html`
+- MODIFIED: `public/js/services/payment.service.js`
+- MODIFIED: `public/js/core/app.js` (bumped to 1.8.130)
+- MODIFIED: `docs/02-PROGRESS-LOG.md`
+- MODIFIED: 35 files across `public/` (?v= bumped to 1.8.130)
+
+---
+
+### [2026-11-24 14:25] Version 1.8.129 — Atomic Admission & Payment Flow with Plan Choice
+
+**What was built:**
+- `public/js/pages/admissions.page.js`:
+  - Required Payment Plan Choice: When the selected course has `fullPaymentAmount > 0`, renders a required choice ("Pay in installments" / "Pay in full (Rs X, Y% discount)"). Default is unselected (`selectedPaymentPlan = null`), requiring user choice before form validation passes.
+  - Live Fee Breakdown:
+    - If unselected: Prompts the user to select a payment plan to view fee breakdown.
+    - If "Pay in installments": Displays Admission fee, Study material fee, 4 Installments (`amount x 4 = total`), and Course total with note that examination fee is charged separately later.
+    - If "Pay in full": Displays Course fee, Full-payment discount, and Amount payable (full amount) with note that examination fee is charged separately later. Installment rows are completely suppressed.
+    - Course selection changes reset the choice (`selectedPaymentPlan = null`).
+  - Verify Confirmation Dialog: Displays student details, selected plan, and exact fee breakdown before proceeding.
+  - Deferred Save: Clicking "Admit & Proceed to Payment" opens the shared payment popup without writing the student to Firestore yet. If the payment popup is cancelled or closed, nothing is saved to Firestore and all form inputs remain intact.
+- `public/js/services/payment.service.js`:
+  - Implemented `recordAdmissionWithPayment({ pendingAdmission, paymentParams })`: Atomic transaction that generates student ID and receipt number, sets student doc (with `paymentPlan`, `fullPaymentAmount`, `fullPaid`, `paidAmount`, and `feeSchedule` set to `[]` for full plan or 4 pending installments for installments plan), saves uploaded documents and aadhaar subcollections, creates payment record (`FULL` or `AD`), and writes activity log.
+- `public/js/components/payment-popup.js`:
+  - Added support for admission mode (`isAdmission` / `pendingAdmission`): strictly presents the single appropriate admission payment item (`Course Fee (Paid in Full)` for full plan, or `Admission & Material Fee` for installments plan).
+  - Date is fixed to today (read-only), late fee fine is 0 (waive disabled).
+  - On confirm, executes `recordAdmissionWithPayment`, plays success sound, and launches receipt prompt.
+- Verification & Housekeeping:
+  - Strict ESM syntax check across all 70 JS files (0 errors).
+  - `tools/check-imports.js` verified (0 errors across 101 files and 247 imports).
+  - Bumped version to `1.8.129` with `tools/bump-version.js`.
+
+**Why:**
+- Fixed the issue where clicking "Verify" admitted the student to Firestore before payment collection, bypassed plan choice, and took the 1st installment.
+- Unified admission creation and fee collection into a single atomic transaction.
+
+**Files touched (created / modified / deleted):**
+- MODIFIED: `public/js/pages/admissions.page.js`
+- MODIFIED: `public/js/services/payment.service.js`
+- MODIFIED: `public/js/components/payment-popup.js`
+- MODIFIED: `public/js/core/app.js` (bumped to 1.8.129)
+- MODIFIED: `docs/02-PROGRESS-LOG.md`
+- MODIFIED: 35 files across `public/` (?v= bumped by bump-version.js to 1.8.129)
+
+---
+
 ### [2026-11-24 13:30] Version 1.8.128 — Fix Admissions Syntax Scope Error & Courses Full Payment Persistence
 
 **What was built:**
@@ -2904,6 +3051,92 @@ ame, code/courseCode, level, prerequisiteId/prerequisiteCode/eligibility (batche
 - `public/js/pages/student-profile.page.js`
 - `public/css/pages/student-profile.css`
 - Bumped version to `1.8.112` across files.
+
+---
+
+### 2026-11-24 — Unified Course Fee Architecture & Full Plan Financials (v1.8.133)
+
+**What:**
+- Fixed `calculateStudentFinancials` in `public/js/services/payment.service.js`:
+  - Course total strictly excludes study material and exam fee across all views (Full plan total = `2500`, Installments plan total = `3000`).
+  - Course paid strictly sums course fee payments only (`FULL`, `AD`, `IN`), excluding study material (`MAT`), exam (`EX`), and late fees (`LF`).
+  - Outstanding = `Total - Paid`. Full plan: `2500 / 2500 / 0` (100%). Installments plan at admission: `3000 / 1000 / 2000` (33%).
+  - Study material is shown strictly as its own "Study material - Paid at admission" line and in the admission receipt.
+- Confirmed atomic admission payment creation in `recordAdmissionWithPayment`:
+  - Exactly 2 payment documents are written in Firestore for Full plan: `FULL` (2500) + `MAT` (100) under the same admission receipt number, without creating duplicates.
+  - Exactly 2 payment documents are written for Installments plan: `AD` (1000) + `MAT` (100).
+  - Student doc fields `feeTotal`, `paidAmount`, and `totalPaid` accurately reflect course fees (`2500` or `1000` paid, not inflated with material).
+- Updated `student-profile.page.js`:
+  - Standardized Course Fee breakdown with `courseFeeOf` and `discountOf`: shows `Course Package Fee (Standard)` Rs 3,000, `Full-Payment Discount (17% off)` - Rs 500, `Full Course Fee` Rs 2,500, and separate `Study Material & Kit (Paid at admission)` Rs 100.
+  - Installment status table skips Admission Fee row for Full plan students and shows green paid-in-full banner.
+- Verified: `node tools/check-imports.js` (0 errors), ESM syntax check on all 70 JS files (0 errors).
+
+**Files touched:**
+- `public/js/services/payment.service.js`
+- `public/js/pages/student-profile.page.js`
+- `public/js/utils/fees.js`
+- `public/js/pages/admissions.page.js`
+- `public/js/components/payment-popup.js`
+- `public/js/utils/admission-receipt.js`
+- Bumped version to `1.8.133` across files.
+
+---
+
+### 2026-11-24 — Strict Record-Based Course Paid & Single Source Financials (v1.8.134)
+
+**What:**
+- Refactored `calculateStudentFinancials` in `public/js/services/payment.service.js`:
+  - `total = fullCourseFee` (`2500` for full plan, `3000` for installments). Study material is strictly excluded.
+  - Removed `paid = Math.max(paidFromRecords, total)` and removed artificial counter fallbacks. Course paid comes ONLY from real course payment records (`FULL` / `AD` / `IN`). If records are missing, it displays the true lower number without masking it.
+  - Course paid strictly ignores `MAT` (study material), `EX` (exam fee), and `LF` (late fee).
+- Verified single source of truth across all pages showing Total / Paid / Outstanding:
+  - `public/js/pages/student-profile.page.js`: Header metrics, notify dues modal, and fee schedule all delegate to `calculateStudentFinancials`.
+  - `public/js/pages/pay-fees.page.js`: Financial summary cards delegate to `calculateStudentFinancials`.
+  - `public/js/pages/admissions.page.js`: Student view modal now fetches payments subcollection and delegates to `calculateStudentFinancials(s, payments)`.
+  - `public/js/services/payment.service.js`: Helper functions `courseFeeWithoutExam` and `courseBalanceWithoutExam` delegate directly to `calculateStudentFinancials`.
+- Verified: `node tools/check-imports.js` (0 errors), ESM syntax check across all 70 JS files (0 errors).
+
+**Files touched:**
+- `public/js/services/payment.service.js`
+- `public/js/pages/admissions.page.js`
+- Bumped version to `1.8.134` across files.
+
+---
+
+### 2026-11-24 — Fix Admission Payment Execution, Discount %, Popup Subtitle & UI Elements (v1.8.135)
+
+**What:**
+- Fixed blocking `ReferenceError: Cannot access 'primaryAmt' before initialization` in `recordAdmissionWithPayment` (`public/js/services/payment.service.js`): moved `const primaryAmt = isFull ? fullAmt : admFee;` above `studentData` and removed duplicate lower declaration. Both full and installment admissions now record atomically with Item 1 (`FULL 2500` or `AD 1000`) and Item 2 (`MAT 100`).
+- Fixed discount % in `public/js/utils/fees.js` (`discountOf`): directly calculates `rs = courseFee - fullAmt` and `pct = Math.round((rs / courseFee) * 100)`. Stale legacy course percent (19%) no longer overrides the mathematically correct `(3000 - 2500) / 3000 = 17%`.
+- Fixed payment popup subtitle in `public/js/components/payment-popup.js`: shows student name and course code (e.g. `RONI • CITA`) even before the student record is saved to Firestore, preventing `undefined` subtitle.
+- Added permanent `#adm-plan-card`, `#adm-plan-options`, and `#adm-plan-err` elements into `public/pages/admissions.html` with styling in `public/css/pages/admissions.css`. Removed console warnings for missing elements and enabled visual error display when no plan is selected.
+- Removed debug log `[admissions] batch ... ACCEPTED/REJECTED` in `public/js/pages/admissions.page.js`.
+- Verified: `node tools/check-imports.js` (0 errors), ESM syntax check across all 70 JS files (0 errors).
+
+**Files touched:**
+- `public/js/services/payment.service.js`
+- `public/js/utils/fees.js`
+- `public/js/components/payment-popup.js`
+- `public/js/pages/admissions.page.js`
+- `public/pages/admissions.html`
+- `public/css/pages/admissions.css`
+- Bumped version to `1.8.135` across files.
+
+---
+
+### 2026-11-24 — Fix Firestore Read Rules for Branch Heads & Remove Batch Debug Log (v1.8.136)
+
+**What:**
+- Fixed `firestore.rules` read rules for `/enrolments`, `/bills`, `/payments`, `/waivers`, `/breaks`, and `/transfers`:
+  - Replaced `request.resource.data.studentId` with `resource.data.studentId` in `allow read` conditions. `request.resource` is null/undefined on read operations (`get`/`list`), which caused permission denied errors when Branch Heads accessed student sub-collections. `request.resource.data` is preserved in `allow create, update` write rules.
+  - Performed a comprehensive audit across all match blocks in `firestore.rules`: confirmed 0 other read rules use `request.resource`.
+- Removed debug log `console.log('[batches] writing batch doc:', ...)` in `public/js/pages/batches.page.js` line 632.
+- Verified: `node tools/check-imports.js` (0 errors across 101 files and 250 imports), ESM syntax check across all 70 JS files (0 errors).
+
+**Files touched:**
+- `firestore.rules`
+- `public/js/pages/batches.page.js`
+- Bumped version to `1.8.136` across files.
 
 ---
 

@@ -1,13 +1,13 @@
 import { db } from '../config/firebase-config.js';
-import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.128';
+import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.136';
 import { collection, getDocs, query, where, doc, addDoc, updateDoc, deleteDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
 import { createSelect } from '../components/ui-select.js';
 import { openMenu } from '../components/ui-menu.js';
 import { confirmDialog } from '../components/ui-confirm.js';
 import { showToast } from '../components/toast.js';
-import { buildStats, buildToolbar, renderEmptyTableState } from '../components/list-page.js?v=1.8.128';
-import { INST_PER_SEM, feeTotal } from '../utils/fees.js?v=1.8.128';
-import { isCourseActive } from '../utils/session-rules.js?v=1.8.128';
+import { buildStats, buildToolbar, renderEmptyTableState } from '../components/list-page.js?v=1.8.136';
+import { INST_PER_SEM, feeTotal, courseFeeOf, discountOf } from '../utils/fees.js?v=1.8.136';
+import { isCourseActive } from '../utils/session-rules.js?v=1.8.136';
 
 const ENDED = ['ended', 'closed', 'completed', 'archived', 'cancelled'];
 const LOCK_FIELDS = { admission: 'Admission fee', installment: 'Installment amount', material: 'Material fee' };
@@ -209,10 +209,14 @@ export async function mount({ ctx, profile }) {
       const fullAmt = num(fullInput ? fullInput.value : 0);
       if (fullAmt > 0) {
         fe.fullPaymentAmount = fullAmt;
-        const courseFee = (fe.admission || 0) + (fe.installment || 0) * 4 + (fe.material || 0);
-        fe.fullPaymentDiscount = courseFee > fullAmt ? Math.round(((courseFee - fullAmt) / courseFee) * 100) : 0;
+        const disc = discountOf({ fees: { admission: fe.admission, installment: fe.installment, fullPaymentAmount: fullAmt } });
+        fe.fullPaymentDiscountRs = disc.rs;
+        fe.fullPaymentDiscountPct = disc.pct;
+        fe.fullPaymentDiscount = disc.rs;
       } else {
         fe.fullPaymentAmount = null;
+        fe.fullPaymentDiscountRs = null;
+        fe.fullPaymentDiscountPct = null;
         fe.fullPaymentDiscount = null;
       }
       return fe;
@@ -222,15 +226,12 @@ export async function mount({ ctx, profile }) {
       const discInput = f.discount || $('cs-f-discount');
       if (!Y || !fullInput || !discInput) return;
       const fe = readFees();
-      const courseFee = (fe.admission || 0) + (fe.installment || 0) * 4 + (fe.material || 0);
       const fullAmt = num(fullInput.value);
-      if (fullAmt > 0 && courseFee > 0) {
-        if (fullAmt < courseFee) {
-          const disc = Math.round(((courseFee - fullAmt) / courseFee) * 100);
-          discInput.value = disc + '% discount (saves ' + rs(courseFee - fullAmt) + ')';
-        } else {
-          discInput.value = '0% discount (no savings)';
-        }
+      const disc = discountOf({ fees: { admission: fe.admission, installment: fe.installment, fullPaymentAmount: fullAmt } });
+      if (disc.rs > 0) {
+        discInput.value = disc.pct + '% discount (saves ' + rs(disc.rs) + ')';
+      } else if (fullAmt > 0) {
+        discInput.value = '0% discount (no savings)';
       } else {
         discInput.value = '';
         discInput.placeholder = 'No offer (empty)';
@@ -262,8 +263,8 @@ export async function mount({ ctx, profile }) {
     }
     function paintSemTotal() {
       const fe = readFees();
-      $('cs-sem-calc').textContent = rs(fe.admission) + ' + ' + rs(fe.installment) + ' x 4 + ' + rs(fe.exam) + ' + ' + rs(fe.material);
-      $('cs-sem-total').textContent = rs(feeTotal(fe));
+      $('cs-sem-calc').textContent = rs(fe.admission) + ' + ' + rs(fe.installment) + ' x 4' + (fe.material ? ' (+ ' + rs(fe.material) + ' material)' : '');
+      $('cs-sem-total').textContent = rs(courseFeeOf(fe));
     }
     function paintSum() {
       if (!Y) return;
@@ -369,6 +370,8 @@ export async function mount({ ctx, profile }) {
         v.eligibility = lv === 1 ? v.eligibilityText : (p ? 'Completed ' + p.code : '');
         v.fees = readFees();
         v.fullPaymentAmount = v.fees.fullPaymentAmount || null;
+        v.fullPaymentDiscountRs = v.fees.fullPaymentDiscountRs || null;
+        v.fullPaymentDiscountPct = v.fees.fullPaymentDiscountPct || null;
         v.fullPaymentDiscount = v.fees.fullPaymentDiscount || null;
         v.curriculum = topics.slice();
       } else {
@@ -598,8 +601,11 @@ export async function mount({ ctx, profile }) {
         if (num(fe.exam) > 0) addFeeRow('Exam fee', num(fe.exam));
         if (num(fe.material) > 0) addFeeRow('Study material', num(fe.material));
         const viewFullAmt = num(fe.fullPaymentAmount) || num(r.fullPaymentAmount);
-        const viewFullDisc = fe.fullPaymentDiscount || r.fullPaymentDiscount || 0;
-        if (viewFullAmt > 0) addFeeRow('Paid in full offer', viewFullAmt, (viewFullDisc ? viewFullDisc + '% discount' : 'Instant offer'));
+        const disc = discountOf(fe || r);
+        if (viewFullAmt > 0) {
+          const discText = disc.rs > 0 ? (disc.pct + '% discount (saves ' + rs(disc.rs) + ')') : 'Instant offer';
+          addFeeRow('Paid in full offer', viewFullAmt, discText);
+        }
 
         const trTot = mk('tr', 'cv-row-total');
         const tdTotL = mk('td', 'cv-cell-label', 'Total semester fee');
@@ -795,8 +801,8 @@ export async function mount({ ctx, profile }) {
           if (num(fe.exam)) parts.push('Exam ' + num(fe.exam));
           if (num(fe.material)) parts.push('Mat ' + num(fe.material));
           const rowFullAmt = num(fe.fullPaymentAmount) || num(r.fullPaymentAmount);
-          const rowFullDisc = fe.fullPaymentDiscount || r.fullPaymentDiscount || 0;
-          if (rowFullAmt) parts.push('Full ' + rs(rowFullAmt) + (rowFullDisc ? ' (' + rowFullDisc + '% off)' : ''));
+          const disc = discountOf(fe || r);
+          if (rowFullAmt) parts.push('Full ' + rs(rowFullAmt) + (disc.pct ? ' (' + disc.pct + '% off)' : ''));
           tdFee.appendChild(mk('div', 'cs-meta', parts.join(', ')));
           const chain = chainOf(r);
           const tdTot = mk('td', 'num cs-total-cell', rs(packageTotal(r)));

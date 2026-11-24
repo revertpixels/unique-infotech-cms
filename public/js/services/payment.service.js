@@ -8,8 +8,9 @@ import {
   runTransaction,
   serverTimestamp
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { readReceiptNo, writeCounter } from './admission.service.js?v=1.8.128';
-import { fineFor, todayISO } from '../utils/session-rules.js?v=1.8.128';
+import { readStudentId, readReceiptNo, writeCounter } from './admission.service.js?v=1.8.136';
+import { fineFor, todayISO } from '../utils/session-rules.js?v=1.8.136';
+import { courseFeeOf } from '../utils/fees.js?v=1.8.136';
 
 const COL = 'students';
 
@@ -186,97 +187,62 @@ export function isExamFeePaid(examFee, paymentsList, student) {
  * Used everywhere: Student Profile cards, Payment History, Pay Fees, Students list, Dashboard.
  *
  * Rules:
- * - Paid = sum of all payments for this student EXCEPT exam fee and late fee
- *   (admission + material + installments, from payment records, not a stale stored counter).
- * - Total = admission + material + installments (no exam fee).
- *   If paymentPlan === 'full', Total = fullPaymentAmount || feeTotal.
- * - Outstanding = Total - Paid, never below 0.
+ * - Total fee (course) = 2500 for full plan (fullCourseFee), 3000 for installments (admission + installments).
+ *   Study material is NEVER part of the course total anywhere.
+ * - Paid (course) = course payments ONLY (FULL / AD / IN).
+ *   Strictly excludes study material (MAT), exam (EX), and late fee (LF).
+ *   Paid comes ONLY from real course payment records. If records are missing, shows the true lower number.
+ * - Outstanding = Total - Paid, never below 0. Full plan: 2500 / 2500 / 0, 100%.
  * - Percent = Total > 0 ? min(100, round((Paid / Total) * 100)) : 0.
- *
- * Handles legacy admissions where admission fee was collected at admission (receiptNo / dueAtAdmission exists)
- * but no separate 'AD' record was written into the payment subcollection.
+ * - Study material is shown only as its own "Study material - Paid at admission" line and in the admission receipt.
  */
 export function calculateStudentFinancials(student, allPayments = []) {
   if (!student) {
     return { total: 0, paid: 0, outstanding: 0, percent: 0 };
   }
 
-  // 1. Total: course package fee EXCLUDING examination fee
+  // 1. Total: course package fee EXCLUDING examination fee AND EXCLUDING study material
   let total = 0;
   if (student.paymentPlan === 'full') {
-    total = Number(student.fullPaymentAmount ?? student.feeTotal ?? 0);
+    total = Number(student.fullPaymentAmount ?? student.dueAtAdmission?.full ?? student.feeTotal ?? 0);
   } else {
     const sched = Array.isArray(student.feeSchedule) ? student.feeSchedule : [];
     const instSum = sched.reduce((sum, it) => sum + Number(it.amount || 0), 0);
     const adm = Number(student.admissionFee ?? student.dueAtAdmission?.admission ?? student.feeSnapshot?.admission ?? 0);
-    const mat = Number(student.materialFee ?? student.dueAtAdmission?.material ?? student.feeSnapshot?.material ?? 0);
-    if (instSum > 0 || adm > 0 || mat > 0) {
-      total = instSum + adm + mat;
+    if (instSum > 0 || adm > 0) {
+      total = instSum + adm;
     } else {
-      const exam = Number(student.examFee ?? student.feeSnapshot?.exam ?? 0);
-      const feeTot = Number(student.feeTotal ?? 0);
-      total = Math.max(0, feeTot - exam);
+      total = courseFeeOf(student) || Math.max(0, Number(student.feeTotal || 0) - Number(student.examFee ?? student.feeSnapshot?.exam ?? 0) - Number(student.materialFee ?? student.feeSnapshot?.material ?? 0));
     }
   }
 
-  // 2. Paid: sum of all payments EXCEPT exam fee and late fee
+  // 2. Paid: course payments ONLY (FULL / AD / IN) from actual payment records.
+  // Strictly NOT material (MAT), NOT exam (EX), NOT late fee (LF).
+  // Paid must come ONLY from real course payment records.
+  // If records are missing, show the true lower number, do not hide it.
   const payments = Array.isArray(allPayments) ? allPayments : [];
-  let paidFromRecords = 0;
-  let hasAdmissionInRecords = false;
-  let hasMaterialInRecords = false;
-  let hasFullPaymentInRecords = false;
+  let paid = 0;
+
+  // If full plan, ignore any accidental duplicate AD record that has the same receiptNo as FULL
+  const fullReceiptNos = new Set(
+    payments.filter(p => String(p.type || '').toUpperCase().trim() === 'FULL').map(p => p.receiptNo).filter(Boolean)
+  );
 
   for (const p of payments) {
     const t = String(p.type || '').toUpperCase().trim();
-    // Exclude exam fee and late fee
+    // Exclude exam fee, late fee, and study material
     if (t === 'EX' || t === 'EXAM' || t === 'EXAMINATION') continue;
     if (t === 'LF' || t === 'LATE_FEE' || t === 'LATEFEE') continue;
+    if (t === 'MAT' || t === 'MATERIAL' || t === 'STUDY_MATERIAL') continue;
 
+    // Deduplicate: if FULL payment exists for this receiptNo, ignore extra AD record with same receiptNo
     if (t === 'AD' || t === 'ADM' || t === 'ADMISSION') {
-      hasAdmissionInRecords = true;
-    }
-    if (t === 'MAT' || t === 'MATERIAL' || t === 'STUDY_MATERIAL') {
-      hasMaterialInRecords = true;
-    }
-    if (t === 'FULL' || t === 'FULL_PAYMENT') {
-      hasFullPaymentInRecords = true;
-    }
-
-    paidFromRecords += Number(p.amount || 0);
-  }
-
-  let paid = paidFromRecords;
-
-  if (student.paymentPlan === 'full') {
-    if (hasFullPaymentInRecords || student.fullPaid === true) {
-      paid = total;
-    }
-  } else {
-    // Legacy support: if student was admitted under old flow where admission fee was collected
-    // but no separate 'AD' record was written to the payment subcollection:
-    if (!hasAdmissionInRecords) {
-      const legacyAdm = Number(
-        student.dueAtAdmission?.admission ??
-        (student.receiptNo || student.admissionPaid ? (student.admissionFee ?? student.feeSnapshot?.admission ?? 0) : 0)
-      );
-      if (legacyAdm > 0) {
-        paid += legacyAdm;
+      if (student.paymentPlan === 'full' || (p.receiptNo && fullReceiptNos.has(p.receiptNo))) {
+        continue;
       }
     }
-    if (!hasMaterialInRecords) {
-      const legacyMat = Number(
-        student.dueAtAdmission?.material ??
-        (student.materialPaid ? (student.materialFee ?? student.feeSnapshot?.material ?? 0) : 0)
-      );
-      if (legacyMat > 0) {
-        paid += legacyMat;
-      }
-    }
-  }
 
-  // If allPayments was not provided (null / undefined), fall back to stored student.paidAmount if larger
-  if ((allPayments === null || allPayments === undefined) && Number(student.paidAmount ?? student.totalPaid ?? 0) > 0) {
-    paid = Math.max(paid, Number(student.paidAmount ?? student.totalPaid ?? 0));
+    paid += Number(p.amount || 0);
   }
 
   const outstanding = Math.max(0, total - paid);
@@ -546,4 +512,279 @@ export async function recordPaymentTx(tx, {
  */
 export async function recordPayment(params) {
   return await runTransaction(db, (tx) => recordPaymentTx(tx, params));
+}
+
+/**
+ * Records a new student admission and their admission payment in a single atomic transaction.
+ * - Reads studentId counter and receipt counter
+ * - Increments both counters
+ * - Writes student document with complete financial records, payment plan ('full' | 'installments'),
+ *   and feeSchedule (empty for full plan, 4 pending installments for installment plan)
+ * - Writes student document subcollections: docs, aadhaar (if provided), payment, activity
+ * Returns { ok: true, studentDocId, studentId, receiptNo, paymentId, studentData, totalPaid }
+ */
+export async function recordAdmissionWithPayment({
+  pendingAdmission,
+  paymentParams
+}) {
+  const pa = pendingAdmission || {};
+  const pp = paymentParams || {};
+  const pDate = todayISO();
+
+  return await runTransaction(db, async (tx) => {
+    // 1. Transaction Reads: Counters first
+    const sid = await readStudentId(tx, {
+      org: 'youth',
+      sessionYear: pa.sessionYear,
+      level: pa.courseLevel
+    });
+
+    const rc = await readReceiptNo(tx, {
+      org: 'youth',
+      type: 'AD',
+      branchCode: pa.branchCode,
+      date: pDate
+    });
+
+    // 2. Transaction Writes: Increment counters
+    writeCounter(tx, sid.ref, sid.next, {
+      org: 'youth',
+      sessionYear: pa.sessionYear,
+      level: pa.courseLevel
+    });
+
+    writeCounter(tx, rc.ref, rc.next, {
+      org: 'youth',
+      type: 'AD',
+      branchCode: pa.branchCode,
+      date: pDate
+    });
+
+    // 3. Prepare student document
+    const studentRef = doc(collection(db, COL));
+    const studentId = sid.studentId;
+    const receiptNo = rc.receiptNo;
+
+    let previousStudentIds = undefined;
+    if (pa.returnDoc) {
+      previousStudentIds = [pa.returnDoc.studentId, ...(pa.returnDoc.previousStudentIds || [])];
+      previousStudentIds = [...new Set(previousStudentIds)];
+    }
+
+    const isFull = !!pa.isFull;
+    const fullAmt = Number(pa.fullAmt || 0);
+    const fullDisc = Number(pa.fullDisc || 0);
+    const admFee = Number(pa.admFee || 0);
+    const matFee = Number(pa.matFee || 0);
+    const instFee = Number(pa.instFee || 0);
+    const examFee = Number(pa.examFee || 0);
+
+    const primaryAmt = isFull ? fullAmt : admFee;
+    const payAmt = isFull ? (fullAmt + matFee) : (admFee + matFee);
+    const balanceDue = isFull ? 0 : (instFee * 4);
+    const courseFee = Number(pa.courseFee || (admFee + instFee * 4));
+    const feeTotal = isFull ? fullAmt : courseFee;
+
+    const studentData = {
+      studentId: studentId,
+      receiptNo: receiptNo,
+      paymentPlan: isFull ? 'full' : 'installments',
+      fullPaymentAmount: isFull ? fullAmt : null,
+      fullPaymentDiscountRs: isFull ? Number(pa.fullDiscRs || pa.fullDisc || 0) : null,
+      fullPaymentDiscountPct: isFull ? Number(pa.fullDiscPct || 0) : null,
+      fullPaymentDiscount: isFull ? Number(pa.fullDiscRs || pa.fullDisc || 0) : null,
+      fullPaid: isFull,
+      fullPaidOn: isFull ? pDate : null,
+      fullReceiptNo: isFull ? receiptNo : null,
+      admissionPaid: true,
+      admissionPaidOn: pDate,
+      admissionReceiptNo: receiptNo,
+      materialPaid: matFee > 0,
+      materialPaidOn: matFee > 0 ? pDate : null,
+      materialReceiptNo: matFee > 0 ? receiptNo : null,
+      name: pa.studentData.name,
+      guardianName: pa.studentData.guardianName,
+      phone: pa.studentData.phone,
+      altPhone: pa.studentData.altPhone || '',
+      email: pa.studentData.email || '',
+      dob: pa.studentData.dob,
+      gender: pa.studentData.gender,
+      qualification: pa.studentData.qualification,
+      address: pa.studentData.address,
+      ctx: 'youth',
+      status: 'active',
+      docs: {},
+      createdAt: serverTimestamp(),
+      createdBy: (pp.userEmail || pa.userEmail || '').toLowerCase(),
+      updatedAt: serverTimestamp(),
+      updatedBy: (pp.userEmail || pa.userEmail || '').toLowerCase(),
+      branchId: pa.branchId,
+      branchName: pa.branchName,
+      branchCode: pa.branchCode,
+      courseId: pa.courseId,
+      courseCode: pa.studentData.courseCode || '',
+      courseName: pa.studentData.courseName || '',
+      batchId: pa.batchId,
+      batchName: pa.studentData.batchName || '',
+      sessionId: pa.sessionId,
+      sessionName: pa.studentData.sessionName || '',
+      admissionDate: pa.studentData.admissionDate || pDate,
+      feeTotal: feeTotal,
+      paidAmount: primaryAmt,
+      totalPaid: primaryAmt,
+      balanceDue: balanceDue,
+      feeSnapshot: pa.feeSnapshot || {},
+      feeSchedule: isFull
+        ? []
+        : (pa.sched || []).map((it) => ({
+            no: it.no,
+            month: it.month,
+            opens: it.opens,
+            due: it.due,
+            amount: instFee,
+            paid: false,
+            status: 'pending'
+          })),
+      paidInstallments: [],
+      installmentsPaid: 0,
+      examFee: examFee,
+      dueAtAdmission: isFull
+        ? { full: fullAmt, material: matFee, total: payAmt }
+        : { admission: admFee, material: matFee, total: payAmt },
+      prereqCheck: pa.prereqCheck || null,
+      ...(previousStudentIds !== undefined ? { previousStudentIds } : {}),
+      ...(pa.sourceAdmission ? { sourceAdmission: pa.sourceAdmission } : {})
+    };
+
+    // Filter undefined fields
+    Object.keys(studentData).forEach((k) => {
+      if (studentData[k] === undefined) delete studentData[k];
+    });
+
+    const docsMap = pa.docs || {};
+    Object.keys(docsMap).forEach((k) => {
+      studentData.docs[k] = !!docsMap[k];
+    });
+
+    // Write student doc
+    tx.set(studentRef, studentData);
+
+    // Write docs subcollection
+    Object.entries(docsMap).forEach(([key, docData]) => {
+      if (docData) {
+        const docRef = doc(collection(studentRef, 'docs'), key);
+        tx.set(docRef, Object.assign({}, docData, { updatedAt: serverTimestamp() }));
+      }
+    });
+
+    // Write aadhaar subcollection if present
+    if (pa.aadhaar) {
+      const aadhaarRef = doc(db, COL, studentRef.id, 'aadhaar', 'aadhaar');
+      tx.set(aadhaarRef, {
+        studentId: studentId,
+        aadhaar: pa.aadhaar,
+        updatedAt: serverTimestamp()
+      });
+    }
+
+    // Write payment subcollection record(s):
+    // Full plan: one 'FULL' record for fullAmt, plus one 'MAT' record if matFee > 0
+    // Installments plan: one 'AD' record for admFee, plus one 'MAT' record if matFee > 0
+    const paymentRef = doc(collection(studentRef, 'payment'));
+    const paymentData = {
+      amount: primaryAmt,
+      baseAmount: primaryAmt,
+      lateFee: 0,
+      lateFeeAmount: 0,
+      lateFeeWaived: false,
+      waived: false,
+      waiverReason: '',
+      total: primaryAmt,
+      date: pDate,
+      paidOn: pDate,
+      type: isFull ? 'FULL' : 'AD',
+      typeName: isFull ? 'Full course fee' : 'Admission fee',
+      installmentNo: null,
+      month: '',
+      mode: pp.mode || 'cash',
+      txnId: pp.mode !== 'cash' ? (pp.txnId || '') : '',
+      receiptNo: receiptNo,
+      remarks: pp.remarks || '',
+      recordedBy: (pp.userEmail || pa.userEmail || '').toLowerCase(),
+      recordedByRole: pp.userRole || '',
+      recordedByName: pp.userName || '',
+      recordedAtBranchId: pp.branchId || pa.branchId || 'HO',
+      recordedAtBranchCode: pp.branchCode || pa.branchCode || 'HO',
+      recordedAtBranchName: pp.branchName || pa.branchName || '',
+      createdAt: serverTimestamp()
+    };
+    tx.set(paymentRef, paymentData);
+
+    if (matFee > 0) {
+      const matPaymentRef = doc(collection(studentRef, 'payment'));
+      const matPaymentData = {
+        amount: matFee,
+        baseAmount: matFee,
+        lateFee: 0,
+        lateFeeAmount: 0,
+        lateFeeWaived: false,
+        waived: false,
+        waiverReason: '',
+        total: matFee,
+        date: pDate,
+        paidOn: pDate,
+        type: 'MAT',
+        typeName: 'Study material',
+        installmentNo: null,
+        month: '',
+        mode: pp.mode || 'cash',
+        txnId: pp.mode !== 'cash' ? (pp.txnId || '') : '',
+        receiptNo: receiptNo,
+        remarks: pp.remarks || '',
+        recordedBy: (pp.userEmail || pa.userEmail || '').toLowerCase(),
+        recordedByRole: pp.userRole || '',
+        recordedByName: pp.userName || '',
+        recordedAtBranchId: pp.branchId || pa.branchId || 'HO',
+        recordedAtBranchCode: pp.branchCode || pa.branchCode || 'HO',
+        recordedAtBranchName: pp.branchName || pa.branchName || '',
+        createdAt: serverTimestamp()
+      };
+      tx.set(matPaymentRef, matPaymentData);
+    }
+
+    // Write activity subcollection record
+    const activityRef = doc(collection(studentRef, 'activity'));
+    const summary = isFull
+      ? `Admitted on Full Payment plan with payment of Rs ${payAmt} (Course fee Rs ${fullAmt}${matFee > 0 ? ' + Study material Rs ' + matFee : ''}, Receipt: ${receiptNo}) via ${pp.mode || 'cash'}`
+      : `Admitted on Installments plan with payment of Rs ${payAmt} (Admission fee Rs ${admFee}${matFee > 0 ? ' + Study material Rs ' + matFee : ''}, Receipt: ${receiptNo}) via ${pp.mode || 'cash'}`;
+
+    tx.set(activityRef, {
+      action: 'admission_and_payment',
+      summary: summary,
+      receiptNo: receiptNo,
+      type: isFull ? 'FULL' : 'AD',
+      amount: payAmt,
+      lateFee: 0,
+      waived: false,
+      mode: pp.mode || 'cash',
+      changes: {
+        paidAmount: { from: 0, to: primaryAmt },
+        balanceDue: { from: feeTotal, to: balanceDue }
+      },
+      by: (pp.userEmail || pa.userEmail || '').toLowerCase(),
+      byRole: pp.userRole || '',
+      branchId: pp.branchId || pa.branchId || '',
+      at: serverTimestamp()
+    });
+
+    return {
+      ok: true,
+      studentDocId: studentRef.id,
+      studentId: studentId,
+      receiptNo: receiptNo,
+      paymentId: paymentRef.id,
+      studentData: studentData,
+      totalPaid: payAmt
+    };
+  });
 }

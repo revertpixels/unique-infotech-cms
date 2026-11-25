@@ -1,6 +1,6 @@
-import { getRunningPeriod, getPeriodOptions } from '../utils/date.utils.js?v=1.8.136';
-import { loadSessions, getSelectedSessionId, setSelectedSession } from '../core/sessions.js?v=1.8.136';
-import { confirmLeave } from '../utils/unsaved-guard.js?v=1.8.136';
+import { getRunningPeriod, getPeriodOptions } from '../utils/date.utils.js?v=1.8.140';
+import { loadSessions, getSelectedSessionId, setSelectedSession } from '../core/sessions.js?v=1.8.140';
+import { confirmLeave } from '../utils/unsaved-guard.js?v=1.8.140';
 
 let listenersRegistered = false;
 let sessionsListenerRegistered = false;

@@ -8,9 +8,9 @@ import {
   runTransaction,
   serverTimestamp
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { readStudentId, readReceiptNo, writeCounter } from './admission.service.js?v=1.8.136';
-import { fineFor, todayISO } from '../utils/session-rules.js?v=1.8.136';
-import { courseFeeOf } from '../utils/fees.js?v=1.8.136';
+import { readStudentId, readReceiptNo, writeCounter } from './admission.service.js?v=1.8.140';
+import { fineFor, todayISO } from '../utils/session-rules.js?v=1.8.140';
+import { courseFeeOf } from '../utils/fees.js?v=1.8.140';
 
 const COL = 'students';
 
@@ -201,10 +201,15 @@ export function calculateStudentFinancials(student, allPayments = []) {
     return { total: 0, paid: 0, outstanding: 0, percent: 0 };
   }
 
+  const isFull = student.paymentPlan === 'full';
+
   // 1. Total: course package fee EXCLUDING examination fee AND EXCLUDING study material
   let total = 0;
-  if (student.paymentPlan === 'full') {
+  if (isFull) {
     total = Number(student.fullPaymentAmount ?? student.dueAtAdmission?.full ?? student.feeTotal ?? 0);
+    if (!total || total <= 0) {
+      total = courseFeeOf(student) || 0;
+    }
   } else {
     const sched = Array.isArray(student.feeSchedule) ? student.feeSchedule : [];
     const instSum = sched.reduce((sum, it) => sum + Number(it.amount || 0), 0);
@@ -216,39 +221,259 @@ export function calculateStudentFinancials(student, allPayments = []) {
     }
   }
 
-  // 2. Paid: course payments ONLY (FULL / AD / IN) from actual payment records.
-  // Strictly NOT material (MAT), NOT exam (EX), NOT late fee (LF).
-  // Paid must come ONLY from real course payment records.
-  // If records are missing, show the true lower number, do not hide it.
+  // 2. Paid: course payments ONLY (FULL / AD / IN)
+  // Strictly NOT material (MAT), NOT exam (EX), NOT late fee (LF), NOT waiver (WA).
   const payments = Array.isArray(allPayments) ? allPayments : [];
   let paid = 0;
 
-  // If full plan, ignore any accidental duplicate AD record that has the same receiptNo as FULL
   const fullReceiptNos = new Set(
     payments.filter(p => String(p.type || '').toUpperCase().trim() === 'FULL').map(p => p.receiptNo).filter(Boolean)
   );
 
   for (const p of payments) {
     const t = String(p.type || '').toUpperCase().trim();
-    // Exclude exam fee, late fee, and study material
+    // Exclude exam fee, late fee, study material, and waiver
     if (t === 'EX' || t === 'EXAM' || t === 'EXAMINATION') continue;
     if (t === 'LF' || t === 'LATE_FEE' || t === 'LATEFEE') continue;
     if (t === 'MAT' || t === 'MATERIAL' || t === 'STUDY_MATERIAL') continue;
+    if (t === 'WA' || t === 'WAIVER') continue;
 
-    // Deduplicate: if FULL payment exists for this receiptNo, ignore extra AD record with same receiptNo
-    if (t === 'AD' || t === 'ADM' || t === 'ADMISSION') {
-      if (student.paymentPlan === 'full' || (p.receiptNo && fullReceiptNos.has(p.receiptNo))) {
-        continue;
-      }
+    if (t === 'FULL') {
+      paid += Number(p.amount || 0);
+      continue;
     }
 
-    paid += Number(p.amount || 0);
+    if (t === 'AD' || t === 'ADM' || t === 'ADMISSION') {
+      // Deduplicate: if student is on Full plan or FULL payment exists for this receiptNo, ignore extra AD record
+      if (isFull || (p.receiptNo && fullReceiptNos.has(p.receiptNo))) {
+        continue;
+      }
+      paid += Number(p.amount || 0);
+      continue;
+    }
+
+    if (t === 'IN' || t === 'INST' || t === 'INSTALLMENT') {
+      paid += Number(p.amount || 0);
+      continue;
+    }
+  }
+
+  if (paid > total && total > 0) {
+    console.warn(`[calculateStudentFinancials] Student ${student.studentId || student.id || ''}: paid (${paid}) exceeds total (${total})`);
   }
 
   const outstanding = Math.max(0, total - paid);
-  const percent = total > 0 ? Math.min(100, Math.round((paid / total) * 100)) : 0;
+  const percent = total > 0 ? Math.round((paid / total) * 100) : 0;
 
   return { total, paid, outstanding, percent };
+}
+
+/**
+ * Builds the receipt menu items for a student.
+ * Rules:
+ * - Admission = ONE receipt. All items at admission (AD / FULL / MAT) share one receipt number
+ *   and open as ONE admission receipt.
+ * - Each installment = its own separate receipt.
+ * - Exam fee = its own separate receipt.
+ * - A FULL, AD or MAT payment is never shown as an "Installment".
+ * - A WA (waiver) is never shown as an "Installment".
+ */
+export function buildReceiptMenuItems(s, payments = []) {
+  if (!s) return [];
+  const isSchool = s.ctx === 'school';
+  const admReceiptRoute = isSchool
+    ? `#/school-admissions/${s.id || s.studentId}/receipt`
+    : `#/admissions/${s.id || s.studentId}/receipt`;
+
+  const admReceiptNo = s.admissionReceiptNo || s.receiptNo || s.fullReceiptNo || '';
+
+  // 1. Single Admission Receipt item
+  const items = [
+    {
+      label: admReceiptNo ? `Admission receipt - ${admReceiptNo}` : 'Admission receipt',
+      icon: 'file-text',
+      onClick: () => { location.hash = admReceiptRoute; }
+    }
+  ];
+
+  const seenReceiptNos = new Set();
+  if (admReceiptNo) seenReceiptNos.add(admReceiptNo);
+
+  // 2. Only list real installment (IN) and exam (EX) payments as separate receipts
+  (payments || []).forEach(p => {
+    const t = String(p.type || '').toUpperCase().trim();
+    // Exclude admission payments, material, late fee, and waivers
+    if (t === 'AD' || t === 'ADM' || t === 'ADMISSION' || t === 'FULL' || t === 'MAT' || t === 'MATERIAL' || t === 'WA' || t === 'WAIVER' || t === 'LF' || t === 'LATE_FEE' || t === 'LATEFEE') return;
+    if (p.receiptNo && seenReceiptNos.has(p.receiptNo)) return;
+    if (p.receiptNo) seenReceiptNos.add(p.receiptNo);
+
+    if (t === 'EX' || t === 'EXAM' || t === 'EXAMINATION') {
+      items.push({
+        label: `Exam fee - ${p.receiptNo || 'Receipt'}`,
+        icon: 'receipt',
+        onClick: () => {
+          location.hash = `#/payments/${s.id}/${p.id}/receipt?from=profile`;
+        }
+      });
+    } else if (t === 'IN' || t === 'INST' || t === 'INSTALLMENT') {
+      const no = p.installmentNo != null ? p.installmentNo : '';
+      const mo = p.month ? ` (${p.month})` : '';
+      items.push({
+        label: `Installment ${no}${mo} - ${p.receiptNo || 'Receipt'}`,
+        icon: 'receipt',
+        onClick: () => {
+          location.hash = `#/payments/${s.id}/${p.id}/receipt?from=profile`;
+        }
+      });
+    }
+  });
+
+  return items;
+}
+
+/**
+ * One-time repair helper: if a student has an admission receipt number
+ * but is missing their AD or FULL (and/or MAT) subcollection payment record(s),
+ * creates the missing record(s) with the student's existing receipt number and persists them to Firestore.
+ */
+export async function repairStudentAdmissionPayment(student, payments = []) {
+  if (!student || !student.id) return [];
+  const rcptNo = student.admissionReceiptNo || student.receiptNo || student.fullReceiptNo;
+  if (!rcptNo) return [];
+
+  const isFull = student.paymentPlan === 'full';
+  const hasFull = payments.some(p => String(p.type || '').toUpperCase().trim() === 'FULL');
+  const hasAd = payments.some(p => {
+    const t = String(p.type || '').toUpperCase().trim();
+    return t === 'AD' || t === 'ADM' || t === 'ADMISSION';
+  });
+  const hasMat = payments.some(p => {
+    const t = String(p.type || '').toUpperCase().trim();
+    return t === 'MAT' || t === 'MATERIAL' || t === 'STUDY_MATERIAL';
+  });
+
+  const pDate = student.admissionDate || student.fullPaidOn || student.admissionPaidOn || todayISO();
+  const branchId = student.branchId || 'HO';
+  const branchCode = student.branchCode || 'HO';
+  const branchName = student.branchName || '';
+
+  const added = [];
+
+  if (isFull && !hasFull) {
+    const fullAmt = Number(student.fullPaymentAmount || student.dueAtAdmission?.full || student.feeTotal || 0);
+    if (fullAmt > 0) {
+      const pRef = doc(collection(db, COL, student.id, 'payment'));
+      const pData = {
+        amount: fullAmt,
+        baseAmount: fullAmt,
+        lateFee: 0,
+        lateFeeAmount: 0,
+        lateFeeWaived: false,
+        waived: false,
+        waiverReason: '',
+        total: fullAmt,
+        date: pDate,
+        paidOn: pDate,
+        type: 'FULL',
+        typeName: 'Full course fee',
+        installmentNo: null,
+        month: '',
+        mode: 'cash',
+        txnId: '',
+        receiptNo: rcptNo,
+        remarks: 'One-time system repair of missing admission payment record',
+        recordedBy: 'system-repair',
+        recordedByRole: 'system',
+        recordedByName: 'System Repair',
+        recordedAtBranchId: branchId,
+        recordedAtBranchCode: branchCode,
+        recordedAtBranchName: branchName,
+        createdAt: serverTimestamp()
+      };
+      await setDoc(pRef, pData);
+      const record = { id: pRef.id, ...pData };
+      payments.push(record);
+      added.push(record);
+      console.log(`[repairStudentAdmissionPayment] Repaired FULL payment for ${student.studentId || student.id}: receipt ${rcptNo}, Rs ${fullAmt}`);
+    }
+  } else if (!isFull && !hasAd) {
+    const admFee = Number(student.dueAtAdmission?.admission ?? student.feeSnapshot?.admission ?? student.admissionFee ?? 0);
+    if (admFee > 0) {
+      const pRef = doc(collection(db, COL, student.id, 'payment'));
+      const pData = {
+        amount: admFee,
+        baseAmount: admFee,
+        lateFee: 0,
+        lateFeeAmount: 0,
+        lateFeeWaived: false,
+        waived: false,
+        waiverReason: '',
+        total: admFee,
+        date: pDate,
+        paidOn: pDate,
+        type: 'AD',
+        typeName: 'Admission fee',
+        installmentNo: null,
+        month: '',
+        mode: 'cash',
+        txnId: '',
+        receiptNo: rcptNo,
+        remarks: 'One-time system repair of missing admission payment record',
+        recordedBy: 'system-repair',
+        recordedByRole: 'system',
+        recordedByName: 'System Repair',
+        recordedAtBranchId: branchId,
+        recordedAtBranchCode: branchCode,
+        recordedAtBranchName: branchName,
+        createdAt: serverTimestamp()
+      };
+      await setDoc(pRef, pData);
+      const record = { id: pRef.id, ...pData };
+      payments.push(record);
+      added.push(record);
+      console.log(`[repairStudentAdmissionPayment] Repaired AD payment for ${student.studentId || student.id}: receipt ${rcptNo}, Rs ${admFee}`);
+    }
+  }
+
+  // Material fee repair
+  const matFee = Number(student.dueAtAdmission?.material ?? student.feeSnapshot?.material ?? student.materialFee ?? 0);
+  if (matFee > 0 && !hasMat) {
+    const matRef = doc(collection(db, COL, student.id, 'payment'));
+    const matData = {
+      amount: matFee,
+      baseAmount: matFee,
+      lateFee: 0,
+      lateFeeAmount: 0,
+      lateFeeWaived: false,
+      waived: false,
+      waiverReason: '',
+      total: matFee,
+      date: pDate,
+      paidOn: pDate,
+      type: 'MAT',
+      typeName: 'Study material',
+      installmentNo: null,
+      month: '',
+      mode: 'cash',
+      txnId: '',
+      receiptNo: rcptNo,
+      remarks: 'One-time system repair of missing material fee record',
+      recordedBy: 'system-repair',
+      recordedByRole: 'system',
+      recordedByName: 'System Repair',
+      recordedAtBranchId: branchId,
+      recordedAtBranchCode: branchCode,
+      recordedAtBranchName: branchName,
+      createdAt: serverTimestamp()
+    };
+    await setDoc(matRef, matData);
+    const record = { id: matRef.id, ...matData };
+    payments.push(record);
+    added.push(record);
+    console.log(`[repairStudentAdmissionPayment] Repaired MAT payment for ${student.studentId || student.id}: receipt ${rcptNo}, Rs ${matFee}`);
+  }
+
+  return added;
 }
 
 /**

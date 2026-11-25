@@ -11,13 +11,13 @@ import {
   runTransaction,
   serverTimestamp
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { createSelect } from '../components/ui-select.js?v=1.8.136';
-import { openPopup } from '../components/modal.js?v=1.8.136';
-import { confirmDialog } from '../components/ui-confirm.js?v=1.8.136';
-import { showToast } from '../components/toast.js?v=1.8.136';
-import { getSelectedSessionId, getCachedSessions } from '../core/sessions.js?v=1.8.136';
-import { todayISO, fmtDate, examWindowOf, installmentSchedule } from '../utils/session-rules.js?v=1.8.136';
-import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.136';
+import { createSelect } from '../components/ui-select.js?v=1.8.140';
+import { openPopup } from '../components/modal.js?v=1.8.140';
+import { confirmDialog } from '../components/ui-confirm.js?v=1.8.140';
+import { showToast } from '../components/toast.js?v=1.8.140';
+import { getSelectedSessionId, getCachedSessions } from '../core/sessions.js?v=1.8.140';
+import { todayISO, fmtDate, examWindowOf, installmentSchedule } from '../utils/session-rules.js?v=1.8.140';
+import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.140';
 import {
   calculateLateFee,
   fetchStudentPayments,
@@ -25,8 +25,9 @@ import {
   isExamFeePaid,
   courseFeeWithoutExam,
   courseBalanceWithoutExam,
-  calculateStudentFinancials
-} from '../services/payment.service.js?v=1.8.136';
+  calculateStudentFinancials,
+  repairStudentAdmissionPayment
+} from '../services/payment.service.js?v=1.8.140';
 
 let currentUserProfile = null;
 let currentCtx = 'youth';
@@ -152,7 +153,7 @@ async function loadStudentDirectly(docId) {
       if (snap.exists()) {
         st = Object.assign({ id: snap.id }, snap.data());
       }
-    } catch (_) {}
+    } catch (_) { }
   }
   if (!st) return;
 
@@ -507,7 +508,7 @@ function resetSearchResults() {
     if (location.hash.startsWith('#/pay-fees')) {
       history.replaceState(null, '', '#/pay-fees');
     }
-  } catch (_) {}
+  } catch (_) { }
 }
 
 /**
@@ -651,7 +652,7 @@ async function openStudentPanel(student) {
     if (location.hash !== newHash) {
       history.replaceState(null, '', newHash);
     }
-  } catch (_) {}
+  } catch (_) { }
   $('pf-multi-card').hidden = true;
   $('pf-empty-state').hidden = true;
   const panel = $('pf-panel');
@@ -698,6 +699,9 @@ async function openStudentPanel(student) {
 
   // Load payments
   currentPayments = await fetchStudentPayments(student.id);
+  if (currentPayments && student.ctx !== 'school') {
+    await repairStudentAdmissionPayment(student, currentPayments).catch(() => {});
+  }
 
   // Render Metrics & Installment Table
   renderPaymentSummary();

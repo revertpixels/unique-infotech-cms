@@ -1,4 +1,5 @@
-import { db } from '../config/firebase-config.js';
+import { db, storage } from '../config/firebase-config.js';
+import { ref as storageRef, deleteObject } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-storage.js';
 import {
   collection,
   getDocs,
@@ -14,25 +15,25 @@ import {
   arrayUnion,
   addDoc
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.136';
-import { registerDirty, confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.136';
-import { buildStats, buildToolbar, renderPager, renderEmptyTableState } from '../components/list-page.js?v=1.8.136';
-import { createSelect } from '../components/ui-select.js?v=1.8.136';
-import { openMenu } from '../components/ui-menu.js?v=1.8.136';
-import { confirmDialog } from '../components/ui-confirm.js?v=1.8.136';
-import { openPopup } from '../components/modal.js?v=1.8.136';
-import { createDatePicker } from '../components/ui-datepicker.js?v=1.8.136';
-import { getSelectedSessionId, getCachedSessions, loadSessions, todayISO } from '../core/sessions.js?v=1.8.136';
-import { firstInstallmentOf, admissionState, sessionLabel, installmentSchedule, batchAllowsCourse, batchCourseLabel, isCourseActive } from '../utils/session-rules.js?v=1.8.136';
-import { formatINR, formatDateIN, initials } from '../utils/formatter.js?v=1.8.136';
-import { validatePhone, validateEmail, validateDOB, validateName, validateRequired } from '../utils/validator.js?v=1.8.136';
-import { listStudentsRaw, checkDuplicatePhone, readStudentId, readReceiptNo, writeCounter, createStudentWithDocs, updateStudentWithDocs, updateStudent, deleteStudent } from '../services/admission.service.js?v=1.8.136';
-import { feeTotal, courseFeeOf, discountOf } from '../utils/fees.js?v=1.8.136';
-import { compressTo100KB, readAsDataURL, blobToDataURL, isImageFile, formatBytes } from '../utils/image-compress.js?v=1.8.136';
-import { fetchStudentPayments, calculateStudentFinancials } from '../services/payment.service.js?v=1.8.136';
-import { playPaymentSuccessSound } from '../utils/sound.js?v=1.8.136';
-import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.136';
-import { APP_CACHE } from '../core/app.js?v=1.8.136';
+import { showToast } from '../components/toast.js?v=1.8.140';
+import { registerDirty, confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.140';
+import { buildStats, buildToolbar, renderPager, renderEmptyTableState } from '../components/list-page.js?v=1.8.140';
+import { createSelect } from '../components/ui-select.js?v=1.8.140';
+import { openMenu } from '../components/ui-menu.js?v=1.8.140';
+import { confirmDialog } from '../components/ui-confirm.js?v=1.8.140';
+import { openPopup } from '../components/modal.js?v=1.8.140';
+import { createDatePicker } from '../components/ui-datepicker.js?v=1.8.140';
+import { getSelectedSessionId, getCachedSessions, loadSessions, todayISO } from '../core/sessions.js?v=1.8.140';
+import { firstInstallmentOf, admissionState, sessionLabel, installmentSchedule, batchAllowsCourse, batchCourseLabel, isCourseActive } from '../utils/session-rules.js?v=1.8.140';
+import { formatINR, formatDateIN, initials } from '../utils/formatter.js?v=1.8.140';
+import { validatePhone, validateEmail, validateDOB, validateName, validateRequired } from '../utils/validator.js?v=1.8.140';
+import { listStudentsRaw, checkDuplicatePhone, readStudentId, readReceiptNo, writeCounter, createStudentWithDocs, updateStudentWithDocs, updateStudent, deleteStudent } from '../services/admission.service.js?v=1.8.140';
+import { feeTotal, courseFeeOf, discountOf } from '../utils/fees.js?v=1.8.140';
+import { compressTo100KB, readAsDataURL, blobToDataURL, isImageFile, formatBytes } from '../utils/image-compress.js?v=1.8.140';
+import { fetchStudentPayments, calculateStudentFinancials, buildReceiptMenuItems } from '../services/payment.service.js?v=1.8.140';
+import { playPaymentSuccessSound } from '../utils/sound.js?v=1.8.140';
+import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.140';
+import { APP_CACHE } from '../core/app.js?v=1.8.140';
 
 const COL = 'students';
 
@@ -1637,37 +1638,7 @@ export async function mount({ container, profile, ctx }) {
                 icon: 'receipt',
                 onClick: async () => {
                   const payments = await fetchStudentPayments(s.id).catch(() => []);
-                  if (!payments || payments.length === 0) {
-                    location.hash = '#/admissions/' + s.id + '/receipt';
-                    return;
-                  }
-                  const receiptItems = [
-                    {
-                      label: 'Admission receipt',
-                      icon: 'file-text',
-                      onClick: () => {
-                        location.hash = '#/admissions/' + s.id + '/receipt';
-                      }
-                    }
-                  ];
-                  payments.forEach(p => {
-                    const type = String(p.type || '').toUpperCase();
-                    let label = '';
-                    if (type === 'EX') {
-                      label = `Exam fee - ${p.receiptNo || 'Receipt'}`;
-                    } else {
-                      const no = p.installmentNo || 1;
-                      const mo = p.month ? ` - ${p.month}` : '';
-                      label = `Installment ${no}${mo} - ${p.receiptNo || 'Receipt'}`;
-                    }
-                    receiptItems.push({
-                      label,
-                      icon: 'receipt',
-                      onClick: () => {
-                        location.hash = `#/payments/${s.id}/${p.id}/receipt`;
-                      }
-                    });
-                  });
+                  const receiptItems = buildReceiptMenuItems(s, payments);
                   setTimeout(() => openMenu(kebab, receiptItems), 10);
                 }
               }
@@ -2764,21 +2735,59 @@ export async function mount({ container, profile, ctx }) {
         });
 
         showToast({ type: 'success', message: `Batch changed to ${destBatch.name || destBatch.id}` });
-        popup.close();
+        saving = false;
+        setSaving(false);
+        popup.close(true);
         await load();
         render();
       } catch (err) {
         console.error('[admissions] change batch failed', err);
         showToast({ type: 'error', message: 'Could not change batch: ' + (err.message || 'error') });
+      } finally {
         saving = false;
         setSaving(false);
+        check();
       }
     });
   }
 
+  // Storage cleanup helper: deletes student photos/docs if in Storage, ignores object-not-found, never blocks
+  async function deleteStudentStorage(s) {
+    if (!storage) return;
+    const paths = [
+      `students/${s.id}/photo`,
+      `students/${s.id}/signature`,
+      `students/${s.id}/dobProof`,
+      `students/${s.id}/marksheet`,
+      `students/${s.id}/docs/photo`,
+      `students/${s.id}/docs/signature`,
+      `students/${s.id}/docs/dobProof`,
+      `students/${s.id}/docs/marksheet`
+    ];
+    if (s.studentId && s.studentId !== s.id) {
+      paths.push(`students/${s.studentId}/photo`);
+      paths.push(`students/${s.studentId}/signature`);
+    }
+    const deletes = paths.map(async (p) => {
+      try {
+        const fileRef = storageRef(storage, p);
+        await deleteObject(fileRef);
+      } catch (err) {
+        if (err && (err.code === 'storage/object-not-found' || (err.message && err.message.includes('object-not-found')))) {
+          return;
+        }
+      }
+    });
+    // Never block popup on Storage: Promise.allSettled with timeout
+    await Promise.race([
+      Promise.allSettled(deletes),
+      new Promise(resolve => setTimeout(resolve, 2000))
+    ]);
+  }
+
   // ---------- Session-Scoped Youth Drop & Delete ----------
   async function purgeYouthAdmission(s, meta) {
-    const subcols = ['docs', 'payment', 'aadhaar'];
+    const subcols = ['docs', 'payment', 'aadhaar', 'activity'];
     const subRefs = [];
     for (const sc of subcols) {
       try {
@@ -2829,11 +2838,23 @@ export async function mount({ container, profile, ctx }) {
       console.warn('[youth] deletion log failed', err);
     }
 
+    // Storage cleanup: photos/documents, ignore "object-not-found", never block popup
+    try {
+      await deleteStudentStorage(s);
+    } catch (err) {
+      console.warn('[youth] storage cleanup failed (non-blocking)', err);
+    }
+
     const allRefs = [...subRefs, ...rootRefs];
     for (let i = 0; i < allRefs.length; i += 400) {
-      const wb = writeBatch(db);
-      allRefs.slice(i, i + 400).forEach(r => wb.delete(r));
-      await wb.commit();
+      try {
+        const wb = writeBatch(db);
+        allRefs.slice(i, i + 400).forEach(r => wb.delete(r));
+        await wb.commit();
+      } catch (batchErr) {
+        console.warn('[youth] batch delete failed, retrying individually with allSettled', batchErr);
+        await Promise.allSettled(allRefs.slice(i, i + 400).map(r => deleteDoc(r)));
+      }
     }
 
     await deleteDoc(doc(db, COL, s.id));
@@ -2949,15 +2970,20 @@ export async function mount({ container, profile, ctx }) {
           showToast({ type: 'success', message: 'Admission deleted permanently' });
         }
 
-        popup.close();
+        // Close popup as soon as Firestore delete/drop succeeds
+        saving = false;
+        setSaving(false);
+        popup.close(true);
         if (editId === s.id) closeForm();
         await load();
         render();
       } catch (err) {
-        console.error('[admissions] purgeYouthAdmission failed', err);
+        console.error('[admissions] student action failed', err);
         showToast({ type: 'error', message: 'Operation failed: ' + (err.message || 'unknown error') });
+      } finally {
         saving = false;
         setSaving(false);
+        check();
       }
     });
   }

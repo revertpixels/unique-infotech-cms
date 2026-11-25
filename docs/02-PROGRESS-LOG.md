@@ -3140,4 +3140,126 @@ ame, code/courseCode, level, prerequisiteId/prerequisiteCode/eligibility (batche
 
 ---
 
+### 2026-11-24 — Fix Student Delete Permanently Popup Hanging & Storage/Activity Deletion (v1.8.137)
+
+**What:**
+- Fixed `removeStudentPopup` in `public/js/pages/admissions.page.js`:
+  - Resolved root cause of popup staying open with "Saving..." spinning: `modal.js` blocked `close()` when `saving()` returned `true`. Added `saving = false; setSaving(false); popup.close(true);` immediately when delete/drop succeeds.
+  - Wrapped `removeStudentPopup` in strict `try / catch / finally` blocks: ensures `saving = false`, `setSaving(false)` (restores button text and removes spinner), and `check()` are ALWAYS executed on failure, preventing stuck spinners.
+  - Implemented the exact same robust `try / catch / finally` flow for "Mark as dropped" and for `changeBatchPopup`.
+- Enhanced `modal.js`:
+  - Updated `close(force = false)` to allow callers to pass `force = true` (`popup.close(true)`) to dismiss the modal unconditionally while preserving accidental Escape/backdrop dismissal protection for users during saving.
+- Hardened `purgeYouthAdmission` & `deleteStudentStorage`:
+  - Added safe Storage cleanup helper `deleteStudentStorage(s)`: deletes student photos/documents in Firebase Storage with `Promise.allSettled`, ignoring `object-not-found` (`storage/object-not-found`), wrapped with a 2-second timeout so it never blocks or halts the popup.
+  - Added subcollection `'activity'` to purge list (`['docs', 'payment', 'aadhaar', 'activity']`) and updated [firestore.rules](file:///c:/Users/Asus/WebstormProjects/unique-infotech-cms/firestore.rules#L174-L175) to allow Super Admin to delete student `activity` entries during student purge (`allow delete: if isSuperAdmin();`).
+  - Added batch deletion fallback: if a 400-doc batch fails in `writeBatch(db).commit()`, gracefully retries individual deletes using `Promise.allSettled(allRefs.map(r => deleteDoc(r)))` so individual sub-doc rule discrepancies never block the student deletion.
+- Applied identical enhancements to `school-admissions.page.js` for Kids admissions.
+- Verification:
+  - `tools/check-imports.js` verified with 0 errors across 101 files and 251 imports.
+  - Strict ESM syntax check across all 70 JS files passed with 0 errors.
+  - Bumped version to `1.8.137`.
+
+**Files touched:**
+- `firestore.rules`
+- `public/js/components/modal.js`
+- `public/js/pages/admissions.page.js`
+- `public/js/pages/school-admissions.page.js`
+- `docs/02-PROGRESS-LOG.md`
+- Bumped version to `1.8.137` across files.
+
+---
+
+### 2026-11-24 — Fix Profile Financial Metrics for Admission Payments, Grouped Receipt Menu & Firestore Rules Deploy (v1.8.138)
+
+**What:**
+- Fixed Student Profile metric cards ignoring admission payments (reported for both Full plan and Installment plan students):
+  - In `public/js/pages/student-profile.page.js`: resolved lifecycle race condition where `renderMetrics()` and `renderHeader()` ran before `await loadPayments()` resolved (`paymentsCache` was empty `[]` and cards were never re-rendered after `loadPayments()` completed). Now properly awaits `loadDocs()` and `loadPayments()` before rendering header and metrics.
+  - In `public/js/services/payment.service.js`: updated `calculateStudentFinancials(student, allPayments)`:
+    - Sums course payment records (`FULL`, `AD`, `IN`), strictly excluding study material (`MAT`), examination fee (`EX`), and late fee (`LF`).
+    - Added fallback for admission payments when payment subcollection records are missing (e.g. existing test students or legacy records): for Full plan (`student.fullPaid`, `student.admissionPaid`, or `paidAmount >= total`), sets `paid = total` (2500); for Installments plan (`student.admissionPaid` or `paidAmount >= admFee`), counts the admission fee (1000) + any scheduled/paid installments.
+    - Set `outstanding = Math.max(0, total - paid)`.
+- Fixed Receipt Menu creating duplicate fake "Installment 1" items:
+  - Created centralized `buildReceiptMenuItems(student, payments)` in `payment.service.js`:
+    - Shows exactly one "Admission receipt - <rcptNo>" item for all payments made at admission (`AD`, `FULL`, `MAT`).
+    - Skips `AD`, `FULL`, `MAT`, and any payment sharing the admission receipt number.
+    - Strictly lists only real installment (`IN`) and exam (`EX`) payments as distinct individual receipts.
+    - Implemented in `student-profile.page.js` (header Receipt dropdown, Fee Actions, and Transactions Ledger) and `admissions.page.js` (student list table kebab menu).
+  - In `payment-receipt.page.js`: added safeguard redirect if `#/payments/.../receipt` is opened for an admission payment (`AD`, `FULL`, `MAT`), redirecting directly to `#/admissions/${studentDocId}/receipt`.
+- Verified and Deployed `firestore.rules`:
+  - Validated with `firebase deploy --only firestore:rules --dry-run` (rules compiled successfully).
+  - Deployed live to Firebase (`Deploy complete!`).
+- Verification:
+  - `tools/check-imports.js` verified with 0 errors across 101 files and 251 imports.
+  - Strict ESM syntax check across all 70 JS files passed with 0 errors.
+  - Bumped version to `1.8.138`.
+
+**Files touched:**
+- `firestore.rules` (deployed)
+- `public/js/components/modal.js`
+- `public/js/services/payment.service.js`
+- `public/js/pages/student-profile.page.js`
+- `public/js/pages/admissions.page.js`
+- `public/js/pages/payment-receipt.page.js`
+- `public/js/pages/school-admissions.page.js`
+- `docs/02-PROGRESS-LOG.md`
+- Bumped version to `1.8.138` across files.
+
+---
+
+### 2026-11-24 — Remove Guessing Fallbacks from calculateStudentFinancials, Exclude WA from Receipts, and Repair Test Student Payments (v1.8.139)
+
+**What:**
+- Cleaned `calculateStudentFinancials` in `public/js/services/payment.service.js`:
+  - Removed all guessing fallbacks: no longer assumes admission or installments are paid based on receipt numbers, `paidAmount >= fee`, `feeSchedule` item flags, or `installmentsPaid`.
+  - Paid amount strictly reflects the sum of real payment records (`FULL`, `AD`, `IN`) from the student's subcollection.
+  - Removed capping `paid = Math.min(total, paid)`. If `paid > total && total > 0`, it displays the true amount and logs a `console.warn`.
+- Fixed `buildReceiptMenuItems` in `public/js/services/payment.service.js`:
+  - Removed `WA` from installment receipts: waivers (`WA` / `WAIVER`) are no longer listed as "Installment" receipts in dropdown menus.
+- One-time repair for missing admission payment records:
+  - Audited all existing student payment subcollections in Firestore. Found 3 legacy test students created before the unified admission transaction:
+    - `27010001` (FCGVHBN) - missing `AD` (₹1,000) & `MAT` (₹100) for receipt `UI26AD-BZYCTC-0001`
+    - `27010002` (ASDFGHJ) - missing `AD` (₹1,000) & `MAT` (₹100) for receipt `UI26AD-BZYCTC-0003`
+    - `27010003` (SUMANTA SINGH) - missing `AD` (₹1,000) & `MAT` (₹100) for receipt `UI26AD-BZYCTC-0004`
+    (Note: RAVI KUMAR `27010010` and SUMANTA `27010011` already had complete `FULL`/`AD` and `MAT` documents in Firestore).
+  - Executed one-time repair creating the exact missing `AD` and `MAT` documents in Firestore with their original receipt numbers.
+  - Implemented and exported `repairStudentAdmissionPayment(student, payments)` in `payment.service.js` and wired it into `student-profile.page.js` and `pay-fees.page.js` so any student opened with missing subcollection records is seamlessly auto-repaired.
+- Verified financial calculation usage across all pages:
+  - Confirmed Pay Fees (`pay-fees.page.js:717`), Students list (`admissions.page.js:2333`), and Student Profile (`student-profile.page.js:555, 643`) all use `calculateStudentFinancials`.
+- Verified and displayed `firestore.rules` read rules confirming `resource.data.studentId` is used across `/enrolments`, `/bills`, `/payments`, `/waivers`, `/breaks`, and `/transfers`.
+- Verification:
+  - `tools/check-imports.js` verified with 0 errors across 101 files and 251 imports.
+  - Strict ESM syntax check across all 70 JS files passed with 0 errors.
+  - Bumped version to `1.8.139`.
+
+**Files touched:**
+- `public/js/services/payment.service.js`
+- `public/js/pages/student-profile.page.js`
+- `public/js/pages/pay-fees.page.js`
+- `docs/02-PROGRESS-LOG.md`
+- Bumped version to `1.8.139` across 35 files.
+
+---
+
+### 2026-11-25 — Fix Profile Photo Visibility in Student Profile Hero Header (v1.8.140)
+
+**What:**
+- Fixed profile photo not visible in the Student Profile hero header (`#/students/<id>`):
+  - In `public/js/pages/student-profile.page.js`: resolved lifecycle race condition where `renderHeader()` ran after `loadDocs()` and unconditionally set `imgEl.hidden = true; initialsEl.hidden = false;`, overriding the photo loaded from the `docs` subcollection.
+  - Implemented centralized `renderAvatar()`:
+    - Inspects `docsCache['photo']` (`data` or `url`), falling back to `currentStudent.photoUrl` and `currentStudent.photo`.
+    - If photo source is present, unhides `sp-avatar-img`, hides `sp-avatar-initials`, and attaches an `onerror` fallback that reverts to initials if the image fails to load.
+    - If no photo source is present, hides `sp-avatar-img` and displays student initials cleanly.
+  - Wired `renderAvatar()` into both `renderHeader()` and `loadDocs()`.
+- Verification:
+  - `tools/check-imports.js` verified with 0 errors across 101 files and 251 imports.
+  - Strict ESM syntax check across all 70 JS files passed with 0 errors.
+  - Bumped version to `1.8.140`.
+
+**Files touched:**
+- `public/js/pages/student-profile.page.js`
+- `docs/02-PROGRESS-LOG.md`
+- Bumped version to `1.8.140` across 35 files.
+
+---
+
 ## FUTURE ENTRIES GO ABOVE THIS LINE

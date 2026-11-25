@@ -9,21 +9,21 @@ import {
   collection, getDocs, query, where, doc, getDoc, addDoc, updateDoc, serverTimestamp,
   runTransaction, deleteField, writeBatch, deleteDoc
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.136';
-import { registerDirty, confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.136';
-import { buildStats, buildToolbar, renderPager } from '../components/list-page.js?v=1.8.136';
-import { createSelect } from '../components/ui-select.js?v=1.8.136';
-import { openMenu } from '../components/ui-menu.js?v=1.8.136';
-import { openPopup } from '../components/modal.js?v=1.8.136';
-import { createDatePicker, createMonthPicker } from '../components/ui-datepicker.js?v=1.8.136';
-import { confirmDialog } from '../components/ui-confirm.js?v=1.8.136';
-import { formatINR, formatDateIN, initials } from '../utils/formatter.js?v=1.8.136';
-import { validatePhone, validateEmail, validateDOB, validateName, validateRequired } from '../utils/validator.js?v=1.8.136';
-import { readStudentId, readReceiptNo, writeCounter } from '../services/admission.service.js?v=1.8.136';
-import { isCourseActive, batchAllowsCourse, todayISO } from '../utils/session-rules.js?v=1.8.136';
-import { compressTo100KB, readAsDataURL, blobToDataURL, isImageFile } from '../utils/image-compress.js?v=1.8.136';
-import { firstMonthlyMonth } from '../utils/school-receipt.js?v=1.8.136';
-import { playPaymentSuccessSound } from '../utils/sound.js?v=1.8.136';
+import { showToast } from '../components/toast.js?v=1.8.140';
+import { registerDirty, confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.140';
+import { buildStats, buildToolbar, renderPager } from '../components/list-page.js?v=1.8.140';
+import { createSelect } from '../components/ui-select.js?v=1.8.140';
+import { openMenu } from '../components/ui-menu.js?v=1.8.140';
+import { openPopup } from '../components/modal.js?v=1.8.140';
+import { createDatePicker, createMonthPicker } from '../components/ui-datepicker.js?v=1.8.140';
+import { confirmDialog } from '../components/ui-confirm.js?v=1.8.140';
+import { formatINR, formatDateIN, initials } from '../utils/formatter.js?v=1.8.140';
+import { validatePhone, validateEmail, validateDOB, validateName, validateRequired } from '../utils/validator.js?v=1.8.140';
+import { readStudentId, readReceiptNo, writeCounter } from '../services/admission.service.js?v=1.8.140';
+import { isCourseActive, batchAllowsCourse, todayISO } from '../utils/session-rules.js?v=1.8.140';
+import { compressTo100KB, readAsDataURL, blobToDataURL, isImageFile } from '../utils/image-compress.js?v=1.8.140';
+import { firstMonthlyMonth } from '../utils/school-receipt.js?v=1.8.140';
+import { playPaymentSuccessSound } from '../utils/sound.js?v=1.8.140';
 
 const COL = 'students';
 const GENDERS = [
@@ -1318,7 +1318,7 @@ export async function mount({ container, profile, ctx }) {
     for (const colName of ['bills', 'payments', 'waivers', 'breaks', 'transfers', 'enrolments']) {
       (await queryByStudent(colName, s)).forEach(d => add(d._ref));
     }
-    for (const sub of ['docs', 'payment', 'aadhaar']) {
+    for (const sub of ['docs', 'payment', 'aadhaar', 'activity']) {
       const snap = await getDocs(collection(db, COL, s.id, sub));
       snap.docs.forEach(d => add(d.ref));
     }
@@ -1330,9 +1330,14 @@ export async function mount({ container, profile, ctx }) {
       });
     } catch (e) { console.warn('[kids] deletion log not saved (deploy firestore.rules)', e); }
     for (let i = 0; i < refs.length; i += 400) {
-      const wb = writeBatch(db);
-      refs.slice(i, i + 400).forEach(r => wb.delete(r));
-      await wb.commit();
+      try {
+        const wb = writeBatch(db);
+        refs.slice(i, i + 400).forEach(r => wb.delete(r));
+        await wb.commit();
+      } catch (batchErr) {
+        console.warn('[kids] batch delete failed, retrying individually with allSettled', batchErr);
+        await Promise.allSettled(refs.slice(i, i + 400).map(r => deleteDoc(r)));
+      }
     }
     await deleteDoc(doc(db, COL, s.id));
     return refs.length + 1;
@@ -1417,14 +1422,16 @@ export async function mount({ container, profile, ctx }) {
         const reasonVal = reasonTa ? reasonTa.value.trim() : '';
         const n = await purgeStudent(s, { mode, reason: reasonVal, lastDay: lastDayVal });
         saving = false;
-        popup.close();
+        setSaving(false);
+        popup.close(true);
         showToast({ type: 'success', message: `${s.name || 'Student'} ${isDrop ? 'dropped' : 'deleted'}. ${n} records removed.` });
         load();
       } catch (e) {
         console.error('[kids] delete failed', e);
+        showToast({ type: 'error', message: 'Operation failed: ' + (e.message || 'error') });
+      } finally {
         saving = false;
         setSaving(false);
-        showToast({ type: 'error', message: 'Operation failed: ' + (e.message || 'error') });
         check();
       }
     });

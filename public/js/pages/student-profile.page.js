@@ -11,18 +11,18 @@ import {
   serverTimestamp,
   runTransaction
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.136';
-import { openPopup } from '../components/modal.js?v=1.8.136';
-import { createSelect } from '../components/ui-select.js?v=1.8.136';
-import { confirmDialog } from '../components/ui-confirm.js?v=1.8.136';
-import { openMenu } from '../components/ui-menu.js?v=1.8.136';
-import { formatINR, formatDateIN, initials } from '../utils/formatter.js?v=1.8.136';
-import { validatePhone, validateEmail, validateDOB, validateName } from '../utils/validator.js?v=1.8.136';
-import { registerDirty } from '../utils/unsaved-guard.js?v=1.8.136';
-import { compressTo100KB, blobToDataURL, isImageFile, formatBytes } from '../utils/image-compress.js?v=1.8.136';
-import { todayISO } from '../utils/session-rules.js?v=1.8.136';
-import { getSelectedSessionId } from '../core/sessions.js?v=1.8.136';
-import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.136';
+import { showToast } from '../components/toast.js?v=1.8.140';
+import { openPopup } from '../components/modal.js?v=1.8.140';
+import { createSelect } from '../components/ui-select.js?v=1.8.140';
+import { confirmDialog } from '../components/ui-confirm.js?v=1.8.140';
+import { openMenu } from '../components/ui-menu.js?v=1.8.140';
+import { formatINR, formatDateIN, initials } from '../utils/formatter.js?v=1.8.140';
+import { validatePhone, validateEmail, validateDOB, validateName } from '../utils/validator.js?v=1.8.140';
+import { registerDirty } from '../utils/unsaved-guard.js?v=1.8.140';
+import { compressTo100KB, blobToDataURL, isImageFile, formatBytes } from '../utils/image-compress.js?v=1.8.140';
+import { todayISO } from '../utils/session-rules.js?v=1.8.140';
+import { getSelectedSessionId } from '../core/sessions.js?v=1.8.140';
+import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.140';
 import {
   fetchStudentPayments,
   recordPaymentTx,
@@ -30,9 +30,11 @@ import {
   calculateLateFee,
   courseFeeWithoutExam,
   courseBalanceWithoutExam,
-  calculateStudentFinancials
-} from '../services/payment.service.js?v=1.8.136';
-import { courseFeeOf, discountOf } from '../utils/fees.js?v=1.8.136';
+  calculateStudentFinancials,
+  buildReceiptMenuItems,
+  repairStudentAdmissionPayment
+} from '../services/payment.service.js?v=1.8.140';
+import { courseFeeOf, discountOf } from '../utils/fees.js?v=1.8.140';
 
 const COL = 'students';
 const QUALIFICATIONS = ['VIII Pass', 'Secondary (X) Pass', 'Higher Secondary (XII) Pass', 'ITI', 'Diploma', 'Undergraduate (Graduate)', 'Postgraduate', 'Other'];
@@ -385,13 +387,13 @@ async function renderProfile(tabName) {
   const content = $('sp-content');
   if (content) content.hidden = false;
 
-  renderHeader();
-  renderMetrics();
-
   await Promise.all([
     loadDocs(),
     loadPayments()
   ]);
+
+  renderHeader();
+  renderMetrics();
 
   switchTab(tabName || activeTab || 'personal');
 }
@@ -492,12 +494,8 @@ function renderHeader() {
   setTxt('sp-session-text', s.sessionName || 'Session');
   setTxt('sp-branch-text', s.branchName || 'Head Office');
 
-  // Avatar Initials fallback
-  const initialsEl = $('sp-avatar-initials');
-  const imgEl = $('sp-avatar-img');
-  initialsEl.textContent = initials(s.name || 'Student');
-  initialsEl.hidden = false;
-  imgEl.hidden = true;
+  // Avatar
+  renderAvatar();
 
   // Contact quick buttons (WhatsApp, Call, Mail, Receipt)
   const phone = (s.phone || '').replace(/\D/g, '');
@@ -545,35 +543,7 @@ function renderHeader() {
   if (receiptBtn) {
     receiptBtn.onclick = async () => {
       const payments = paymentsCache && paymentsCache.length ? paymentsCache : await fetchStudentPayments(s.id).catch(() => []);
-      if (!payments || payments.length === 0) {
-        location.hash = (s.ctx === 'school' ? '#/school-admissions/' : '#/admissions/') + (s.id || s.studentId) + '/receipt';
-        return;
-      }
-      const receiptItems = [
-        {
-          label: 'Admission receipt',
-          icon: 'file-text',
-          onClick: () => { location.hash = (s.ctx === 'school' ? '#/school-admissions/' : '#/admissions/') + (s.id || s.studentId) + '/receipt'; }
-        }
-      ];
-      payments.forEach(p => {
-        const type = String(p.type || '').toUpperCase();
-        let label = '';
-        if (type === 'EX') {
-          label = `Exam fee - ${p.receiptNo || 'Receipt'}`;
-        } else {
-          const no = p.installmentNo || 1;
-          const mo = p.month ? ` - ${p.month}` : '';
-          label = `Installment ${no}${mo} - ${p.receiptNo || 'Receipt'}`;
-        }
-        receiptItems.push({
-          label,
-          icon: 'receipt',
-          onClick: () => {
-            location.hash = `#/payments/${s.id}/${p.id}/receipt?from=profile`;
-          }
-        });
-      });
+      const receiptItems = buildReceiptMenuItems(s, payments);
       openMenu(receiptBtn, receiptItems);
     };
   }
@@ -1141,6 +1111,36 @@ function createTextareaFormField(label, value, required, { placeholder = '' } = 
 }
 
 /**
+ * Render Avatar: displays student's photo if present (from docs/photo subcollection or doc fields),
+ * otherwise falls back cleanly to their initials.
+ */
+function renderAvatar() {
+  const s = currentStudent;
+  const initialsEl = $('sp-avatar-initials');
+  const imgEl = $('sp-avatar-img');
+  if (!initialsEl || !imgEl) return;
+
+  const name = s?.name || 'Student';
+  initialsEl.textContent = initials(name);
+
+  const photoDoc = docsCache ? docsCache['photo'] : null;
+  const photoSrc = photoDoc?.data || photoDoc?.url || s?.photoUrl || s?.photo;
+
+  if (photoSrc) {
+    imgEl.src = photoSrc;
+    imgEl.hidden = false;
+    initialsEl.hidden = true;
+    imgEl.onerror = () => {
+      imgEl.hidden = true;
+      initialsEl.hidden = false;
+    };
+  } else {
+    imgEl.hidden = true;
+    initialsEl.hidden = false;
+  }
+}
+
+/**
  * TAB 2: Documents (Pipeline: compressTo100KB -> blobToDataURL)
  */
 async function loadDocs() {
@@ -1156,16 +1156,7 @@ async function loadDocs() {
   }
 
   // Update photo avatar
-  const photoDoc = docsCache['photo'];
-  if (photoDoc && photoDoc.data) {
-    const imgEl = $('sp-avatar-img');
-    const initEl = $('sp-avatar-initials');
-    if (imgEl && initEl) {
-      imgEl.src = photoDoc.data;
-      imgEl.hidden = false;
-      initEl.hidden = true;
-    }
-  }
+  renderAvatar();
 }
 
 function renderDocumentsTab() {
@@ -1995,6 +1986,11 @@ async function loadPayments() {
     fetchStudentPayments(currentStudent.id).then(res => { paymentsCache = res; }),
     ensureMetadataCache()
   ]);
+  if (paymentsCache && currentStudent.ctx !== 'school') {
+    await repairStudentAdmissionPayment(currentStudent, paymentsCache).catch(err => {
+      console.warn('Admission payment repair check skipped:', err);
+    });
+  }
 }
 
 function renderPaymentsTab() {
@@ -2036,7 +2032,7 @@ function renderFeeActionCell(actionTd, { isPaid, isWaived, payType, label, icon,
     receiptBtn.title = `View receipt for ${label}`;
     receiptBtn.innerHTML = '<i data-lucide="receipt"></i><span>Receipt</span>';
     receiptBtn.onclick = () => {
-      if (isAdmission) {
+      if (isAdmission || payType === 'AD' || payType === 'FULL' || payType === 'MAT') {
         const receiptRoute = currentStudent?.ctx === 'school'
           ? '#/school-admissions/' + currentStudent.id + '/receipt'
           : '#/admissions/' + currentStudent.id + '/receipt';
@@ -2137,7 +2133,7 @@ function renderInstallmentStatusTable(sched) {
       label: 'Study Material Fee',
       icon: 'credit-card',
       paymentId: matTxn?.id,
-      isAdmission: !matTxn
+      isAdmission: true
     });
 
     tr.append(noTd, monthTd, dueTd, schedTd, paidTd, paidOnTd, statusTd, actionTd);
@@ -2446,10 +2442,10 @@ function renderTransactionsLedger() {
   txns.forEach((t) => {
     const tr = mk('tr');
 
-    const typeLabel = t.type === 'AD' ? 'Admission' :
+    const typeLabel = t.type === 'AD' ? 'Admission fee' :
       (t.type === 'FULL' ? 'Full course fee' :
-        (t.type === 'IN' ? ('Inst #' + (t.installmentNo || '')) :
-          (t.type === 'EX' ? 'Exam Fee' : (t.type === 'MAT' ? 'Study Material' : (t.type || 'Payment')))));
+        (t.type === 'IN' ? ('Installment ' + (t.installmentNo || '')) :
+          (t.type === 'EX' ? 'Exam fee' : (t.type === 'MAT' ? 'Study material' : (t.type || 'Payment')))));
 
     const amountStr = formatINR(t.amount || 0) + (t.lateFeeAmount ? ` (+ Rs ${t.lateFeeAmount})` : '');
 
@@ -2513,7 +2509,10 @@ function renderTransactionsLedger() {
     receiptBtn.title = 'View Receipt';
     receiptBtn.innerHTML = '<i data-lucide="receipt"></i><span>Receipt</span>';
     receiptBtn.onclick = () => {
-      if (t.type === 'AD' || (t.type === 'MAT' && (t.isAdmissionMat || !t.id || t.receiptNo === currentStudent.receiptNo))) {
+      const isAdmReceipt = t.type === 'AD' || t.type === 'FULL' || t.type === 'MAT' ||
+        (t.receiptNo && (t.receiptNo === currentStudent.admissionReceiptNo || t.receiptNo === currentStudent.receiptNo || t.receiptNo === currentStudent.fullReceiptNo));
+
+      if (isAdmReceipt) {
         const receiptRoute = currentStudent?.ctx === 'school'
           ? '#/school-admissions/' + currentStudent.id + '/receipt'
           : '#/admissions/' + currentStudent.id + '/receipt';

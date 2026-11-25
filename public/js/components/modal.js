@@ -76,9 +76,9 @@ export function openPopup({ title = '', subtitle = '', icon = '', tone = 'defaul
 
   let closed = false;
 
-  function close() {
+  function close(force = false) {
     if (closed) return;
-    if (saving && typeof saving === 'function' && saving()) return;
+    if (!force && saving && typeof saving === 'function' && saving()) return;
     closed = true;
     document.removeEventListener('keydown', onKeydown);
     document.body.style.overflow = '';

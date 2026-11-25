@@ -5,15 +5,15 @@ import {
   doc,
   getDoc
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { inWords } from '../utils/admission-receipt.js?v=1.8.136';
-import { showToast } from '../components/toast.js?v=1.8.136';
-import { fmtDate, todayISO } from '../utils/session-rules.js?v=1.8.136';
+import { inWords } from '../utils/admission-receipt.js?v=1.8.140';
+import { showToast } from '../components/toast.js?v=1.8.140';
+import { fmtDate, todayISO } from '../utils/session-rules.js?v=1.8.140';
 import {
   fetchStudentPayments,
   isInstallmentPaid,
   installmentCourseFee,
   installmentBalanceDue
-} from '../services/payment.service.js?v=1.8.136';
+} from '../services/payment.service.js?v=1.8.140';
 
 function $(id) {
   return document.getElementById(id);
@@ -146,6 +146,16 @@ async function loadAndRenderReceipt() {
     if (!payment) {
       loading.hidden = true;
       notfound.hidden = false;
+      return;
+    }
+
+    // Admission payments (AD, FULL, MAT) share one admission receipt; redirect to admission receipt
+    const pType = String(payment.type || '').toUpperCase().trim();
+    const isAdmRcpt = pType === 'AD' || pType === 'FULL' || pType === 'MAT' ||
+      (payment.receiptNo && (payment.receiptNo === student.admissionReceiptNo || payment.receiptNo === student.receiptNo || payment.receiptNo === student.fullReceiptNo));
+    if (isAdmRcpt) {
+      const admRoute = (student.ctx === 'school' ? '#/school-admissions/' : '#/admissions/') + studentDocId + '/receipt';
+      location.replace(admRoute);
       return;
     }
 

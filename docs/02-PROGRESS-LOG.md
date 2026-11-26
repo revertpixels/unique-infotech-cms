@@ -39,6 +39,26 @@
 
 ---
 
+### [2026-11-26 14:30] Version 1.8.171 — Youth Centre Archives (CMS-Identical Offline Viewer, Real Fonts, Vector/Hi-Res Receipt PDFs & Full Audit Fixes)
+
+**What was built:**
+- **CMS-Identical Offline Archive Viewer (`public/js/services/archive.service.js`, `public/js/utils/archive-viewer-builder.js`, `public/js/utils/archive-viewer-styles.js`)**:
+  - Replaced bespoke `.av-*` markup/styles with the CMS's real stylesheets (`variables.css`, `ui-kit.css`, `main.css`, `list-page.css`, `badges.css`, `admissions.css`, `student-profile.css`, `financial-reports.css`, `admission-receipt.css`, `payment-receipt.css`, etc.) and DOM structure (`.app`, `.sidebar`, `.topbar`, `.lp-stats`, `.adm-table`, `.sp-hero-card`, `.sp-tabs-nav`, `.adm-view-card`).
+  - Removed internet dependency for fonts/icons by bundling offline latin `.woff2` variable fonts (`Plus Jakarta Sans`, `Libre Franklin`, `IBM Plex Sans`) under `viewer/fonts/` + `viewer/css/fonts.css`, and vendored `lucide@0.344.0` under `viewer/vendor/lucide.min.js`. Removed bespoke `archive-viewer-icons.js`.
+  - Audited and fixed archive data normalization (`archive.service.js`): copied `batchId`/`batchName` onto normalized Youth ledger rows, precomputed `installmentCourseFee`, `installmentBalanceDue`, and `buildYouthReceiptData` models without duplicating base64 payloads, fixed ISO subtitle (`orgSubtitle` instead of tagline), fixed UI currency formatting (`₹`), and aligned Payment History & Overdue tables (`.adm-table-card` / `.adm-table`) plus mobile card responsiveness on `archives.page.js` / `archives.css`.
+- **Exact Live Receipts & Offline PDF Downloads (`public/js/utils/archive-viewer-receipts.js`)**:
+  - Upgraded Admission Receipt to full 2-page A4 sheet layout with `Download PDF` (offline `pdfmake@0.2.10` + `vfs_fonts.js` vector PDF) and clean Print (`#av-print-stage` + `@page { size: A4 portrait; margin: 0; }`).
+  - Upgraded Payment Receipt to exact `.mpr-page` sheet layout with `Download PDF` (`html2canvas@1.4.1` + `jsPDF`), safe Chromium `file://` canvas taint detection (falling back gracefully with a Print-to-PDF hint on raw local folders while embedding `blob:` images cleanly in encrypted archives), and preserved waiver/collector designations.
+- **Tooling (`tools/check-imports.js`)**: Skipped third-party `public/vendor/` scripts from ES module import parsing.
+
+**Firestore / Rules changes:**
+- None (left rules, fees, receipt numbering, and non-Archive CMS pages untouched; only `archiveLogs` writes unchanged).
+
+**Tested on:**
+- Chrome Desktop (`1440x900`) & Mobile (`390x844`) side-by-side Live CMS vs Offline `file://` Encrypted & Plain ZIPs (Wi-Fi OFF and Wi-Fi ON), plus Print-to-PDF and Download PDF binary checks.
+
+---
+
 ### [2026-11-26 14:00] Version 1.8.170 — Youth Centre Archives (Phase 1: Offline ZIP Viewer, Encryption, Verification & History)
 
 **What was built:**

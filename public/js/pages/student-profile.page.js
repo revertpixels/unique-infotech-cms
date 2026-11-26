@@ -11,19 +11,19 @@ import {
   serverTimestamp,
   runTransaction
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.170';
-import { openPopup } from '../components/modal.js?v=1.8.170';
-import { createSelect } from '../components/ui-select.js?v=1.8.170';
-import { confirmDialog } from '../components/ui-confirm.js?v=1.8.170';
-import { openMenu } from '../components/ui-menu.js?v=1.8.170';
-import { formatINR, formatDateIN, formatPersonName, initials } from '../utils/formatter.js?v=1.8.170';
-import { validatePhone, validateEmail, validateDOB, validateName } from '../utils/validator.js?v=1.8.170';
-import { registerDirty } from '../utils/unsaved-guard.js?v=1.8.170';
-import { resolveUserDisplay, getRoleTitle } from '../services/user-directory.service.js?v=1.8.170';
-import { compressTo100KB, blobToDataURL, isImageFile, formatBytes } from '../utils/image-compress.js?v=1.8.170';
-import { todayISO } from '../utils/session-rules.js?v=1.8.170';
-import { getSelectedSessionId } from '../core/sessions.js?v=1.8.170';
-import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.170';
+import { showToast } from '../components/toast.js?v=1.8.171';
+import { openPopup } from '../components/modal.js?v=1.8.171';
+import { createSelect } from '../components/ui-select.js?v=1.8.171';
+import { confirmDialog } from '../components/ui-confirm.js?v=1.8.171';
+import { openMenu } from '../components/ui-menu.js?v=1.8.171';
+import { formatINR, formatDateIN, formatPersonName, initials } from '../utils/formatter.js?v=1.8.171';
+import { validatePhone, validateEmail, validateDOB, validateName } from '../utils/validator.js?v=1.8.171';
+import { registerDirty } from '../utils/unsaved-guard.js?v=1.8.171';
+import { resolveUserDisplay, getRoleTitle } from '../services/user-directory.service.js?v=1.8.171';
+import { compressTo100KB, blobToDataURL, isImageFile, formatBytes } from '../utils/image-compress.js?v=1.8.171';
+import { todayISO } from '../utils/session-rules.js?v=1.8.171';
+import { getSelectedSessionId } from '../core/sessions.js?v=1.8.171';
+import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.171';
 import {
   fetchStudentPayments,
   recordPaymentTx,
@@ -34,8 +34,8 @@ import {
   calculateStudentFinancials,
   buildReceiptMenuItems,
   repairStudentAdmissionPayment
-} from '../services/payment.service.js?v=1.8.170';
-import { courseFeeOf, discountOf } from '../utils/fees.js?v=1.8.170';
+} from '../services/payment.service.js?v=1.8.171';
+import { courseFeeOf, discountOf } from '../utils/fees.js?v=1.8.171';
 
 const COL = 'students';
 const QUALIFICATIONS = ['VIII Pass', 'Secondary (X) Pass', 'Higher Secondary (XII) Pass', 'ITI', 'Diploma', 'Undergraduate (Graduate)', 'Postgraduate', 'Other'];

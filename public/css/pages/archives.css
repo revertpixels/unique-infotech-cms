@@ -352,6 +352,13 @@
   }
 }
 
+@media (max-width: 900px) {
+  #arx-panel-sessions .lp-card .lp-scroll,
+  #arx-panel-history .lp-card .lp-scroll {
+    overflow-x: visible;
+  }
+}
+
 @media (max-width: 480px) {
   .arx-sum-grid {
     grid-template-columns: 1fr;

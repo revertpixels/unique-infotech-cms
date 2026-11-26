@@ -1,20 +1,20 @@
 import { db } from '../config/firebase-config.js';
 import { collection, getDocs } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { openPopup } from '../components/modal.js?v=1.8.170';
-import { showToast } from '../components/toast.js?v=1.8.170';
-import { confirmDialog } from '../components/ui-confirm.js?v=1.8.170';
-import { openMenu } from '../components/ui-menu.js?v=1.8.170';
-import { PAGE_SIZE, renderPager } from '../components/list-page.js?v=1.8.170';
-import { formatPersonName, initials } from '../utils/formatter.js?v=1.8.170';
-import { sendResetEmailForUser, mapAuthError } from '../core/auth.js?v=1.8.170';
-import { openPhotoCropModal, openChangePasswordModal } from '../components/profile-modal.js?v=1.8.170';
+import { openPopup } from '../components/modal.js?v=1.8.171';
+import { showToast } from '../components/toast.js?v=1.8.171';
+import { confirmDialog } from '../components/ui-confirm.js?v=1.8.171';
+import { openMenu } from '../components/ui-menu.js?v=1.8.171';
+import { PAGE_SIZE, renderPager } from '../components/list-page.js?v=1.8.171';
+import { formatPersonName, initials } from '../utils/formatter.js?v=1.8.171';
+import { sendResetEmailForUser, mapAuthError } from '../core/auth.js?v=1.8.171';
+import { openPhotoCropModal, openChangePasswordModal } from '../components/profile-modal.js?v=1.8.171';
 import {
   getRoleTitle,
   getRolePluralTitle,
   loadUsersDirectory,
   resolveUserDisplay,
   saveUserFields
-} from '../services/user-directory.service.js?v=1.8.170';
+} from '../services/user-directory.service.js?v=1.8.171';
 
 function el(tag, cls, text) {
   const node = document.createElement(tag);

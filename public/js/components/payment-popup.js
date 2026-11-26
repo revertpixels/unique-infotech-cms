@@ -1,12 +1,12 @@
 // payment-popup.js — Single Shared Payment Popup for Student Profile and Pay Fees
 import { auth } from '../config/firebase-config.js';
-import { openPopup } from './modal.js?v=1.8.170';
-import { createSelect } from './ui-select.js?v=1.8.170';
-import { formatINR, formatDateIN } from '../utils/formatter.js?v=1.8.170';
-import { todayISO } from '../utils/session-rules.js?v=1.8.170';
-import { getRoleTitle, resolveUserDisplay } from '../services/user-directory.service.js?v=1.8.170';
-import { showToast } from './toast.js?v=1.8.170';
-import { playPaymentSuccessSound } from '../utils/sound.js?v=1.8.170';
+import { openPopup } from './modal.js?v=1.8.171';
+import { createSelect } from './ui-select.js?v=1.8.171';
+import { formatINR, formatDateIN } from '../utils/formatter.js?v=1.8.171';
+import { todayISO } from '../utils/session-rules.js?v=1.8.171';
+import { getRoleTitle, resolveUserDisplay } from '../services/user-directory.service.js?v=1.8.171';
+import { showToast } from './toast.js?v=1.8.171';
+import { playPaymentSuccessSound } from '../utils/sound.js?v=1.8.171';
 import {
   recordPayment,
   recordAdmissionWithPayment,
@@ -16,7 +16,7 @@ import {
   isAdmissionFeePaid,
   isMaterialFeePaid,
   isExamFeePaid
-} from '../services/payment.service.js?v=1.8.170';
+} from '../services/payment.service.js?v=1.8.171';
 
 function formatDateTime(d) {
   const dt = d instanceof Date ? d : new Date(d);

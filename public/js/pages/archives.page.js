@@ -1,5 +1,5 @@
 // archives.page.js — Youth Centre Archives UI (Phase 1: Download, Password Encryption, Verify & History)
-import { getContext } from '../core/app.js?v=1.8.170';
+import { getContext } from '../core/app.js?v=1.8.171';
 import {
   PAGE_SIZE,
   buildStats,
@@ -7,12 +7,12 @@ import {
   buildTableCard,
   renderPager,
   renderEmptyTableState
-} from '../components/list-page.js?v=1.8.170';
-import { openPopup } from '../components/modal.js?v=1.8.170';
-import { openMenu } from '../components/ui-menu.js?v=1.8.170';
-import { showToast } from '../components/toast.js?v=1.8.170';
-import { fmtDate } from '../utils/session-rules.js?v=1.8.170';
-import { formatINR } from '../utils/formatter.js?v=1.8.170';
+} from '../components/list-page.js?v=1.8.171';
+import { openPopup } from '../components/modal.js?v=1.8.171';
+import { openMenu } from '../components/ui-menu.js?v=1.8.171';
+import { showToast } from '../components/toast.js?v=1.8.171';
+import { fmtDate } from '../utils/session-rules.js?v=1.8.171';
+import { formatINR } from '../utils/formatter.js?v=1.8.171';
 import {
   ENABLE_ARCHIVE_SESSION_DELETE,
   computeArchiveSessionStatus,
@@ -21,7 +21,7 @@ import {
   scanSessionForExport,
   buildAndDownloadArchiveZip,
   verifyLocalArchiveZip
-} from '../services/archive.service.js?v=1.8.170';
+} from '../services/archive.service.js?v=1.8.171';
 
 let cleanups = [];
 
@@ -261,7 +261,7 @@ export async function mount({ container, profile, ctx }) {
     sessTableHost.innerHTML = '';
     const card = buildTableCard({ title: 'Youth Sessions', icon: 'archive' });
 
-    const tbl = el('table', 'lp-table');
+    const tbl = el('table', 'lp-table lp-mobile-cards');
     tbl.innerHTML =
       '<thead><tr>' +
         '<th>Session</th>' +
@@ -328,7 +328,8 @@ export async function mount({ container, profile, ctx }) {
 
       const tr = el('tr');
 
-      const tdSess = el('td');
+      const tdSess = el('td', 'lp-td-primary');
+      tdSess.dataset.label = 'Session';
       const sessCell = el('div', 'arx-session-cell');
       sessCell.appendChild(el('span', 'arx-session-name', s.name || s.id));
       const range = (s.startDate || s.endDate)
@@ -338,12 +339,15 @@ export async function mount({ container, profile, ctx }) {
       tdSess.appendChild(sessCell);
 
       const tdStatus = el('td');
+      tdStatus.dataset.label = 'Status';
       tdStatus.appendChild(el('span', `pill ${st.tone}`, st.label));
 
       const tdStudents = el('td');
+      tdStudents.dataset.label = 'Students';
       tdStudents.textContent = count === null || count === undefined ? '—' : String(count);
 
       const tdSum = el('td');
+      tdSum.dataset.label = 'Last Archive Summary';
       const sumBox = el('div', 'arx-stat-mini');
       if (summary && (summary.payments !== undefined || lastCollected !== undefined)) {
         sumBox.appendChild(el('strong', '', formatINR(lastCollected || 0)));
@@ -354,6 +358,7 @@ export async function mount({ container, profile, ctx }) {
       tdSum.appendChild(sumBox);
 
       const tdFp = el('td');
+      tdFp.dataset.label = 'Last Download & Fingerprint';
       const fpBox = el('div', 'arx-stat-mini');
       fpBox.appendChild(el('span', '', lastDateText));
       if (lastSha) {
@@ -364,6 +369,7 @@ export async function mount({ container, profile, ctx }) {
       tdFp.appendChild(fpBox);
 
       const tdAct = el('td', 'act');
+      tdAct.dataset.label = 'Actions';
       const actWrap = el('div');
       actWrap.style.cssText = 'display:inline-flex;align-items:center;gap:6px;justify-content:flex-end;';
 
@@ -568,7 +574,7 @@ export async function mount({ container, profile, ctx }) {
     histTableHost.innerHTML = '';
     const card = buildTableCard({ title: 'Permanent Archive History', icon: 'history' });
 
-    const tbl = el('table', 'lp-table');
+    const tbl = el('table', 'lp-table lp-mobile-cards');
     tbl.innerHTML =
       '<thead><tr>' +
         '<th>Date &amp; Time</th>' +
@@ -632,24 +638,29 @@ export async function mount({ container, profile, ctx }) {
       const pill = actionPillMeta(l.action);
       const tr = el('tr');
 
-      const tdTime = el('td', '', fmtLogTime(l));
+      const tdTime = el('td', 'lp-td-primary', fmtLogTime(l));
+      tdTime.dataset.label = 'Date & Time';
 
       const tdSess = el('td');
+      tdSess.dataset.label = 'Session & Scope';
       const sBox = el('div', 'arx-stat-mini');
       sBox.appendChild(el('strong', '', l.sessionName || l.sessionId || '-'));
       sBox.appendChild(el('span', '', l.scopeLabel || l.scopeType || '-'));
       tdSess.appendChild(sBox);
 
       const tdActType = el('td');
+      tdActType.dataset.label = 'Action';
       tdActType.appendChild(el('span', `pill ${pill.tone}`, pill.label));
 
       const tdBy = el('td');
+      tdBy.dataset.label = 'Performed By';
       const byBox = el('div', 'arx-stat-mini');
       byBox.appendChild(el('strong', '', l.byName || l.byEmail || '-'));
       byBox.appendChild(el('span', '', l.byDesignation || 'Staff'));
       tdBy.appendChild(byBox);
 
       const tdFile = el('td');
+      tdFile.dataset.label = 'File & SHA-256';
       const fBox = el('div', 'arx-stat-mini');
       const sizeText = l.sizeBytes ? ` · ${formatBytesCompact(l.sizeBytes)}` : '';
       const encText = l.encrypted ? ' · Encrypted' : '';
@@ -662,6 +673,7 @@ export async function mount({ container, profile, ctx }) {
       tdFile.appendChild(fBox);
 
       const tdDet = el('td', 'act');
+      tdDet.dataset.label = 'Details';
       const detBtn = el('button', 'ui-btn ghost sm');
       detBtn.type = 'button';
       detBtn.append(ic('eye'), el('span', '', 'Details'));

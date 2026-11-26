@@ -98,6 +98,7 @@ unique-infotech-cms/
     │   │   └── students.page.js
     │   ├── services/
     │   │   ├── admission.service.js
+    │   │   ├── archive.service.js
     │   │   ├── branch.service.js
     │   │   ├── course.service.js
     │   │   ├── payment.service.js
@@ -107,19 +108,29 @@ unique-infotech-cms/
     │   │   └── user-directory.service.js
     │   └── utils/
     │       ├── archive-viewer-builder.js
-│       ├── archive-viewer-icons.js
-│       ├── archive-viewer-receipts.js
-│       ├── archive-viewer-styles.js
-│       ├── date.utils.js
+    │       ├── archive-viewer-receipts.js
+    │       ├── archive-viewer-styles.js
+    │       ├── date.utils.js
     │       ├── formatter.js
     │       ├── helpers.js
     │       ├── pdf.utils.js
     │       ├── sound.js
     │       └── validator.js
     ├── vendor/
+    │   ├── archive/
+    │   │   ├── fonts/
+    │   │   │   ├── ibm-plex-sans-1.woff2
+    │   │   │   ├── libre-franklin-2.woff2
+    │   │   │   └── plus-jakarta-sans-3.woff2
+    │   │   ├── fonts.css
+    │   │   ├── html2canvas.min.js
+    │   │   ├── lucide.min.js
+    │   │   └── pdfmake.min.js
     │   ├── fflate.LICENSE.txt
     │   ├── fflate.umd.js
-    │   └── pdfmake.min.js
+    │   ├── jspdf.umd.min.js
+    │   ├── pdfmake.min.js
+    │   └── vfs_fonts.js
     └── pages/
         ├── admissions.html
         ├── archives.html

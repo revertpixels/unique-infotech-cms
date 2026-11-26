@@ -17,20 +17,23 @@ import {
   getCountFromServer,
   serverTimestamp
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { APP_VERSION } from '../core/app.js?v=1.8.170';
-import { todayISO, installmentSchedule, getOrgTimezone } from '../utils/session-rules.js?v=1.8.170';
+import { APP_VERSION } from '../core/app.js?v=1.8.171';
+import { todayISO, installmentSchedule, getOrgTimezone } from '../utils/session-rules.js?v=1.8.171';
 import {
   calculateStudentFinancials,
   evaluateYouthStudentDues,
-  normalizeYouthPaymentsLedger
-} from './payment.service.js?v=1.8.170';
+  normalizeYouthPaymentsLedger,
+  installmentCourseFee,
+  installmentBalanceDue
+} from './payment.service.js?v=1.8.171';
 import {
   loadUsersDirectory,
   resolveUserDisplay,
   getUserTitle
-} from './user-directory.service.js?v=1.8.170';
-import { formatPersonName } from '../utils/formatter.js?v=1.8.170';
-import { buildOfflineViewerAssets } from '../utils/archive-viewer-builder.js?v=1.8.170';
+} from './user-directory.service.js?v=1.8.171';
+import { formatPersonName } from '../utils/formatter.js?v=1.8.171';
+import { buildOfflineViewerAssets } from '../utils/archive-viewer-builder.js?v=1.8.171';
+import { buildYouthReceiptData } from '../utils/admission-receipt.js?v=1.8.171';
 
 /** Feature flag keeping Phase 2 session deletion OFF until Phase 1 is verified and approved. */
 export const ENABLE_ARCHIVE_SESSION_DELETE = false;
@@ -40,6 +43,96 @@ const CHUNK_SUBCOLLECTION_READS = 10;
 const ID_DOC_KEY_RE = /^(aadhaar|aadhar|dobproof|id|idproof|idcard|pan|voter|passport)/i;
 
 let fflateLoader = null;
+
+const VIEWER_CSS_PATHS = [
+  'css/main.css',
+  'css/base/reset.css',
+  'css/base/variables.css',
+  'css/base/typography.css',
+  'css/components/ui-kit.css',
+  'css/components/toast.css',
+  'css/components/list-page.css',
+  'css/components/course-view.css',
+  'css/components/doc-card.css',
+  'css/components/badges.css',
+  'css/components/buttons.css',
+  'css/components/forms.css',
+  'css/components/cards.css',
+  'css/components/dropdown.css',
+  'css/components/tables.css',
+  'css/components/multi-select.css',
+  'css/layout/grid.css',
+  'css/layout/sidebar.css',
+  'css/layout/topbar.css',
+  'css/pages/settings.css',
+  'css/pages/branches.css',
+  'css/pages/branch-heads.css',
+  'css/pages/admissions.css',
+  'css/pages/admission-receipt.css',
+  'css/pages/batches.css',
+  'css/pages/sessions.css',
+  'css/pages/dashboard.css',
+  'css/pages/school-admissions.css',
+  'css/pages/school-admission-receipt.css',
+  'css/pages/school-students.css',
+  'css/pages/school-fees.css',
+  'css/pages/school-fee-payment.css',
+  'css/pages/school-transfer.css',
+  'css/pages/school-end.css',
+  'css/pages/school-break.css',
+  'css/pages/school-delete.css',
+  'css/pages/student-profile.css',
+  'css/pages/pay-fees.css',
+  'css/pages/payment-receipt.css',
+  'css/pages/financial-reports.css',
+  'css/pages/archives.css'
+];
+
+const VIEWER_BINARY_ASSETS = [
+  { src: 'vendor/archive/fonts.css', dest: 'viewer/css/fonts.css', compress: true, isText: true },
+  { src: 'vendor/archive/fonts/ibm-plex-sans-1.woff2', dest: 'viewer/fonts/ibm-plex-sans-1.woff2', compress: false },
+  { src: 'vendor/archive/fonts/libre-franklin-2.woff2', dest: 'viewer/fonts/libre-franklin-2.woff2', compress: false },
+  { src: 'vendor/archive/fonts/plus-jakarta-sans-3.woff2', dest: 'viewer/fonts/plus-jakarta-sans-3.woff2', compress: false },
+  { src: 'vendor/archive/lucide.min.js', dest: 'viewer/vendor/lucide.min.js', compress: true },
+  { src: 'vendor/archive/pdfmake.min.js', dest: 'viewer/vendor/pdfmake.min.js', compress: true },
+  { src: 'vendor/vfs_fonts.js', dest: 'viewer/vendor/vfs_fonts.js', compress: true },
+  { src: 'vendor/archive/html2canvas.min.js', dest: 'viewer/vendor/html2canvas.min.js', compress: true },
+  { src: 'vendor/jspdf.umd.min.js', dest: 'viewer/vendor/jspdf.umd.min.js', compress: true }
+];
+
+let viewerStaticCache = null;
+
+async function collectViewerStaticAssets() {
+  if (viewerStaticCache) return viewerStaticCache;
+  const enc = new TextEncoder();
+  const out = [];
+
+  await Promise.all(VIEWER_CSS_PATHS.map(async (rel) => {
+    try {
+      const resp = await fetch(`/${rel}?v=${APP_VERSION}`);
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      let text = await resp.text();
+      text = text.replace(/@import\s+url\([^)]*fonts\.googleapis[^)]*\)\s*;?/gi, '/* local woff2 loaded by viewer/css/fonts.css */');
+      out.push({ path: `viewer/${rel}`, bytes: enc.encode(text), compress: true });
+    } catch (err) {
+      console.warn('[archives] CSS bundle warning:', rel, err?.message || err);
+    }
+  }));
+
+  await Promise.all(VIEWER_BINARY_ASSETS.map(async (item) => {
+    try {
+      const resp = await fetch(`/${item.src}?v=${APP_VERSION}`);
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const buf = await resp.arrayBuffer();
+      out.push({ path: item.dest, bytes: new Uint8Array(buf), compress: Boolean(item.compress) });
+    } catch (err) {
+      console.warn('[archives] asset bundle warning:', item.src, err?.message || err);
+    }
+  }));
+
+  viewerStaticCache = out;
+  return out;
+}
 
 /**
  * Dynamically loads the vendored local fflate UMD bundle (no CDN).
@@ -744,7 +837,7 @@ export async function scanSessionForExport({
   const asOfDate = (isCompleted && session.endDate) ? session.endDate : today;
   const defaultSchedule = installmentSchedule(session);
 
-  // Overdue items as of session end date (or today if ongoing), plus per-student financials
+  // Overdue items as of session end date (or today if ongoing), plus live receipt/ledger snapshots
   const overdueItems = [];
   for (const st of scrubbedStudents) {
     const rawPays = paymentsByStudent[st.id] || [];
@@ -755,6 +848,26 @@ export async function scanSessionForExport({
       batchesById
     });
     st._financials = evalRes.financials || calculateStudentFinancials(st, rawPays);
+    st._installmentCourseFee = installmentCourseFee(st);
+    st._installmentBalanceDue = installmentBalanceDue(st, rawPays);
+    const admPay = rawPays.find((p) => ['AD', 'ADMISSION', 'FULL', 'MAT'].includes(String(p.type || '').toUpperCase())) || rawPays[0] || null;
+    const admModel = buildYouthReceiptData({
+      admission: st,
+      photo: null,
+      signature: null,
+      org,
+      payment: admPay,
+      aadhaar: includeIdDocs ? rawAadhaarByStudent[st.id] : null,
+      branch: branchesById[st.branchId] || {},
+      course: coursesById[st.courseId] || {},
+      session
+    });
+    delete admModel.orgLogo;
+    delete admModel.photoUrl;
+    delete admModel.signatureUrl;
+    admModel.generatedDate = asOfDate ? formatPersonName(admModel.generatedDate) : admModel.generatedDate;
+    st._admissionReceiptModel = admModel;
+
     for (const item of (evalRes.items || [])) {
       if (item.status === 'overdue') {
         const cleanItem = { ...item };
@@ -780,6 +893,11 @@ export async function scanSessionForExport({
 
   for (let i = 0; i < ledger.length; i++) {
     const entry = ledger[i];
+    const stObj = studentsById[entry.studentDocId] || null;
+    if (stObj) {
+      if (!entry.batchId && stObj.batchId) entry.batchId = stObj.batchId;
+      if (!entry.batchName && stObj.batchName) entry.batchName = stObj.batchName;
+    }
     const colDisp = resolveUserDisplay(entry.recordedBy, entry.recordedByName, entry.recordedByDesignation);
     const colName = colDisp.name && colDisp.name !== '-' ? colDisp.name : (entry.recordedByName || '');
     const colDesig = colDisp.designation || entry.recordedByDesignation || '';
@@ -1184,7 +1302,11 @@ export async function buildAndDownloadArchiveZip({
       entry.push(uint8Bytes, true);
     }
 
-    // 1. Viewer HTML / README / CSS / JS
+    // 1. Viewer HTML / README / CSS overrides / Classic JS + real live CMS CSS/Fonts/Vendor libs
+    const bundledStaticAssets = await collectViewerStaticAssets();
+    for (const sa of bundledStaticAssets) {
+      await pushZipEntry(sa.path, sa.bytes, { compress: sa.compress });
+    }
     for (const asset of viewerAssets) {
       await pushZipEntry(asset.path, enc.encode(asset.content), { compress: true });
     }
@@ -1380,7 +1502,16 @@ export async function verifyLocalArchiveZip(file, { profile, logToFirestore = tr
   }
   const manifestSha256 = await sha256HexFromBuffer(manifestEntry);
 
-  const requiredFiles = ['index.html', 'README.txt', 'data/archive-data.js', 'viewer/css/viewer.css', 'viewer/js/app.js'];
+  const requiredFiles = [
+    'index.html',
+    'README.txt',
+    'data/archive-data.js',
+    'viewer/css/fonts.css',
+    'viewer/css/main.css',
+    'viewer/css/archive-overrides.css',
+    'viewer/js/receipts.js',
+    'viewer/js/app.js'
+  ];
   const missingViewer = requiredFiles.filter((p) => !entries[p]);
 
   const listed = Array.isArray(manifest.files) ? manifest.files : [];

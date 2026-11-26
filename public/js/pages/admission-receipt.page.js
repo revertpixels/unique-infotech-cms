@@ -10,10 +10,10 @@ import {
   query,
   where
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.170';
-import { createSelect } from '../components/ui-select.js?v=1.8.170';
-import { buildYouthReceiptData, fmtRs } from '../utils/admission-receipt.js?v=1.8.170';
-import { downloadYouthReceiptPdf } from '../utils/admission-receipt-pdf.js?v=1.8.170';
+import { showToast } from '../components/toast.js?v=1.8.171';
+import { createSelect } from '../components/ui-select.js?v=1.8.171';
+import { buildYouthReceiptData, fmtRs } from '../utils/admission-receipt.js?v=1.8.171';
+import { downloadYouthReceiptPdf } from '../utils/admission-receipt-pdf.js?v=1.8.171';
 
 const COL = 'students';
 let studentDocId = '';

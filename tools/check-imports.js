@@ -49,7 +49,7 @@ function scanDir(dir) {
   for (const entry of entries) {
     const fullPath = path.join(dir, entry.name);
     if (entry.isDirectory()) {
-      if (entry.name !== 'node_modules' && entry.name !== '.git') {
+      if (entry.name !== 'node_modules' && entry.name !== '.git' && entry.name !== 'vendor') {
         scanDir(fullPath);
       }
     } else if (entry.name.endsWith('.js') || entry.name.endsWith('.html')) {

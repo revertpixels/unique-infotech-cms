@@ -20,20 +20,20 @@ import {
   evaluateYouthStudentDues,
   normalizeYouthPaymentsLedger,
   fetchStudentPayments
-} from './payment.service.js?v=1.8.174';
+} from './payment.service.js?v=1.8.175';
 import {
   evaluateKidsPendingBills,
   buildKidsPaymentLedger
-} from '../utils/school-billing.js?v=1.8.174';
-import { getStudentPhotoSrc } from '../utils/student-media.js?v=1.8.174';
+} from '../utils/school-billing.js?v=1.8.175';
+import { getStudentPhotoSrc } from '../utils/student-media.js?v=1.8.175';
 import {
   todayISO,
   fmtDate,
   getOrgTimezone
-} from '../utils/session-rules.js?v=1.8.174';
-import { formatINR } from '../utils/formatter.js?v=1.8.174';
-import { formatPersonName } from '../utils/formatter.js?v=1.8.174';
-import { resolveUserDisplay, loadUsersDirectory } from './user-directory.service.js?v=1.8.174';
+} from '../utils/session-rules.js?v=1.8.175';
+import { formatINR } from '../utils/formatter.js?v=1.8.175';
+import { formatPersonName } from '../utils/formatter.js?v=1.8.175';
+import { resolveUserDisplay, loadUsersDirectory } from './user-directory.service.js?v=1.8.175';
 
 const CACHE_KEY = 'financialReports';
 

@@ -21,31 +21,31 @@ import {
   ref as storageRef,
   getDownloadURL
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-storage.js';
-import { APP_VERSION } from '../core/app.js?v=1.8.174';
-import { todayISO, installmentSchedule, getOrgTimezone } from '../utils/session-rules.js?v=1.8.174';
+import { APP_VERSION } from '../core/app.js?v=1.8.175';
+import { todayISO, installmentSchedule, getOrgTimezone } from '../utils/session-rules.js?v=1.8.175';
 import {
   calculateStudentFinancials,
   evaluateYouthStudentDues,
   normalizeYouthPaymentsLedger,
   installmentCourseFee,
   installmentBalanceDue
-} from './payment.service.js?v=1.8.174';
+} from './payment.service.js?v=1.8.175';
 import {
   loadUsersDirectory,
   resolveUserDisplay,
   getUserTitle
-} from './user-directory.service.js?v=1.8.174';
-import { formatPersonName, formatGenderDisplay } from '../utils/formatter.js?v=1.8.174';
-import { getStudentPhotoSrc, getStudentDocRecord, getStudentDocSrc, getStudentDocMime } from '../utils/student-media.js?v=1.8.174';
-import { buildOfflineViewerAssets } from '../utils/archive-viewer-builder.js?v=1.8.174';
-import { buildYouthReceiptData } from '../utils/admission-receipt.js?v=1.8.174';
+} from './user-directory.service.js?v=1.8.175';
+import { formatPersonName, formatGenderDisplay } from '../utils/formatter.js?v=1.8.175';
+import { getStudentPhotoSrc, getStudentDocRecord, getStudentDocSrc, getStudentDocMime } from '../utils/student-media.js?v=1.8.175';
+import { buildOfflineViewerAssets } from '../utils/archive-viewer-builder.js?v=1.8.175';
+import { buildYouthReceiptData } from '../utils/admission-receipt.js?v=1.8.175';
 
 /** Feature flag keeping Phase 2 session deletion OFF until Phase 1 is verified and approved. */
 export const ENABLE_ARCHIVE_SESSION_DELETE = false;
 
 const PBKDF2_ITERATIONS = 600000;
 const CHUNK_SUBCOLLECTION_READS = 10;
-const ID_DOC_KEY_RE = /^(aadhaar|aadhar|dobproof|id|idproof|idcard|pan|voter|passport)/i;
+const ID_DOC_KEY_RE = /^(aadhaar|aadhar|id|idproof|idcard|pan|voter|passport)/i;
 
 let fflateLoader = null;
 
@@ -785,6 +785,7 @@ export async function scanSessionForExport({
   let docFileCount = 0;
   let idDocCount = 0;
   let mediaBytesTotal = 0;
+  const usedSafeSids = new Set();
 
   for (let i = 0; i < rawStudents.length; i++) {
     if (isCancelled && isCancelled()) throw new Error('CANCELLED');
@@ -796,7 +797,11 @@ export async function scanSessionForExport({
     if (rawAadhaarByStudent[rawS.id] && includeIdDocs) idDocCount += 1;
 
     const stDocsList = rawDocsByStudent[rawS.id] || [];
-    const safeSid = sanitizeFilenamePart(rawS.studentId || rawS.id, rawS.id);
+    const baseSafeSid = sanitizeFilenamePart(rawS.studentId || rawS.id, rawS.id);
+    const safeSid = usedSafeSids.has(baseSafeSid)
+      ? sanitizeFilenamePart(`${baseSafeSid}_${rawS.id}`, rawS.id)
+      : baseSafeSid;
+    usedSafeSids.add(safeSid);
     const outDocs = [];
     const exportedCanonKeys = new Set();
     let photoPath = '';
@@ -869,6 +874,7 @@ export async function scanSessionForExport({
           docFileCount += 1;
         }
         outDocs.push({
+          studentDocId: rawS.id,
           key: canonKey,
           label: friendlyDocLabel(canonKey, d.label),
           name: d.name || displayFname,

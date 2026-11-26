@@ -1,5 +1,5 @@
-import { ARCHIVE_VIEWER_OVERRIDES_CSS } from './archive-viewer-styles.js?v=1.8.174';
-import { ARCHIVE_RECEIPTS_VIEWER_JS } from './archive-viewer-receipts.js?v=1.8.174';
+import { ARCHIVE_VIEWER_OVERRIDES_CSS } from './archive-viewer-styles.js?v=1.8.175';
+import { ARCHIVE_RECEIPTS_VIEWER_JS } from './archive-viewer-receipts.js?v=1.8.175';
 
 /**
  * Builds the static viewer files packed into each archive ZIP:
@@ -99,6 +99,7 @@ const ARCHIVE_APP_VIEWER_JS = `(function(){
   var PAGE_SIZE = 10;
   var unlockKey = null;
   var mediaUrlCache = Object.create(null);
+  var mediaBlobCache = Object.create(null);
   var pendingMedia = Object.create(null);
   var registeredEncMedia = Object.create(null);
   var DATA = null;
@@ -349,10 +350,13 @@ const ARCHIVE_APP_VIEWER_JS = `(function(){
         showToastNotice('File could not be decrypted offline.', 'error');
         return;
       }
+      if (mediaBlobCache[relPath]) {
+        triggerBlobDownload(URL.createObjectURL(mediaBlobCache[relPath]), outName, true);
+        return;
+      }
       try {
         var blob = await fetch(cachedOrFreshUrl).then(function(r){ return r.blob(); });
-        var freshUrl = URL.createObjectURL(blob);
-        triggerBlobDownload(freshUrl, outName, true);
+        triggerBlobDownload(URL.createObjectURL(blob), outName, true);
       } catch (_) {
         triggerBlobDownload(cachedOrFreshUrl, outName, false);
       }
@@ -416,7 +420,9 @@ const ARCHIVE_APP_VIEWER_JS = `(function(){
         var ct = b64ToBytes(rec.dataB64);
         var aad = new TextEncoder().encode(relPath);
         crypto.subtle.decrypt({ name: 'AES-GCM', iv: iv, additionalData: aad }, unlockKey, ct).then(function(buf){
-          var url = URL.createObjectURL(new Blob([buf], { type: rec.mime || 'application/octet-stream' }));
+          var blob = new Blob([buf], { type: rec.mime || 'application/octet-stream' });
+          var url = URL.createObjectURL(blob);
+          mediaBlobCache[relPath] = blob;
           mediaUrlCache[relPath] = url;
           resolve(url);
         }).catch(function(){ resolve(''); });
@@ -1405,7 +1411,7 @@ const ARCHIVE_APP_VIEWER_JS = `(function(){
           '</div>' +
         '</div>';
       }
-      var isExcluded = !(DATA.meta && DATA.meta.includesIdDocs) && /^(aadhaar|aadhar|dobproof|id)/i.test(k);
+      var isExcluded = !(DATA.meta && DATA.meta.includesIdDocs) && /^(aadhaar|aadhar|id|idproof|idcard|pan|voter|passport)/i.test(k);
       return '<div class="sp-doc-card">' +
         '<div class="sp-doc-body">' +
           '<div class="sp-doc-title-row"><h4 class="sp-doc-title">' + esc(label) + '</h4><span class="pill neutral">' + (isExcluded ? 'Excluded' : 'Missing') + '</span></div>' +
@@ -2358,12 +2364,20 @@ const ARCHIVE_APP_VIEWER_JS = `(function(){
               '<div class="arx-tb-chip"><i data-lucide="calendar"></i><span>' + esc(sessionName) + '</span></div>' +
               '<div class="arx-tb-chip arx-tb-badge"><i data-lucide="archive"></i><span>Archive</span></div>' +
             '</div>' +
-            '<div class="arx-tb-chip arx-tb-scope-chip"><i data-lucide="git-branch"></i><span>' + esc(titleCase(m.scopeLabel || 'All branches')) + '</span></div>' +
+            '<div class="arx-tb-chip arx-tb-scope-chip"><i data-lucide="git-branch"></i><span>' + esc(formatScopeBadge(m.scopeLabel || 'All Branches')) + '</span></div>' +
           '</header>' +
           '<main class="view" id="view" tabindex="-1"></main>' +
         '</div>' +
       '</div>';
 
+    function formatScopeBadge(v) {
+      var raw = String(v || 'All Branches').trim();
+      if (!raw) return 'All Branches';
+      if (/^[A-Z0-9_-]{2,}$/.test(raw)) return raw;
+      return raw.split(/\\s+/).map(function(w){
+        return /^[A-Z0-9_-]{2,8}$/.test(w) ? w : titleCase(w);
+      }).join(' ');
+    }
     var appEl = document.getElementById('app');
     document.querySelectorAll('.sb-nav a[data-nav]').forEach(function(a){
       a.onclick = function(ev){

@@ -3,7 +3,7 @@
 // locks branch for Branch Heads (and single-branch Kids mode), and locks Batch until a branch
 // is chosen for Super Admin.
 
-import { createSelect } from './ui-select.js?v=1.8.174';
+import { createSelect } from './ui-select.js?v=1.8.175';
 
 const STORAGE_PREFIX = 'uicms.bb.';
 

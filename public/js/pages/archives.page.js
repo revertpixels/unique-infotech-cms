@@ -1,5 +1,5 @@
 // archives.page.js — Youth Centre Archives UI (Phase 1: Download, Password Encryption, Verify & History)
-import { getContext } from '../core/app.js?v=1.8.174';
+import { getContext } from '../core/app.js?v=1.8.175';
 import {
   PAGE_SIZE,
   buildStats,
@@ -7,12 +7,12 @@ import {
   buildTableCard,
   renderPager,
   renderEmptyTableState
-} from '../components/list-page.js?v=1.8.174';
-import { openPopup } from '../components/modal.js?v=1.8.174';
-import { openMenu } from '../components/ui-menu.js?v=1.8.174';
-import { showToast } from '../components/toast.js?v=1.8.174';
-import { fmtDate } from '../utils/session-rules.js?v=1.8.174';
-import { formatINR } from '../utils/formatter.js?v=1.8.174';
+} from '../components/list-page.js?v=1.8.175';
+import { openPopup } from '../components/modal.js?v=1.8.175';
+import { openMenu } from '../components/ui-menu.js?v=1.8.175';
+import { showToast } from '../components/toast.js?v=1.8.175';
+import { fmtDate } from '../utils/session-rules.js?v=1.8.175';
+import { formatINR } from '../utils/formatter.js?v=1.8.175';
 import {
   ENABLE_ARCHIVE_SESSION_DELETE,
   computeArchiveSessionStatus,
@@ -21,7 +21,7 @@ import {
   scanSessionForExport,
   buildAndDownloadArchiveZip,
   verifyLocalArchiveZip
-} from '../services/archive.service.js?v=1.8.174';
+} from '../services/archive.service.js?v=1.8.175';
 
 let cleanups = [];
 
@@ -703,12 +703,14 @@ export async function mount({ container, profile, ctx }) {
     let selectedBranchIds = isSuper ? allBranches.map((b) => b.id) : (profile?.branchId ? [profile.branchId] : []);
     let snapshot = null;
     let scanning = false;
+    let debouncing = false;
     let building = false;
     let cancelled = false;
     let modalClosed = false;
     let encryptChecked = false;
     let pwDefaultAppliedForScan = false;
     let scanSeq = 0;
+    let rescanTimer = null;
 
     const popup = openPopup({
       title: `Prepare Archive — ${session.name || session.id}`,
@@ -719,6 +721,10 @@ export async function mount({ container, profile, ctx }) {
       onClose: () => {
         modalClosed = true;
         cancelled = true;
+        if (rescanTimer) {
+          clearTimeout(rescanTimer);
+          rescanTimer = null;
+        }
       }
     });
 
@@ -735,6 +741,10 @@ export async function mount({ container, profile, ctx }) {
     const fullPill = el('label', 'arx-radio-pill is-selected');
     const partialPill = el('label', 'arx-radio-pill');
 
+    let fullRadio = null;
+    let partialRadio = null;
+    const branchCheckboxes = [];
+
     if (isSuper) {
       const optsRow = el('div', 'arx-scope-opts');
 
@@ -743,12 +753,14 @@ export async function mount({ container, profile, ctx }) {
       rFull.name = 'arx-scope-mode';
       rFull.value = 'full';
       rFull.checked = true;
+      fullRadio = rFull;
       fullPill.append(rFull, el('span', '', 'Full Session (All Branches)'));
 
       const rPartial = el('input');
       rPartial.type = 'radio';
       rPartial.name = 'arx-scope-mode';
       rPartial.value = 'branches';
+      partialRadio = rPartial;
       partialPill.append(rPartial, el('span', '', 'Specific Branches Only'));
 
       const scopeHint = el('small', 'text-mute', 'Includes all branches, student records, photos, Aadhaar & documents.');
@@ -760,16 +772,17 @@ export async function mount({ container, profile, ctx }) {
         cb.checked = true;
         cb.value = b.id;
         cb.addEventListener('change', () => {
+          if (building) return;
           selectedBranchIds = Array.from(branchCheckWrap.querySelectorAll('input:checked')).map((x) => x.value);
-          snapshot = null;
-          renderBodyFromState();
+          scheduleAutoScan(400);
         });
+        branchCheckboxes.push(cb);
         lbl.append(cb, el('span', '', `${b.name || b.id}${b.code ? ' (' + b.code + ')' : ''}`));
         branchCheckWrap.appendChild(lbl);
       });
 
       const onScopeChange = (nextMode) => {
-        if (scanning || building) return;
+        if (building) return;
         scopeType = nextMode;
         fullPill.classList.toggle('is-selected', scopeType === 'full');
         partialPill.classList.toggle('is-selected', scopeType === 'branches');
@@ -777,8 +790,7 @@ export async function mount({ container, profile, ctx }) {
         scopeHint.textContent = scopeType === 'full'
           ? 'Includes all branches, student records, photos, Aadhaar & documents.'
           : 'Includes selected branch(es) with all student records, photos, Aadhaar & documents.';
-        snapshot = null;
-        startScan();
+        scheduleAutoScan(400);
       };
 
       rFull.addEventListener('change', () => onScopeChange('full'));
@@ -848,13 +860,18 @@ export async function mount({ container, profile, ctx }) {
     let resultBox = null;
 
     function updateProgressUI(pct, label) {
-      progWrap.hidden = !(scanning || building);
+      const busy = scanning || building || debouncing;
+      progWrap.hidden = !busy;
       const safePct = Math.max(0, Math.min(100, Number(pct) || 0));
       progStage.textContent = label || 'Working...';
       progPct.textContent = `${safePct}%`;
       progBar.style.width = `${safePct}%`;
       cancelBtn.textContent = (scanning || building) ? 'Cancel' : 'Close';
       rescanBtn.disabled = scanning || building;
+      downloadBtn.disabled = !snapshot || busy;
+      if (fullRadio) fullRadio.disabled = building;
+      if (partialRadio) partialRadio.disabled = building;
+      branchCheckboxes.forEach((cb) => { cb.disabled = building; });
     }
 
     function renderBodyFromState() {
@@ -862,9 +879,9 @@ export async function mount({ container, profile, ctx }) {
       if (resultBox) bodyHost.appendChild(resultBox);
 
       if (!snapshot) {
-        if (!scanning && isSuper && scopeType === 'branches' && selectedBranchIds.length === 0) {
+        if (!scanning && !debouncing && isSuper && scopeType === 'branches' && selectedBranchIds.length === 0) {
           const w = el('div', 'arx-warn-box');
-          w.append(ic('alert-triangle'), el('span', '', 'Select at least one branch above and click Re-scan.'));
+          w.append(ic('alert-triangle'), el('span', '', 'Select at least one branch above to scan and download.'));
           bodyHost.appendChild(w);
         }
         downloadBtn.disabled = true;
@@ -987,14 +1004,50 @@ export async function mount({ container, profile, ctx }) {
       });
 
       bodyHost.appendChild(pwPanel);
-      downloadBtn.disabled = scanning || building;
+      downloadBtn.disabled = scanning || building || debouncing;
       paint();
+    }
+
+    function scheduleAutoScan(delayMs = 400) {
+      if (building || modalClosed) return;
+      if (rescanTimer) {
+        clearTimeout(rescanTimer);
+        rescanTimer = null;
+      }
+      // Supersede any active scan silently so stale results cannot overwrite the new selection
+      scanSeq += 1;
+      scanning = false;
+      cancelled = false;
+      snapshot = null;
+      resultBox = null;
+
+      if (isSuper && scopeType === 'branches' && selectedBranchIds.length === 0) {
+        debouncing = false;
+        updateProgressUI(0, '');
+        renderBodyFromState();
+        return;
+      }
+
+      debouncing = true;
+      renderBodyFromState();
+      updateProgressUI(2, 'Scanning updated selection...');
+      rescanTimer = setTimeout(() => {
+        rescanTimer = null;
+        debouncing = false;
+        startScan();
+      }, delayMs);
     }
 
     async function startScan() {
       if (building || modalClosed) return;
+      if (rescanTimer) {
+        clearTimeout(rescanTimer);
+        rescanTimer = null;
+      }
+      debouncing = false;
       if (isSuper && scopeType === 'branches' && selectedBranchIds.length === 0) {
         snapshot = null;
+        updateProgressUI(0, '');
         renderBodyFromState();
         return;
       }
@@ -1024,8 +1077,10 @@ export async function mount({ container, profile, ctx }) {
         snapshot = res;
       } catch (err) {
         if (err && err.message === 'CANCELLED') {
-          if (!modalClosed) showToast({ type: 'info', message: 'Session scan cancelled.' });
-        } else if (!modalClosed) {
+          if (!modalClosed && cancelled && mySeq === scanSeq) {
+            showToast({ type: 'info', message: 'Session scan cancelled.' });
+          }
+        } else if (!modalClosed && mySeq === scanSeq) {
           showToast({ type: 'error', message: err?.message || 'Could not scan session records.' });
         }
       } finally {

@@ -34,23 +34,24 @@ export const ARCHIVE_VIEWER_OVERRIDES_CSS = `/* archive-overrides.css — Topbar
   align-items: center;
   justify-content: center;
   width: 100%;
-  min-height: 220px;
+  min-height: 260px;
   padding: 12px;
   background: var(--bg);
   border-radius: var(--r-card, 10px);
   border: 1px solid var(--border);
   box-sizing: border-box;
   overflow: hidden;
+  text-align: center;
 }
 
 .sp-doc-preview-modal-body img {
   max-width: 100%;
-  max-height: 72vh;
+  max-height: 70vh;
   width: auto;
   height: auto;
   object-fit: contain;
   display: block;
-  margin: 0 auto;
+  margin: auto;
   border-radius: 6px;
 }
 
@@ -123,6 +124,8 @@ export const ARCHIVE_VIEWER_OVERRIDES_CSS = `/* archive-overrides.css — Topbar
   color: var(--text);
   font-size: 12.5px;
   font-weight: 600;
+  line-height: 1;
+  box-sizing: border-box;
   white-space: nowrap;
 }
 
@@ -242,10 +245,6 @@ export const ARCHIVE_VIEWER_OVERRIDES_CSS = `/* archive-overrides.css — Topbar
   }
   .arx-tb-scope-chip {
     display: none;
-  }
-  .arx-tb-badge {
-    padding: 3px 8px;
-    font-size: 11px;
   }
 }
 

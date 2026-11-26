@@ -39,6 +39,21 @@
 
 ---
 
+### [2026-11-27 00:01] Version 1.8.175 — Auto Re-scan Export Modal, Unique Student File Paths, DOB Proof Rule Cleanup & Offline Viewer Polish
+
+**What was built:**
+- **Auto Re-scan Prepare Archive Modal (`public/js/pages/archives.page.js`)**: Switching between **Full Session** and **Specific Branches Only** or ticking/unticking branch checkboxes now automatically triggers a debounced (~400 ms) re-scan without requiring a manual `Re-scan` click; keeps the Download button disabled with progress shown during scan/debounce, enables Download automatically when a valid scan finishes, and always shows the optional password panel (unchecked by default).
+- **Student Document ID Path Isolation & `dobProof` Cleanup (`public/js/services/archive.service.js`, `public/js/utils/archive-viewer-builder.js`)**: Removed `dobproof` from `ID_DOC_KEY_RE` and the viewer's `isExcluded` regex so DOB Proof is treated as a standard document; added unique `usedSafeSids` ZIP path guarding and `studentDocId` tagging tied to each student's Firestore document ID. Audited student `27010004` (`Anshu Kundu`, `students/6oGTVJ8SdGpFHWQM2q1H`) against Firestore backup `06fffcd2 (1).json` confirming `Ramjit_Ghosal.png` (`docs/photo`) and `Anik_Saha_Signature.jpg-80kb - Copy.jpeg` (`docs/signature`) were stored directly under that student's own subcollection.
+- **Offline Viewer Chip Parity, Popup Centering & Direct Encrypted Downloads (`public/js/utils/archive-viewer-styles.js`, `public/js/utils/archive-viewer-builder.js`)**: Removed the mobile padding/font override on `.arx-tb-badge` and preserved uppercase branch codes on `.arx-tb-scope-chip` so Session, Archive, and Branch chips match across viewports; enforced flex centering (`margin: auto`) and `object-fit: contain` on document preview popups; cached decrypted `Blob` objects (`mediaBlobCache`) so `file://` document downloads create fresh `blob:` URLs directly with the proper filename and extension in both plain and password-protected archives.
+
+**Files touched:**
+- MODIFIED: `public/js/pages/archives.page.js`, `public/js/services/archive.service.js`, `public/js/utils/archive-viewer-builder.js`, `public/js/utils/archive-viewer-styles.js`, `docs/02-PROGRESS-LOG.md`, plus `?v=1.8.175` cache-bust bumps across static assets.
+
+**Firestore changes:**
+- None (client UI/exporter/viewer update only).
+
+---
+
 ### [2026-11-26 23:32] Version 1.8.174 — Separate Aadhaar Doc Key, Optional Archive Password, Role Parity, Offline Downloads, Hash Reload & Live Metadata Fix
 
 **What was built:**

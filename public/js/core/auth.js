@@ -6,9 +6,61 @@ import {
   signOut,
   setPersistence,
   browserSessionPersistence,
-  sendEmailVerification
+  sendEmailVerification,
+  EmailAuthProvider,
+  reauthenticateWithCredential,
+  updatePassword,
+  sendPasswordResetEmail
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js';
 import { doc, getDoc } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
+
+export function mapAuthError(err) {
+  const code = err && err.code ? err.code : '';
+  if (code === 'auth/wrong-password' || code === 'auth/invalid-credential') {
+    return 'Incorrect current password.';
+  }
+  if (code === 'auth/weak-password') {
+    return 'Password is too weak. Use at least 8 characters with letters and numbers.';
+  }
+  if (code === 'auth/too-many-requests') {
+    return 'Too many attempts. Please wait a few minutes and try again.';
+  }
+  if (code === 'auth/requires-recent-login') {
+    return 'For security, please sign out and sign in again before changing your password.';
+  }
+  if (code === 'auth/user-not-found') {
+    return 'No email/password account matches that address.';
+  }
+  if (code === 'auth/invalid-email') {
+    return 'Enter a valid email address.';
+  }
+  if (code === 'auth/network-request-failed') {
+    return 'Network problem. Check your internet connection and try again.';
+  }
+  return (err && err.message) ? err.message : 'Authentication request failed. Please try again.';
+}
+
+export async function changeSuperAdminPassword(currentPassword, newPassword) {
+  const user = auth.currentUser;
+  if (!user || !user.email) {
+    const err = new Error('No active user session.');
+    err.code = 'auth/requires-recent-login';
+    throw err;
+  }
+  const cred = EmailAuthProvider.credential(user.email, currentPassword);
+  await reauthenticateWithCredential(user, cred);
+  await updatePassword(user, newPassword);
+}
+
+export async function sendResetEmailForUser(email) {
+  const clean = String(email || '').trim().toLowerCase();
+  if (!clean) {
+    const err = new Error('Email is required.');
+    err.code = 'auth/invalid-email';
+    throw err;
+  }
+  await sendPasswordResetEmail(auth, clean);
+}
 
 export async function signInWithPassword(email, password) {
   await setPersistence(auth, browserSessionPersistence);
@@ -88,6 +140,9 @@ export async function resolveSession(user) {
     profile: {
       email,
       name: data.name || '',
+      designation: data.designation || '',
+      photoUrl: data.photoUrl || '',
+      phone: data.phone || '',
       role: data.role,
       branchId: data.branchId || null
     }

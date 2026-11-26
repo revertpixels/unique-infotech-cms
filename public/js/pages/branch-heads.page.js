@@ -1,11 +1,13 @@
 import { db } from '../config/firebase-config.js';
 import { collection, getDocs, doc, getDoc, setDoc, updateDoc, deleteDoc, query, where, serverTimestamp } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { createSelect } from '../components/ui-select.js?v=1.8.140';
-import { openMenu } from '../components/ui-menu.js?v=1.8.140';
-import { confirmDialog } from '../components/ui-confirm.js?v=1.8.140';
-import { showToast } from '../components/toast.js?v=1.8.140';
-import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.140';
-import { buildStats, buildToolbar, renderEmptyTableState } from '../components/list-page.js?v=1.8.140';
+import { createSelect } from '../components/ui-select.js?v=1.8.164';
+import { openMenu } from '../components/ui-menu.js?v=1.8.164';
+import { confirmDialog } from '../components/ui-confirm.js?v=1.8.164';
+import { showToast } from '../components/toast.js?v=1.8.164';
+import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.164';
+import { PAGE_SIZE, buildStats, buildToolbar, renderPager, renderEmptyTableState } from '../components/list-page.js?v=1.8.164';
+import { formatPersonName } from '../utils/formatter.js?v=1.8.164';
+import { loadUsersDirectory } from '../services/user-directory.service.js?v=1.8.164';
 
 const TEXT_KEYS = ['name', 'email', 'phone'];
 const KEYS = ['name', 'email', 'phone', 'branchId', 'status'];
@@ -41,6 +43,7 @@ export async function mount({ profile }) {
 
   let rows = [];
   let branches = [];
+  let page = 1;
   const stats = buildStats([
     { label: 'Total heads', value: 0, sub: 'All branch heads', icon: 'user-cog', tone: 'indigo' },
     { label: 'Active', value: 0, sub: 'Can sign in', icon: 'check-circle', tone: 'green' },
@@ -57,7 +60,7 @@ export async function mount({ profile }) {
       ] },
       { id: 'branch', label: 'Branch', options: [{ value: 'all', label: 'All branches', icon: 'git-branch' }] }
     ],
-    onChange: () => render(),
+    onChange: () => { page = 1; render(); },
     onRefresh: () => load()
   });
   const tbHost = $('bh-toolbar');
@@ -192,11 +195,24 @@ export async function mount({ profile }) {
     stats.update(2, rows.length - active, 'Signed out');
     stats.update(3, withoutHead, withoutHead === 0 ? 'All active branches covered' : withoutHead + ' without a head');
     const cnt = $('bh-count');
-    if (cnt) cnt.textContent = rows.length + ' heads';
+    if (cnt) cnt.textContent = list.length + (list.length === 1 ? ' head' : ' heads');
     const foot = $('bh-foot');
+    const totalPages = Math.max(1, Math.ceil(list.length / PAGE_SIZE));
+    if (page > totalPages) page = totalPages;
+    const start = (page - 1) * PAGE_SIZE;
+    const pageRows = list.slice(start, start + PAGE_SIZE);
     if (foot) {
-      foot.hidden = rows.length === 0;
-      foot.textContent = list.length === rows.length ? 'Showing all ' + rows.length : 'Showing ' + list.length + ' of ' + rows.length;
+      foot.hidden = list.length === 0;
+      renderPager(foot, {
+        page,
+        pageSize: PAGE_SIZE,
+        totalItems: list.length,
+        showWhenSingle: true,
+        onPageChange: (next) => {
+          page = next;
+          render();
+        }
+      });
     }
     if (rows.length && !list.length) {
       renderEmptyTableState(tbody, {
@@ -206,14 +222,16 @@ export async function mount({ profile }) {
         onClear: () => {
           tb.state.q = '';
           tb.state.status = 'all';
+          tb.state.branch = 'all';
+          page = 1;
           render();
         }
       });
     }
-    list.forEach((r) => {
+    pageRows.forEach((r) => {
       const tr = mk('tr');
       const nameTd = mk('td', 'bh-name');
-      nameTd.appendChild(mk('b', '', r.name || ' - '));
+      nameTd.appendChild(mk('b', '', formatPersonName(r.name || '') || ' - '));
       nameTd.appendChild(mk('br'));
       nameTd.appendChild(mk('span', 'bh-email', r.email || ''));
       tr.appendChild(nameTd);
@@ -278,6 +296,11 @@ export async function mount({ profile }) {
     render();
   }
 
+  async function syncDirectoryAfterMutation() {
+    await loadUsersDirectory({ forceRefresh: true });
+    window.dispatchEvent(new CustomEvent('uic:users-updated'));
+  }
+
   async function toggleActive(r) {
     const wantActive = (r.status || 'active') !== 'active';
     const ok = await confirmDialog({
@@ -290,6 +313,7 @@ export async function mount({ profile }) {
       await updateDoc(doc(db, 'users', r.id), { status: wantActive ? 'active' : 'inactive', updatedAt: serverTimestamp() });
       if (editId === r.id) closeForm();
       await load();
+      await syncDirectoryAfterMutation();
       note((r.name || r.email) + ' ' + (wantActive ? 'activated.' : 'deactivated.'), false);
     } catch (e) {
       console.error('[branch-heads] toggle failed', e);
@@ -310,6 +334,7 @@ export async function mount({ profile }) {
       await deleteDoc(doc(db, 'users', r.id));
       if (editId === r.id) closeForm();
       await load();
+      await syncDirectoryAfterMutation();
       showToast('Branch head deleted.', 'success');
     } catch (e) {
       console.error('[branch-heads] delete failed', e);
@@ -358,7 +383,7 @@ export async function mount({ profile }) {
     if (!form.hidden && !saveBtn.disabled && !(await confirmLeave({ clear: false }))) return;
     closeForm();
   });
-  registerDirty(() => !form.hidden && !saveBtn.disabled && !saving);
+  const unregisterDirty = registerDirty(() => !form.hidden && !saveBtn.disabled && !saving);
   form.addEventListener('input', () => { touched = true; refresh(); });
   form.addEventListener('change', () => { touched = true; refresh(); });
 
@@ -396,10 +421,11 @@ export async function mount({ profile }) {
     cancelBtn.disabled = true;
     setState('Saving...', 'dirty');
     const who = (profile && profile.email) ? profile.email : '';
+    const formattedName = formatPersonName(v.name) || v.name;
     try {
       if (editId) {
         await updateDoc(doc(db, 'users', editId), {
-          name: v.name,
+          name: formattedName,
           phone: v.phone || '',
           branchId: v.branchId,
           status: v.status,
@@ -408,7 +434,8 @@ export async function mount({ profile }) {
       } else {
         const data = {
           email: v.email,
-          name: v.name,
+          name: formattedName,
+          designation: 'Branch Head',
           role: 'branch_head',
           branchId: v.branchId,
           status: v.status,
@@ -422,6 +449,7 @@ export async function mount({ profile }) {
       saving = false;
       closeForm();
       await load();
+      await syncDirectoryAfterMutation();
       note(editId ? 'Branch head updated.' : 'Branch head added.', false);
     } catch (e) {
       console.error('[branch-heads] save failed', e);
@@ -432,7 +460,13 @@ export async function mount({ profile }) {
     }
   });
 
+  const onExternalUpdate = () => { load(); };
+  window.addEventListener('uic:users-updated', onExternalUpdate);
   await load();
+  return () => {
+    unregisterDirty();
+    window.removeEventListener('uic:users-updated', onExternalUpdate);
+  };
 }
 
 

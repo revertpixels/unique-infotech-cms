@@ -29,6 +29,51 @@
   color: var(--primary);
 }
 
+.pill.overdue {
+  background: var(--danger-soft);
+  color: var(--danger);
+  border: 1px solid color-mix(in srgb, var(--danger) 24%, transparent);
+}
+
+.pill.due,
+.pill.warning {
+  background: var(--warning-soft);
+  color: var(--warning);
+  border: 1px solid color-mix(in srgb, var(--warning) 24%, transparent);
+}
+
+.pill.upcoming,
+.pill.sky {
+  background: var(--info-soft);
+  color: var(--info);
+  border: 1px solid color-mix(in srgb, var(--info) 24%, transparent);
+}
+
+.pill.paid {
+  background: var(--success-soft);
+  color: var(--success);
+  border: 1px solid color-mix(in srgb, var(--success) 24%, transparent);
+}
+
+.pill.waived,
+.pill.purple {
+  background: #F3E8FF;
+  color: #7C3AED;
+  border: 1px solid color-mix(in srgb, #7C3AED 22%, transparent);
+}
+
+.pill.partial {
+  background: #FFF7ED;
+  color: #C2410C;
+  border: 1px solid color-mix(in srgb, #C2410C 24%, transparent);
+}
+
+.pill.muted {
+  background: var(--bg);
+  color: var(--text-mute);
+  border: 1px solid var(--border);
+}
+
 .due-tag {
   display: inline-flex;
   align-items: center;
@@ -79,4 +124,9 @@
 .la-mode.bank {
   background: var(--primary-soft);
   color: var(--primary);
+}
+
+.la-mode.waiver {
+  background: #F3E8FF;
+  color: #7C3AED;
 }

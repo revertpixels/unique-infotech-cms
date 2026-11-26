@@ -37,6 +37,13 @@ export function getSelectedSessionId(ctx) {
   try { return localStorage.getItem('uicms.session.' + centreOf(ctx)); } catch (e) { return null; }
 }
 
+export function getSelectedSession(ctx = 'youth') {
+  const list = getCachedSessions(ctx);
+  if (!list.length) return null;
+  const id = getSelectedSessionId(ctx);
+  return list.find((s) => s.id === id) || list.find((s) => s.status === 'running') || list[0];
+}
+
 export function setSelectedSession(ctx, s) {
   try {
     if (s) localStorage.setItem('uicms.session.' + centreOf(ctx), s.id);

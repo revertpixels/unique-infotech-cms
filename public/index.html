@@ -9,9 +9,10 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/main.css?v=1.8.140">
-  <link rel="stylesheet" href="css/components/multi-select.css?v=1.8.140">
-  <script>window.__BUILD__ = '1.8.140';</script>
+  <link rel="stylesheet" href="css/main.css?v=1.8.164">
+  <link rel="stylesheet" href="css/components/multi-select.css?v=1.8.164">
+  <link rel="stylesheet" href="css/pages/login.css?v=1.8.164">
+  <script>window.__BUILD__ = '1.8.164';</script>
   <style>
     body.auth-pending {
       visibility: hidden;
@@ -20,7 +21,8 @@
   <script src="https://unpkg.com/lucide@0.344.0/dist/umd/lucide.min.js"></script>
 </head>
 <body class="auth-pending" data-ctx="youth">
-  <div class="app" id="app">
+  <main id="auth-shell" class="login-screen" hidden></main>
+  <div class="app" id="app" hidden>
     <div class="sb-backdrop" id="sb-backdrop"></div>
     <aside class="sidebar" id="sidebar" aria-label="Sidebar"></aside>
     <div class="main">
@@ -29,23 +31,88 @@
     </div>
   </div>
   <script type="module">
-    import { getContext, setContext, loadSavedContext } from './js/core/app.js?v=1.8.140';
-    import { requireSession, logout } from './js/core/guard.js?v=1.8.140';
-    import { startRouter } from './js/core/router.js?v=1.8.140';
-    import { confirmLeave } from './js/utils/unsaved-guard.js?v=1.8.140';
-    import { renderSidebar, setActiveRoute, setCollapsed, toggleDrawer, closeDrawer, initSidebar } from './js/components/sidebar.js?v=1.8.140';
-    import { renderTopbar, setPageTitle, setSwitcherActive } from './js/components/topbar.js?v=1.8.140';
+    import { getContext, setContext, loadSavedContext } from './js/core/app.js?v=1.8.164';
+    import { tryRestoreSession, activateSession, stopInactivityTracking, setUnauthenticatedHandler, logout } from './js/core/guard.js?v=1.8.164';
+    import { startRouter, stopRouter } from './js/core/router.js?v=1.8.164';
+    import { confirmLeave, clearDirty } from './js/utils/unsaved-guard.js?v=1.8.164';
+    import { renderSidebar, setActiveRoute, setCollapsed, toggleDrawer, closeDrawer, initSidebar, destroySidebar } from './js/components/sidebar.js?v=1.8.164';
+    import { renderTopbar, setPageTitle, setSwitcherActive } from './js/components/topbar.js?v=1.8.164';
+    import { clearPersistedBranchBatchFilters } from './js/components/branch-batch-filter.js?v=1.8.164';
+    import { initDatasetSession, stopDatasetSession } from './js/core/dataset-session.js?v=1.8.164';
+    import { invalidateFinancialCache } from './js/services/report.service.js?v=1.8.164';
+    import { loadUsersDirectory, clearUsersDirectoryCache } from './js/services/user-directory.service.js?v=1.8.164';
+    import { renderLoginView } from './js/pages/login.page.js?v=1.8.164';
+    import { playSwitchSound, preloadSwitchSound, preloadLogoutSound } from './js/utils/sound.js?v=1.8.164';
     import { db } from './js/config/firebase-config.js';
     import { doc, getDoc } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
 
-    (async () => {
-      const profile = await requireSession();
+    const authShell = document.getElementById('auth-shell');
+    const appShell = document.getElementById('app');
+    let loginController = null;
+    let shellGlobalBound = false;
+
+    function cleanupFloatingOverlays() {
+      document.querySelectorAll('.ui-modal-back, .ui-select-list').forEach((el) => el.remove());
+    }
+
+    function showAuthView(reason = '') {
+      stopRouter();
+      stopDatasetSession();
+      stopInactivityTracking();
+      destroySidebar();
+      clearDirty();
+      clearPersistedBranchBatchFilters();
+      invalidateFinancialCache({ clearMeta: true });
+      clearUsersDirectoryCache();
+      cleanupFloatingOverlays();
+
+      const topbar = document.getElementById('topbar');
+      if (topbar) topbar.textContent = '';
+
+      appShell.hidden = true;
+      document.body.classList.add('auth-screen');
+      document.body.dataset.ctx = 'youth';
+      document.title = 'Sign in - Unique Infotech CMS';
+
+      try {
+        history.replaceState(null, '', '/index.html' + (reason ? '?reason=' + encodeURIComponent(reason) : ''));
+      } catch (_) {}
+
+      if (loginController) {
+        loginController.unmount();
+        loginController = null;
+      }
+      loginController = renderLoginView(authShell, {
+        reason,
+        onAuthenticated: async (profile) => {
+          try {
+            history.replaceState(null, '', '/index.html#/dashboard');
+          } catch (_) {}
+          await bootAuthenticatedApp(profile);
+        }
+      });
+      document.body.classList.remove('auth-pending');
+    }
+
+    async function bootAuthenticatedApp(profile) {
+      if (loginController) {
+        loginController.unmount();
+        loginController = null;
+      }
+      authShell.hidden = true;
+      appShell.hidden = false;
+      document.body.classList.remove('auth-screen');
+
+      activateSession(profile);
+      initDatasetSession().catch((err) => {
+        console.warn('[boot] dataset-session init warning:', err && err.code ? err.code : err);
+      });
 
       try {
         const pendingNotice = sessionStorage.getItem('pending_verification_notice');
         if (pendingNotice) {
           sessionStorage.removeItem('pending_verification_notice');
-          import('./js/components/toast.js?v=1.8.140').then(({ showToast }) => {
+          import('./js/components/toast.js?v=1.8.164').then(({ showToast }) => {
             showToast({
               type: 'info',
               title: 'Email Verification',
@@ -65,44 +132,13 @@
         startCtx = 'school';
       }
       setContext(startCtx);
-
-      let currentRouteKey = null;
-
-      function applyContext(ctx) {
-        setContext(ctx);
-        renderSidebar({
-          profile,
-          ctx: getContext(),
-          orgName,
-          tagline,
-          onNavigate: closeDrawer,
-          onLogout: async () => { if (await confirmLeave()) logout('signedout'); }
-        });
-        renderTopbar({
-          profile,
-          ctx: getContext(),
-          canSwitch: profile.role === 'superadmin',
-          onMenu: () => {
-            const app = document.getElementById('app');
-            if (window.innerWidth > 768) {
-              setCollapsed(!app.classList.contains('sb-collapsed'));
-            } else {
-              toggleDrawer();
-            }
-          },
-          onSwitch: async (nextCtx) => {
-            if (!(await confirmLeave())) { setSwitcherActive(getContext()); return; }
-            applyContext(nextCtx);
-            if (location.hash !== '#/dashboard') {
-              location.hash = '#/dashboard';
-            }
-          }
-        });
-        setSwitcherActive(getContext());
-        setActiveRoute(currentRouteKey);
+      preloadLogoutSound();
+      if (profile.role === 'superadmin') {
+        preloadSwitchSound();
       }
 
-window.APP_CACHE = window.APP_CACHE || {};
+      window.APP_CACHE = window.APP_CACHE || {};
+      await loadUsersDirectory({ forceRefresh: true });
       try {
         const orgSnap = await getDoc(doc(db, 'settings/org_config'));
         if (orgSnap.exists()) {
@@ -130,44 +166,79 @@ window.APP_CACHE = window.APP_CACHE || {};
 
       const orgName = (window.APP_CACHE && window.APP_CACHE.org && window.APP_CACHE.org.orgName) ? window.APP_CACHE.org.orgName : null;
       const tagline = (window.APP_CACHE && window.APP_CACHE.org && window.APP_CACHE.org.tagline) ? window.APP_CACHE.org.tagline : null;
+      let currentRouteKey = null;
 
-      renderTopbar({
-        profile,
-        ctx: getContext(),
-        canSwitch: profile.role === 'superadmin',
-        onMenu: () => {
-          const app = document.getElementById('app');
-          if (window.innerWidth > 768) {
-            setCollapsed(!app.classList.contains('sb-collapsed'));
-          } else {
-            toggleDrawer();
-          }
-        },
-        onSwitch: async (ctx) => {
-          if (!(await confirmLeave())) { setSwitcherActive(getContext()); return; }
-          applyContext(ctx);
-          if (location.hash !== '#/dashboard') {
-            location.hash = '#/dashboard';
-          }
+      async function handleProgrammeSwitch(nextCtx) {
+        const prevCtx = getContext();
+        if (nextCtx === prevCtx) return;
+        if (!(await confirmLeave())) { setSwitcherActive(prevCtx); return; }
+        playSwitchSound();
+        clearPersistedBranchBatchFilters();
+        applyContext(nextCtx);
+        const rawHash = location.hash || '';
+        const h = rawHash.split('?')[0];
+        let nextHash = rawHash;
+        if (h === '#/pending' || h === '#/school-pending') {
+          nextHash = nextCtx === 'school' ? '#/school-pending' : '#/pending';
+        } else if (h === '#/payments' || h === '#/school-payments') {
+          nextHash = nextCtx === 'school' ? '#/school-payments' : '#/payments';
+        } else if (h === '#/students' || h === '#/school-students') {
+          nextHash = nextCtx === 'school' ? '#/school-students' : '#/students';
+        } else if (
+          h === '#/dashboard' || h === '#/courses' || h === '#/batches' ||
+          h === '#/reports' || h === '#/archives' || h === '#/org'
+        ) {
+          nextHash = rawHash;
+        } else {
+          nextHash = '#/dashboard';
         }
-      });
 
-      renderSidebar({
-        profile,
-        ctx: getContext(),
-        orgName,
-        tagline,
-        onNavigate: closeDrawer,
-        onLogout: () => logout('signedout')
-      });
+        if (nextHash !== rawHash) {
+          location.hash = nextHash;
+        } else if (nextCtx !== prevCtx) {
+          window.dispatchEvent(new CustomEvent('uic:ctx-changed', { detail: { ctx: nextCtx } }));
+        }
+      }
 
+      function applyContext(ctx) {
+        setContext(ctx);
+        renderSidebar({
+          profile,
+          ctx: getContext(),
+          orgName,
+          tagline,
+          onNavigate: closeDrawer,
+          onLogout: async () => { if (await confirmLeave()) logout('signedout'); }
+        });
+        renderTopbar({
+          profile,
+          ctx: getContext(),
+          canSwitch: profile.role === 'superadmin',
+          onMenu: () => {
+            const app = document.getElementById('app');
+            if (window.innerWidth > 768) {
+              setCollapsed(!app.classList.contains('sb-collapsed'));
+            } else {
+              toggleDrawer();
+            }
+          },
+          onSwitch: handleProgrammeSwitch,
+          onOpenOrganisation: () => {
+            if (profile.role === 'superadmin') {
+              location.hash = '#/org?tab=authorised';
+            }
+          },
+          onLogout: async () => {
+            if (await confirmLeave()) logout('signedout');
+          }
+        });
+        setSwitcherActive(getContext());
+        setActiveRoute(currentRouteKey);
+      }
+
+      applyContext(getContext());
       initSidebar();
       setSwitcherActive(getContext());
-
-      const backdrop = document.getElementById('sb-backdrop');
-      if (backdrop) {
-        backdrop.addEventListener('click', closeDrawer);
-      }
 
       startRouter({
         profile,
@@ -181,41 +252,37 @@ window.APP_CACHE = window.APP_CACHE || {};
         }
       });
 
-      document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') {
-          closeDrawer();
-        }
-      });
-
-      window.addEventListener('resize', () => {
-        if (window.innerWidth > 768) {
-          closeDrawer();
-        }
-      });
+      if (!shellGlobalBound) {
+        shellGlobalBound = true;
+        const backdrop = document.getElementById('sb-backdrop');
+        if (backdrop) backdrop.addEventListener('click', closeDrawer);
+        document.addEventListener('keydown', (e) => {
+          if (e.key === 'Escape') closeDrawer();
+        });
+        window.addEventListener('resize', () => {
+          if (window.innerWidth > 768) closeDrawer();
+        });
+      }
 
       document.body.classList.remove('auth-pending');
-      if (typeof lucide !== 'undefined') {
-        lucide.createIcons();
+      if (typeof lucide !== 'undefined') lucide.createIcons();
+    }
+
+    setUnauthenticatedHandler((reason) => {
+      showAuthView(reason);
+    });
+
+    (async () => {
+      const params = new URLSearchParams(location.search);
+      const urlReason = params.get('reason') || '';
+      const res = await tryRestoreSession();
+      if (res.ok) {
+        await bootAuthenticatedApp(res.profile);
+      } else {
+        showAuthView(res.reason || urlReason);
       }
     })();
   </script>
-  <script type="module" src="js/core/app.js?v=1.8.140"></script>
+  <script type="module" src="js/core/app.js?v=1.8.164"></script>
 </body>
 </html>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

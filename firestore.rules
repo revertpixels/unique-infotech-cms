@@ -53,15 +53,52 @@ service cloud.firestore {
       return me().branchId;
     }
 
+    // During Master Delete or Restore, block all client writes so live
+    // snapshots/restores cannot mix with concurrent edits. Never auto-expires:
+    // an interrupted destructive operation remains locked until recovery completes.
+    function maintenanceOpen() {
+      return !exists(/databases/$(database)/documents/_system/maintenance)
+        || get(/databases/$(database)/documents/_system/maintenance).data.active != true;
+    }
+
+    // Hide business reads while Clear or Restore is replacing records so users
+    // never observe a partial state. Backups keep reads open.
+    function readsOpen() {
+      return !exists(/databases/$(database)/documents/_system/maintenance)
+        || get(/databases/$(database)/documents/_system/maintenance).data.active != true
+        || get(/databases/$(database)/documents/_system/maintenance).data.mode == 'backup';
+    }
+
+    // Public-to-signed-in client state for dataset generation / maintenance banner.
+    // _system/maintenance, _system_backup_manifests/*, and _system_backup_operations/*
+    // stay strictly server-only (denied by catch-all rule below).
+    match /_system/client_state {
+      allow get: if signedIn();
+      allow list, write: if false;
+    }
+
     function validUserDoc(userEmail) {
       let d = request.resource.data;
       return userEmail == userEmail.lower()
         && d.email == userEmail
-        && d.keys().hasOnly(['email', 'name', 'phone', 'role', 'branchId', 'status', 'createdAt', 'createdBy', 'updatedAt'])
+        && d.keys().hasOnly(['email', 'name', 'designation', 'phone', 'role', 'branchId', 'photoUrl', 'status', 'createdAt', 'createdBy', 'updatedAt'])
         && d.keys().hasAll(['email', 'role', 'status'])
-        && d.role in ['branch_head', 'school_head']
+        && (
+             (d.role in ['branch_head', 'school_head'] && (d.role == 'school_head' || (d.branchId is string && d.branchId.size() > 0)))
+             || (d.role == 'superadmin' && userEmail == authEmail())
+           )
         && d.status in ['active', 'inactive']
-        && (d.role == 'school_head' || (d.branchId is string && d.branchId.size() > 0));
+        && (!('name' in d) || d.name == null || (d.name is string && d.name.size() <= 80))
+        && (!('designation' in d) || d.designation == null || (d.designation is string && d.designation.size() <= 80))
+        && (!('photoUrl' in d) || d.photoUrl == null || (d.photoUrl is string && d.photoUrl.size() <= 1024));
+    }
+
+    function isSelfPhotoOnlyUpdate(userEmail) {
+      let d = request.resource.data;
+      return isActiveHead()
+        && userEmail == authEmail()
+        && d.diff(resource.data).affectedKeys().hasOnly(['photoUrl', 'updatedAt'])
+        && (!('photoUrl' in d) || d.photoUrl == null || (d.photoUrl is string && (d.photoUrl == '' || d.photoUrl.matches('https://.*')) && d.photoUrl.size() <= 1024));
     }
 
     function validBatchDoc() {
@@ -80,49 +117,55 @@ service cloud.firestore {
     }
 
     match /users/{userEmail} {
+      // Allow get even during maintenance so session resolution & recovery always work.
       allow get: if isSuperAdmin()
-                 || (isGoogleVerified() && userEmail == authEmail());
-      allow list: if isSuperAdmin();
-      allow create, update: if isSuperAdmin() && validUserDoc(userEmail);
-      allow delete: if isSuperAdmin();
+                 || (isGoogleVerified() && userEmail == authEmail())
+                 || (readsOpen() && isActiveHead());
+      allow list: if readsOpen() && (isSuperAdmin() || isActiveHead());
+      allow create: if maintenanceOpen() && isSuperAdmin() && validUserDoc(userEmail);
+      allow update: if maintenanceOpen() && (
+                      (isSuperAdmin() && validUserDoc(userEmail))
+                      || isSelfPhotoOnlyUpdate(userEmail)
+                    );
+      allow delete: if maintenanceOpen() && isSuperAdmin() && userEmail != authEmail();
     }
 
     match /settings/{docId} {
-      allow read: if isSuperAdmin() || isActiveHead();
-      allow write: if isSuperAdmin();
+      allow read: if readsOpen() && (isSuperAdmin() || isActiveHead());
+      allow write: if maintenanceOpen() && isSuperAdmin();
     }
 
     match /branches/{branchId} {
-      allow read: if isSuperAdmin()
+      allow read: if readsOpen() && (isSuperAdmin()
         || (isBranchHead() && branchId == myBranchId())
-        || (isActiveHead() && branchId == myBranchId());
-      allow write: if isSuperAdmin();
+        || (isActiveHead() && branchId == myBranchId()));
+      allow write: if maintenanceOpen() && isSuperAdmin();
     }
 
     match /courses/{courseId} {
-      allow read: if isSuperAdmin() || isBranchHead();
-      allow write: if isSuperAdmin();
+      allow read: if readsOpen() && (isSuperAdmin() || isBranchHead() || (isSchoolHead() && resource.data.ctx == 'school'));
+      allow write: if maintenanceOpen() && isSuperAdmin();
     }
 
     match /batches/{batchId} {
-      allow read: if isSuperAdmin() || isBranchHead();
-      allow create: if (isSuperAdmin()
+      allow read: if readsOpen() && (isSuperAdmin() || isBranchHead() || (isSchoolHead() && resource.data.ctx == 'school'));
+      allow create: if maintenanceOpen() && (isSuperAdmin()
         || (isBranchHead()
             && request.resource.data.branchId == myBranchId()
             && request.resource.data.ctx == 'youth'))
         && validBatchDoc();
-      allow update: if (isSuperAdmin()
+      allow update: if maintenanceOpen() && (isSuperAdmin()
         || (isBranchHead()
             && request.resource.data.branchId == myBranchId()
             && request.resource.data.ctx == 'youth'
             && resource.data.branchId == myBranchId()))
         && validBatchDoc();
-      allow delete: if isSuperAdmin();
+      allow delete: if maintenanceOpen() && isSuperAdmin();
     }
 
     match /levels/{levelId} {
-      allow read: if isSuperAdmin() || isSchoolHead();
-      allow write: if isSuperAdmin();
+      allow read: if readsOpen() && (isSuperAdmin() || isSchoolHead());
+      allow write: if maintenanceOpen() && isSuperAdmin();
     }
 
     function validSessionUpdate() {
@@ -135,120 +178,136 @@ service cloud.firestore {
     }
 
     match /sessions/{sessionId} {
-      allow read: if isSuperAdmin() || isActiveHead();
-      allow create, delete: if isSuperAdmin();
-      allow update: if isSuperAdmin() && validSessionUpdate();
+      allow read: if readsOpen() && (isSuperAdmin() || isBranchHead() || (isSchoolHead() && resource.data.ctx == 'school'));
+      allow create, delete: if maintenanceOpen() && isSuperAdmin();
+      allow update: if maintenanceOpen() && isSuperAdmin() && validSessionUpdate();
     }
 
     match /students/{studentId} {
-      allow read: if isSuperAdmin()
-        || (isBranchHead() && resource.data.branchId == myBranchId());
-      allow create: if (isSuperAdmin()
+      allow read: if readsOpen() && (isSuperAdmin()
+        || (isBranchHead() && resource.data.branchId == myBranchId())
+        || (isSchoolHead() && resource.data.ctx == 'school'));
+      allow create: if maintenanceOpen() && (isSuperAdmin()
         || (isBranchHead() && request.resource.data.branchId == myBranchId()
             && request.resource.data.ctx == 'youth'))
         && validStudentDoc();
-      allow update: if (isSuperAdmin()
+      allow update: if maintenanceOpen() && (isSuperAdmin()
         || (isBranchHead() && resource.data.branchId == myBranchId()
             && request.resource.data.branchId == resource.data.branchId
             && request.resource.data.studentId == resource.data.studentId))
         && validStudentDoc();
-      allow delete: if isSuperAdmin();
+      allow delete: if maintenanceOpen() && isSuperAdmin();
 
       match /docs/{docId} {
-        allow read: if isSuperAdmin()
-          || (isBranchHead() && get(/databases/$(database)/documents/students/$(studentId)).data.branchId == myBranchId());
+        allow read: if readsOpen() && (isSuperAdmin()
+          || (isBranchHead() && get(/databases/$(database)/documents/students/$(studentId)).data.branchId == myBranchId())
+          || (isSchoolHead() && get(/databases/$(database)/documents/students/$(studentId)).data.ctx == 'school'));
         // getAfter: the parent student doc may be created in the SAME batch (new admission).
-        allow write: if isSuperAdmin()
-          || (isBranchHead() && getAfter(/databases/$(database)/documents/students/$(studentId)).data.branchId == myBranchId());
+        allow write: if maintenanceOpen() && (isSuperAdmin()
+          || (isBranchHead() && getAfter(/databases/$(database)/documents/students/$(studentId)).data.branchId == myBranchId()));
       }
 
       // Activity log: append-only. Nobody can edit entries; Super Admin can delete during student purge.
       match /activity/{activityId} {
-        allow read: if isSuperAdmin()
-          || (isBranchHead() && get(/databases/$(database)/documents/students/$(studentId)).data.branchId == myBranchId());
-        allow create: if isSuperAdmin()
+        allow read: if readsOpen() && (isSuperAdmin()
+          || (isBranchHead() && get(/databases/$(database)/documents/students/$(studentId)).data.branchId == myBranchId()));
+        allow create: if maintenanceOpen() && (isSuperAdmin()
           || (isBranchHead() && (
               (exists(/databases/$(database)/documents/students/$(studentId)) && get(/databases/$(database)/documents/students/$(studentId)).data.branchId == myBranchId()) ||
               getAfter(/databases/$(database)/documents/students/$(studentId)).data.branchId == myBranchId()
-          ));
+          )));
         allow update: if false;
-        allow delete: if isSuperAdmin();
+        allow delete: if maintenanceOpen() && isSuperAdmin();
       }
     }
 
     match /students/{studentId}/payment/{paymentId} {
-      allow read: if isSuperAdmin()
-        || (isBranchHead() && get(/databases/$(database)/documents/students/$(studentId)).data.branchId == myBranchId());
-      allow create: if isSuperAdmin()
+      allow read: if readsOpen() && (isSuperAdmin()
+        || (isBranchHead() && get(/databases/$(database)/documents/students/$(studentId)).data.branchId == myBranchId())
+        || (isSchoolHead() && get(/databases/$(database)/documents/students/$(studentId)).data.ctx == 'school'));
+      allow create: if maintenanceOpen() && (isSuperAdmin()
         || (isBranchHead() && (
             (exists(/databases/$(database)/documents/students/$(studentId)) && get(/databases/$(database)/documents/students/$(studentId)).data.branchId == myBranchId()) ||
             getAfter(/databases/$(database)/documents/students/$(studentId)).data.branchId == myBranchId()
         )
         && request.resource.data.waived == false
-        && request.resource.data.recordedBy == request.auth.token.email.lower());
-      allow update, delete: if isSuperAdmin();
+        && request.resource.data.recordedBy == request.auth.token.email.lower()));
+      allow update, delete: if maintenanceOpen() && isSuperAdmin();
+    }
+
+    // Collection-group read access for collectionGroup(db, 'payment') (Payment History)
+    match /{path=**}/payment/{paymentId} {
+      allow read: if readsOpen() && (isSuperAdmin()
+        || (isBranchHead() && (
+            resource.data.recordedAtBranchId == myBranchId()
+            || get(/databases/$(database)/documents/$(path)).data.branchId == myBranchId()
+        ))
+        || (isSchoolHead() && get(/databases/$(database)/documents/$(path)).data.ctx == 'school'));
     }
 
     match /students/{studentId}/aadhaar/{aadhaarId} {
-      allow read: if isSuperAdmin()
-        || (isBranchHead() && get(/databases/$(database)/documents/students/$(studentId)).data.branchId == myBranchId());
-      allow write: if isSuperAdmin()
-        || (isBranchHead() && getAfter(/databases/$(database)/documents/students/$(studentId)).data.branchId == myBranchId());
+      allow read: if readsOpen() && (isSuperAdmin()
+        || (isBranchHead() && get(/databases/$(database)/documents/students/$(studentId)).data.branchId == myBranchId()));
+      allow write: if maintenanceOpen() && (isSuperAdmin()
+        || (isBranchHead() && getAfter(/databases/$(database)/documents/students/$(studentId)).data.branchId == myBranchId()));
     }
 
     match /counters/{counterId} {
-      allow read, write: if isSuperAdmin()
-        || (isBranchHead() && (counterId.matches('sid_.*') || counterId.matches('rcpt_.*')));
+      allow read: if readsOpen() && (isSuperAdmin()
+        || (isBranchHead() && (counterId.matches('sid_.*') || counterId.matches('rcpt_.*'))));
+      allow write: if maintenanceOpen() && (isSuperAdmin()
+        || (isBranchHead() && (counterId.matches('sid_.*') || counterId.matches('rcpt_.*'))));
     }
 
     match /enrolments/{enrolmentId} {
-      allow read: if isSuperAdmin()
-        || (isBranchHead() && get(/databases/$(database)/documents/students/$(resource.data.studentId)).data.branchId == myBranchId());
-      allow create, update: if isSuperAdmin();
-      allow delete: if isSuperAdmin();
+      allow read: if readsOpen() && (isSuperAdmin()
+        || isSchoolHead()
+        || (isBranchHead() && get(/databases/$(database)/documents/students/$(resource.data.studentId)).data.branchId == myBranchId()));
+      allow create, update, delete: if maintenanceOpen() && isSuperAdmin();
     }
 
     match /bills/{billId} {
-      allow read: if isSuperAdmin()
-        || (isBranchHead() && get(/databases/$(database)/documents/students/$(resource.data.studentId)).data.branchId == myBranchId());
-      allow create, update: if isSuperAdmin();
-      allow delete: if isSuperAdmin();
+      allow read: if readsOpen() && (isSuperAdmin()
+        || isSchoolHead()
+        || (isBranchHead() && get(/databases/$(database)/documents/students/$(resource.data.studentId)).data.branchId == myBranchId()));
+      allow create, update, delete: if maintenanceOpen() && isSuperAdmin();
     }
 
     match /payments/{paymentId} {
-      allow read: if isSuperAdmin()
-        || (isBranchHead() && get(/databases/$(database)/documents/students/$(resource.data.studentId)).data.branchId == myBranchId());
-      allow create, update: if isSuperAdmin();
-      allow delete: if isSuperAdmin();
+      allow read: if readsOpen() && (isSuperAdmin()
+        || isSchoolHead()
+        || (isBranchHead() && get(/databases/$(database)/documents/students/$(resource.data.studentId)).data.branchId == myBranchId()));
+      allow create, update, delete: if maintenanceOpen() && isSuperAdmin();
     }
 
     match /waivers/{waiverId} {
-      allow read: if isSuperAdmin()
-        || (isBranchHead() && get(/databases/$(database)/documents/students/$(resource.data.studentId)).data.branchId == myBranchId());
-      allow create, update: if isSuperAdmin();
-      allow delete: if isSuperAdmin();
+      allow read: if readsOpen() && (isSuperAdmin()
+        || isSchoolHead()
+        || (isBranchHead() && get(/databases/$(database)/documents/students/$(resource.data.studentId)).data.branchId == myBranchId()));
+      allow create, update, delete: if maintenanceOpen() && isSuperAdmin();
     }
 
     match /breaks/{breakId} {
-      allow read: if isSuperAdmin()
-        || (isBranchHead() && get(/databases/$(database)/documents/students/$(resource.data.studentId)).data.branchId == myBranchId());
-      allow create, update: if isSuperAdmin();
-      allow delete: if isSuperAdmin();
+      allow read: if readsOpen() && (isSuperAdmin()
+        || isSchoolHead()
+        || (isBranchHead() && get(/databases/$(database)/documents/students/$(resource.data.studentId)).data.branchId == myBranchId()));
+      allow create, update, delete: if maintenanceOpen() && isSuperAdmin();
     }
 
     match /transfers/{transferId} {
-      allow read: if isSuperAdmin()
-        || (isBranchHead() && get(/databases/$(database)/documents/students/$(resource.data.studentId)).data.branchId == myBranchId());
-      allow create, update: if isSuperAdmin();
-      allow delete: if isSuperAdmin();
+      allow read: if readsOpen() && (isSuperAdmin()
+        || (isBranchHead() && get(/databases/$(database)/documents/students/$(resource.data.studentId)).data.branchId == myBranchId()));
+      allow create, update, delete: if maintenanceOpen() && isSuperAdmin();
     }
 
     match /deletionLog/{logId} {
-      allow read, create: if isSuperAdmin();
+      allow read: if readsOpen() && isSuperAdmin();
+      allow create: if maintenanceOpen() && isSuperAdmin();
       allow update, delete: if false;
     }
 
-    // Everything else is denied until its phase adds rules
+    // Everything else (including _system/maintenance, _system_backup_manifests,
+    // _system_backup_operations) is denied to client reads and writes.
     match /{document=**} {
       allow read, write: if false;
     }

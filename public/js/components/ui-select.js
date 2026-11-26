@@ -194,13 +194,22 @@ export function createSelect(host, opts) {
     rebuild();
   }
 
+  let isDisabled = Boolean(opts && opts.disabled);
+  function applyDisabled() {
+    btn.disabled = isDisabled;
+    host.classList.toggle('is-disabled', isDisabled);
+    if (isDisabled && !list.hidden) close(false);
+  }
+
   btn.addEventListener('click', (e) => {
     e.stopPropagation();
+    if (isDisabled) return;
     if (list.hidden) open();
     else close(false);
   });
 
   btn.addEventListener('keydown', (e) => {
+    if (isDisabled) return;
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); open(); }
     else if (e.key === 'Escape') { e.preventDefault(); close(false); }
   });
@@ -216,12 +225,16 @@ export function createSelect(host, opts) {
   });
 
   paint();
+  applyDisabled();
   return {
     get value() { return current; },
     set value(v) { current = v; paint(); },
+    get disabled() { return isDisabled; },
+    set disabled(v) { isDisabled = Boolean(v); applyDisabled(); },
     setValue(v) { current = v; paint(); },
+    setDisabled(v) { isDisabled = Boolean(v); applyDisabled(); },
     setOptions,
-    focus() { btn.focus(); },
+    focus() { if (!isDisabled) btn.focus(); },
     close() { close(false); }
   };
 }

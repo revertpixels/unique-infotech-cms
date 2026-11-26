@@ -1,6 +1,11 @@
-import { getRunningPeriod, getPeriodOptions } from '../utils/date.utils.js?v=1.8.140';
-import { loadSessions, getSelectedSessionId, setSelectedSession } from '../core/sessions.js?v=1.8.140';
-import { confirmLeave } from '../utils/unsaved-guard.js?v=1.8.140';
+import { getRunningPeriod, getPeriodOptions } from '../utils/date.utils.js?v=1.8.164';
+import { loadSessions, getSelectedSessionId, setSelectedSession } from '../core/sessions.js?v=1.8.164';
+import { confirmLeave } from '../utils/unsaved-guard.js?v=1.8.164';
+import { formatPersonName } from '../utils/formatter.js?v=1.8.164';
+import { defaultDesignationForRole, resolveUserDisplay } from '../services/user-directory.service.js?v=1.8.164';
+import { openProfileModal } from './profile-modal.js?v=1.8.164';
+
+let topbarProfileCleanup = null;
 
 let listenersRegistered = false;
 let sessionsListenerRegistered = false;
@@ -23,9 +28,11 @@ function roleLabel(role) {
   return role || '';
 }
 
-export function renderTopbar({ profile, ctx, canSwitch, onMenu, onSwitch }) {
+export function renderTopbar({ profile, ctx, canSwitch, onMenu, onSwitch, onOpenOrganisation, onLogout }) {
   const topbar = document.getElementById('topbar');
   topbar.textContent = '';
+  const onOpenOrgCb = typeof onOpenOrganisation === 'function' ? onOpenOrganisation : () => { location.hash = '#/org'; };
+  const onLogoutCb = typeof onLogout === 'function' ? onLogout : () => {};
 
   // 1. hamburger
   const menuBtn = document.createElement('button');
@@ -228,24 +235,168 @@ export function renderTopbar({ profile, ctx, canSwitch, onMenu, onSwitch }) {
   notifBtn.appendChild(dot);
   topbar.appendChild(notifBtn);
 
-  // 7. user chip
+  // 7. interactive user profile menu
+  if (topbarProfileCleanup) {
+    topbarProfileCleanup();
+    topbarProfileCleanup = null;
+  }
+
   const chip = document.createElement('div');
   chip.className = 'user-chip';
+
+  const chipBtn = document.createElement('button');
+  chipBtn.type = 'button';
+  chipBtn.className = 'user-chip-btn';
+  chipBtn.setAttribute('aria-haspopup', 'menu');
+  chipBtn.setAttribute('aria-expanded', 'false');
+  chipBtn.setAttribute('aria-label', 'Account menu');
+
   const avatar = document.createElement('span');
   avatar.className = 'chip-avatar';
-  avatar.textContent = initials(profile);
-  chip.appendChild(avatar);
+  chipBtn.appendChild(avatar);
+
   const chipText = document.createElement('div');
   chipText.className = 'chip-text';
   const chipName = document.createElement('div');
   chipName.className = 'chip-name';
-  chipName.textContent = (profile && (profile.name || profile.email)) || '';
   chipText.appendChild(chipName);
   const chipRole = document.createElement('div');
   chipRole.className = 'chip-role';
-  chipRole.textContent = roleLabel(profile && profile.role);
   chipText.appendChild(chipRole);
-  chip.appendChild(chipText);
+  chipBtn.appendChild(chipText);
+
+  const chevIcon = document.createElement('i');
+  chevIcon.setAttribute('data-lucide', 'chevron-down');
+  chevIcon.className = 'user-chip-chev';
+  chipBtn.appendChild(chevIcon);
+
+  const profileMenu = document.createElement('div');
+  profileMenu.className = 'tb-profile-menu';
+  profileMenu.setAttribute('role', 'menu');
+  profileMenu.hidden = true;
+
+  const menuHead = document.createElement('div');
+  menuHead.className = 'tb-profile-head';
+  const menuHeadName = document.createElement('b');
+  const menuHeadRole = document.createElement('span');
+  const menuHeadEmail = document.createElement('small');
+  menuHead.append(menuHeadName, menuHeadRole, menuHeadEmail);
+  profileMenu.appendChild(menuHead);
+
+  const itemProfile = document.createElement('button');
+  itemProfile.type = 'button';
+  itemProfile.className = 'tb-profile-item';
+  itemProfile.setAttribute('role', 'menuitem');
+  itemProfile.innerHTML = '<i data-lucide="user"></i><span>Profile</span>';
+  profileMenu.appendChild(itemProfile);
+
+  let itemOrg = null;
+  if (profile && profile.role === 'superadmin') {
+    itemOrg = document.createElement('button');
+    itemOrg.type = 'button';
+    itemOrg.className = 'tb-profile-item';
+    itemOrg.setAttribute('role', 'menuitem');
+    itemOrg.innerHTML = '<i data-lucide="landmark"></i><span>Organisation</span>';
+    profileMenu.appendChild(itemOrg);
+  }
+
+  const sep = document.createElement('hr');
+  sep.className = 'tb-profile-sep';
+  profileMenu.appendChild(sep);
+
+  const itemLogout = document.createElement('button');
+  itemLogout.type = 'button';
+  itemLogout.className = 'tb-profile-item danger';
+  itemLogout.setAttribute('role', 'menuitem');
+  itemLogout.innerHTML = '<i data-lucide="log-out"></i><span>Logout</span>';
+  profileMenu.appendChild(itemLogout);
+
+  function syncTopbarIdentity() {
+    const disp = resolveUserDisplay(
+      profile && profile.email,
+      profile && profile.name,
+      profile && profile.designation
+    );
+    const displayName = disp.name || formatPersonName(profile && (profile.name || profile.email)) || '';
+    const displayRole = disp.designation || defaultDesignationForRole(profile && profile.role) || roleLabel(profile && profile.role);
+
+    avatar.textContent = '';
+    if (disp.photoUrl) {
+      const img = document.createElement('img');
+      img.src = disp.photoUrl;
+      img.alt = displayName;
+      avatar.appendChild(img);
+    } else {
+      avatar.textContent = initials(profile);
+    }
+    chipName.textContent = displayName;
+    chipRole.textContent = displayRole;
+    menuHeadName.textContent = displayName;
+    menuHeadRole.textContent = displayRole;
+    menuHeadEmail.textContent = (profile && profile.email) || '';
+  }
+
+  function closeProfileMenu() {
+    profileMenu.hidden = true;
+    chipBtn.setAttribute('aria-expanded', 'false');
+  }
+
+  function openProfileMenu() {
+    syncTopbarIdentity();
+    profileMenu.hidden = false;
+    chipBtn.setAttribute('aria-expanded', 'true');
+  }
+
+  chipBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (profileMenu.hidden) openProfileMenu();
+    else closeProfileMenu();
+  });
+
+  itemProfile.addEventListener('click', () => {
+    closeProfileMenu();
+    openProfileModal({
+      profile,
+      onOpenOrganisation: () => {
+        location.hash = '#/org?tab=authorised';
+      }
+    });
+  });
+
+  if (itemOrg) {
+    itemOrg.addEventListener('click', () => {
+      closeProfileMenu();
+      onOpenOrgCb();
+    });
+  }
+
+  itemLogout.addEventListener('click', () => {
+    closeProfileMenu();
+    onLogoutCb();
+  });
+
+  const onDocClick = (e) => {
+    if (!chip.contains(e.target)) closeProfileMenu();
+  };
+  const onDocKey = (e) => {
+    if (e.key === 'Escape') closeProfileMenu();
+  };
+  const onProfileChange = () => syncTopbarIdentity();
+
+  document.addEventListener('click', onDocClick);
+  document.addEventListener('keydown', onDocKey);
+  window.addEventListener('uic:profile-updated', onProfileChange);
+  window.addEventListener('uic:users-updated', onProfileChange);
+
+  topbarProfileCleanup = () => {
+    document.removeEventListener('click', onDocClick);
+    document.removeEventListener('keydown', onDocKey);
+    window.removeEventListener('uic:profile-updated', onProfileChange);
+    window.removeEventListener('uic:users-updated', onProfileChange);
+  };
+
+  syncTopbarIdentity();
+  chip.append(chipBtn, profileMenu);
   topbar.appendChild(chip);
 
   if (!listenersRegistered) {

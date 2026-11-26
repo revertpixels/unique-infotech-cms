@@ -3,12 +3,12 @@
 // Store reason and approval history. Authorised staff can approve/reject/modify.
 import { db } from '../config/firebase-config.js';
 import { collection, getDocs, query, where, doc, getDoc, updateDoc, serverTimestamp, runTransaction } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.140';
-import { registerDirty, confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.140';
-import { buildStats, buildToolbar } from '../components/list-page.js?v=1.8.140';
-import { createSelect } from '../components/ui-select.js?v=1.8.140';
-import { formatDateIN } from '../utils/formatter.js?v=1.8.140';
-import { localToday, monthSeq, nextMonth } from '../utils/school-lifecycle.js?v=1.8.140';
+import { showToast } from '../components/toast.js?v=1.8.164';
+import { registerDirty, confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.164';
+import { PAGE_SIZE, buildStats, buildToolbar, renderPager } from '../components/list-page.js?v=1.8.164';
+import { createSelect } from '../components/ui-select.js?v=1.8.164';
+import { formatDateIN, formatPersonName } from '../utils/formatter.js?v=1.8.164';
+import { localToday, monthSeq, nextMonth } from '../utils/school-lifecycle.js?v=1.8.164';
 
 const COL = 'students';
 const BREAKS_COL = 'breaks';
@@ -52,7 +52,7 @@ export async function mount({ container, profile, ctx }) {
   const tb = buildToolbar({
     placeholder: 'Search student name or Student ID',
     filters: tbFilters,
-    onChange: () => render(),
+    onChange: () => { page = 1; render(); },
     onRefresh: () => load()
   });
   const tbHost = $('skb-toolbar');
@@ -70,6 +70,7 @@ export async function mount({ container, profile, ctx }) {
 
   // ---------- state ----------
   let breaks = [], students = [];
+  let page = 1;
   let loadError = null;
   let loading = true;
 
@@ -154,13 +155,17 @@ export async function mount({ container, profile, ctx }) {
       return;
     }
 
-    list.forEach(b => {
+    const totalPages = Math.max(1, Math.ceil(list.length / PAGE_SIZE));
+    if (page > totalPages) page = totalPages;
+    const pageList = list.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+    pageList.forEach(b => {
       const s = students.find(x => x.id === b.studentId) || {};
       const tr = document.createElement('tr');
       tr.innerHTML =
         '<td class="skb-id">' + (s.studentId || '-') + '</td>' +
-        '<td>' + (s.name || '-') + '</td>' +
-        '<td>' + (b.startMonth || '-') + ' ? ' + (b.endMonth || '-') + '</td>' +
+        '<td>' + (formatPersonName(s.name || '') || '-') + '</td>' +
+        '<td>' + (b.startMonth || '-') + ' - ' + (b.endMonth || '-') + '</td>' +
         '<td>' + (b.reason || '-') + '</td>' +
         '<td>' + statusPill(b.status || 'pending') + '</td>' +
         '<td>' + (b.requestedBy || '-') + '</td>' +
@@ -182,8 +187,14 @@ export async function mount({ container, profile, ctx }) {
     stats.update(2, approvedN);
     stats.update(3, rejectedN);
     if (footEl) {
-      footEl.hidden = breaks.length === 0;
-      footEl.textContent = list.length === breaks.length ? 'Showing all ' + breaks.length : 'Showing ' + list.length + ' of ' + breaks.length;
+      footEl.hidden = list.length === 0;
+      renderPager(footEl, {
+        page,
+        pageSize: PAGE_SIZE,
+        totalItems: list.length,
+        showWhenSingle: true,
+        onPageChange: (next) => { page = next; render(); }
+      });
     }
 
     // row actions

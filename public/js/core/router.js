@@ -1,4 +1,4 @@
-import { confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.140';
+import { confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.164';
 
 export const ROLE_LABELS = {
   superadmin: 'Super Admin',
@@ -18,9 +18,9 @@ export const ROUTES = {
   pending: { label: 'Pending & Overdue', icon: 'alarm-clock', group: 'Fees', page: 'pending', ctx: ['youth'], roles: ['superadmin', 'branch_head'] },
   payments: { label: 'Payment History', icon: 'history', group: 'Fees', page: 'payments', ctx: ['youth'], roles: ['superadmin', 'branch_head'] },
   'school-students': { label: 'Students', icon: 'baby', group: 'Students', page: 'school-admissions', ctx: ['school'], roles: ['superadmin', 'school_head'] },
-  'school-fees': { label: 'Collect Fees', icon: 'wallet', group: 'Fees', page: 'school-fees', ctx: ['school'], roles: ['superadmin', 'school_head'] },
-  'school-pending': { label: 'Pending & Overdue', icon: 'alarm-clock', group: 'Fees', page: 'school-pending', ctx: ['school'], roles: ['superadmin', 'school_head'] },
-  'school-payments': { label: 'Payment History', icon: 'receipt', group: 'Fees', page: 'school-payments', ctx: ['school'], roles: ['superadmin', 'school_head'] },
+  'school-fees': { label: 'Collect Fees', icon: 'wallet', group: 'Fees', page: 'school-fees', ctx: ['school'], roles: ['superadmin'] },
+  'school-pending': { label: 'Pending & Overdue', icon: 'alarm-clock', group: 'Fees', page: 'pending', ctx: ['school'], roles: ['superadmin', 'school_head'] },
+  'school-payments': { label: 'Payment History', icon: 'receipt', group: 'Fees', page: 'payments', ctx: ['school'], roles: ['superadmin', 'school_head'] },
   'school-levels': { label: 'Levels & Fees', icon: 'sliders-horizontal', group: 'Setup', page: 'school-levels', ctx: ['school'], roles: ['superadmin'] },
   'school-transfer': { label: 'Change Batch', icon: 'shuffle', group: 'Students', page: 'school-transfer', ctx: ['school'], roles: ['superadmin'], nav: false },
   'school-end': { label: 'End Course', icon: 'x-circle', group: 'Students', page: 'school-end', ctx: ['school'], roles: ['superadmin'], nav: false },
@@ -30,7 +30,7 @@ export const ROUTES = {
   'youth-end': { label: 'End Course', icon: 'x-circle', group: 'Students', page: 'school-end', ctx: ['youth'], roles: ['superadmin'], nav: false },
   reports: { label: 'Reports', icon: 'bar-chart-3', group: 'Insights', page: 'reports', ctx: ['youth', 'school'], roles: ['superadmin'] },
   archives: { label: 'Archives', icon: 'archive', group: 'Insights', page: 'archives', ctx: ['youth', 'school'], roles: ['superadmin'] },
-  'branch-heads': { label: 'Branch Heads', icon: 'user-cog', group: 'Administration', page: 'branch-heads', ctx: ['youth'], roles: ['superadmin'] },
+  'branch-heads': { label: 'Users', icon: 'user-cog', group: 'Administration', page: 'org-details', nav: false, redirect: 'org?tab=users', ctx: ['youth', 'school'], roles: ['superadmin'] },
   sessions: { label: 'Sessions', icon: 'calendar-clock', group: 'Administration', page: 'sessions', ctx: ['youth'], roles: ['superadmin'] },
   org: { label: 'Organisation', icon: 'landmark', group: 'Administration', page: 'org-details', ctx: ['youth', 'school'], roles: ['superadmin'] }
 };
@@ -42,8 +42,24 @@ for (const key of Object.keys(ROUTES)) {
 
 let currentModule = null;
 let navCounter = 0;
+let activeCleanup = null;
+
+export function stopRouter() {
+  navCounter++;
+  if (currentModule && typeof currentModule.unmount === 'function') {
+    try { currentModule.unmount(); } catch (_) {}
+  }
+  currentModule = null;
+  if (activeCleanup) {
+    try { activeCleanup(); } catch (_) {}
+    activeCleanup = null;
+  }
+  const view = document.getElementById('view');
+  if (view) view.textContent = '';
+}
 
 export function startRouter({ profile, getContext, setContext, onRouteChange }) {
+  stopRouter();
   const view = document.getElementById('view');
   const orgName = (window.APP_CACHE && window.APP_CACHE.org && window.APP_CACHE.org.orgName) ? window.APP_CACHE.org.orgName : 'Unique Infotech CMS';
 
@@ -94,7 +110,7 @@ export function startRouter({ profile, getContext, setContext, onRouteChange }) 
   async function renderStudentProfile(studentId, routeKey) {
     const thisNav = ++navCounter;
     try {
-      const resp = await fetch('/pages/student-profile.html?v=1.8.140', { cache: 'no-cache' });
+      const resp = await fetch('/pages/student-profile.html?v=1.8.164', { cache: 'no-cache' });
       if (thisNav !== navCounter) return;
       if (!resp.ok) {
         renderEmpty('inbox', "This page isn't available yet", 'The student profile page could not be loaded.');
@@ -143,7 +159,7 @@ export function startRouter({ profile, getContext, setContext, onRouteChange }) 
   async function renderAdmissionReceipt(key) {
     const thisNav = ++navCounter;
     try {
-      const resp = await fetch('/pages/admission-receipt.html?v=1.8.140', { cache: 'no-cache' });
+      const resp = await fetch('/pages/admission-receipt.html?v=1.8.164', { cache: 'no-cache' });
       if (thisNav !== navCounter) return;
       if (!resp.ok) {
         renderEmpty('inbox', "This page isn't available yet", 'The receipt page could not be loaded.');
@@ -193,7 +209,7 @@ export function startRouter({ profile, getContext, setContext, onRouteChange }) 
   async function renderSchoolAdmissionReceipt(key) {
     const thisNav = ++navCounter;
     try {
-      const resp = await fetch('/pages/school-admission-receipt.html?v=1.8.140', { cache: 'no-cache' });
+      const resp = await fetch('/pages/school-admission-receipt.html?v=1.8.164', { cache: 'no-cache' });
       if (thisNav !== navCounter) return;
       if (!resp.ok) {
         renderEmpty('inbox', "This page isn't available yet", 'The receipt page could not be loaded.');
@@ -243,7 +259,7 @@ export function startRouter({ profile, getContext, setContext, onRouteChange }) 
   async function renderPaymentReceipt(key) {
     const thisNav = ++navCounter;
     try {
-      const resp = await fetch('/pages/payment-receipt.html?v=1.8.140', { cache: 'no-cache' });
+      const resp = await fetch('/pages/payment-receipt.html?v=1.8.164', { cache: 'no-cache' });
       if (thisNav !== navCounter) return;
       if (!resp.ok) {
         renderEmpty('inbox', "This page isn't available yet", 'The payment receipt page could not be loaded.');
@@ -292,7 +308,7 @@ export function startRouter({ profile, getContext, setContext, onRouteChange }) 
   async function renderSchoolTransfer(key) {
     const thisNav = ++navCounter;
     try {
-      const resp = await fetch('/pages/school-transfer.html?v=1.8.140', { cache: 'no-cache' });
+      const resp = await fetch('/pages/school-transfer.html?v=1.8.164', { cache: 'no-cache' });
       if (thisNav !== navCounter) return;
       if (!resp.ok) {
         renderEmpty('inbox', "This page isn't available yet", 'The transfer page could not be loaded.');
@@ -342,7 +358,7 @@ export function startRouter({ profile, getContext, setContext, onRouteChange }) 
   async function renderSchoolEnd(key) {
     const thisNav = ++navCounter;
     try {
-      const resp = await fetch('/pages/school-end.html?v=1.8.140', { cache: 'no-cache' });
+      const resp = await fetch('/pages/school-end.html?v=1.8.164', { cache: 'no-cache' });
       if (thisNav !== navCounter) return;
       if (!resp.ok) {
         renderEmpty('inbox', "This page isn't available yet", 'The end course page could not be loaded.');
@@ -392,7 +408,7 @@ export function startRouter({ profile, getContext, setContext, onRouteChange }) 
   async function renderSchoolDelete(key) {
     const thisNav = ++navCounter;
     try {
-      const resp = await fetch('/pages/school-delete.html?v=1.8.140', { cache: 'no-cache' });
+      const resp = await fetch('/pages/school-delete.html?v=1.8.164', { cache: 'no-cache' });
       if (thisNav !== navCounter) return;
       if (!resp.ok) {
         renderEmpty('inbox', "This page isn't available yet", 'The delete page could not be loaded.');
@@ -443,7 +459,7 @@ export function startRouter({ profile, getContext, setContext, onRouteChange }) 
     const thisNav = ++navCounter;
     const billId = key.slice('school-fees/pay/'.length);
     try {
-      const resp = await fetch('/pages/school-fee-payment.html?v=1.8.140', { cache: 'no-cache' });
+      const resp = await fetch('/pages/school-fee-payment.html?v=1.8.164', { cache: 'no-cache' });
       if (thisNav !== navCounter) return;
       if (!resp.ok) {
         renderEmpty('inbox', "This page isn't available yet", 'The fee payment page could not be loaded.');
@@ -556,7 +572,7 @@ export function startRouter({ profile, getContext, setContext, onRouteChange }) 
       return;
     }
 
-    if (route.redirect) {
+    if (route && route.redirect) {
       location.hash = '#/' + route.redirect;
       return;
     }
@@ -570,7 +586,15 @@ export function startRouter({ profile, getContext, setContext, onRouteChange }) 
       if (onRouteChange) onRouteChange(key, null);
       return;
     }
-    if (!route.roles.includes(profile.role)) {
+    if (route && !route.roles.includes(profile.role)) {
+      if (key !== 'dashboard') {
+        try {
+          location.replace('#/dashboard');
+        } catch (_) {
+          location.hash = '#/dashboard';
+        }
+        return;
+      }
       renderEmpty('lock', "You don't have access to this page", 'Ask the Super Admin to grant access.');
       const back = document.createElement('button');
       back.type = 'button';
@@ -602,7 +626,7 @@ export function startRouter({ profile, getContext, setContext, onRouteChange }) 
     let pageHtml;
     let html;
     try {
-      const resp = await fetch('/pages/' + route.page + '.html?v=1.8.140', { cache: 'no-cache' });
+      const resp = await fetch('/pages/' + route.page + '.html?v=1.8.164', { cache: 'no-cache' });
       pageHtml = resp;
       if (thisNav !== navCounter) return;
       if (!pageHtml.ok) {
@@ -691,13 +715,20 @@ export function startRouter({ profile, getContext, setContext, onRouteChange }) 
   }
 
   window.addEventListener('hashchange', onHashChange);
-  window.addEventListener('uic:session-selected', () => {
+  const rerenderActiveRoute = () => {
     const hash = location.hash;
     if (hash && hash.length > 2) {
       const key = hash.slice(2);
       render(key);
     }
-  });
+  };
+  window.addEventListener('uic:session-selected', rerenderActiveRoute);
+  window.addEventListener('uic:ctx-changed', rerenderActiveRoute);
+  activeCleanup = () => {
+    window.removeEventListener('hashchange', onHashChange);
+    window.removeEventListener('uic:session-selected', rerenderActiveRoute);
+    window.removeEventListener('uic:ctx-changed', rerenderActiveRoute);
+  };
   onHashChange();
 }
 

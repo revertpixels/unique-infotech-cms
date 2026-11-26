@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <title>Batches</title>
-  <link rel="stylesheet" href="../css/pages/batches.css?v=1.8.140">
+  <link rel="stylesheet" href="../css/pages/batches.css?v=1.8.164">
 </head>
 <body>
   <div class="page-shell">
@@ -14,6 +14,16 @@
         <p id="bt-sub"></p>
       </section>
       <button id="bt-add" class="ui-btn primary" type="button"><i data-lucide="plus"></i> Add batch</button>
+    </div>
+    <div id="bt-no-session" class="lp-card" hidden>
+      <div class="empty-state">
+        <i data-lucide="calendar-plus"></i>
+        <h3>No Youth session found</h3>
+        <p>Create a Youth Centre session in Sessions to view and manage batches.</p>
+        <div style="margin-top: 14px;">
+          <a href="#/sessions" class="ui-btn primary"><i data-lucide="calendar"></i><span>Go to Sessions</span></a>
+        </div>
+      </div>
     </div>
     <div id="bt-stats"></div>
     <div id="bt-toolbar"></div>
@@ -35,6 +45,7 @@
         <b>No batches yet</b>
         <span>Batches you create will appear here.</span>
       </div>
+      <div class="lp-card-foot" id="bt-foot" hidden></div>
     </div>
 
     <form id="bt-form" class="ui-card br-form bt-form" hidden novalidate>

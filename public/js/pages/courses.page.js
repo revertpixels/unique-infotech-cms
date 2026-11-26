@@ -1,13 +1,13 @@
 import { db } from '../config/firebase-config.js';
-import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.140';
+import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.164';
 import { collection, getDocs, query, where, doc, addDoc, updateDoc, deleteDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
 import { createSelect } from '../components/ui-select.js';
 import { openMenu } from '../components/ui-menu.js';
 import { confirmDialog } from '../components/ui-confirm.js';
 import { showToast } from '../components/toast.js';
-import { buildStats, buildToolbar, renderEmptyTableState } from '../components/list-page.js?v=1.8.140';
-import { INST_PER_SEM, feeTotal, courseFeeOf, discountOf } from '../utils/fees.js?v=1.8.140';
-import { isCourseActive } from '../utils/session-rules.js?v=1.8.140';
+import { buildStats, buildToolbar, renderPager, renderEmptyTableState, PAGE_SIZE } from '../components/list-page.js?v=1.8.164';
+import { INST_PER_SEM, feeTotal, courseFeeOf, discountOf } from '../utils/fees.js?v=1.8.164';
+import { isCourseActive } from '../utils/session-rules.js?v=1.8.164';
 
 const ENDED = ['ended', 'closed', 'completed', 'archived', 'cancelled'];
 const LOCK_FIELDS = { admission: 'Admission fee', installment: 'Installment amount', material: 'Material fee' };
@@ -348,7 +348,7 @@ export async function mount({ ctx, profile }) {
     const filters = [];
     if (Y) filters.push({ id: 'level', label: 'Level', options: [{ value: 'all', label: 'All levels', icon: 'layers' }, { value: '1', label: 'Sem 1 - Base', icon: 'book-open' }, { value: '2', label: 'Sem 2 - Combo', icon: 'git-merge' }, { value: '3', label: 'Sem 3 - Advanced', icon: 'award' }] });
     if (!isHead) filters.push({ id: 'status', label: 'Status', options: [{ value: 'all', label: 'All statuses' }, { value: 'active', label: 'Active' }, { value: 'inactive', label: 'Inactive' }] });
-    const tb = buildToolbar({ placeholder: Y ? 'Search code, name, eligibility or topic' : 'Search level', filters, onChange: () => render(), onRefresh: () => load() });
+    const tb = buildToolbar({ placeholder: Y ? 'Search code, name, eligibility or topic' : 'Search level', filters, onChange: () => { page = 1; render(); }, onRefresh: () => load() });
     $('cs-toolbar').appendChild(tb.el);
 
     $('cs-head').innerHTML = Y
@@ -722,6 +722,7 @@ export async function mount({ ctx, profile }) {
       closeBtn.focus();
     }
 
+    let page = 1;
     // ---------- table ----------
     function render() {
       const tbody = $('cs-rows');
@@ -754,8 +755,19 @@ export async function mount({ ctx, profile }) {
       }
       $('cs-count').textContent = listForStats.length + ' ' + (listForStats.length === 1 ? T.one : T.many);
       const foot = $('cs-foot');
-      foot.hidden = !listForStats.length;
-      foot.textContent = rows.length === listForStats.length ? 'Showing all ' + listForStats.length : 'Showing ' + rows.length + ' of ' + listForStats.length;
+      const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+      if (page > totalPages) page = totalPages;
+      const pageRows = rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+      if (foot) {
+        foot.hidden = !rows.length;
+        renderPager(foot, {
+          page,
+          pageSize: PAGE_SIZE,
+          totalItems: rows.length,
+          showWhenSingle: true,
+          onPageChange: (next) => { page = next; render(); }
+        });
+      }
       if (!rows.length) {
         if (listForStats.length) {
           renderEmptyTableState(tbody, {
@@ -766,6 +778,7 @@ export async function mount({ ctx, profile }) {
               tb.state.q = '';
               if (tb.state.level) tb.state.level = 'all';
               if (tb.state.status) tb.state.status = 'all';
+              page = 1;
               render();
             }
           });
@@ -777,7 +790,7 @@ export async function mount({ ctx, profile }) {
           tbody.appendChild(tr);
         }
       }
-      rows.forEach((r) => {
+      pageRows.forEach((r) => {
         const tr = mk('tr');
         const isOn = (r.status || 'active') === 'active';
         if (Y) {

@@ -1,8 +1,17 @@
 const { beforeUserSignedIn, HttpsError } = require('firebase-functions/v2/identity');
+const { onCall } = require('firebase-functions/v2/https');
 const admin = require('firebase-admin');
+const { getFirestore } = require('firebase-admin/firestore');
+const { getStorage } = require('firebase-admin/storage');
+const { createService } = require('./lib/backup-service');
 
-admin.initializeApp();
-const db = admin.firestore();
+admin.initializeApp({
+  storageBucket: 'unique-infotech-cms.firebasestorage.app'
+});
+
+const db = getFirestore();
+const bucket = getStorage().bucket();
+const backupService = createService({ db, bucket });
 
 /**
  * Blocking Cloud Function: beforeUserSignedIn
@@ -42,3 +51,23 @@ exports.beforeUserSignedIn = beforeUserSignedIn({ region: 'asia-south1' }, async
 
   return {};
 });
+
+const CALLABLE_OPTS = {
+  region: 'asia-south1',
+  timeoutSeconds: 540,
+  memory: '512MiB',
+  minInstances: 0,
+  maxInstances: 1,
+  concurrency: 1
+};
+
+for (const name of [
+  'createCmsBackup',
+  'clearCmsData',
+  'restoreCmsBackup',
+  'validateCmsBackup',
+  'downloadCmsBackup',
+  'getCmsBackupStatus'
+]) {
+  exports[name] = onCall(CALLABLE_OPTS, backupService[name]);
+}

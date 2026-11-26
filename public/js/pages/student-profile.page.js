@@ -11,18 +11,19 @@ import {
   serverTimestamp,
   runTransaction
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.140';
-import { openPopup } from '../components/modal.js?v=1.8.140';
-import { createSelect } from '../components/ui-select.js?v=1.8.140';
-import { confirmDialog } from '../components/ui-confirm.js?v=1.8.140';
-import { openMenu } from '../components/ui-menu.js?v=1.8.140';
-import { formatINR, formatDateIN, initials } from '../utils/formatter.js?v=1.8.140';
-import { validatePhone, validateEmail, validateDOB, validateName } from '../utils/validator.js?v=1.8.140';
-import { registerDirty } from '../utils/unsaved-guard.js?v=1.8.140';
-import { compressTo100KB, blobToDataURL, isImageFile, formatBytes } from '../utils/image-compress.js?v=1.8.140';
-import { todayISO } from '../utils/session-rules.js?v=1.8.140';
-import { getSelectedSessionId } from '../core/sessions.js?v=1.8.140';
-import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.140';
+import { showToast } from '../components/toast.js?v=1.8.164';
+import { openPopup } from '../components/modal.js?v=1.8.164';
+import { createSelect } from '../components/ui-select.js?v=1.8.164';
+import { confirmDialog } from '../components/ui-confirm.js?v=1.8.164';
+import { openMenu } from '../components/ui-menu.js?v=1.8.164';
+import { formatINR, formatDateIN, formatPersonName, initials } from '../utils/formatter.js?v=1.8.164';
+import { validatePhone, validateEmail, validateDOB, validateName } from '../utils/validator.js?v=1.8.164';
+import { registerDirty } from '../utils/unsaved-guard.js?v=1.8.164';
+import { resolveUserDisplay } from '../services/user-directory.service.js?v=1.8.164';
+import { compressTo100KB, blobToDataURL, isImageFile, formatBytes } from '../utils/image-compress.js?v=1.8.164';
+import { todayISO } from '../utils/session-rules.js?v=1.8.164';
+import { getSelectedSessionId } from '../core/sessions.js?v=1.8.164';
+import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.164';
 import {
   fetchStudentPayments,
   recordPaymentTx,
@@ -33,8 +34,8 @@ import {
   calculateStudentFinancials,
   buildReceiptMenuItems,
   repairStudentAdmissionPayment
-} from '../services/payment.service.js?v=1.8.140';
-import { courseFeeOf, discountOf } from '../utils/fees.js?v=1.8.140';
+} from '../services/payment.service.js?v=1.8.164';
+import { courseFeeOf, discountOf } from '../utils/fees.js?v=1.8.164';
 
 const COL = 'students';
 const QUALIFICATIONS = ['VIII Pass', 'Secondary (X) Pass', 'Higher Secondary (XII) Pass', 'ITI', 'Diploma', 'Undergraduate (Graduate)', 'Postgraduate', 'Other'];
@@ -91,7 +92,7 @@ async function ensureMetadataCache() {
 
     const [bSnap, uSnap, cSnap, sSnap, btSnap] = await Promise.all([
       branchesCache ? null : (isSuper ? getDocs(collection(db, 'branches')).catch(() => null) : (myBranch ? getDoc(doc(db, 'branches', myBranch)).catch(() => null) : null)),
-      usersCache ? null : (isSuper ? getDocs(collection(db, 'users')).catch(() => null) : null),
+      usersCache ? null : getDocs(collection(db, 'users')).catch(() => null),
       coursesCache ? null : getDocs(collection(db, 'courses')).catch(() => null),
       sessionsCache ? null : getDocs(collection(db, 'sessions')).catch(() => null),
       batchesCache ? null : getDocs(collection(db, 'batches')).catch(() => null)
@@ -119,7 +120,7 @@ async function ensureMetadataCache() {
       uSnap.docs.forEach(d => {
         const u = d.data();
         const em = (u.email || d.id || '').toLowerCase().trim();
-        const item = { id: d.id, name: u.name || '', email: em, role: u.role || '', branchId: u.branchId || '' };
+        const item = { id: d.id, name: u.name || '', designation: u.designation || '', email: em, role: u.role || '', branchId: u.branchId || '' };
         if (em) usersCache.byEmail[em] = item;
         if (u.branchId && (u.role === 'branch_head' || !usersCache.byBranch[u.branchId])) {
           usersCache.byBranch[u.branchId] = item;
@@ -131,6 +132,7 @@ async function ensureMetadataCache() {
       const item = {
         id: em,
         name: currentUserProfile.name || '',
+        designation: currentUserProfile.designation || '',
         email: em,
         role: currentUserProfile.role || '',
         branchId: currentUserProfile.branchId || ''
@@ -438,7 +440,7 @@ function renderHeader() {
   const s = currentStudent;
   if (!s) return;
 
-  setTxt('sp-name', s.name || '-');
+  setTxt('sp-name', formatPersonName(s.name || '') || '-');
   setTxt('sp-student-id', s.studentId || s.id || '-');
 
   // Copy Student ID handler (chip & icon)
@@ -2474,21 +2476,27 @@ function renderTransactionsLedger() {
     const email = t.recordedBy || currentStudent.createdBy || '-';
     const emailNorm = (email || '').toLowerCase().trim();
 
-    let headName = t.recordedByName || '';
-    if (!headName && usersCache) {
-      if (emailNorm && usersCache.byEmail && usersCache.byEmail[emailNorm]) {
-        headName = usersCache.byEmail[emailNorm].name || '';
-      }
-      if (!headName && branchId && usersCache.byBranch && usersCache.byBranch[branchId]) {
-        headName = usersCache.byBranch[branchId].name || '';
-      }
-    }
+    const dirDisp = emailNorm && emailNorm !== '-'
+      ? resolveUserDisplay(emailNorm, t.recordedByName, t.recordedByDesignation)
+      : { found: false, name: '', designation: '' };
+    const localCached = emailNorm && usersCache && usersCache.byEmail && usersCache.byEmail[emailNorm];
+    const branchFallback = branchId && usersCache && usersCache.byBranch && usersCache.byBranch[branchId];
+
+    let headName = (dirDisp.found && dirDisp.name)
+      || (localCached && localCached.name)
+      || t.recordedByName
+      || (branchFallback && branchFallback.name)
+      || '';
     if (!headName && emailNorm && currentUserProfile && currentUserProfile.email && emailNorm === currentUserProfile.email.toLowerCase()) {
       headName = currentUserProfile.name || '';
     }
     if (!headName && email && email !== '-') {
       headName = t.userRole === 'superadmin' ? 'Super Admin' : 'Branch Head';
     }
+    headName = headName ? (formatPersonName(headName) || headName) : '';
+    const headDesig = (dirDisp.found && dirDisp.designation)
+      || (localCached && localCached.designation ? formatPersonName(localCached.designation) : '')
+      || (t.recordedByDesignation ? formatPersonName(t.recordedByDesignation) : '');
 
     const collectorTd = mk('td', 'sp-collector-cell');
     let collectorText = branchDisplay;
@@ -2496,10 +2504,12 @@ function renderTransactionsLedger() {
       collectorText += ' - ' + email;
     }
     if (headName) {
-      collectorText += ' by ' + headName;
+      collectorText += ' by ' + headName + (headDesig ? ' (' + headDesig + ')' : '');
     }
     collectorTd.textContent = collectorText;
-    collectorTd.title = (branchName || branchDisplay) + (email && email !== '-' ? ' • ' + email : '') + (headName ? ' • ' + headName : '');
+    collectorTd.title = (branchName || branchDisplay)
+      + (email && email !== '-' ? ' • ' + email : '')
+      + (headName ? ' • ' + headName + (headDesig ? ' (' + headDesig + ')' : '') : '');
 
     const remarksTd = mk('td', '', t.remarks || (t.waiverReason ? `Waived: ${t.waiverReason}` : '—'));
 

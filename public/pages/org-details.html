@@ -5,73 +5,333 @@
     <p>Institute details shown in the sidebar, receipts and reports.</p>
   </section>
 
-  <form id="org-form" novalidate>
-    <div class="set-card">
-      <div class="set-side">
-        <h3>Identity</h3>
-        <p>Name and tagline appear in the sidebar, on receipts and on reports.</p>
-        <div class="brand-preview-label">Sidebar preview</div>
-        <div class="brand-preview">
-          <img src="/assets/images/logo-192.jpg" alt="">
-          <div><b id="pv-name">Unique Infotech</b><span id="pv-tagline"></span></div>
-        </div>
-      </div>
-      <div class="set-fields">
-        <div class="ui-field span-2">
-          <div class="ui-label-row"><label for="org-name">Institute name <em>*</em></label><span class="ui-count" data-for="org-name"></span></div>
-          <div class="ui-input-wrap"><i data-lucide="building-2"></i><input id="org-name" class="ui-input" type="text" maxlength="80" autocomplete="off" placeholder="e.g. Unique Infotech"></div>
-          <div class="ui-err" id="org-name-err"></div>
-        </div>
-        <div class="ui-field span-2">
-          <div class="ui-label-row"><label for="org-tagline">Tagline</label><span class="ui-count" data-for="org-tagline"></span></div>
-          <div class="ui-input-wrap"><i data-lucide="sparkles"></i><input id="org-tagline" class="ui-input" type="text" maxlength="120" autocomplete="off" placeholder="Short line under the name"></div>
-          <div class="ui-err" id="org-tagline-err"></div>
-        </div>
-      </div>
-    </div>
+  <div class="org-tabs" id="org-tabs" role="tablist" aria-label="Organisation sections">
+    <button type="button" class="org-tab is-active" id="org-tab-details" role="tab" aria-selected="true" aria-controls="org-panel-details" data-tab="details">
+      <i data-lucide="building-2"></i>
+      <span>Organisation Details</span>
+    </button>
+    <button type="button" class="org-tab" id="org-tab-users" role="tab" aria-selected="false" aria-controls="org-panel-users" data-tab="users" hidden>
+      <i data-lucide="user-cog"></i>
+      <span>Users</span>
+    </button>
+    <button type="button" class="org-tab" id="org-tab-authorised" role="tab" aria-selected="false" aria-controls="org-panel-authorised" data-tab="authorised" hidden>
+      <i data-lucide="shield-check"></i>
+      <span>Authorised Users</span>
+    </button>
+    <button type="button" class="org-tab org-tab-danger" id="org-tab-manage" role="tab" aria-selected="false" aria-controls="org-panel-manage" data-tab="manage" hidden>
+      <i data-lucide="database"></i>
+      <span>Manage Data</span>
+    </button>
+  </div>
 
-    <div class="set-card">
-      <div class="set-side">
-        <h3>Contact details</h3>
-        <p>Printed on fee receipts so parents and students can reach you.</p>
-      </div>
-      <div class="set-fields">
-        <div class="ui-field span-2">
-          <div class="ui-label-row"><label>Phone numbers</label><span class="ui-count" id="org-phones-count">0/3</span></div>
-          <div id="org-phones" class="org-phones"></div>
-          <button type="button" id="org-phone-add" class="ui-btn ghost org-phone-add"><i data-lucide="plus"></i>Add number</button>
-          <div class="ui-err" id="org-phones-err"></div>
+  <!-- ================= TAB 1: ORGANISATION DETAILS ================= -->
+  <div id="org-panel-details" role="tabpanel" aria-labelledby="org-tab-details">
+    <form id="org-form" novalidate>
+      <div class="set-card">
+        <div class="set-side">
+          <h3>Identity</h3>
+          <p>Name and tagline appear in the sidebar, on receipts and on reports.</p>
+          <div class="brand-preview-label">Sidebar preview</div>
+          <div class="brand-preview">
+            <img src="/assets/images/logo-192.jpg" alt="">
+            <div><b id="pv-name">Unique Infotech</b><span id="pv-tagline"></span></div>
+          </div>
         </div>
-        <div class="ui-field">
-          <div class="ui-label-row"><label for="org-email">Email</label></div>
-          <div class="ui-input-wrap"><i data-lucide="mail"></i><input id="org-email" class="ui-input" type="email" maxlength="100" autocomplete="off" placeholder="office@example.com"></div>
-          <div class="ui-err" id="org-email-err"></div>
-        </div>
-        <div class="ui-field span-2">
-          <div class="ui-label-row"><label for="org-email">Email</label></div>
-          <div class="ui-input-wrap"><i data-lucide="mail"></i><input id="org-email" class="ui-input" type="email" maxlength="100" autocomplete="off" placeholder="office@example.com"></div>
-          <div class="ui-err" id="org-email-err"></div>
-        </div>
-        <div class="ui-field span-2">
-          <div class="ui-label-row"><label for="org-receiptCode">Receipt code (Kids) <em>*</em></label></div>
-          <div class="ui-input-wrap"><i data-lucide="receipt"></i><input id="org-receiptCode" class="ui-input" type="text" maxlength="12" autocomplete="off" placeholder="e.g. BANKURA"></div>
-          <div class="ui-err" id="org-receiptCode-err"></div>
-          <div class="ui-help">Short uppercase code used in Kids admission receipt numbers.</div>
-        </div>
-        <div class="ui-field span-2">
-          <div class="ui-label-row"><label for="org-address">Address</label><span class="ui-count" data-for="org-address"></span></div>
-          <div class="ui-input-wrap top"><i data-lucide="map-pin"></i><textarea id="org-address" class="ui-input" rows="3" maxlength="300" placeholder="Street, town, district, state"></textarea></div>
-          <div class="ui-err" id="org-address-err"></div>
+        <div class="set-fields">
+          <div class="ui-field span-2">
+            <div class="ui-label-row"><label for="org-name">Institute name <em>*</em></label><span class="ui-count" data-for="org-name"></span></div>
+            <div class="ui-input-wrap"><i data-lucide="building-2"></i><input id="org-name" class="ui-input" type="text" maxlength="80" autocomplete="off" placeholder="e.g. Unique Infotech"></div>
+            <div class="ui-err" id="org-name-err"></div>
+          </div>
+          <div class="ui-field span-2">
+            <div class="ui-label-row"><label for="org-tagline">Tagline</label><span class="ui-count" data-for="org-tagline"></span></div>
+            <div class="ui-input-wrap"><i data-lucide="sparkles"></i><input id="org-tagline" class="ui-input" type="text" maxlength="120" autocomplete="off" placeholder="Short line under the name"></div>
+            <div class="ui-err" id="org-tagline-err"></div>
+          </div>
         </div>
       </div>
-    </div>
 
-    <div class="save-bar">
-      <span id="org-state" class="save-state" role="status" aria-live="polite">All changes saved</span>
-      <div class="save-actions">
-        <button type="button" id="org-discard" class="ui-btn ghost" disabled><i data-lucide="rotate-ccw"></i>Discard</button>
-        <button type="submit" id="org-save" class="ui-btn primary" disabled><i data-lucide="save"></i>Save changes</button>
+      <div class="set-card">
+        <div class="set-side">
+          <h3>Contact details</h3>
+          <p>Printed on fee receipts so parents and students can reach you.</p>
+        </div>
+        <div class="set-fields">
+          <div class="ui-field span-2">
+            <div class="ui-label-row"><label>Phone numbers</label><span class="ui-count" id="org-phones-count">0/3</span></div>
+            <div id="org-phones" class="org-phones"></div>
+            <button type="button" id="org-phone-add" class="ui-btn ghost org-phone-add"><i data-lucide="plus"></i>Add number</button>
+            <div class="ui-err" id="org-phones-err"></div>
+          </div>
+          <div class="ui-field">
+            <div class="ui-label-row"><label for="org-email">Email</label></div>
+            <div class="ui-input-wrap"><i data-lucide="mail"></i><input id="org-email" class="ui-input" type="email" maxlength="100" autocomplete="off" placeholder="office@example.com"></div>
+            <div class="ui-err" id="org-email-err"></div>
+          </div>
+          <div class="ui-field">
+            <div class="ui-label-row"><label for="org-receiptCode">Receipt code (Kids) <em>*</em></label></div>
+            <div class="ui-input-wrap"><i data-lucide="receipt"></i><input id="org-receiptCode" class="ui-input" type="text" maxlength="12" autocomplete="off" placeholder="e.g. BANKURA"></div>
+            <div class="ui-err" id="org-receiptCode-err"></div>
+            <div class="ui-help">Short uppercase code used in Kids admission receipt numbers.</div>
+          </div>
+          <div class="ui-field span-2">
+            <div class="ui-label-row"><label for="org-address">Address</label><span class="ui-count" data-for="org-address"></span></div>
+            <div class="ui-input-wrap top"><i data-lucide="map-pin"></i><textarea id="org-address" class="ui-input" rows="3" maxlength="300" placeholder="Street, town, district, state"></textarea></div>
+            <div class="ui-err" id="org-address-err"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="save-bar">
+        <span id="org-state" class="save-state" role="status" aria-live="polite">All changes saved</span>
+        <div class="save-actions">
+          <button type="button" id="org-discard" class="ui-btn ghost" disabled><i data-lucide="rotate-ccw"></i>Discard</button>
+          <button type="submit" id="org-save" class="ui-btn primary" disabled><i data-lucide="save"></i>Save changes</button>
+        </div>
+      </div>
+    </form>
+  </div>
+
+  <!-- ================= TAB 2: USERS (BRANCH HEADS, SUPER ADMIN ONLY) ================= -->
+  <div id="org-panel-users" role="tabpanel" aria-labelledby="org-tab-users" hidden>
+    <div id="org-users-host"></div>
+  </div>
+
+  <!-- ================= TAB 3: AUTHORISED USERS (SUPER ADMIN ONLY) ================= -->
+  <div id="org-panel-authorised" role="tabpanel" aria-labelledby="org-tab-authorised" hidden>
+    <div id="org-authorised-host"></div>
+  </div>
+
+  <!-- ================= TAB 4: MANAGE DATA (SUPER ADMIN ONLY) ================= -->
+  <div id="org-panel-manage" role="tabpanel" aria-labelledby="org-tab-manage" hidden>
+    <div id="md-panel" class="md-panel">
+
+      <!-- SECURITY GATE: PASSWORD RE-AUTHENTICATION + RISK CONSENT -->
+      <div id="md-gate" class="md-gate">
+        <div class="md-gate-card">
+          <div class="md-gate-head">
+            <span class="md-danger-chip"><i data-lucide="shield-alert"></i><span>DANGER ZONE · SUPER ADMIN ONLY</span></span>
+            <h3>Verify Identity &amp; Acknowledge Risks</h3>
+            <p>Manage Data controls full database backups, permanent Master Delete, and system restores. Re-enter your Super Admin password and confirm the risk notice to unlock.</p>
+          </div>
+
+          <ul class="md-risk-list">
+            <li><i data-lucide="alert-triangle"></i><span><strong>Master Delete</strong> permanently deletes all students, photos/docs, payments, bills, enrolments, counters, courses, batches, sessions, branches, org details, Branch/School Heads, and Storage files.</span></li>
+            <li><i data-lucide="alert-triangle"></i><span><strong>Restore</strong> is only allowed on an empty database (after Master Delete) and restores the exact saved IDs, receipt numbers, counters, and files.</span></li>
+            <li class="info"><i data-lucide="info"></i><span><strong>Your Super Admin access survives</strong> Master Delete and Restore, and saved backups remain private in Storage.</span></li>
+          </ul>
+
+          <form id="md-gate-form" class="md-gate-form" autocomplete="off">
+            <div class="md-field">
+              <label for="md-gate-pw">Super Admin Password (<span id="md-gate-email">—</span>)</label>
+              <div class="md-pw-wrap">
+                <i data-lucide="key"></i>
+                <input type="password" id="md-gate-pw" class="md-input" autocomplete="current-password" placeholder="Re-enter your password">
+                <button type="button" id="md-gate-pw-toggle" class="md-pw-toggle" aria-label="Show password">
+                  <i data-lucide="eye"></i>
+                </button>
+              </div>
+            </div>
+
+            <label class="md-consent-check" for="md-gate-ack">
+              <input type="checkbox" id="md-gate-ack">
+              <span>I understand that Master Delete and Restore permanently alter live CMS data, and I take full responsibility for verifying backups before running destructive actions.</span>
+            </label>
+
+            <div id="md-gate-err" class="md-alert md-alert-danger" hidden role="alert"></div>
+
+            <div class="md-gate-actions">
+              <button type="submit" id="md-gate-unlock" class="md-btn md-btn-danger" disabled>
+                <i data-lucide="unlock"></i><span>Verify Password &amp; Open Manage Data</span>
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <!-- UNLOCKED DANGER ZONE WORKSPACE -->
+      <div id="md-workspace" class="md-workspace" hidden>
+        <div class="md-console-bar">
+          <div class="md-console-dots" aria-hidden="true">
+            <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+            <span class="md-console-title">manage-data — unique-infotech-cms (danger zone)</span>
+          </div>
+          <div class="md-console-right">
+            <span class="md-live-pill" id="md-live-summary">Loading...</span>
+            <button type="button" id="md-lock-btn" class="md-btn md-btn-outline">
+              <i data-lucide="lock"></i><span>Lock Manage Data</span>
+            </button>
+          </div>
+        </div>
+
+        <div id="md-op-status" class="md-alert md-alert-info" hidden aria-live="polite"></div>
+
+        <!-- SECTION 1: RECOVERY STATUS & SAVED BACKUPS -->
+        <section class="md-card md-sec-cyan">
+          <div class="md-sec-head">
+            <div class="md-sec-icon"><i data-lucide="refresh-cw"></i></div>
+            <div>
+              <h3>Recovery Status &amp; Saved Backups</h3>
+              <p>Server-enforced locks, automatic safety snapshots, and recent backup downloads.</p>
+            </div>
+          </div>
+
+          <div id="md-recovery-state" class="md-alert md-alert-info" role="status">Loading status...</div>
+          <div id="md-bucket-info" class="md-meta-line">Checking Storage bucket location...</div>
+
+          <div class="md-btn-row">
+            <button type="button" id="md-refresh-btn" class="md-btn md-btn-outline">
+              <i data-lucide="refresh-cw"></i><span>Refresh Status</span>
+            </button>
+            <button type="button" id="md-reload-btn" class="md-btn md-btn-accent" hidden>
+              <i data-lucide="rotate-cw"></i><span>Reload CMS Now</span>
+            </button>
+          </div>
+
+          <details class="md-howto">
+            <summary><i data-lucide="trash-2"></i><span>How to manually delete backups from Firebase Console</span><i data-lucide="chevron-down" class="md-chev"></i></summary>
+            <div class="md-howto-body">
+              <p>Backups are auto-pruned to keep the <strong>last 5 normal backups</strong> and <strong>last 2 safety backups</strong>. You can also delete any backup directly in Firebase Console without breaking this page:</p>
+              <ol>
+                <li>Confirm the status above shows no active maintenance lock.</li>
+                <li>In <a href="https://console.firebase.google.com/project/unique-infotech-cms/storage/unique-infotech-cms.firebasestorage.app/files" target="_blank" rel="noopener noreferrer">Firebase Storage</a>, open <code>system-backups/&lt;your-uid&gt;/</code> and delete the unwanted <code>backup-&lt;id&gt;.json</code> file.</li>
+                <li>Optionally open <a href="https://console.firebase.google.com/project/unique-infotech-cms/firestore/databases/-default-/data" target="_blank" rel="noopener noreferrer">Firestore Database</a> &rarr; <code>_system_backup_manifests</code> and delete the matching <code>&lt;id&gt;</code> document (note: once its manifest doc is deleted, even a local copy of that backup file cannot be restored).</li>
+                <li>Click <strong>Refresh Status</strong> above; missing Storage files drop from this list cleanly.</li>
+              </ol>
+            </div>
+          </details>
+
+          <div id="md-backup-history" class="md-backup-list"></div>
+        </section>
+
+        <!-- SECTION 2: EXPORT FULL BACKUP -->
+        <section class="md-card md-sec-green">
+          <div class="md-sec-head">
+            <div class="md-sec-icon"><i data-lucide="download"></i></div>
+            <div>
+              <h3>Export Full Backup</h3>
+              <p>Creates a server-verified snapshot of all 16 root collections, all 4 student subcollections, and Storage files, saves it to Storage, and downloads the JSON file.</p>
+            </div>
+          </div>
+
+          <div id="md-backup-quota" class="md-quota info">Calculating live counts and quota estimate...</div>
+
+          <div class="md-btn-row">
+            <button type="button" id="md-create-backup-btn" class="md-btn md-btn-accent">
+              <i data-lucide="download"></i><span>Export Full Backup Now</span>
+            </button>
+          </div>
+        </section>
+
+        <!-- SECTION 3: MASTER DELETE -->
+        <section class="md-card md-sec-red">
+          <div class="md-sec-head">
+            <div class="md-sec-icon"><i data-lucide="trash-2"></i></div>
+            <div>
+              <h3>Master Delete — Wipe All Business Data</h3>
+              <p>Required before importing a backup. Always takes an automatic safety backup first, locks the CMS, deletes children before parents, and verifies emptiness.</p>
+            </div>
+          </div>
+
+          <div id="md-clear-quota" class="md-quota info">Calculating live counts and quota estimate...</div>
+
+          <div class="md-alert md-alert-danger">
+            <strong>PERMANENT DELETION SCOPE:</strong> Deletes students (Youth &amp; Kids), photos/docs/signatures/Aadhaar, payments, bills, enrolments, waivers, breaks, transfers, deletion logs, counters, courses, levels, batches, sessions, branches, org config, Branch/School Head users, and business Storage files. <strong>Preserves:</strong> Super Admin login &amp; saved backups.
+          </div>
+
+          <label class="md-consent-check" for="md-clear-ack">
+            <input type="checkbox" id="md-clear-ack">
+            <span>I understand this permanently removes all live CMS records and files after taking an automatic safety backup.</span>
+          </label>
+
+          <div class="md-field">
+            <label for="md-clear-confirm">Type <code>DELETE ALL DATA</code> to enable Master Delete</label>
+            <input type="text" id="md-clear-confirm" class="md-input md-input-plain" autocomplete="off" spellcheck="false" placeholder="DELETE ALL DATA">
+          </div>
+
+          <div class="md-btn-row">
+            <button type="button" id="md-clear-btn" class="md-btn md-btn-danger" disabled>
+              <i data-lucide="trash-2"></i><span>Master Delete All Data</span>
+            </button>
+          </div>
+        </section>
+
+        <!-- SECTION 4: IMPORT / RESTORE -->
+        <section class="md-card md-sec-violet">
+          <div class="md-sec-head">
+            <div class="md-sec-icon"><i data-lucide="upload"></i></div>
+            <div>
+              <h3>Import / Restore Backup</h3>
+              <p>Upload a verified backup JSON from this project, inspect counts &amp; checksums on the server, then restore after Master Delete.</p>
+            </div>
+          </div>
+
+          <div class="md-alert md-alert-warning">
+            Only unmodified backup files created by this CMS project (with an active manifest in <code>_system_backup_manifests</code>) are accepted. Live records &amp; files must be 0 before restore.
+          </div>
+
+          <div class="md-field">
+            <label for="md-backup-file">Select backup JSON file (max 95 MiB)</label>
+            <input type="file" id="md-backup-file" class="md-input md-input-file" accept=".json,application/json">
+          </div>
+
+          <div class="md-btn-row">
+            <button type="button" id="md-validate-btn" class="md-btn md-btn-outline">
+              <i data-lucide="file-text"></i><span>Validate &amp; Preview Backup</span>
+            </button>
+            <button type="button" id="md-cancel-file-btn" class="md-btn md-btn-outline" disabled>
+              <i data-lucide="x"></i><span>Clear Selection</span>
+            </button>
+          </div>
+
+          <div id="md-progress-wrap" class="md-progress-wrap" hidden>
+            <progress id="md-progress" max="100" value="0"></progress>
+            <div id="md-progress-text" class="md-meta-line"></div>
+          </div>
+
+          <div id="md-preview" class="md-preview" hidden>
+            <div class="md-preview-head">
+              <strong>Validated Backup Preview</strong>
+              <span id="md-preview-total" class="md-live-pill">0</span>
+            </div>
+
+            <div class="md-preview-grid">
+              <div><span class="md-kv-k">Backup Date</span><div id="md-preview-date">—</div></div>
+              <div><span class="md-kv-k">File Size</span><div id="md-preview-size">—</div></div>
+              <div class="span-2"><span class="md-kv-k">Backup ID</span><div id="md-preview-id" class="mono">—</div></div>
+              <div class="span-2"><span class="md-kv-k">SHA-256</span><div id="md-preview-sha" class="mono">—</div></div>
+            </div>
+
+            <div class="md-table-wrap">
+              <table class="md-table">
+                <thead><tr><th>Collection</th><th class="num">Records</th></tr></thead>
+                <tbody id="md-preview-counts"></tbody>
+              </table>
+            </div>
+
+            <div id="md-restore-quota" class="md-quota info"></div>
+            <div id="md-preview-current" class="md-alert md-alert-info"></div>
+            <div id="md-preview-warning" class="md-alert md-alert-danger"></div>
+
+            <label class="md-consent-check" for="md-restore-ack">
+              <input type="checkbox" id="md-restore-ack">
+              <span>I understand this restores the entire selected snapshot (IDs, counters, receipts, payments, and files) into the live CMS.</span>
+            </label>
+
+            <div class="md-field">
+              <label for="md-restore-confirm">Type <code>RESTORE</code> to confirm</label>
+              <input type="text" id="md-restore-confirm" class="md-input md-input-plain" autocomplete="off" spellcheck="false" placeholder="RESTORE">
+            </div>
+
+            <div class="md-btn-row">
+              <button type="button" id="md-restore-btn" class="md-btn md-btn-danger" disabled>
+                <i data-lucide="upload"></i><span>Restore This Backup</span>
+              </button>
+            </div>
+          </div>
+        </section>
+
       </div>
     </div>
-  </form>
+  </div>
 </div>

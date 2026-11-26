@@ -1,0 +1,194 @@
+<div class="fr-wrap" id="payments-page">
+  <div class="lp-head-row">
+    <section class="pg-head">
+      <div class="pg-crumbs">Fees / <span id="payh-crumb-ctx">Youth Centre</span> / <span>Payment History</span></div>
+      <h2 id="payh-title">Payment History</h2>
+      <p id="payh-subtitle">Loading receipt ledger...</p>
+    </section>
+    <div class="lp-head-actions">
+      <span id="payh-scope-badge" class="fr-chip" hidden></span>
+      <button type="button" class="ui-btn ghost" id="payh-export-csv">
+        <i data-lucide="download"></i><span>Export CSV</span>
+      </button>
+      <button type="button" class="ui-btn ghost" id="payh-print">
+        <i data-lucide="printer"></i><span>Daily Cash Report</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Empty No-Session State -->
+  <div class="lp-card" id="payh-no-session" hidden>
+    <div class="empty-state">
+      <i data-lucide="calendar-plus"></i>
+      <h3>No Youth session found</h3>
+      <p>Create or select a Youth Centre session in Sessions to view payment history.</p>
+      <div style="margin-top: 14px;">
+        <a href="#/sessions" class="ui-btn primary"><i data-lucide="calendar"></i><span>Go to Sessions</span></a>
+      </div>
+    </div>
+  </div>
+
+  <!-- 5 Summary Stat Cards -->
+  <div class="lp-stats cols-5" id="payh-stats">
+    <div class="lp-stat green">
+      <div class="lp-stat-ic"><i data-lucide="indian-rupee"></i></div>
+      <div class="lp-stat-txt">
+        <span class="lp-stat-label">Total Collected</span>
+        <span class="lp-stat-value" id="payh-kpi-total">—</span>
+        <span class="lp-stat-sub" id="payh-kpi-total-sub">0 receipts (waivers excl.)</span>
+      </div>
+    </div>
+    <div class="lp-stat sky">
+      <div class="lp-stat-ic"><i data-lucide="banknote"></i></div>
+      <div class="lp-stat-txt">
+        <span class="lp-stat-label">Cash Collected</span>
+        <span class="lp-stat-value" id="payh-kpi-cash">—</span>
+        <span class="lp-stat-sub" id="payh-kpi-cash-sub">0 receipts</span>
+      </div>
+    </div>
+    <div class="lp-stat indigo">
+      <div class="lp-stat-ic"><i data-lucide="smartphone"></i></div>
+      <div class="lp-stat-txt">
+        <span class="lp-stat-label">UPI / Bank</span>
+        <span class="lp-stat-value" id="payh-kpi-upi">—</span>
+        <span class="lp-stat-sub" id="payh-kpi-upi-sub">0 digital receipts</span>
+      </div>
+    </div>
+    <div class="lp-stat amber">
+      <div class="lp-stat-ic"><i data-lucide="clock"></i></div>
+      <div class="lp-stat-txt">
+        <span class="lp-stat-label">Late Fees Collected</span>
+        <span class="lp-stat-value" id="payh-kpi-late-paid">—</span>
+        <span class="lp-stat-sub">Included in total</span>
+      </div>
+    </div>
+    <div class="lp-stat violet">
+      <div class="lp-stat-ic"><i data-lucide="shield-off"></i></div>
+      <div class="lp-stat-txt">
+        <span class="lp-stat-label">Late Fees Waived</span>
+        <span class="lp-stat-value" id="payh-kpi-late-waived">—</span>
+        <span class="lp-stat-sub" id="payh-kpi-waiver-sub">0 waiver logs</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Category Breakdown Strip (hidden when empty or loading — no blank strip above search bar) -->
+  <div class="fr-breakdown-bar" id="payh-breakdown-strip" hidden>
+    <div class="fr-chips" id="payh-type-chips"></div>
+  </div>
+
+  <!-- Partial Pagination Notice -->
+  <div class="adm-note warn fr-partial-note" id="payh-partial-banner" hidden>
+    <span id="payh-partial-text">Showing recent 60 receipts. Load older Youth receipts to include them in totals.</span>
+    <div class="fr-partial-actions">
+      <button type="button" class="ui-btn ghost sm" id="payh-banner-loadmore">Load Next 60</button>
+      <button type="button" class="ui-btn primary sm" id="payh-banner-loadall">Load All History</button>
+    </div>
+  </div>
+
+  <!-- Tidy Single-Row Filter Toolbar (Session is top-bar only; paired [Branch -> Batch] inside one box) -->
+  <div class="lp-toolbar" id="payh-toolbar">
+    <div class="lp-toolbar-row-filters">
+      <div class="lp-toolbar-row-search">
+        <div class="lp-search">
+          <i data-lucide="search"></i>
+          <input type="search" id="payh-search" placeholder="Search receipt no, student name, ID, phone or TXN ID" autocomplete="off" />
+        </div>
+      </div>
+
+      <button type="button" class="ui-btn ghost lp-mobile-filter-btn" id="payh-mobile-filters-btn" aria-expanded="false">
+        <i data-lucide="sliders-horizontal"></i>
+        <span>Filters</span>
+        <span class="lp-count" id="payh-mobile-filters-count" hidden>0</span>
+      </button>
+
+      <div class="lp-toolbar-drawer" id="payh-filters-drawer">
+        <div id="payh-bb-host"></div>
+        <div class="lp-filter">
+          <span class="lp-filter-label">Date range</span>
+          <div id="payh-date-preset-host" class="lp-filter-select"></div>
+        </div>
+        <button type="button" class="ui-btn ghost fr-more-btn" id="payh-more-btn" aria-expanded="false" title="Type, Mode, Course &amp; Collector filters">
+          <i data-lucide="sliders-horizontal"></i><span>More</span>
+        </button>
+      </div>
+
+      <button type="button" class="lp-refresh" id="payh-refresh" aria-label="Refresh" title="Refresh">
+        <i data-lucide="refresh-cw"></i>
+      </button>
+    </div>
+
+    <!-- Custom date inputs (shared .lp-date-custom) -->
+    <div class="lp-toolbar-row-custom">
+      <div class="lp-date-custom" id="payh-custom-dates" hidden>
+        <span class="lp-date-label">From</span>
+        <input type="date" id="payh-date-from" class="lp-date-input" />
+        <span class="lp-date-label">To</span>
+        <input type="date" id="payh-date-to" class="lp-date-input" />
+      </div>
+    </div>
+
+    <!-- Secondary filters (Type, Mode, Course/Level, Collector) + Reset -->
+    <div class="lp-toolbar-extra" id="payh-extra-filters" hidden>
+      <div class="lp-filter">
+        <span class="lp-filter-label">Type</span>
+        <div id="payh-type-host" class="lp-filter-select"></div>
+      </div>
+      <div class="lp-filter">
+        <span class="lp-filter-label">Mode</span>
+        <div id="payh-mode-host" class="lp-filter-select"></div>
+      </div>
+      <div class="lp-filter">
+        <span class="lp-filter-label" id="payh-course-label">Course</span>
+        <div id="payh-course-host" class="lp-filter-select"></div>
+      </div>
+      <div class="lp-filter">
+        <span class="lp-filter-label">Collected by</span>
+        <div id="payh-collector-host" class="lp-filter-select"></div>
+      </div>
+      <button type="button" class="ui-btn ghost sm" id="payh-clear-filters" hidden>
+        <i data-lucide="rotate-ccw"></i><span>Clear filters</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Ledger Table Card (same structure & classes as Students table — grows naturally with page scroll) -->
+  <div class="adm-table-card" id="payh-table-card">
+    <div class="lp-card-head">
+      <div class="lp-card-title">
+        <i data-lucide="receipt"></i>
+        <span>Receipt Ledger</span>
+        <span class="lp-count" id="payh-row-count">0 receipts</span>
+      </div>
+      <span class="lp-sub" id="payh-sort-note">Newest payments first</span>
+    </div>
+
+    <div id="payh-error" class="empty-state" hidden>
+      <i data-lucide="alert-circle" style="color:var(--danger);"></i>
+      <h3>Could not load payment history</h3>
+      <p id="payh-error-msg">Unable to load payment records right now.</p>
+      <button type="button" class="ui-btn primary" id="payh-retry"><i data-lucide="refresh-cw"></i><span>Retry</span></button>
+    </div>
+
+    <div class="adm-scroll" id="payh-scroll-wrap">
+      <table class="adm-table" id="payh-table">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Student</th>
+            <th id="payh-th-cb">Course, Branch &amp; Batch</th>
+            <th>Payment For</th>
+            <th>Mode</th>
+            <th class="num">Fee / Late</th>
+            <th class="num">Received</th>
+            <th class="adm-actions">Receipt</th>
+            <th class="adm-actions fr-act-th">Action</th>
+          </tr>
+        </thead>
+        <tbody id="payh-tbody"></tbody>
+      </table>
+    </div>
+
+    <div class="adm-card-foot lp-card-foot" id="payh-foot" hidden></div>
+  </div>
+</div>

@@ -1,6 +1,105 @@
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
+
+    function signedIn() {
+      return request.auth != null
+        && request.auth.token.email != null;
+    }
+
+    function uid() {
+      return request.auth.uid;
+    }
+
+    function authEmail() {
+      return request.auth.token.email.lower();
+    }
+
+    function isPasswordSignIn() {
+      return signedIn()
+        && ('firebase' in request.auth.token)
+        && request.auth.token.firebase.sign_in_provider == 'password';
+    }
+
+    function isGoogleSignIn() {
+      return signedIn()
+        && ('firebase' in request.auth.token)
+        && request.auth.token.firebase.sign_in_provider == 'google.com'
+        && request.auth.token.email_verified == true;
+    }
+
+    function isActiveSuperAdminDoc(userDoc) {
+      return userDoc != null
+        && userDoc.data != null
+        && ('role' in userDoc.data)
+        && ('status' in userDoc.data)
+        && userDoc.data.role == 'superadmin'
+        && userDoc.data.status == 'active';
+    }
+
+    function isActiveStaffDoc(userDoc) {
+      return userDoc != null
+        && userDoc.data != null
+        && ('role' in userDoc.data)
+        && ('status' in userDoc.data)
+        && userDoc.data.status == 'active'
+        && (
+             (isPasswordSignIn() && userDoc.data.role == 'superadmin')
+             || (isGoogleSignIn() && userDoc.data.role in ['branch_head', 'school_head'])
+           );
+    }
+
+    // Uses the CMS role registry (`users/{email}`) with a single cross-service read
+    // (Firebase Storage allows at most 2 firestore.get/exists calls per request).
+    function isSuperAdmin() {
+      return isPasswordSignIn()
+        && isActiveSuperAdminDoc(
+             firestore.get(/databases/(default)/documents/users/$(authEmail()))
+           );
+    }
+
+    function isActiveStaff() {
+      return signedIn()
+        && isActiveStaffDoc(
+             firestore.get(/databases/(default)/documents/users/$(authEmail()))
+           );
+    }
+
+    // ---------- PER-USER PROFILE PHOTOS ----------
+    // Any active CMS user may read staff avatars; users may write/delete ONLY their own email folder.
+    match /user-photos/{userEmail}/{fileName} {
+      allow read: if isActiveStaff();
+      allow create, update: if isActiveStaff()
+                            && userEmail == authEmail()
+                            && request.resource.size > 0
+                            && request.resource.size <= 350 * 1024
+                            && request.resource.contentType.matches('image/(jpeg|webp)');
+      allow delete: if isActiveStaff()
+                    && userEmail == authEmail();
+    }
+
+    // ---------- PRIVATE BACKUP FILES ----------
+    // Only the server (Admin SDK) can write permanent `backup-*.json` files.
+    // An active Super Admin may read their own backup files and upload/remove
+    // immutable temporary `incoming-*.json` files (<= 95 MiB) for validation/restore.
+    match /system-backups/{userId}/{fileName} {
+      allow read: if isSuperAdmin()
+                  && uid() == userId
+                  && fileName.matches('backup-[A-Fa-f0-9-]+\\.json');
+
+      allow create: if isSuperAdmin()
+                    && resource == null
+                    && uid() == userId
+                    && fileName.matches('incoming-[A-Fa-f0-9-]+\\.json')
+                    && request.resource.size > 0
+                    && request.resource.size <= 95 * 1024 * 1024
+                    && request.resource.contentType == 'application/json';
+
+      allow delete: if isSuperAdmin()
+                    && uid() == userId
+                    && fileName.matches('incoming-[A-Fa-f0-9-]+\\.json');
+    }
+
     match /{allPaths=**} {
       allow read, write: if false;
     }

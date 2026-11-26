@@ -4,8 +4,9 @@ import { createSelect } from '../components/ui-select.js';
 import { openMenu } from '../components/ui-menu.js';
 import { confirmDialog } from '../components/ui-confirm.js';
 import { showToast } from '../components/toast.js';
-import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.140';
-import { buildStats, buildToolbar, renderEmptyTableState } from '../components/list-page.js?v=1.8.140';
+import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.164';
+import { PAGE_SIZE, buildStats, buildToolbar, renderPager, renderEmptyTableState } from '../components/list-page.js?v=1.8.164';
+import { formatPersonName } from '../utils/formatter.js?v=1.8.164';
 
 const TEXT_KEYS = ['name', 'code', 'email', 'address', 'mapUrl'];
 const KEYS = ['name', 'code', 'phones', 'email', 'address', 'mapUrl', 'status'];
@@ -132,7 +133,7 @@ export async function mount({ profile }) {
     filters: [{ id: 'status', label: 'Status', options: [
       { value: 'all', label: 'All statuses' }, { value: 'active', label: 'Active' }, { value: 'inactive', label: 'Inactive' }
     ] }],
-    onChange: () => render(),
+    onChange: () => { page = 1; render(); },
     onRefresh: () => load()
   });
   const tbHost = $('br-toolbar');
@@ -234,11 +235,12 @@ export async function mount({ profile }) {
       return td;
     }
     const h = list[0];
+    const displayHeadName = formatPersonName(h.name || '') || h.email;
     const box = mk('div', 'br-head');
-    box.appendChild(mk('span', 'br-head-av', initials(h.name || h.email)));
+    box.appendChild(mk('span', 'br-head-av', initials(displayHeadName || h.email)));
     const txt = mk('div', 'br-head-txt');
     const nameRow = mk('div', 'br-head-name');
-    nameRow.appendChild(mk('b', '', h.name || h.email));
+    nameRow.appendChild(mk('b', '', displayHeadName));
     if ((h.status || 'active') !== 'active') {
       const dot = mk('span', 'br-dot-off');
       dot.setAttribute('title', 'Inactive \u2014 cannot sign in');
@@ -251,6 +253,7 @@ export async function mount({ profile }) {
     return td;
   }
 
+  let page = 1;
   function render() {
     tbody.textContent = '';
     if (empty) empty.hidden = rows.length > 0;
@@ -263,11 +266,20 @@ export async function mount({ profile }) {
     stats.update(2, rows.length - act, 'Paused or closed');
     stats.update(3, withHead, rows.length ? (rows.length - withHead) + ' without a head' : 'Branches with a head');
     const cnt = $('br-count');
-    if (cnt) cnt.textContent = rows.length + ' branches';
+    if (cnt) cnt.textContent = list.length + (list.length === 1 ? ' branch' : ' branches');
     const foot = $('br-foot');
+    const totalPages = Math.max(1, Math.ceil(list.length / PAGE_SIZE));
+    if (page > totalPages) page = totalPages;
+    const pageRows = list.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
     if (foot) {
-      foot.hidden = rows.length === 0;
-      foot.textContent = list.length === rows.length ? 'Showing all ' + rows.length : 'Showing ' + list.length + ' of ' + rows.length;
+      foot.hidden = list.length === 0;
+      renderPager(foot, {
+        page,
+        pageSize: PAGE_SIZE,
+        totalItems: list.length,
+        showWhenSingle: true,
+        onPageChange: (next) => { page = next; render(); }
+      });
     }
     if (rows.length && !list.length) {
       renderEmptyTableState(tbody, {
@@ -277,11 +289,12 @@ export async function mount({ profile }) {
         onClear: () => {
           tb.state.q = '';
           tb.state.status = 'all';
+          page = 1;
           render();
         }
       });
     }
-    list.forEach((r) => {
+    pageRows.forEach((r) => {
       const tr = mk('tr');
       tr.appendChild(mk('td', 'br-name', r.name || ' - '));
       const tdCode = mk('td');

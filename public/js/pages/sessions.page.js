@@ -4,10 +4,10 @@ import { createSelect } from '../components/ui-select.js';
 import { openMenu } from '../components/ui-menu.js';
 import { confirmDialog } from '../components/ui-confirm.js';
 import { showToast } from '../components/toast.js';
-import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.140';
-import { buildStats, buildToolbar, renderEmptyTableState } from '../components/list-page.js?v=1.8.140';
-import { notifySessionsChanged, todayISO, expectedStatus, statusMismatch, daysLeft } from '../core/sessions.js?v=1.8.140';
-import { firstInstallmentOf, admissionState, installmentSchedule, sessionPattern, fmtDate } from '../utils/session-rules.js?v=1.8.140';
+import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.164';
+import { PAGE_SIZE, buildStats, buildToolbar, renderPager, renderEmptyTableState } from '../components/list-page.js?v=1.8.164';
+import { notifySessionsChanged, todayISO, expectedStatus, statusMismatch, daysLeft } from '../core/sessions.js?v=1.8.164';
+import { firstInstallmentOf, admissionState, installmentSchedule, sessionPattern, fmtDate } from '../utils/session-rules.js?v=1.8.164';
 
 const TEXT_KEYS = ['name', 'start', 'end'];
 const KEYS = ['name', 'start', 'end', 'status'];
@@ -148,7 +148,7 @@ export async function mount({ profile, ctx }) {
       { value: 'all', label: 'All statuses' }, { value: 'running', label: 'Running' },
       { value: 'upcoming', label: 'Upcoming' }, { value: 'closed', label: 'Closed' }, { value: 'archived', label: 'Archived' }
     ] }],
-    onChange: () => render(),
+    onChange: () => { page = 1; render(); },
     onRefresh: () => load()
   });
   const tbHost = $('ss-toolbar');
@@ -224,6 +224,7 @@ export async function mount({ profile, ctx }) {
     if (!saving) setState(dirty ? 'Unsaved changes' : (editId ? 'No changes yet' : 'Fill in the details'), dirty ? 'dirty' : '');
   }
 
+  let page = 1;
   function render() {
     tbody.textContent = '';
     if (empty) empty.hidden = rows.length > 0;
@@ -251,11 +252,20 @@ export async function mount({ profile, ctx }) {
       if (daySub) { daySub.title = daySub.textContent || ''; daySub.classList.remove('ss-overdue'); }
     }
     const cnt = $('ss-count');
-    if (cnt) cnt.textContent = rows.length + ' sessions';
+    if (cnt) cnt.textContent = list.length + (list.length === 1 ? ' session' : ' sessions');
     const foot = $('ss-foot');
+    const totalPages = Math.max(1, Math.ceil(list.length / PAGE_SIZE));
+    if (page > totalPages) page = totalPages;
+    const pageRows = list.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
     if (foot) {
-      foot.hidden = rows.length === 0;
-      foot.textContent = list.length === rows.length ? 'Showing all ' + rows.length : 'Showing ' + list.length + ' of ' + rows.length;
+      foot.hidden = list.length === 0;
+      renderPager(foot, {
+        page,
+        pageSize: PAGE_SIZE,
+        totalItems: list.length,
+        showWhenSingle: true,
+        onPageChange: (next) => { page = next; render(); }
+      });
     }
     if (rows.length && !list.length) {
       renderEmptyTableState(tbody, {
@@ -265,11 +275,12 @@ export async function mount({ profile, ctx }) {
         onClear: () => {
           tb.state.q = '';
           tb.state.status = 'all';
+          page = 1;
           render();
         }
       });
     }
-    list.forEach((r) => {
+    pageRows.forEach((r) => {
       const tr = mk('tr');
       tr.appendChild(mk('td', 'br-name', r.name || ' - '));
       tr.appendChild(mk('td', '', fmt(r.startDate)));

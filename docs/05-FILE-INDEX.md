@@ -56,16 +56,21 @@ unique-infotech-cms/
     │   └── pages/
     │       ├── auth.css
     │       ├── dashboard.css
+    │       ├── financial-reports.css
     │       └── login.css
     ├── js/
     │   ├── components/
+    │   │   ├── branch-batch-filter.js
     │   │   ├── confirm.js
     │   │   ├── dropdown.js
+    │   │   ├── list-page.js
     │   │   ├── modal.js
     │   │   ├── payment-popup.js
+    │   │   ├── profile-modal.js
     │   │   ├── sidebar.js
     │   │   ├── toast.js
-    │   │   └── topbar.js
+    │   │   ├── topbar.js
+    │   │   └── ui-select.js
     │   ├── config/
     │   │   └── firebase-config.js
     │   ├── core/
@@ -76,6 +81,7 @@ unique-infotech-cms/
     │   ├── pages/
     │   │   ├── admissions.page.js
     │   │   ├── archives.page.js
+    │   │   ├── authorised-users.js
     │   │   ├── branch-heads.page.js
     │   │   ├── batches.page.js
     │   │   ├── branches.page.js
@@ -85,6 +91,7 @@ unique-infotech-cms/
     │   │   ├── org.page.js
     │   │   ├── pay-fees.page.js
     │   │   ├── payments.page.js
+    │   │   ├── pending.page.js
     │   │   ├── reports.page.js
     │   │   ├── school.page.js
     │   │   └── students.page.js
@@ -95,7 +102,8 @@ unique-infotech-cms/
     │   │   ├── payment.service.js
     │   │   ├── report.service.js
     │   │   ├── school.service.js
-    │   │   └── student.service.js
+    │   │   ├── student.service.js
+    │   │   └── user-directory.service.js
     │   └── utils/
     │       ├── date.utils.js
     │       ├── formatter.js
@@ -115,6 +123,7 @@ unique-infotech-cms/
         ├── org-details.html
         ├── pay-fees.html
         ├── payments.html
+        ├── pending.html
         ├── reports.html
         ├── school-fees.html
         ├── school-students.html

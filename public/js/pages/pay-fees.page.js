@@ -11,13 +11,13 @@ import {
   runTransaction,
   serverTimestamp
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { createSelect } from '../components/ui-select.js?v=1.8.140';
-import { openPopup } from '../components/modal.js?v=1.8.140';
-import { confirmDialog } from '../components/ui-confirm.js?v=1.8.140';
-import { showToast } from '../components/toast.js?v=1.8.140';
-import { getSelectedSessionId, getCachedSessions } from '../core/sessions.js?v=1.8.140';
-import { todayISO, fmtDate, examWindowOf, installmentSchedule } from '../utils/session-rules.js?v=1.8.140';
-import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.140';
+import { createSelect } from '../components/ui-select.js?v=1.8.164';
+import { openPopup } from '../components/modal.js?v=1.8.164';
+import { confirmDialog } from '../components/ui-confirm.js?v=1.8.164';
+import { showToast } from '../components/toast.js?v=1.8.164';
+import { getSelectedSessionId, getCachedSessions } from '../core/sessions.js?v=1.8.164';
+import { todayISO, fmtDate, examWindowOf, installmentSchedule } from '../utils/session-rules.js?v=1.8.164';
+import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.164';
 import {
   calculateLateFee,
   fetchStudentPayments,
@@ -27,7 +27,7 @@ import {
   courseBalanceWithoutExam,
   calculateStudentFinancials,
   repairStudentAdmissionPayment
-} from '../services/payment.service.js?v=1.8.140';
+} from '../services/payment.service.js?v=1.8.164';
 
 let currentUserProfile = null;
 let currentCtx = 'youth';
@@ -203,6 +203,19 @@ async function initData() {
   const sessionBadge = $('pf-session-badge');
   if (sessionBadge) {
     sessionBadge.textContent = activeSession ? (activeSession.name || activeSession.id) : 'No session selected';
+  }
+  const pfSub = $('pf-subtitle');
+  if (pfSub) {
+    pfSub.textContent = activeSession
+      ? `Session ${activeSession.name || activeSession.id} — Search students by ID, phone number or name to collect scheduled installments and examination fees.`
+      : 'Search students by ID, phone number or name to collect scheduled installments and examination fees.';
+  }
+  const noSess = $('pf-no-session');
+  const payWrap = $('pf-payments-container');
+  const hasAnySessions = cachedSessions.length > 0 || Boolean(activeSession);
+  if (noSess && payWrap) {
+    noSess.hidden = hasAnySessions;
+    payWrap.hidden = !hasAnySessions;
   }
 
   // Load Youth courses
@@ -700,7 +713,7 @@ async function openStudentPanel(student) {
   // Load payments
   currentPayments = await fetchStudentPayments(student.id);
   if (currentPayments && student.ctx !== 'school') {
-    await repairStudentAdmissionPayment(student, currentPayments).catch(() => {});
+    await repairStudentAdmissionPayment(student, currentPayments).catch(() => { });
   }
 
   // Render Metrics & Installment Table

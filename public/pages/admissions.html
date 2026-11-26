@@ -3,9 +3,20 @@
     <section class="pg-head">
       <div class="pg-crumbs">Students / <span>Students</span></div>
       <h2>Students</h2>
-      <p>Admit new students to courses and batches. Student IDs are generated per session year and course level.</p>
+      <p id="adm-sub">Admit new students to courses and batches. Student IDs are generated per session year and course level.</p>
     </section>
     <button type="button" id="adm-add" class="ui-btn primary"><i data-lucide="user-plus"></i>New admission</button>
+  </div>
+
+  <div class="lp-card" id="adm-no-session" hidden>
+    <div class="empty-state">
+      <i data-lucide="calendar-plus"></i>
+      <h3>No Youth session found</h3>
+      <p>Create or activate a Youth Centre session in Sessions to manage student admissions.</p>
+      <div style="margin-top: 14px;">
+        <a href="#/sessions" class="ui-btn primary"><i data-lucide="calendar"></i><span>Go to Sessions</span></a>
+      </div>
+    </div>
   </div>
 
   <div id="adm-stats"></div>

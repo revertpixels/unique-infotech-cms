@@ -39,7 +39,9 @@
 .sb-identity-role { font-size: 10.5px; color: color-mix(in srgb, var(--sidebar-text) 60%, transparent); }
 .sb-identity-btn { width: 32px; height: 32px; border: 0; background: transparent; color: var(--sidebar-text); border-radius: var(--r); display: flex; align-items: center; justify-content: center; flex-shrink: 0; cursor: pointer; }
 .sb-identity-btn:hover { background: var(--sidebar-hover); color: #fff; }
+.sb-identity-btn:disabled { opacity: 0.55; cursor: wait; }
 .sb-identity-btn svg.lucide { width: 16px; height: 16px; }
+body.is-logging-out #app { transition: opacity 0.45s ease; opacity: 0.72; pointer-events: none; }
 
 @media (min-width: 769px) {
   #app.sb-collapsed .sidebar { width: var(--sb-w-collapsed); }

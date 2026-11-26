@@ -1,11 +1,12 @@
 // payment-popup.js — Single Shared Payment Popup for Student Profile and Pay Fees
 import { auth } from '../config/firebase-config.js';
-import { openPopup } from './modal.js?v=1.8.140';
-import { createSelect } from './ui-select.js?v=1.8.140';
-import { formatINR, formatDateIN } from '../utils/formatter.js?v=1.8.140';
-import { todayISO } from '../utils/session-rules.js?v=1.8.140';
-import { showToast } from './toast.js?v=1.8.140';
-import { playPaymentSuccessSound } from '../utils/sound.js?v=1.8.140';
+import { openPopup } from './modal.js?v=1.8.164';
+import { createSelect } from './ui-select.js?v=1.8.164';
+import { formatINR, formatDateIN } from '../utils/formatter.js?v=1.8.164';
+import { todayISO } from '../utils/session-rules.js?v=1.8.164';
+import { resolveUserDisplay } from '../services/user-directory.service.js?v=1.8.164';
+import { showToast } from './toast.js?v=1.8.164';
+import { playPaymentSuccessSound } from '../utils/sound.js?v=1.8.164';
 import {
   recordPayment,
   recordAdmissionWithPayment,
@@ -15,7 +16,7 @@ import {
   isAdmissionFeePaid,
   isMaterialFeePaid,
   isExamFeePaid
-} from '../services/payment.service.js?v=1.8.140';
+} from '../services/payment.service.js?v=1.8.164';
 
 function formatDateTime(d) {
   const dt = d instanceof Date ? d : new Date(d);
@@ -830,6 +831,7 @@ export async function openPaymentPopup({
 
       try {
         const authEmail = auth?.currentUser?.email || profile?.email || '';
+        const userDisp = resolveUserDisplay(authEmail, profile?.name, profile?.designation);
         const res = await recordAdmissionWithPayment({
           pendingAdmission,
           paymentParams: {
@@ -837,7 +839,8 @@ export async function openPaymentPopup({
             txnId: txnInput.value.trim(),
             remarks: remInput.value.trim(),
             userEmail: authEmail,
-            userName: profile?.name || '',
+            userName: userDisp.name || profile?.name || '',
+            userDesignation: userDisp.designation || profile?.designation || '',
             userRole: profile?.role || '',
             branchId: profile?.branchId || pendingAdmission.branchId,
             branchCode: pendingAdmission.branchCode,
@@ -887,6 +890,7 @@ export async function openPaymentPopup({
 
     try {
       const authEmail = auth?.currentUser?.email || profile?.email || '';
+      const userDisp = resolveUserDisplay(authEmail, profile?.name, profile?.designation);
       const res = await recordPayment({
         studentDoc: s,
         type: payType,
@@ -901,7 +905,8 @@ export async function openPaymentPopup({
         waiverReason,
         paymentDate: todayISO(),
         userEmail: authEmail,
-        userName: profile?.name || '',
+        userName: userDisp.name || profile?.name || '',
+        userDesignation: userDisp.designation || profile?.designation || '',
         userRole: profile?.role || '',
         branchId: profile?.branchId || s.branchId,
         branchCode: s.branchCode || '',

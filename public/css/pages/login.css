@@ -1,8 +1,13 @@
-body {
+body.auth-screen {
+  min-height: 100vh;
+}
+
+.login-screen {
   min-height: 100vh;
   display: grid;
   place-items: center;
   padding: 1rem;
+  background: var(--bg);
 }
 
 .login-card {
@@ -74,6 +79,32 @@ body {
 
 .login-card .btn.full {
   margin-top: 4px;
+}
+
+.login-forgot-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 10px;
+}
+
+.login-forgot-btn {
+  background: none;
+  border: 0;
+  padding: 2px 4px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--primary);
+  cursor: pointer;
+}
+
+.login-forgot-btn:hover:not(:disabled) {
+  text-decoration: underline;
+}
+
+.login-forgot-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
 }
 
 @media (max-width: 320px) {

@@ -1,7 +1,10 @@
-import { ROUTES, ROLE_LABELS } from '../core/router.js?v=1.8.140';
-import { APP_VERSION } from '../core/app.js?v=1.8.140';
-import { getRunningPeriod, getNextDueDate, formatDayMonth } from '../utils/date.utils.js?v=1.8.140';
-import { getRunningSession, toPeriod, daysLeft, expectedStatus } from '../core/sessions.js?v=1.8.140';
+import { ROUTES, ROLE_LABELS } from '../core/router.js?v=1.8.164';
+import { APP_VERSION } from '../core/app.js?v=1.8.164';
+import { getRunningPeriod, getNextDueDate, formatDayMonth } from '../utils/date.utils.js?v=1.8.164';
+import { getRunningSession, toPeriod, daysLeft, expectedStatus } from '../core/sessions.js?v=1.8.164';
+import { resolveUserDisplay } from '../services/user-directory.service.js?v=1.8.164';
+
+let removeSidebarProfileListener = null;
 
 let drawerOpen = false;
 let tipEl = null;
@@ -207,17 +210,33 @@ export function renderSidebar({ profile, ctx, orgName, tagline, onNavigate, onLo
   // temporary identity row
   const identity = document.createElement('div');
   identity.className = 'sb-identity';
-  // TEMPORARY - moves to the topbar user menu in Step 5c-3
   const idLeft = document.createElement('div');
   const idName = document.createElement('div');
   idName.className = 'sb-identity-name';
-  idName.textContent = profile.name || profile.email || '';
   idLeft.appendChild(idName);
   const idRole = document.createElement('div');
   idRole.className = 'sb-identity-role';
-  idRole.textContent = ROLE_LABELS[profile.role] || profile.role;
   idLeft.appendChild(idRole);
   identity.appendChild(idLeft);
+
+  function syncSidebarIdentity() {
+    const disp = resolveUserDisplay(profile.email, profile.name, profile.designation);
+    idName.textContent = disp.name || profile.name || profile.email || '';
+    idRole.textContent = disp.designation || ROLE_LABELS[profile.role] || profile.role;
+  }
+  syncSidebarIdentity();
+  if (removeSidebarProfileListener) {
+    removeSidebarProfileListener();
+    removeSidebarProfileListener = null;
+  }
+  const onSidebarProfileChange = () => syncSidebarIdentity();
+  window.addEventListener('uic:profile-updated', onSidebarProfileChange);
+  window.addEventListener('uic:users-updated', onSidebarProfileChange);
+  removeSidebarProfileListener = () => {
+    window.removeEventListener('uic:profile-updated', onSidebarProfileChange);
+    window.removeEventListener('uic:users-updated', onSidebarProfileChange);
+  };
+
   const signout = document.createElement('button');
   signout.type = 'button';
   signout.className = 'sb-identity-btn';
@@ -335,6 +354,27 @@ function loadSavedCollapsed() {
 }
 
 export function initSidebar() { setCollapsed(loadSavedCollapsed()); }
+
+export function destroySidebar() {
+  if (removeSidebarProfileListener) {
+    removeSidebarProfileListener();
+    removeSidebarProfileListener = null;
+  }
+  if (sessionInterval) {
+    clearInterval(sessionInterval);
+    sessionInterval = null;
+  }
+  drawerOpen = false;
+  lastSessionCtx = 'youth';
+  const app = document.getElementById('app');
+  if (app) app.classList.remove('drawer-open');
+  const sb = document.getElementById('sidebar');
+  if (sb) sb.textContent = '';
+  if (tipEl && tipEl.parentNode) {
+    tipEl.parentNode.removeChild(tipEl);
+    tipEl = null;
+  }
+}
 
 export function setNavCount(key, count, isAlert) {
   document.querySelectorAll('#sidebar .sb-item').forEach(el => {

@@ -4,7 +4,7 @@
     <section class="pg-head">
       <div class="pg-crumbs">Fees / <span>Pay Fees</span></div>
       <h2>Pay Fees</h2>
-      <p>Search students by ID, phone number or name to collect scheduled installments and examination fees.</p>
+      <p id="pf-subtitle">Search students by ID, phone number or name to collect scheduled installments and examination fees.</p>
     </section>
     <div class="pf-head-actions">
       <button type="button" id="pf-btn-exam-mode" class="ui-btn ghost pf-exam-mode-btn" title="View Exam Fee Collection for Active Session">
@@ -12,6 +12,17 @@
         <span>Exam fee</span>
         <span id="pf-exam-dot" class="pf-status-dot dot-grey"></span>
       </button>
+    </div>
+  </div>
+
+  <div id="pf-no-session" class="lp-card" hidden>
+    <div class="empty-state">
+      <i data-lucide="calendar-plus"></i>
+      <h3>No Youth session found</h3>
+      <p>Create or activate a Youth Centre session in Sessions to collect fees.</p>
+      <div style="margin-top: 14px;">
+        <a href="#/sessions" class="ui-btn primary"><i data-lucide="calendar"></i><span>Go to Sessions</span></a>
+      </div>
     </div>
   </div>
 

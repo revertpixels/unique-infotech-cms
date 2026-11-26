@@ -4,17 +4,18 @@
 // 10th, late fine Rs 1/day from the 11th.
 import { db } from '../config/firebase-config.js';
 import { collection, getDocs, query, where, doc, getDoc, updateDoc, runTransaction, serverTimestamp } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.140';
-import { registerDirty, confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.140';
-import { buildStats, buildToolbar } from '../components/list-page.js?v=1.8.140';
-import { createSelect } from '../components/ui-select.js?v=1.8.140';
-import { openMenu } from '../components/ui-menu.js?v=1.8.140';
-import { confirmDialog } from '../components/ui-confirm.js?v=1.8.140';
-import { formatINR, formatDateIN } from '../utils/formatter.js?v=1.8.140';
-import { isCourseActive } from '../utils/session-rules.js?v=1.8.140';
-import { localToday, monthSeq, nextMonth } from '../utils/school-lifecycle.js?v=1.8.140';
-import { playPaymentSuccessSound } from '../utils/sound.js?v=1.8.140';
-import { daysLate, computeLateFee } from '../utils/school-billing.js?v=1.8.140';
+import { showToast } from '../components/toast.js?v=1.8.164';
+import { registerDirty, confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.164';
+import { PAGE_SIZE, buildStats, buildToolbar, renderPager } from '../components/list-page.js?v=1.8.164';
+import { createSelect } from '../components/ui-select.js?v=1.8.164';
+import { openMenu } from '../components/ui-menu.js?v=1.8.164';
+import { confirmDialog } from '../components/ui-confirm.js?v=1.8.164';
+import { formatINR, formatDateIN, formatPersonName } from '../utils/formatter.js?v=1.8.164';
+import { resolveUserDisplay } from '../services/user-directory.service.js?v=1.8.164';
+import { isCourseActive } from '../utils/session-rules.js?v=1.8.164';
+import { localToday, monthSeq, nextMonth } from '../utils/school-lifecycle.js?v=1.8.164';
+import { playPaymentSuccessSound } from '../utils/sound.js?v=1.8.164';
+import { daysLate, computeLateFee } from '../utils/school-billing.js?v=1.8.164';
 
 const COL = 'students';
 const BILLS_COL = 'bills';
@@ -59,7 +60,7 @@ export async function mount({ container, profile, ctx }) {
   const tb = buildToolbar({
     placeholder: 'Search student name, Student ID or phone',
     filters: tbFilters,
-    onChange: () => render(),
+    onChange: () => { page = 1; render(); },
     onRefresh: () => load()
   });
   const tbHost = $('sk-toolbar');
@@ -77,6 +78,7 @@ export async function mount({ container, profile, ctx }) {
 
   // ---------- state ----------
   let bills = [], students = [], levels = [], batches = [], coursesById = {};
+  let page = 1;
   let loadError = null;
   let loading = true;
 
@@ -123,6 +125,14 @@ export async function mount({ container, profile, ctx }) {
       levels = cSnap.docs.map(d => Object.assign({ id: d.id }, d.data())).filter(c => (c.status || 'active') === 'active');
       coursesById = {}; levels.forEach(c => { coursesById[c.id] = c; });
       batches = brSnap.docs.map(d => Object.assign({ id: d.id }, d.data())).filter(b => (b.status || 'active') === 'active');
+      const months = Array.from(new Set(bills.map(b => b.month).filter(Boolean))).sort().reverse();
+      tb.setFilterOptions('month', [{ value: 'all', label: 'All months', icon: 'calendar' }].concat(
+        months.map(m => ({ value: m, label: m, icon: 'calendar' }))
+      ));
+      tb.setFilterOptions('level', [{ value: 'all', label: 'All levels', icon: 'book-open' }].concat(
+        levels.slice().sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+          .map(c => ({ value: c.id, label: c.name || c.id, icon: 'book-open' }))
+      ));
       render();
     } catch (e) {
       console.error('[school-fees] load failed', e);
@@ -182,7 +192,11 @@ export async function mount({ container, profile, ctx }) {
       return;
     }
 
-    list.forEach(b => {
+    const totalPages = Math.max(1, Math.ceil(list.length / PAGE_SIZE));
+    if (page > totalPages) page = totalPages;
+    const pageList = list.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+    pageList.forEach(b => {
       const s = students.find(x => x.id === b.studentId) || {};
       const c = coursesById[b.courseId] || {};
       const late = computeLateFee(b);
@@ -190,7 +204,7 @@ export async function mount({ container, profile, ctx }) {
       const paidPct = b.monthlyFee > 0 ? Math.round((Number(b.paidAmount || 0) / Number(b.monthlyFee)) * 100) : 0;
       tr.innerHTML =
         '<td class="sf-id">' + (s.studentId || '-') + '</td>' +
-        '<td>' + (s.name || '-') + '</td>' +
+        '<td>' + (formatPersonName(s.name || '') || '-') + '</td>' +
         '<td class="hide-sm">' + (s.phone || '-') + '</td>' +
         '<td>' + (c.name || '-') + '</td>' +
         '<td>' + (b.month || '-') + '</td>' +
@@ -212,8 +226,14 @@ export async function mount({ container, profile, ctx }) {
     stats.update(2, paidN);
     stats.update(3, overdueN);
     if (footEl) {
-      footEl.hidden = bills.length === 0;
-      footEl.textContent = list.length === bills.length ? 'Showing all ' + bills.length : 'Showing ' + list.length + ' of ' + bills.length;
+      footEl.hidden = list.length === 0;
+      renderPager(footEl, {
+        page,
+        pageSize: PAGE_SIZE,
+        totalItems: list.length,
+        showWhenSingle: true,
+        onPageChange: (next) => { page = next; render(); }
+      });
     }
 
     // row actions: payment
@@ -231,6 +251,7 @@ export async function mount({ container, profile, ctx }) {
     if (!receivedDate) { showToast({ type: 'error', message: 'Enter the received date.' }); return; }
     try {
       const who = (profile && profile.email) || '';
+      const recDisp = resolveUserDisplay(who, profile?.name, profile?.designation);
       // Read unpaid bills outside the transaction; only writes run inside it.
       const unpaidSnap = await getDocs(query(collection(db, BILLS_COL),
         where('studentId', '==', bill.studentId), where('status', 'in', ['unpaid', 'partial'])));
@@ -249,7 +270,10 @@ export async function mount({ container, profile, ctx }) {
           tx.set(allocRef, {
             id: allocRef.id, studentId: b.studentId, billId: b.id, month: b.month,
             amount: rupees(payThis), lateFeeCovered: 0, feeCovered: rupees(payThis),
-            receivedDate, receivedBy: who, createdAt: serverTimestamp()
+            receivedDate, receivedBy: who,
+            ...(recDisp.name ? { receivedByName: recDisp.name } : {}),
+            ...(recDisp.designation ? { recordedByDesignation: recDisp.designation } : {}),
+            createdAt: serverTimestamp()
           });
           const newPaid = rupees(b.paidAmount || 0) + payThis;
           tx.update(doc(db, BILLS_COL, b.id), {
@@ -260,6 +284,8 @@ export async function mount({ container, profile, ctx }) {
         const payRef = doc(collection(db, PAYMENTS_COL));
         tx.set(payRef, {
           id: payRef.id, studentId: bill.studentId, totalAmount: paid, receivedDate, receivedBy: who,
+          ...(recDisp.name ? { receivedByName: recDisp.name } : {}),
+          ...(recDisp.designation ? { recordedByDesignation: recDisp.designation } : {}),
           allocations: [], createdAt: serverTimestamp()
         });
       });

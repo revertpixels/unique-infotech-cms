@@ -39,6 +39,282 @@
 
 ---
 
+### [2026-11-26 09:10] Version 1.8.164 — Authorised Users, Top-Bar Profile Menu, Dynamic Names/Designations & Section 5 Table Pagination
+
+**What was built / changed:**
+- **Organisation Tabs & Authorised Users (`public/pages/org-details.html`, `public/js/pages/org-details.page.js`, `public/js/pages/authorised-users.js`, `public/js/pages/branch-heads.page.js`, `public/css/pages/settings.css`)**: Added `Users` (reusing `branch-heads` seamlessly) and `Authorised Users` tabs inside **Organisation** (Super Admin only), plus `#/branch-heads` redirect to `#/org?tab=users`. Built three Student-Profile-styled cards: **Super Admin** (edit name & designation, square photo crop/upload, password change with re-authentication + min 8 chars + confirm, Forgot Password email trigger), **Branch Heads** (synced live from `/users`, inline edit name & designation, deep link to Users), and **School Computer Head** (view, add Google account head, edit name & designation, Enable/Disable with `active`/`inactive`). Added `"Forgot password?"` button & mapped error feedback on the login screen (`public/js/pages/login.page.js`, `public/css/pages/login.css`, `public/js/core/auth.js`).
+- **Top-Bar Profile Menu & Square Photo Crop (`public/js/components/topbar.js`, `public/css/layout/topbar.css`, `public/js/components/profile-modal.js`, `public/js/utils/image-compress.js`)**: Converted the topbar user chip into an accessible menu (`Profile`, `Organisation` for Super Admin, `Logout`) with live user photo/initials, Title Case name, and designation. Added `openProfileModal` and interactive square crop/zoom modal (`cropSquareAvatarToBlob` -> WebP/JPEG <= 300 KB -> Storage `/user-photos/{email}/...`). Updated `sidebar.js` and `dashboard.page.js` to react live to `uic:profile-updated` and `uic:users-updated`.
+- **Dynamic Title Case Names/Designations & Security Hardening (`public/js/services/user-directory.service.js`, `public/js/utils/formatter.js`, `public/js/services/report.service.js`, `public/js/pages/payments.page.js`, `public/js/pages/student-profile.page.js`, `public/js/services/payment.service.js`, `public/js/components/payment-popup.js`, `public/js/utils/school-billing.js`, `public/js/pages/school-fee-payment.page.js`, `firestore.rules`, `storage.rules`, `public/js/core/router.js`)**: Added live `/users` resolution (`resolveUserDisplay` + `formatPersonName`) across Topbar, Sidebar, Dashboard, Payment History collector column/dropdown/details/CSV/print, and Student Profile while keeping already-issued receipts untouched and storing `recordedByDesignation` snapshots on new payment writes. Removed `'school_head'` access from `'school-fees'` in `router.js`, redirected blocked routes directly to `#/dashboard`, restricted `school_head` reads on `courses`/`batches`/`sessions` to `ctx == 'school'`, and restricted self updates on `/users/{email}` & `/user-photos/{email}/*` for active heads to own photo only.
+- **Section 5 Cleanup & Shared Pagination (`public/css/components/list-page.css`, `public/js/pages/branches.page.js`, `public/js/pages/courses.page.js`, `public/js/pages/batches.page.js`, `public/js/pages/batches.html`, `public/js/pages/sessions.page.js`, `public/js/pages/school-fees.page.js`, `public/js/pages/school-break.page.js`)**: Removed dead `.lp-scroll.sticky` CSS rules and upgraded remaining tables to `renderPager` with `PAGE_SIZE = 10`.
+
+**Tested on:**
+- `node tools/check-imports.js` (0 broken imports), `node --check` across all JS modules (0 syntax errors).
+- `scratch/run-tests.mjs` & `scratch/verify-auth-profile.mjs` (Headless Chrome CDP across `superadmin`, `branch_head`, and `school_head` roles at `1440px` and `390px`, 0 console/page errors).
+
+---
+
+### [2026-11-25 21:08] Version 1.8.163 — Smooth 1.2s Sign-Out Transition Pacing
+
+**What was built / changed:**
+- **Graceful Sign-Out Pacing (`public/js/core/guard.js`, `public/css/layout/sidebar.css`)**: Added a `1200ms` minimum visual transition (`LOGOUT_MIN_TRANSITION_MS`) running in parallel with `signOutUser()` (`Promise.all`) for user-initiated sign-outs while `logout.mp3` plays immediately on tap (skipping delay on `timeout`). Added `.sb-identity-btn:disabled` and `body.is-logging-out #app` transition styles for crisp visual acknowledgment before `#auth-shell` opens.
+
+### [2026-11-25 18:48] Version 1.8.162 — Unified Persistent App Shell (Continuous Login & Logout Audio Across Transitions)
+
+**What was built / changed:**
+- **Single-Document Login <-> App Transitions (`public/index.html`, `public/js/pages/login.page.js`, `public/pages/login.html`, `public/css/pages/login.css`)**: Converted authentication from a hard `location.replace('/index.html')` reload into an in-document `#auth-shell` rendered by `renderLoginView()`, while `/pages/login.html` immediately forwards direct bookmarks to `/index.html`. Scoped login layout CSS to `.login-screen` so login and dashboard views coexist cleanly inside one persistent window.
+- **Clean In-Tab Session Teardown on Logout (`public/js/core/guard.js`, `public/js/core/router.js`, `public/js/core/dataset-session.js`, `public/js/components/sidebar.js`, `public/js/core/app.js`)**: Added `stopRouter()`, `stopDatasetSession()`, `destroySidebar()`, `stopInactivityTracking()`, `setUnauthenticatedHandler()`, and extended `clearAppCache()`. Clicking Sign Out starts `logout.mp3` immediately via `playLogoutSound()` and swaps smoothly back to `#auth-shell` without tearing down the page, while signing in starts `login.mp3` immediately and keeps playing uninterrupted through entering Dashboard.
+
+### [2026-11-25 18:38] Version 1.8.161 — Instant Parallel Audio Playback on Login, Logout & Mode Switch
+
+**What was built / changed:**
+- **Non-Blocking Parallel Audio (`public/js/utils/sound.js`)**: Simplified `sound.js` to pure fire-and-forget playback (`playLoginSound()`, `stopLoginSound()`, `playLogoutSound()`, `playSwitchSound()`, `playPaymentSuccessSound()`) with preloading (`preloadLoginSound()`, `preloadLogoutSound()`, `preloadSwitchSound()`) and removed all `sessionStorage` audio splitting / artificial holds.
+- **Instant Login & Logout Flows (`public/js/pages/login.page.js`, `public/js/core/guard.js`, `public/index.html`)**:
+  - `login.page.js` preloads `login.mp3` on init, starts `playLoginSound()` immediately on Sign In / Google tap in parallel with Firebase auth/session resolution, stops cleanly if auth fails or popup closes, and navigates immediately via `location.replace('/index.html')` once authenticated without any hold.
+  - `guard.js` calls `playLogoutSound()` immediately at the start of `logout(reason)` in parallel with `signOutUser()`, never adding artificial delay to navigation.
+
+### [2026-11-25 18:32] Version 1.8.160 — Split Login Audio (~1.5s + Post-Login Remainder) & Logout Sound Cue
+
+**What was built / changed:**
+- **Split Login Tone (`public/js/utils/sound.js`, `public/index.html`)**: Updated `playLoginSuccessSound()` to play the first ~1.5s of `login.mp3` cleanly on the login page (instead of holding ~3.3s before redirect), save `{ offsetSec, ts }` into `sessionStorage`, pause cleanly, and immediately resume playback from that timestamp on `/index.html` via `playLoginResumeSound()` (seeking once metadata is ready).
+- **Logout Sound Cue (`public/js/utils/sound.js`, `public/js/core/guard.js`, `public/index.html`)**: Added `preloadLogoutSound()` and `playLogoutSound()` for `/assets/sounds/logout.mp3` (~2.08s), triggered inside `logout(reason)` via `Promise.all([signOutUser(), playLogoutSound()])` with re-entry guard (`loggingOut`) so signing out plays the complete confirmation tone before returning to `/pages/login.html`.
+
+### [2026-11-25 18:25] Version 1.8.159 — Login Success Tone & Mode Switch Sound Cues
+
+**What was built / changed:**
+- **Shared Audio Utility (`public/js/utils/sound.js`)**: Generalized `sound.js` with an internal `AUDIO_CACHE` Map and root-relative `/assets/sounds/...` paths so audio cues work cleanly across both `/pages/login.html` and `/index.html`. Added `preloadSwitchSound()`, `playSwitchSound()`, `preloadLoginSound()`, and `playLoginSuccessSound()` (waits up to 4s for `ended` or resolves immediately on error/autoplay rejection) alongside `playPaymentSuccessSound()`.
+- **Top-Bar Mode Switch Sound (`public/index.html`)**: Preloads `switch.mp3` for `superadmin` and calls `playSwitchSound()` inside `handleProgrammeSwitch(nextCtx)` only when `nextCtx !== prevCtx` and `confirmLeave()` succeeds (toggling between `Youth Centre` and `Unique Kids`).
+- **Login Success Tone (`public/js/pages/login.page.js`)**: Preloads `login.mp3` on form submit / Google sign-in click and awaits `playLoginSuccessSound()` when `resolveSession(user)` succeeds for any authorised role (`superadmin`, `branch_head`, `school_head`) before redirecting via `location.replace('/index.html')`.
+
+### [2026-11-25 16:20] Version 1.8.158 — Completed Pending & Overdue Rebuild (5 KPIs, Days Late Filter, Sortable Headers, School Head Read-Only) + Payment History `Course, Branch & Batch` Column
+
+**What was built / changed:**
+- **Pending & Overdue 5 Summary Cards & Overdue-Only KPIs (`public/pages/pending.html`, `public/js/pages/pending.page.js`, `public/js/services/report.service.js`)**:
+  - Upgraded `#pend-stats` from 4 cards to the 5-card `.lp-stats.cols-5` layout (`Overdue Students`, `Overdue Amount`, `Late Fees`, `Total to Collect`, and `Oldest Overdue` showing highest days late and student name) computed across all filtered overdue rows (`dueDate < todayISO()`).
+  - Updated CSV (`Course Code`, `Course`, `Branch Code`, `Branch`, `Batch`) and Print exports to include complete code + full name + batch details and all 5 summary metrics, plus updated empty state title to `'No overdue payments - everyone is up to date'`.
+- **Toolbar, Days Late Filter & Sortable Table Headers (`pending.html`, `pending.page.js`, `financial-reports.css`, `branch-batch-filter.js`)**:
+  - Added `Days Late` filter (`1–7 days`, `8–30 days`, `31–60 days`, `60+ days`) via `getDaysLateFilterOptions` / `matchesDaysLateFilter`, moved secondary `Course`/`Level` and `Sort by` filters into the collapsible `More` drawer (`#pend-more-btn` + `#pend-extra-filters` matching Payment History), and reset persisted `uicms.bb.pending.*` filters when switching Session or Programme.
+  - Added clickable sortable `Due Date` and `Total Due` column headers synced with `Sort by`, highlighted `30+ days late` with darker crimson (`.fr-days-late.is-severe`), and formatted Unique Kids bill items cleanly as `'Nov 2026 bill'` (`Installment` column renamed `Bill` in Kids).
+- **Read-Only Role Guard, Modal Grand Total & Payment History Batch Column (`pending.page.js`, `payments.html`, `payments.page.js`, `report.service.js`)**:
+  - Blocked unauthorized roles in `pending.page.js` `mount()`, kept Youth Branch Head scoped to `profile.branchId`, and omitted the Wallet `Collect` button for read-only `school_head` so only the centered Eye `View details` icon renders.
+  - Added primary + `altPhone` merging and a `<tfoot>` **Grand Total** row inside the `Overdue Details` modal table (`buildOverdueDetailsModel` / `openOverdueDetailsPopup`).
+  - Updated Payment History (`payments.html`, `payments.page.js`, `report.service.js`) column `Course & Branch` -> `Course, Branch & Batch` (`Level, Branch & Batch` in Kids) with muted `batchName` line 2 underneath `CODE - [BRANCHCODE]`, included batch in `searchBlob` and CSV/Print exports, and cleared persisted `payments.*` filters on session/programme switch.
+  - Confirmed `.lp-scroll.sticky` in `public/css/components/list-page.css` is no longer referenced by any HTML/JS file; left `list-page.css` and `firestore.rules` untouched per safety rules.
+
+### [2026-11-25 13:04] Version 1.8.157 — Overdue-Only Pending Page Matching Payment History Table & Dual Action Icons
+- **Matched Payment History Table Structure (Zero Inner Scroll, Shared 10-Row Pager)**: Replaced `.lp-card`, `.lp-scroll.sticky`, `.lp-table.lp-mobile-cards`, and `#pend-reads-note` in `public/pages/pending.html` and `public/js/pages/pending.page.js` with `.adm-table-card`, `.adm-scroll`, `.adm-table`, and `.adm-card-foot.lp-card-foot` (`renderPager` with `PAGE_SIZE = 10`). Removed Firestore read count text from UI cleanly.
+- **Overdue Only (Removed Upcoming & Status Column)**: Added `isItemStrictlyOverdue` / `filterOverdueItems` (`dueDate < todayISO()` strictly before today IST and unpaid/unwaived) across Youth & Kids pending loaders (`report.service.js`), removed `Upcoming` and `Due This Month` KPI cards (`pending.html` now shows 4 overdue cards: `Overdue Fee`, `Late Fees So Far`, `Total Overdue Due`, `Overdue Students`), removed the `Status` dropdown filter and `Status` table column, and renamed the table card header to `Overdue Payments`.
+- **Short Code Columns & Clean Cell Formatting**: Formatted `Course & Batch` as `COURSECODE - [BRANCHCODE]` (pill chip + hover 2-line tooltip) over muted batch name, Student name in Title Case with nowrap `ID · Phone`, single-line `Installment N` + muted session name, `10 Nov 2026` + red `days late`, and split `Fee` | `Late Fee` | `Total Due` (bold red) right-aligned numeric columns (`pending.page.js`, `payment.service.js`, `financial-reports.css`).
+- **Dual Action Icon Buttons & Overdue Details Modal**: Replaced `Collect`, `After #N`, and 3-dot kebab menu with centered Eye (`View details`) and Wallet (`Collect fee`, disabled with `"Pay Installment N first"` tooltip when earlier installment is unpaid) buttons matching Payment History's icon-button style (`payments.page.js`). Added `buildOverdueDetailsModel` (`report.service.js`) and `openOverdueDetailsPopup` (`pending.page.js`) showing student, phone, course+code, branch+code, batch, session, summary totals, and every overdue installment/bill table with a header Copy icon showing the `'Details copied'` toast.
+
+### [2026-11-25 12:40] Version 1.8.155 — Strict Youth Centre vs Unique Kids Filter & Data Separation
+- **Removed Page-Level Organisation Filter (`payments.html`, `payments.page.js`)**: Removed `#payh-org-wrap` / `state.selects.org` so Payment History strictly follows the active toolbar programme (`Youth Centre` vs `Unique Kids`) with zero cross-programme loading or `'All (Youth + Kids)'` mode.
+- **Programme-Isolated Options, Chips, Labels & Exports (`report.service.js`, `payments.page.js`, `pending.page.js`)**: Added `scopeReferenceDataByCtx`, `getPaymentDatePresetOptions`, `getPaymentTypeFilterOptions`, `getPaymentModeFilterOptions`, and `getPaymentChipOrder`. Youth Centre excludes Kids `KIDS_MONTHLY` / `Waiver only` types/chips and Kids levels/batches; Unique Kids excludes Youth `IN` / `EX` / `FULL` / `MAT`, Youth `'Active session window'`, and Youth branches (`branchesList: []`). Labels (`Course` vs `Level`), CSV columns, and print reports use strictly active-programme terminology.
+- **Toolbar Programme Switch Resets Filters (`index.html`, `branch-batch-filter.js`, `router.js`)**: Unified `handleProgrammeSwitch` in `public/index.html` (fixing a duplicate `onSwitch` regression), cleared persisted `uicms.bb.*` sessionStorage filter selections via `clearPersistedBranchBatchFilters()`, preserved paired routes (`#/payments <-> #/school-payments`, `#/pending <-> #/school-pending`, `#/students <-> #/school-students`), and dispatched `uic:ctx-changed` to cleanly re-mount shared routes (`#/courses`, `#/batches`, `#/dashboard`, `#/archives`, `#/org`) at default filters and page 1.
+- **Fixed Mixed Filters on Other Pages**:
+  - `batches.page.js`: Isolated Status options (`Upcoming`/`Running` for Youth vs `Active` for Kids), renamed `Course` filter to `Level` (`All levels`) in Kids, removed Youth `Semester 1/2/3` dropdown in Kids, and skipped loading branches in Kids.
+  - `admissions.page.js`: Scoped `batches` and `sessions` queries with `where('ctx', '==', 'youth')` and filtered branches by `!b.ctx || b.ctx === 'youth'`.
+  - `school-fees.page.js`: Populated `month` and `level` toolbar filter dropdowns from Kids bills and Kids levels.
+
+### [2026-11-25 12:24] Version 1.8.154 — Remove Table Breakdown Dropdown & Show Itemized Breakdown in Payment Details Modal
+- **Removed Inline Table Dropdown (`2 items ▼` / `Hide breakdown ▲`)**: Cleaned up `expandedKeys`, `fr-expand-btn`, `getMaterialItem`, and `buildBreakdownSubrow` in `public/js/pages/payments.page.js`, plus unused breakdown CSS rules in `public/css/pages/financial-reports.css`, so bundled transactions (e.g. `Admission + Study material`) show cleanly on a single table row with their pill.
+- **Itemized Breakdown in `Payment Details` Popup**: Updated `buildPaymentDetailsModel` (`public/js/services/report.service.js`) and `buildDetailCard` (`public/js/pages/payments.page.js`) with `.fr-det-breakdown` rows so multi-item transactions display a structured `Breakdown` list (`Admission fee`, `Study material`, amounts) inside the `PAYMENT` box when viewed via the eye button, as well as in Copy text.
+
+### [2026-11-25 12:18] Version 1.8.153 — Refined Payment Details Popup Layout & Header Actions
+- **Merged Transaction Fields into `PAYMENT` Box**: Updated `openPaymentDetailsPopup` in `public/js/pages/payments.page.js` to combine `model.paymentFields` and `model.transactionFields` inside the `PAYMENT` detail card, removing the separate `TRANSACTION` card so top-row cards (`STUDENT` and `PAYMENT`) balance vertically without whitespace.
+- **Full-Width `REMARKS` Box**: Added `.fr-det-card-full { grid-column: 1 / -1; }` in `public/css/pages/financial-reports.css` and applied it to the `REMARKS` card so it spans full grid width underneath `STUDENT` and `PAYMENT`.
+- **Moved Receipt Button to Header & Removed Footer**: Removed the bottom `.adm-view-foot` (`Close` / `Open Receipt` buttons) from `openPaymentDetailsPopup` (preventing modal bottom overflow) and added a `receipt` icon button (`title="Open receipt"`) in `.adm-view-head-actions` immediately to the left of the Copy icon button (`[Receipt] [Copy] [Close X]`).
+
+### [2026-11-25 12:12] Version 1.8.152 — Tag-Only Mode Column, Action Eye Button & Payment Details Popup
+
+**What was built / changed:**
+- **Tag-Only `Mode` Column + New `Action` Column (`public/pages/payments.html`, `public/js/pages/payments.page.js`, `public/css/pages/financial-reports.css`)**:
+  - Updated `Mode` column to show only the compact mode tag + icon (`Cash`, `UPI`, `Card`, `Bank`, `Cheque`, `Waiver`) at minimal width (`width: 1%`), removing inline `" - <txnId>"` text on desktop and giving freed space to `Student` (`min-width: 210px`) and `Course & Branch` (`min-width: 145px`). Mobile cards and CSV/Print exports still preserve full Mode & Transaction ID columns.
+  - Added 9th column `Action` (last column, centered `.ui-kebab` `eye` icon button with `"View payment details"` tooltip and `aria-label` on desktop; full-width `Details` button at bottom of mobile cards).
+- **Payment Details Popup & Clipboard Copy (`public/js/pages/payments.page.js`, `public/js/services/report.service.js`, `public/js/services/payment.service.js`, `public/js/utils/school-billing.js`)**:
+  - Added `buildPaymentDetailsModel` and `getCachedBillForEntry` in `report.service.js`, and enriched `dueDate`, `month`, `billPeriod`, `billId`, `waiverReason`, and `createdAtSec` on normalized Youth & Kids records cleanly with zero extra reads when already cached.
+  - Built `openPaymentDetailsPopup` on top of existing `openPopup` (`components/modal.js`) showing `"Payment Details"` + receipt ID + `Paid` / `Waived` / `Partial` badge, header `Copy payment details` button (swaps to check icon + `"Payment details copied"` toast with clipboard fallback), grouped `STUDENT` / `PAYMENT` / `TRANSACTION` / `REMARKS` cards hiding empty fields, IST timestamps, monospace TXN ID, `"Open Receipt"` and `"Close"` actions, and mobile full-width scrollable layout.
+
+**Files touched:**
+- MODIFIED: `public/css/pages/financial-reports.css`, `public/js/services/payment.service.js`, `public/js/utils/school-billing.js`, `public/js/services/report.service.js`, `public/pages/payments.html`, `public/js/pages/payments.page.js`, `docs/02-PROGRESS-LOG.md`
+
+**Tested on:**
+- `tools/check-imports.js`, `node --check`, Node ESM verification suite (`run-tests.mjs`: `buildPaymentDetailsModel` Cash/UPI/Waived/Kids Partial details & clipboard format, IST timestamps, 9-column DOM parity, `06fffcd2` backup figures): ✅
+- Live Chrome DevTools verification: Checked after deploy (see session output).
+
+---
+
+### [2026-11-25 12:04] Version 1.8.151 — Dedicated Payment Mode Column, KPI Polish & Mobile Filters Sync
+
+**What was built / changed:**
+- **Restored Dedicated `Mode` Column (`public/pages/payments.html`, `public/js/pages/payments.page.js`, `public/js/services/report.service.js`, `public/css/pages/financial-reports.css`)**:
+  - Updated table columns to `Date | Student | Course & Branch | Payment For | Mode | Fee / Late | Received | Receipt` (`8` columns on desktop).
+  - `Mode` renders single-line icon + label + monospace muted transaction ID for non-cash payments (`[banknote] Cash`, `[smartphone] UPI - TXN...`, `[credit-card] Card - TXN...`, `[landmark] Bank - UTR...`, `[file-text] Cheque - No...`, or muted italic `not recorded` when missing; Cash shows no dash/ID; full TXN ID on hover). Removed mode subline under `Received`.
+  - Mobile `<= 900px` cards keep `Mode` (`[icon] UPI`) and `Transaction ID` (`fr-mobile-only-td`, full ID) as separate rows for non-cash records, while Print/CSV export separate `Mode` and `Transaction ID` columns with full IDs and full course/branch names.
+- **KPI Card & Breakdown Polish + Mobile Filters Panel (`payments.html`, `payments.page.js`, `list-page.css`)**:
+  - Shortened `#payh-kpi-total-sub` to `"N receipts"` (with full `"N receipts (waivers excluded)"` hover tooltip) so it never truncates, and removed the duplicate `#payh-breakdown-note` `"Filtered rows: N"` label next to chips.
+  - Updated `#payh-mobile-filters-btn` click handler & `@media (max-width: 768px)` `.lp-toolbar:not(.is-filters-open) .lp-toolbar-extra` rule so opening/closing the mobile `Filters` and `More` controls collapses cleanly without orphaned panels.
+
+**Files touched:**
+- MODIFIED: `public/css/components/list-page.css`, `public/css/pages/financial-reports.css`, `public/js/services/report.service.js`, `public/pages/payments.html`, `public/js/pages/payments.page.js`, `docs/02-PROGRESS-LOG.md`
+
+**Tested on:**
+- `tools/check-imports.js`, `node --check`, Node ESM verification suite (`run-tests.mjs`): ✅
+- Live Chrome DevTools verification: Checked after deploy (see session output).
+
+---
+
+### [2026-11-25 11:52] Version 1.8.150 — Payment History Compact 7-Column Layout, Mode Icons & Short Receipt Link
+
+**What was built / changed:**
+- **Removed `Mode & By` Column (`public/pages/payments.html`, `public/js/pages/payments.page.js`, `public/js/services/report.service.js`, `public/css/pages/financial-reports.css`)**:
+  - Updated table to 7 columns (`Date | Student | Course & Branch | Payment For | Fee / Late | Received | Receipt`), freeing horizontal space so Student (`min-width: 215px`) and Course & Branch (`CDTA - BZYCTC`) stay single-line and rows match Students 2-line height.
+  - Added `by <Collector>` in Title Case (via `formatCollectorName` / `toTitleCaseIfCaps`) as line 2 under Date with ellipsis truncation (`max-width: 165px`) and full-name hover tooltip.
+  - Added payment mode (`Cash`=`banknote`, `UPI`=`smartphone`, `Card`=`credit-card`, `Bank / NEFT`=`landmark`, `Cheque`=`file-text` via `modeDisplayMeta`) as line 2 under Received with TXN ID hover tooltip.
+- **Compact Receipt Column (`#0034`) & Mobile Card View**:
+  - Updated Receipt cell to display `[receipt icon] #0034` (`formatShortReceipt`) with full-ID tooltip (`"<fullId> - Open receipt"`) and keyboard focus styling; kept full-receipt search via `searchBlob` and full separate columns (`Course & Branch`, `Mode`, `Collected By`, full `Receipt`) in CSV/Print exports.
+  - Updated mobile `<= 900px` card layout so Date + `by` appear cleanly on top, Received amount + mode icon stand out, and `#0034` renders as a full-width tap button at the bottom of each card.
+
+**Files touched:**
+- MODIFIED: `public/css/pages/financial-reports.css`, `public/js/services/report.service.js`, `public/pages/payments.html`, `public/js/pages/payments.page.js`, `docs/02-PROGRESS-LOG.md`
+
+**Tested on:**
+- `tools/check-imports.js`, `node --check`, Node ESM verification suite (`run-tests.mjs`: `formatShortReceipt`, `formatCollectorName`, `modeDisplayMeta` icons, 7-column DOM parity, `CDTA - BZYCTC`, `06fffcd2` ledger & overdue checks): ✅
+- Live Chrome DevTools verification: Checked after deploy (see session output).
+
+---
+
+### [2026-11-25 11:36] Version 1.8.149 — Students-Matched Payment History Table, Link-Only Receipt Column & Course/Branch Codes
+
+**What was built / changed:**
+- **Exact Students Table Structure & Bottom Bar (`public/pages/payments.html`, `public/js/pages/payments.page.js`, `public/css/components/list-page.css`)**:
+  - Replaced Payment History's sticky inner-scroll `.lp-scroll.sticky` / `.lp-table` wrapper with the exact Students page table structure (`.adm-table-card` > `.adm-scroll` > `.adm-table` + `.adm-card-foot.lp-card-foot` footer) so rows grow naturally (`PAGE_SIZE = 10`) with single page scroll, identical row padding/height, and bottom bar (`"Showing 1-10 of N"` left, `Prev / page numbers / Next` right).
+  - Removed the `~N Firestore reads` text and bottom `Load More` button from the page footer (logged in `console.debug`).
+- **Receipt Link Only (`public/pages/payments.page.js`, `public/css/pages/financial-reports.css`)**:
+  - Removed the separate `View` button and icon from the `Receipt` column; now shows only the receipt ID as an accessible primary monospace link (`title="Open receipt"`, underline hover + keyboard `:focus-visible` ring) across desktop table and mobile card views.
+- **Short Code Course & Branch Format (`public/js/services/payment.service.js`, `public/js/services/report.service.js`, `public/css/pages/financial-reports.css`)**:
+  - Added `formatCourseBranchDisplay` & `toTitleCaseIfCaps` in `report.service.js` and prioritized saved `branches/{id}.code` + `courses/{id}.code`.
+  - Screen and mobile card views display `COURSECODE - BRANCHCODE` on one line (bold course code + muted `" - "` + `.pill.neutral` branch code badge, falling back to full course/Title Case branch name when no saved code exists) with a two-line hover tooltip showing full course name and Title Case branch name. CSV and Print exports use full readable names (`formatCourseAndBranch`).
+  - Kept Date (`white-space: nowrap`) and Student name (`min-width: 195px`) tidy so rows stay single-height matching Students.
+
+**Files touched:**
+- MODIFIED: `public/css/components/list-page.css`, `public/css/pages/financial-reports.css`, `public/js/services/payment.service.js`, `public/js/services/report.service.js`, `public/pages/payments.html`, `public/js/pages/payments.page.js`, `docs/02-PROGRESS-LOG.md`
+
+**Tested on:**
+- `tools/check-imports.js`, `node --check`, Node ESM verification suite (`run-tests.mjs`: `CDTA - BZYCTC`, 2-line Title Case tooltip, CSV/Print full names, no `sp-table-action-btn` View button, Students table/footer DOM classes, shared `PAGE_SIZE = 10`): ✅
+- Live Chrome DevTools verification: Checked after deploy (see session output).
+
+---
+
+### [2026-11-25 11:22] Version 1.8.148 — Payment History Column Streamlining, Course Codes & Shared 10-Row Paging
+
+**What was built / changed:**
+- **Payment History Columns (`public/pages/payments.html`, `public/js/pages/payments.page.js`, `public/js/services/payment.service.js`, `public/js/services/report.service.js`, `public/css/pages/financial-reports.css`)**:
+  - Removed the duplicate `Receipt No` column (`8` columns total across table, skeleton, mobile card view, CSV export, and print report), while keeping clickable receipt number + `View` / `Profile` button together in the `Receipt` column and preserving search by receipt number.
+  - Updated `Course & Branch` to display `COURSECODE - Centre name` via shared `formatCourseAndBranch` (using saved `courses/{id}.code` / `courseCode`, falling back cleanly to `courseName` when a course has no saved code — currently the 3 Kids courses — with full course name in `title` tooltip and no batch name), and applied the same format in mobile card view, CSV export, and print sheets.
+- **Shared Students Pager & Full Session Batch Loading (`public/js/components/list-page.js`, `public/css/components/list-page.css`, `admissions.page.js`, `school-admissions.page.js`, `pending.page.js`, `payments.page.js`, `pending.html`, `payments.html`, `report.service.js`)**:
+  - Exported single shared `PAGE_SIZE = 10` and `renderPager` styles (`.lp-pager-host`, `.adm-pager`, `.adm-pager .ui-btn.active`) from `list-page.js` / `list-page.css`, removing per-page `PAGE_SIZE` / `CLIENT_PAGE_SIZE = 40` / `PAGE_SIZE = 30` overrides from Admissions, Pending & Overdue, and Payment History.
+  - Updated `loadYouthPaymentHistory` in `report.service.js` to load all `limit(60)` cursor batches for the active date scope before computing KPI totals and paging (cached in `window.APP_CACHE.financialReports.youthHistory`), guaranteeing exact summary card totals, full older-session coverage, and exact `"Showing 1-10 of N"` / last page counts.
+
+**Files touched:**
+- MODIFIED: `public/js/components/list-page.js`, `public/css/components/list-page.css`, `public/css/pages/financial-reports.css`, `public/js/services/payment.service.js`, `public/js/services/report.service.js`, `public/pages/payments.html`, `public/js/pages/payments.page.js`, `public/pages/pending.html`, `public/js/pages/pending.page.js`, `public/js/pages/admissions.page.js`, `public/js/pages/school-admissions.page.js`, `docs/02-PROGRESS-LOG.md`
+
+**Tested on:**
+- `tools/check-imports.js`, `node --check`, Node ESM verification suite (`run-tests.mjs`: `06fffcd2` backup financial figures, `formatCourseAndBranch`, `"Showing 1-10 of 57"` pager assertion, shared `PAGE_SIZE = 10` static checks): ✅
+- Live Chrome DevTools verification: Checked after deploy (see session output).
+
+---
+
+### [2026-11-25 10:56] Version 1.8.147 — Shared Branch -> Batch Filter Group Alignment & Box Removal
+
+**What was built / changed:**
+- Updated shared `.lp-bb-group`, `.lp-bb-host`, `.lp-bb-arrow`, and responsive drawer rules in `public/css/components/list-page.css` (zero page-specific CSS):
+  - Removed the background box (`background: transparent; border: 0; border-radius: 0; box-shadow: none; padding: 0;`).
+  - Matched sibling `.lp-filter` geometry across all toolbars (`height: 42px` select buttons, identical `11px` uppercase label alignment, `10px` filter gap, flex parity), keeping the arrow vertically centered (`42px`) between Branch and Batch on desktop/tablet and cleanly stacking inside mobile (`<= 480px`) filter drawers.
+
+**Files touched:**
+- MODIFIED: `public/css/components/list-page.css`, `docs/02-PROGRESS-LOG.md`
+
+**Tested on:**
+- `tools/check-imports.js`, Node ESM verification suite (`run-tests.mjs`): ✅
+- Live Chrome DevTools verification: Checked after deploy (see session output).
+
+---
+
+### [2026-11-25 10:45] Version 1.8.146 — App-Wide Session Source, Paired Branch → Batch Filter & Payment History Rule Fix
+
+**What was built / changed:**
+- **Rule 1 — Single Session Source (Toolbar Only)**:
+  - Added `getSelectedSession(ctx)` in `public/js/core/sessions.js`.
+  - Removed all page-level session dropdown filters from `public/pages/pending.html` (`#pend-session-host`), `public/pages/payments.html` (`#payh-session-host`), and `public/js/pages/batches.page.js`.
+  - Wired Youth list/operation pages (`pending.page.js`, `payments.page.js`, `admissions.page.js`, `batches.page.js`, `pay-fees.page.js`) to listen to `uic:session-selected`, `uic:sessions-loaded`, and `uic:sessions-changed` (cleaning up listeners cleanly in `unmount()`), reload/re-render without full page refresh, show `Session <name>` in `.pg-head` subtitle, and show a standard `.empty-state` linking to `#/sessions` when no Youth session exists.
+- **Rule 2 — Paired `[ Branch v ] → [ Batch v ]` Filter Box**:
+  - Added genuine `disabled` support in `public/js/components/ui-select.js` (`opts.disabled`, `.setDisabled`, `.disabled`) + `.ui-select.is-disabled` styling in `public/css/components/ui-kit.css`.
+  - Created shared component `public/js/components/branch-batch-filter.js` and `.lp-bb-group` styles in `public/css/components/list-page.css`: keeps `Branch -> Batch` in one bordered filter box across desktop toolbars and mobile filter drawers, disables `Batch` with `· Select branch first` until a branch is chosen, scopes Youth batches to the selected branch + active toolbar session, resets `Batch` when changing `Branch`, locks `Branch` for `branch_head` and `Head Office` for Unique Kids (`ctx: 'school'`), and persists per-page selections across session switches in `sessionStorage`.
+  - Wired `createBranchBatchFilter` into `pending.page.js`, `payments.page.js`, `admissions.page.js`, and `school-admissions.page.js`; kept Branch Head lock & Clear Filters guard in `batches.page.js` and `public/js/components/list-page.js`.
+- **Screenshot Bugs Fixed**:
+  - `firestore.rules`: Added `match /{path=**}/payment/{paymentId}` read rule for `collectionGroup(db, 'payment')` scoped cleanly to Super Admin, Branch Head (`recordedAtBranchId == myBranchId()` or parent `branchId == myBranchId()`), and School Head (`ctx == 'school'`), resolving `Missing or insufficient permissions` on Payment History.
+  - `public/pages/payments.html` & `public/js/pages/payments.page.js`: Kept `#payh-breakdown-strip` `hidden` during loading, errors, and when zero category chips exist so no empty white strip appears above the Search bar.
+
+**Files touched:**
+- CREATED: `public/js/components/branch-batch-filter.js`
+- MODIFIED: `firestore.rules`, `public/css/components/ui-kit.css`, `public/css/components/list-page.css`, `public/js/components/ui-select.js`, `public/js/components/list-page.js`, `public/js/core/sessions.js`, `public/pages/pending.html`, `public/js/pages/pending.page.js`, `public/pages/payments.html`, `public/js/pages/payments.page.js`, `public/pages/admissions.html`, `public/js/pages/admissions.page.js`, `public/pages/batches.html`, `public/js/pages/batches.page.js`, `public/js/pages/school-admissions.page.js`, `public/pages/pay-fees.html`, `public/js/pages/pay-fees.page.js`, `docs/05-FILE-INDEX.md`, `docs/02-PROGRESS-LOG.md`
+
+**Firestore changes:**
+- Rules: Added `match /{path=**}/payment/{paymentId}` collection-group read rule in `firestore.rules` (compiled via `--dry-run` and deployed live).
+
+**Tested on:**
+- Node ESM verification suite (`06fffcd2` backup financial numbers, `createBranchBatchFilter` locking/cascading/persistence, `getSelectedSession`, HTML/JS DOM ID parity, `tools/check-imports.js`, `node --check`): ✅
+- Live Chrome DevTools verification: Checked after deploy (see session notes for Chrome DevTools availability).
+
+---
+
+### [2026-11-25 08:50] Version 1.8.145 — Design System Overhaul for Pending & Overdue + Payment History
+
+**What was built / changed:**
+- Aligned Pending & Overdue (`#/pending`, `#/school-pending`) and Payment History (`#/payments`, `#/school-payments`) 100% with Student Profile, Students list (`admissions`), Pay Fees, Dashboard, `list-page.css`, `badges.css`, and `ui-kit.css` (`v5 flat SaaS` styling — zero box shadows, gradients, or ad-hoc color styles).
+- Extended shared CSS for reuse:
+  - `public/css/components/badges.css`: Added semantic `.pill.overdue` (red), `.pill.due`/`.warning` (amber), `.pill.upcoming`/`.sky` (blue), `.pill.paid` (green), `.pill.waived`/`.purple` (purple), `.pill.partial`, `.pill.muted`, and `.la-mode.waiver`.
+  - `public/css/components/list-page.css`: Added shared `.lp-head-row`, `.lp-head-actions`, `.lp-stats.cols-5`, `.lp-scroll.sticky` (with opaque context-aware sticky `thead th`), responsive mobile card transformation `.lp-table.lp-mobile-cards` using `td[data-label]`, and mobile filter collapse drawer (`.lp-mobile-filter-btn`, `.lp-toolbar-drawer`, `.lp-toolbar-extra`).
+- Rebuilt `public/pages/pending.html`, `public/js/pages/pending.page.js`, `public/pages/payments.html`, `public/js/pages/payments.page.js`, and simplified `public/css/pages/financial-reports.css` + print styling in `public/js/services/report.service.js`:
+  - Summary cards now use `.lp-stats.cols-5` + `.lp-stat.{tone}` and shared `.skel` shimmer skeletons matching `admissions.page.js`.
+  - Filter toolbars use `.lp-toolbar` in one tidy horizontal desktop bar (`More` toggles secondary filters cleanly; mobile `< 768px` tucks filters behind a `Filters (N)` button), with `.lp-refresh` inside the toolbar.
+  - Tables compact into 8–9 columns fitting desktop without horizontal scrolling, feature sticky opaque column headers, right-aligned Indian rupee formatting (`₹4,500`), shared `.ui-kebab` row menus (`openMenu`) + `.sp-table-action-btn` action buttons, `renderEmptyTableState`, shared `.empty-state` errors, and stacked labeled mobile cards at `<= 900px`.
+
+**Files touched:**
+- MODIFIED: `public/css/components/badges.css`, `public/css/components/list-page.css`, `public/css/pages/financial-reports.css`, `public/pages/pending.html`, `public/js/pages/pending.page.js`, `public/pages/payments.html`, `public/js/pages/payments.page.js`, `public/js/services/report.service.js`
+
+**Tested on:**
+- Node ESM verification suite (`06fffcd2` backup: 5 overdue students / `₹4,500` / `₹289` late fees; Sneha payment simulation; 47 grouped Youth ledger rows / `₹39,073`; Kids same-month & dedup checks) + `tools/check-imports.js` + `node --check`: ✅
+- Live Chrome DevTools screenshots: Not run (`DevToolsActivePort` unavailable on host).
+
+**Next task:**
+- Visually spot-check `#/pending`, `#/payments`, `#/school-pending`, `#/school-payments` at 1440px and 390px in Chrome.
+---
+
+### [2026-11-25 08:38] Version 1.8.144 — Pending & Overdue + Payment History (Youth & Unique Kids)
+
+**What was built:**
+- `public/js/utils/session-rules.js`: Added org timezone support (`getOrgTimezone` defaulting to `Asia/Kolkata`), fixed `todayISO()` to compute calendar dates in IST instead of browser UTC, and calendar-diff `fineFor()`.
+- `public/js/utils/school-lifecycle.js` & `public/js/pages/school-fee-payment.page.js`: Delegated `localToday()` and payment dates to IST `todayISO()`.
+- `public/js/utils/school-billing.js`: Fixed `daysLate()` same-month after-10th bug, restricted `computeLateFee()` to `unpaid`/`partial` bills, added shared `isKidsStudentEligible`, `buildApprovedBreakMonthsMap`, `evaluateKidsPendingBills`, and `buildKidsPaymentLedger` (deduplicating allocation vs summary records and handling Kids admission docs + waivers).
+- `public/js/services/payment.service.js`: Added shared `isStudentEligibleForDues`, `evaluateYouthStudentDues`, and `normalizeYouthPaymentsLedger` (grouping admission/full/material sharing `receiptNo`, separating paid vs waived late fees, and keeping `WA` totalReceived = 0).
+- `public/js/services/report.service.js`: Built shared session-cached loaders, lazy visible photo fetching, sequential eligibility marking, summary helpers, paginated Super Admin `collectionGroup('payment')` queries (with admission sibling boundary safeguard & branch-head subcollection fallback), CSV export, and print sheets.
+- `public/pages/pending.html`, `public/js/pages/pending.page.js`, `public/pages/payments.html`, `public/js/pages/payments.page.js`, `public/css/pages/financial-reports.css`: Built responsive Pending & Overdue (`#/pending`, `#/school-pending`) and Payment History (`#/payments`, `#/school-payments`) UIs with 5 KPI cards, `createSelect()` filters, expandable admission breakdowns, WhatsApp reminder modal, direct Collect popup / Kids payment flow, CSV export, and Daily Cash Report print sheet.
+- `public/js/core/router.js`, `public/index.html`, `public/js/pages/payment-receipt.page.js`, `public/js/pages/school-admission-receipt.page.js`, `public/css/main.css`: Wired shared route handlers, seamless context switching between Youth and Kids views, receipt back-links, and `school_head` access to Kids admission receipts.
+- `firestore.rules` & `firestore.indexes.json`: Added read-only `isSchoolHead()` permissions across Unique Kids collections (`students`, `docs`, `payment`, `courses`, `batches`, `enrolments`, `bills`, `payments`, `waivers`, `breaks`) and deployed composite `students` indexes plus `collectionGroup('payment')` `date` field overrides.
+
+**Files touched:**
+- CREATED: `public/pages/pending.html`, `public/js/pages/pending.page.js`, `public/css/pages/financial-reports.css`
+- MODIFIED: `public/js/utils/session-rules.js`, `public/js/utils/school-lifecycle.js`, `public/js/utils/school-billing.js`, `public/js/services/payment.service.js`, `public/js/services/report.service.js`, `public/pages/payments.html`, `public/js/pages/payments.page.js`, `public/js/pages/school-fee-payment.page.js`, `public/js/pages/payment-receipt.page.js`, `public/js/pages/school-admission-receipt.page.js`, `public/js/core/router.js`, `public/index.html`, `public/css/main.css`, `firestore.rules`, `firestore.indexes.json`
+
+**Tested on:**
+- Node ESM verification suite running live unmodified modules against `06fffcd2` backup (5 overdue students = Rs 4,500 overdue, Rs 289 late fees; Sneha simulation dropping to 4 / Rs 4,250 / Rs 274; 47 grouped Youth ledger rows = Rs 39,073; Kids same-month day-11 late fee & allocation dedup; waiver exclusion): ✅
+- `tools/check-imports.js` (105 files, 283 imports) & `node --check`: ✅
+
+**Next task:**
+- Review live UI on deployed hosting across Super Admin, Branch Head, and School Head roles.
+---
+
 ## ACTIVE LOG (NEWEST ON TOP)
 ---
 

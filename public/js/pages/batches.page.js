@@ -1,14 +1,14 @@
 import { db } from '../config/firebase-config.js';
 import { collection, getDocs, getDoc, query, where, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, deleteField } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.140';
-import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.140';
-import { buildStats, buildToolbar, renderEmptyTableState } from '../components/list-page.js?v=1.8.140';
-import { createSelect } from '../components/ui-select.js?v=1.8.140';
-import { createMultiSelect } from '../components/multi-select.js?v=1.8.140';
-import { openMenu } from '../components/ui-menu.js?v=1.8.140';
-import { confirmDialog } from '../components/ui-confirm.js?v=1.8.140';
-import { loadSessions } from '../core/sessions.js?v=1.8.140';
-import { batchAllowsCourse, batchCourseLabel, batchCourseTooltip, isCourseActive } from '../utils/session-rules.js?v=1.8.140';
+import { showToast } from '../components/toast.js?v=1.8.164';
+import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.164';
+import { PAGE_SIZE, buildStats, buildToolbar, renderPager, renderEmptyTableState } from '../components/list-page.js?v=1.8.164';
+import { createSelect } from '../components/ui-select.js?v=1.8.164';
+import { createMultiSelect } from '../components/multi-select.js?v=1.8.164';
+import { openMenu } from '../components/ui-menu.js?v=1.8.164';
+import { confirmDialog } from '../components/ui-confirm.js?v=1.8.164';
+import { loadSessions, getSelectedSessionId, getSelectedSession, getCachedSessions } from '../core/sessions.js?v=1.8.164';
+import { batchAllowsCourse, batchCourseLabel, batchCourseTooltip, isCourseActive } from '../utils/session-rules.js?v=1.8.164';
 // Batches Part 2A/2B: add/edit form, delete, student capacity
 
 const TEXT_KEYS = ['name', 'code', 'capacity'];
@@ -67,22 +67,27 @@ export async function mount({ profile, ctx }) {
   try {
   const tbHost = $('bt-toolbar');
   const tb = buildToolbar({
-    placeholder: 'Search batch, code or course',
+    placeholder: youth ? 'Search batch, code or course' : 'Search batch, code or level',
       filters: [
-        { id: 'status', label: 'Status', options: [
-          { value: 'all', label: 'All statuses' }, { value: 'upcoming', label: 'Upcoming' },
-          { value: 'running', label: 'Running' }, { value: 'completed', label: 'Completed' },
-          { value: 'archived', label: 'Archived' }
-        ]},
-        ...(youth ? [{ id: 'session', label: 'Session', options: [{ value: 'all', label: 'All sessions' }] }] : []),
-        ...(youth && isSuper ? [{ id: 'branch', label: 'Branch', options: [{ value: 'all', label: 'All branches' }] }] : []),
-        { id: 'course', label: 'Course', options: [{ value: 'all', label: 'All courses', icon: 'book-open' }] },
-      { id: 'level', label: 'Level', options: [
-        { value: 'all', label: 'All levels' }, { value: '1', label: 'Semester 1 (Base Course)' },
-        { value: '2', label: 'Semester 2 (Combo Course)' }, { value: '3', label: 'Semester 3 (Advanced Course)' }
-      ]}
+        { id: 'status', label: 'Status', options: youth
+          ? [
+              { value: 'all', label: 'All statuses' }, { value: 'upcoming', label: 'Upcoming' },
+              { value: 'running', label: 'Running' }, { value: 'completed', label: 'Completed' },
+              { value: 'archived', label: 'Archived' }
+            ]
+          : [
+              { value: 'all', label: 'All statuses' }, { value: 'active', label: 'Active' },
+              { value: 'completed', label: 'Completed' }, { value: 'archived', label: 'Archived' }
+            ]
+        },
+        ...(youth ? [{ id: 'branch', label: 'Branch', options: [{ value: 'all', label: 'All branches' }] }] : []),
+        { id: 'course', label: youth ? 'Course' : 'Level', options: [{ value: 'all', label: youth ? 'All courses' : 'All levels', icon: 'book-open' }] },
+        ...(youth ? [{ id: 'level', label: 'Level', options: [
+          { value: 'all', label: 'All levels' }, { value: '1', label: 'Semester 1 (Base Course)' },
+          { value: '2', label: 'Semester 2 (Combo Course)' }, { value: '3', label: 'Semester 3 (Advanced Course)' }
+        ]}] : [])
     ],
-    onChange: () => render(),
+    onChange: () => { page = 1; render(); },
     onRefresh: () => load()
   });
   if (tbHost) tbHost.appendChild(tb.el);
@@ -311,10 +316,11 @@ export async function mount({ profile, ctx }) {
         const sessSnap = await getDocs(query(collection(db, 'sessions'), where('ctx', '==', ctx)));
         sessions = sessSnap.docs.map(d => Object.assign({ id: d.id }, d.data()));
       }
-      if (isSuper) {
+      if (youth && isSuper) {
         const brSnap = await getDocs(collection(db, 'branches'));
-        branches = brSnap.docs.map(d => Object.assign({ id: d.id }, d.data())).filter(b => (b.status || 'active') === 'active');
-      } else if (isBranchHead && myBranchId) {
+        branches = brSnap.docs.map(d => Object.assign({ id: d.id }, d.data()))
+          .filter(b => (!b.ctx || b.ctx === 'youth') && (b.status || 'active') === 'active');
+      } else if (youth && isBranchHead && myBranchId) {
         try {
           const brSnap = await getDoc(doc(db, 'branches', myBranchId));
           if (brSnap.exists()) {
@@ -336,12 +342,15 @@ export async function mount({ profile, ctx }) {
       batches = []; sessions = []; branches = []; courses = []; coursesById = {};
     }
     if (youth) {
-      tb.setFilterOptions('session', [{ value: 'all', label: 'All sessions', icon: 'calendar-range' }].concat(sessions.map(s => ({ value: s.id, label: s.name || s.id, icon: 'calendar-range' }))));
       if (isSuper) {
         tb.setFilterOptions('branch', [{ value: 'all', label: 'All branches', icon: 'git-branch' }].concat(branches.map(b => ({ value: b.id, label: b.name || b.id, icon: 'git-branch' }))));
+      } else if (myBranchId) {
+        const myBr = branches.find(b => b.id === myBranchId);
+        tb.setFilterOptions('branch', [{ value: myBranchId, label: (myBr && myBr.name) || myBranchId, icon: 'lock' }]);
+        tb.state.branch = myBranchId;
       }
     }
-    tb.setFilterOptions('course', [{ value: 'all', label: 'All courses', icon: 'book-open' }].concat(courses.map(c => ({ value: c.id, label: (courseCode(c) ? courseCode(c) + '  -  ' : '') + (c.name || c.id), icon: 'book-open' }))));
+    tb.setFilterOptions('course', [{ value: 'all', label: youth ? 'All courses' : 'All levels', icon: 'book-open' }].concat(courses.map(c => ({ value: c.id, label: (courseCode(c) ? courseCode(c) + '  -  ' : '') + (c.name || c.id), icon: 'book-open' }))));
     rebuildSelectOptions();
     render();
   }
@@ -399,6 +408,8 @@ export async function mount({ profile, ctx }) {
   const rowsHost = $('bt-rows');
   const empty = $('bt-empty');
   const countEl = $('bt-count');
+  const footEl = $('bt-foot');
+  let page = 1;
 
   function render() {
     if (!rowsHost) return;
@@ -409,14 +420,25 @@ export async function mount({ profile, ctx }) {
     const branchHeader = document.getElementById('bt-col-branch');
     if (sessHeader) sessHeader.hidden = !youth;
     if (branchHeader) branchHeader.hidden = !youth;
+
+    const activeSessObj = youth ? (getSelectedSession('youth') || sessions.find(s => s.id === getSelectedSessionId('youth')) || sessions.find(s => s.status === 'running') || sessions[0] || null) : null;
+    const activeSessId = activeSessObj ? activeSessObj.id : '';
+    if (sub) {
+      sub.textContent = youth
+        ? (activeSessObj ? `Session ${activeSessObj.name} — Teaching groups per course and branch.` : 'Teaching groups per course, session and branch.')
+        : 'Unique Kids teaching groups (Head Office).';
+    }
+    const noSessEl = $('bt-no-session');
+    if (noSessEl) noSessEl.hidden = !(youth && sessions.length === 0);
+
+    const sessionBatches = youth && activeSessId ? batches.filter(b => b.sessionId === activeSessId) : batches;
     const f = tb.state || {};
     const q = (f.q || '').toLowerCase();
-    const list = batches.filter(b => {
+    const list = sessionBatches.filter(b => {
       if (f.status && f.status !== 'all' && batchStatus(b) !== f.status) return false;
-      if (youth && f.session && f.session !== 'all' && b.sessionId !== f.session) return false;
       if (youth && f.branch && f.branch !== 'all' && b.branchId !== f.branch) return false;
       if (f.course && f.course !== 'all' && !batchAllowsCourse(b, f.course, courses)) return false;
-      if (f.level && f.level !== 'all' && String(b.courseLevel || '') !== f.level) return false;
+      if (youth && f.level && f.level !== 'all' && String(b.courseLevel || b.level || '') !== f.level) return false;
       if (q) {
         const c = courseOf(b);
         const hay = [b.name, b.code, c.code, c.name, c.courseCode].map(x => (x || '').toLowerCase()).join(' ');
@@ -425,44 +447,59 @@ export async function mount({ profile, ctx }) {
       return true;
     });
 
-    const total = batches.length;
+    const total = sessionBatches.length;
     if (youth) {
-      const running = batches.filter(x => batchStatus(x) === 'running').length;
-      const upcoming = batches.filter(x => batchStatus(x) === 'upcoming').length;
-      const students = batches.reduce((a, b) => a + (b.studentCount || 0), 0);
-      stats.update(0, total, 'This centre');
+      const running = sessionBatches.filter(x => batchStatus(x) === 'running').length;
+      const upcoming = sessionBatches.filter(x => batchStatus(x) === 'upcoming').length;
+      const students = sessionBatches.reduce((a, b) => a + (b.studentCount || 0), 0);
+      stats.update(0, total, activeSessObj ? `Session ${activeSessObj.name}` : 'This centre');
       stats.update(1, running, 'Classes in progress');
       stats.update(2, upcoming, 'Not started yet');
       stats.update(3, students, 'Across all batches');
     } else {
-      const active = batches.filter(x => batchStatus(x) === 'active').length;
-      const inactive = batches.filter(x => batchStatus(x) === 'completed' || batchStatus(x) === 'archived' || batchStatus(x) === 'inactive').length;
-      const students = batches.reduce((a, b) => a + (b.studentCount || 0), 0);
+      const active = sessionBatches.filter(x => batchStatus(x) === 'active').length;
+      const inactive = sessionBatches.filter(x => batchStatus(x) === 'completed' || batchStatus(x) === 'archived' || batchStatus(x) === 'inactive').length;
+      const students = sessionBatches.reduce((a, b) => a + (b.studentCount || 0), 0);
       stats.update(0, total, 'This centre');
       stats.update(1, active, 'Active batches');
       stats.update(2, inactive, 'Inactive batches');
       stats.update(3, students, 'Across all batches');
     }
 
-    if (countEl) countEl.textContent = batches.length + ' ' + (batches.length === 1 ? 'batch' : 'batches');
-    if (empty) empty.hidden = batches.length > 0;
+    if (countEl) countEl.textContent = list.length + ' ' + (list.length === 1 ? 'batch' : 'batches');
+    if (empty) empty.hidden = sessionBatches.length > 0;
+    const totalPages = Math.max(1, Math.ceil(list.length / PAGE_SIZE));
+    if (page > totalPages) page = totalPages;
+    const pageList = list.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+    if (footEl) {
+      footEl.hidden = list.length === 0;
+      renderPager(footEl, {
+        page,
+        pageSize: PAGE_SIZE,
+        totalItems: list.length,
+        showWhenSingle: true,
+        onPageChange: (next) => { page = next; render(); }
+      });
+    }
 
-    if (batches.length && !list.length) {
+    if (sessionBatches.length && !list.length) {
       renderEmptyTableState(rowsHost, {
         colSpan: youth ? 7 : 5,
         title: 'No matching batches',
         desc: 'No batches match your search or filter criteria.',
         onClear: () => {
-          tb.state.q = '';
-          if (tb.state.status) tb.state.status = 'all';
-          if (tb.state.course) tb.state.course = 'all';
-          if (tb.state.branch) tb.state.branch = 'all';
+          tb.clearSearch();
+          if (tb.state.status) tb.setFilterValue('status', 'all');
+          if (tb.state.course) tb.setFilterValue('course', 'all');
+          if (tb.state.level) tb.setFilterValue('level', 'all');
+          if (tb.state.branch && isSuper) tb.setFilterValue('branch', 'all');
+          page = 1;
           render();
         }
       });
     }
 
-    list.forEach(b => {
+    pageList.forEach(b => {
       const c = courseOf(b);
       const tr = document.createElement('tr');
       const tdBatch = document.createElement('td');
@@ -711,6 +748,22 @@ export async function mount({ profile, ctx }) {
   form.addEventListener('change', () => { touched = true; refresh(); });
   formEl.addEventListener('submit', (ev) => { ev.preventDefault(); save(); });
 
+  const onToolbarSessionChange = () => {
+    if (youth) render();
+  };
+  const onSessionsChanged = async () => {
+    await load();
+  };
+  window.__btSessionCleanup && window.__btSessionCleanup();
+  window.addEventListener('uic:session-selected', onToolbarSessionChange);
+  window.addEventListener('uic:sessions-loaded', onToolbarSessionChange);
+  window.addEventListener('uic:sessions-changed', onSessionsChanged);
+  window.__btSessionCleanup = () => {
+    window.removeEventListener('uic:session-selected', onToolbarSessionChange);
+    window.removeEventListener('uic:sessions-loaded', onToolbarSessionChange);
+    window.removeEventListener('uic:sessions-changed', onSessionsChanged);
+  };
+
   await load();
   } catch (err) {
     console.error('[batches]', err);
@@ -721,6 +774,13 @@ export async function mount({ profile, ctx }) {
     if (rowsHost) rowsHost.innerHTML = '';
     if (empty) empty.hidden = false;
     if (countEl) countEl.textContent = '0 batches';
+  }
+}
+
+export function unmount() {
+  if (window.__btSessionCleanup) {
+    window.__btSessionCleanup();
+    window.__btSessionCleanup = null;
   }
 }
 

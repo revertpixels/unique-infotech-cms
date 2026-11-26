@@ -2,10 +2,12 @@
 // Super Admin only. Shows bill details and accepts payment amount.
 import { db } from '../config/firebase-config.js';
 import { doc, getDoc, updateDoc, serverTimestamp, runTransaction } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.140';
-import { formatINR, formatDateIN } from '../utils/formatter.js?v=1.8.140';
-import { computeLateFee, recordPayment } from '../utils/school-billing.js?v=1.8.140';
-import { playPaymentSuccessSound } from '../utils/sound.js?v=1.8.140';
+import { showToast } from '../components/toast.js?v=1.8.164';
+import { formatINR, formatDateIN } from '../utils/formatter.js?v=1.8.164';
+import { computeLateFee, recordPayment } from '../utils/school-billing.js?v=1.8.164';
+import { localToday } from '../utils/school-lifecycle.js?v=1.8.164';
+import { playPaymentSuccessSound } from '../utils/sound.js?v=1.8.164';
+import { resolveUserDisplay } from '../services/user-directory.service.js?v=1.8.164';
 
 const BILLS_COL = 'bills';
 const PAYMENTS_COL = 'payments';
@@ -73,9 +75,16 @@ export async function mount({ container, profile, ctx, billId }) {
     saveBtn.disabled = true;
     try {
       const who = (profile && profile.email) || '';
-      const today = new Date().toISOString().split('T')[0];
+      const disp = resolveUserDisplay(who, profile?.name, profile?.designation);
+      const today = localToday();
       const result = await recordPayment(db, {
-        studentId: bill.studentId, amount, receivedDate: today, receivedBy: who, allocation: 'auto'
+        studentId: bill.studentId,
+        amount,
+        receivedDate: today,
+        receivedBy: who,
+        receivedByName: disp.name || profile?.name || '',
+        receivedByDesignation: disp.designation || profile?.designation || '',
+        allocation: 'auto'
       });
       await load(); // refresh bill status
       playPaymentSuccessSound();

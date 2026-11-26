@@ -126,3 +126,84 @@ export function formatBytes(bytes) {
   if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
   return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
 }
+
+function loadBitmapFromSource(source) {
+  return new Promise((resolve, reject) => {
+    if (source && typeof source === 'object' && source.naturalWidth) {
+      resolve(source);
+      return;
+    }
+    const url = URL.createObjectURL(source);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      resolve(img);
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error('Could not decode selected image.'));
+    };
+    img.src = url;
+  });
+}
+
+function canvasToBlob(canvas, mime, quality) {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (blob) resolve(blob);
+      else reject(new Error('Canvas encoding failed.'));
+    }, mime, quality);
+  });
+}
+
+/**
+ * Renders a square avatar crop from `source` (File/Blob/Image) using normalized pan `fx`/`fy` in [-1, 1]
+ * and zoom >= 1, compressing to WebP or JPEG under `maxBytes`.
+ */
+export async function cropSquareAvatarToBlob(source, cropState = {}, { maxBytes = 300 * 1024, size = 512 } = {}) {
+  const img = await loadBitmapFromSource(source);
+  const nw = img.naturalWidth || img.width;
+  const nh = img.naturalHeight || img.height;
+  if (!nw || !nh) throw new Error('Invalid image dimensions.');
+
+  const zoom = Math.max(1, Math.min(4, Number(cropState.zoom) || 1));
+  const fx = Math.max(-1, Math.min(1, Number(cropState.fx) || 0));
+  const fy = Math.max(-1, Math.min(1, Number(cropState.fy) || 0));
+
+  const mimeCandidates = ['image/webp', 'image/jpeg'];
+  const sizes = [size, Math.min(384, size), Math.min(256, size)];
+  const qualities = [0.9, 0.82, 0.72, 0.62, 0.5];
+
+  for (const outSize of sizes) {
+    const canvas = document.createElement('canvas');
+    canvas.width = outSize;
+    canvas.height = outSize;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('Canvas 2D context unavailable.');
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillRect(0, 0, outSize, outSize);
+
+    const baseScale = Math.max(outSize / nw, outSize / nh);
+    const drawW = nw * baseScale * zoom;
+    const drawH = nh * baseScale * zoom;
+    const maxDx = Math.max(0, (drawW - outSize) / 2);
+    const maxDy = Math.max(0, (drawH - outSize) / 2);
+    const drawX = (outSize - drawW) / 2 + fx * maxDx;
+    const drawY = (outSize - drawH) / 2 + fy * maxDy;
+
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(img, drawX, drawY, drawW, drawH);
+
+    for (const mime of mimeCandidates) {
+      for (const q of qualities) {
+        const blob = await canvasToBlob(canvas, mime, q);
+        if (blob.type === mime && blob.size <= maxBytes) {
+          return { blob, mime, width: outSize, height: outSize };
+        }
+      }
+    }
+  }
+
+  throw new Error('Could not compress avatar image under 300 KB. Please choose a smaller image.');
+}

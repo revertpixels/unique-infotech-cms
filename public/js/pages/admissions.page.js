@@ -15,25 +15,26 @@ import {
   arrayUnion,
   addDoc
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.140';
-import { registerDirty, confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.140';
-import { buildStats, buildToolbar, renderPager, renderEmptyTableState } from '../components/list-page.js?v=1.8.140';
-import { createSelect } from '../components/ui-select.js?v=1.8.140';
-import { openMenu } from '../components/ui-menu.js?v=1.8.140';
-import { confirmDialog } from '../components/ui-confirm.js?v=1.8.140';
-import { openPopup } from '../components/modal.js?v=1.8.140';
-import { createDatePicker } from '../components/ui-datepicker.js?v=1.8.140';
-import { getSelectedSessionId, getCachedSessions, loadSessions, todayISO } from '../core/sessions.js?v=1.8.140';
-import { firstInstallmentOf, admissionState, sessionLabel, installmentSchedule, batchAllowsCourse, batchCourseLabel, isCourseActive } from '../utils/session-rules.js?v=1.8.140';
-import { formatINR, formatDateIN, initials } from '../utils/formatter.js?v=1.8.140';
-import { validatePhone, validateEmail, validateDOB, validateName, validateRequired } from '../utils/validator.js?v=1.8.140';
-import { listStudentsRaw, checkDuplicatePhone, readStudentId, readReceiptNo, writeCounter, createStudentWithDocs, updateStudentWithDocs, updateStudent, deleteStudent } from '../services/admission.service.js?v=1.8.140';
-import { feeTotal, courseFeeOf, discountOf } from '../utils/fees.js?v=1.8.140';
-import { compressTo100KB, readAsDataURL, blobToDataURL, isImageFile, formatBytes } from '../utils/image-compress.js?v=1.8.140';
-import { fetchStudentPayments, calculateStudentFinancials, buildReceiptMenuItems } from '../services/payment.service.js?v=1.8.140';
-import { playPaymentSuccessSound } from '../utils/sound.js?v=1.8.140';
-import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.140';
-import { APP_CACHE } from '../core/app.js?v=1.8.140';
+import { showToast } from '../components/toast.js?v=1.8.164';
+import { registerDirty, confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.164';
+import { buildStats, buildToolbar, renderPager, renderEmptyTableState, PAGE_SIZE } from '../components/list-page.js?v=1.8.164';
+import { createSelect } from '../components/ui-select.js?v=1.8.164';
+import { createBranchBatchFilter } from '../components/branch-batch-filter.js?v=1.8.164';
+import { openMenu } from '../components/ui-menu.js?v=1.8.164';
+import { confirmDialog } from '../components/ui-confirm.js?v=1.8.164';
+import { openPopup } from '../components/modal.js?v=1.8.164';
+import { createDatePicker } from '../components/ui-datepicker.js?v=1.8.164';
+import { getSelectedSessionId, getSelectedSession, getCachedSessions, loadSessions, todayISO } from '../core/sessions.js?v=1.8.164';
+import { firstInstallmentOf, admissionState, sessionLabel, installmentSchedule, batchAllowsCourse, batchCourseLabel, isCourseActive } from '../utils/session-rules.js?v=1.8.164';
+import { formatINR, formatDateIN, initials } from '../utils/formatter.js?v=1.8.164';
+import { validatePhone, validateEmail, validateDOB, validateName, validateRequired } from '../utils/validator.js?v=1.8.164';
+import { listStudentsRaw, checkDuplicatePhone, readStudentId, readReceiptNo, writeCounter, createStudentWithDocs, updateStudentWithDocs, updateStudent, deleteStudent } from '../services/admission.service.js?v=1.8.164';
+import { feeTotal, courseFeeOf, discountOf } from '../utils/fees.js?v=1.8.164';
+import { compressTo100KB, readAsDataURL, blobToDataURL, isImageFile, formatBytes } from '../utils/image-compress.js?v=1.8.164';
+import { fetchStudentPayments, calculateStudentFinancials, buildReceiptMenuItems } from '../services/payment.service.js?v=1.8.164';
+import { playPaymentSuccessSound } from '../utils/sound.js?v=1.8.164';
+import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.164';
+import { APP_CACHE } from '../core/app.js?v=1.8.164';
 
 const COL = 'students';
 
@@ -61,7 +62,6 @@ const STATUS_PILLS = [
   { value: 'archived', label: 'Archived', cls: 'archived' },
   { value: 'break', label: 'On break', cls: 'break' }
 ];
-const PAGE_SIZE = 10;
 
 const DOC_KEYS = ['photo', 'signature', 'dobProof', 'marksheet'];
 const DOC_LABELS = {
@@ -182,12 +182,8 @@ export async function mount({ container, profile, ctx }) {
         { value: 'dropped', label: 'Dropped' }, { value: 'completed', label: 'Completed' }
       ]
     },
-    { id: 'course', label: 'Course', options: [{ value: 'all', label: 'All courses', icon: 'book-open' }] },
-    { id: 'batch', label: 'Batch', options: [{ value: 'all', label: 'All batches', icon: 'layers' }] }
+    { id: 'course', label: 'Course', options: [{ value: 'all', label: 'All courses', icon: 'book-open' }] }
   ];
-  if (isSuper) {
-    tbFilters.splice(2, 0, { id: 'branch', label: 'Branch', options: [{ value: 'all', label: 'All branches', icon: 'git-branch' }] });
-  }
   const tb = buildToolbar({
     placeholder: 'Search name, student ID, phone or guardian',
     filters: tbFilters,
@@ -195,10 +191,24 @@ export async function mount({ container, profile, ctx }) {
     onRefresh: () => load(),
     rowLayout: true
   });
+  let bbFilter = null;
   const tbHost = $('adm-toolbar');
   if (tbHost) {
     tbHost.innerHTML = '';
     tbHost.appendChild(tb.el);
+
+    const bbHost = document.createElement('div');
+    bbHost.className = 'lp-bb-host';
+    bbFilter = createBranchBatchFilter(bbHost, {
+      persistKey: 'admissions.youth',
+      profile,
+      ctx: 'youth',
+      sessionId: getSelectedSessionId('youth') || '',
+      branches: [],
+      batches: [],
+      onChange: () => { page = 1; render(); }
+    });
+    tb.addFilterEl(bbHost);
 
     // Admission date filter dropdown + custom range row (inside row 3 container).
     const dateWrap = document.createElement('div');
@@ -436,12 +446,13 @@ export async function mount({ container, profile, ctx }) {
       const cSnap = await getDocs(query(collection(db, 'courses'), where('ctx', '==', 'youth')));
       courses = cSnap.docs.map((d) => Object.assign({ id: d.id }, d.data())).filter(c => (c.status || 'active') === 'active');
 
-      const bSnap = await getDocs(collection(db, 'batches'));
+      const bSnap = await getDocs(query(collection(db, 'batches'), where('ctx', '==', 'youth')));
       batches = bSnap.docs.map((d) => Object.assign({ id: d.id }, d.data()));
 
       if (isSuper) {
         const brSnap = await getDocs(collection(db, 'branches'));
-        branches = brSnap.docs.map((d) => Object.assign({ id: d.id }, d.data())).filter(b => (b.status || 'active') === 'active');
+        branches = brSnap.docs.map((d) => Object.assign({ id: d.id }, d.data()))
+          .filter(b => (!b.ctx || b.ctx === 'youth') && (b.status || 'active') === 'active');
       } else if (isHead && fixedBranch) {
         try {
           const brSnap = await getDoc(doc(db, 'branches', fixedBranch));
@@ -455,21 +466,19 @@ export async function mount({ container, profile, ctx }) {
         }
       }
 
-      const sessSnap = await getDocs(collection(db, 'sessions'));
+      const sessSnap = await getDocs(query(collection(db, 'sessions'), where('ctx', '==', 'youth')));
       sessions = sessSnap.docs.map((d) => Object.assign({ id: d.id }, d.data()));
 
       tb.setFilterOptions('course', [{ value: 'all', label: 'All courses', icon: 'book-open' }].concat(courses.map(c => ({ value: c.id, label: (c.courseCode || c.code || c.id), icon: 'book-open' }))));
-      const batchOpts = [{ value: 'all', label: 'All batches', icon: 'layers' }];
-      batches.forEach(b => {
-        const st = batchStatusOf(b.id);
-        if (st === 'upcoming' || st === 'running') {
-          const c = courseOf(b.courseId);
-          batchOpts.push({ value: b.id, label: (b.name || b.id) + ' (' + (c.courseCode || c.code || '') + ')', icon: 'layers' });
-        }
-      });
-      tb.setFilterOptions('batch', batchOpts);
-      if (isSuper) {
-        tb.setFilterOptions('branch', [{ value: 'all', label: 'All branches', icon: 'git-branch' }].concat(branches.map(b => ({ value: b.id, label: b.name || 'Unknown branch', icon: 'git-branch' }))));
+      const activeSess = getSelectedSession('youth') || sessions.find(s => s.id === getSelectedSessionId('youth')) || sessions.find(s => s.status === 'running') || sessions[0] || null;
+      if (bbFilter) {
+        bbFilter.updateData({
+          ctx: 'youth',
+          sessionId: activeSess ? activeSess.id : '',
+          branches,
+          batches,
+          courses
+        });
       }
 
       if (branchSel) {
@@ -1473,7 +1482,17 @@ export async function mount({ container, profile, ctx }) {
       const dr = admDateRange();
       if (dateErrEl) { dateErrEl.textContent = dr.err || ''; dateErrEl.hidden = !dr.err; }
       const q = (f.q || '').toLowerCase();
-      const selSession = getSelectedSessionId();
+      const selSession = getSelectedSessionId('youth');
+      const activeSessObj = getSelectedSession('youth') || sessions.find(s => s.id === selSession) || sessions.find(s => s.status === 'running') || sessions[0] || null;
+      const subEl = $('adm-sub');
+      if (subEl) {
+        subEl.textContent = activeSessObj
+          ? `Session ${activeSessObj.name} — Admit new students to courses and batches. Student IDs are generated per session year and course level.`
+          : 'Admit new students to courses and batches. Student IDs are generated per session year and course level.';
+      }
+      const noSessEl = $('adm-no-session');
+      if (noSessEl) noSessEl.hidden = sessions.length > 0;
+      const bbVal = bbFilter ? bbFilter.getValue() : { branchId: 'all', batchId: 'all' };
 
       // Session filter helper: matches selected session, or if student has no session specified
       const inCurrentSession = (s) => !(selSession && s.sessionId && s.sessionId !== selSession);
@@ -1482,7 +1501,7 @@ export async function mount({ container, profile, ctx }) {
       const hiddenCount = students.filter(s => selSession && s.sessionId && s.sessionId !== selSession).length;
       if (sessionNotice) {
         if (hiddenCount > 0) {
-          sessionNotice.textContent = hiddenCount + ' students are in other sessions - switch session to see them.';
+          sessionNotice.textContent = hiddenCount + ' students are in other sessions - switch session in the toolbar to see them.';
           sessionNotice.hidden = false;
         } else {
           sessionNotice.hidden = true;
@@ -1493,8 +1512,8 @@ export async function mount({ container, profile, ctx }) {
         if (selSession && s.sessionId && s.sessionId !== selSession) return false;
         if (f.status && f.status !== 'all' && s.status !== f.status) return false;
         if (f.course && f.course !== 'all' && s.courseId !== f.course) return false;
-        if (f.batch && f.batch !== 'all' && s.batchId !== f.batch) return false;
-        if (isSuper && f.branch && f.branch !== 'all' && s.branchId !== f.branch) return false;
+        if (bbVal.batchId && bbVal.batchId !== 'all' && s.batchId !== bbVal.batchId) return false;
+        if (isSuper && bbVal.branchId && bbVal.branchId !== 'all' && s.branchId !== bbVal.branchId) return false;
         const ad = s.admissionDate || '';
         if (dr.from && ad < dr.from) return false;
         if (dr.to && ad > dr.to) return false;
@@ -1553,8 +1572,7 @@ export async function mount({ container, profile, ctx }) {
               tb.state.q = '';
               tb.state.status = 'all';
               tb.state.course = 'all';
-              tb.state.batch = 'all';
-              if (isSuper) tb.state.branch = 'all';
+              if (bbFilter) bbFilter.reset();
               admDateFilter = 'all';
               admDateFrom = '';
               admDateTo = '';
@@ -3117,11 +3135,43 @@ export async function mount({ container, profile, ctx }) {
     }
   }
 
+  const onToolbarSessionChange = () => {
+    const newSessId = getSelectedSessionId('youth') || '';
+    if (bbFilter) {
+      bbFilter.updateData({ ctx: 'youth', sessionId: newSessId, branches, batches, courses });
+    }
+    if (form.hidden && sessionSel && newSessId) {
+      const topS = sessions.find(s => s.id === newSessId);
+      if (topS && admissionState(topS, todayISO()).open) {
+        sessionSel.value = newSessId;
+        onSessionChange();
+      }
+    }
+    page = 1;
+    render();
+  };
+  const onSessionsChanged = async () => {
+    await load();
+  };
+  window.__admSessionCleanup && window.__admSessionCleanup();
+  window.addEventListener('uic:session-selected', onToolbarSessionChange);
+  window.addEventListener('uic:sessions-loaded', onToolbarSessionChange);
+  window.addEventListener('uic:sessions-changed', onSessionsChanged);
+  window.__admSessionCleanup = () => {
+    window.removeEventListener('uic:session-selected', onToolbarSessionChange);
+    window.removeEventListener('uic:sessions-loaded', onToolbarSessionChange);
+    window.removeEventListener('uic:sessions-changed', onSessionsChanged);
+  };
+
   await load();
 }
 
 export function unmount() {
   clearDirty();
+  if (window.__admSessionCleanup) {
+    window.__admSessionCleanup();
+    window.__admSessionCleanup = null;
+  }
   const host = $('adm-fee-grid');
   if (host && host.parentNode) {
     host.parentNode.querySelectorAll('.adm-fee-total-row').forEach(el => el.remove());

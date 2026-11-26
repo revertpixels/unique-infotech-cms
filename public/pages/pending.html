@@ -1,0 +1,170 @@
+<div class="fr-wrap" id="pending-page">
+  <div class="lp-head-row">
+    <section class="pg-head">
+      <div class="pg-crumbs">Fees / <span id="pend-crumb-ctx">Youth Centre</span> / <span>Pending &amp; Overdue</span></div>
+      <h2 id="pend-title">Pending &amp; Overdue</h2>
+      <p id="pend-subtitle">Loading pending &amp; overdue schedule...</p>
+    </section>
+    <div class="lp-head-actions">
+      <span id="pend-branch-badge" class="fr-chip" hidden></span>
+      <button type="button" class="ui-btn ghost" id="pend-export-csv">
+        <i data-lucide="download"></i><span>Export CSV</span>
+      </button>
+      <button type="button" class="ui-btn ghost" id="pend-print">
+        <i data-lucide="printer"></i><span>Print Report</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Empty No-Session State -->
+  <div class="lp-card" id="pend-no-session" hidden>
+    <div class="empty-state">
+      <i data-lucide="calendar-plus"></i>
+      <h3>No Youth session found</h3>
+      <p>Create or select a Youth Centre session in Sessions to track pending installments and dues.</p>
+      <div style="margin-top: 14px;">
+        <a href="#/sessions" class="ui-btn primary"><i data-lucide="calendar"></i><span>Go to Sessions</span></a>
+      </div>
+    </div>
+  </div>
+
+  <!-- 5 Summary Stat Cards (Overdue Only) -->
+  <div class="lp-stats cols-5" id="pend-stats">
+    <div class="lp-stat indigo">
+      <div class="lp-stat-ic"><i data-lucide="users"></i></div>
+      <div class="lp-stat-txt">
+        <span class="lp-stat-label">Overdue Students</span>
+        <span class="lp-stat-value" id="pend-kpi-students">—</span>
+        <span class="lp-stat-sub" id="pend-kpi-students-sub">0 overdue items</span>
+      </div>
+    </div>
+    <div class="lp-stat red">
+      <div class="lp-stat-ic"><i data-lucide="alert-circle"></i></div>
+      <div class="lp-stat-txt">
+        <span class="lp-stat-label">Overdue Amount</span>
+        <span class="lp-stat-value" id="pend-kpi-overdue">—</span>
+        <span class="lp-stat-sub">Unpaid fee principal</span>
+      </div>
+    </div>
+    <div class="lp-stat amber">
+      <div class="lp-stat-ic"><i data-lucide="clock"></i></div>
+      <div class="lp-stat-txt">
+        <span class="lp-stat-label">Late Fees</span>
+        <span class="lp-stat-value" id="pend-kpi-late">—</span>
+        <span class="lp-stat-sub" id="pend-kpi-late-sub">Accrued to today</span>
+      </div>
+    </div>
+    <div class="lp-stat violet">
+      <div class="lp-stat-ic"><i data-lucide="indian-rupee"></i></div>
+      <div class="lp-stat-txt">
+        <span class="lp-stat-label">Total to Collect</span>
+        <span class="lp-stat-value" id="pend-kpi-total-due">—</span>
+        <span class="lp-stat-sub">Fee + late fee payable</span>
+      </div>
+    </div>
+    <div class="lp-stat sky">
+      <div class="lp-stat-ic"><i data-lucide="alarm-clock"></i></div>
+      <div class="lp-stat-txt">
+        <span class="lp-stat-label">Oldest Overdue</span>
+        <span class="lp-stat-value" id="pend-kpi-oldest">—</span>
+        <span class="lp-stat-sub" id="pend-kpi-oldest-sub">No overdue items</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tidy Single-Row Filter Toolbar (Session is top-bar only; paired [Branch -> Batch] inside one box) -->
+  <div class="lp-toolbar" id="pend-toolbar">
+    <div class="lp-toolbar-row-filters">
+      <div class="lp-toolbar-row-search">
+        <div class="lp-search">
+          <i data-lucide="search"></i>
+          <input type="search" id="pend-search" placeholder="Search student name, ID, phone or course" autocomplete="off" />
+        </div>
+      </div>
+
+      <button type="button" class="ui-btn ghost lp-mobile-filter-btn" id="pend-mobile-filters-btn" aria-expanded="false">
+        <i data-lucide="sliders-horizontal"></i>
+        <span>Filters</span>
+        <span class="lp-count" id="pend-mobile-filters-count" hidden>0</span>
+      </button>
+
+      <div class="lp-toolbar-drawer" id="pend-filters-drawer">
+        <div id="pend-bb-host"></div>
+        <div class="lp-filter">
+          <span class="lp-filter-label">Days late</span>
+          <div id="pend-days-host" class="lp-filter-select"></div>
+        </div>
+        <button type="button" class="ui-btn ghost fr-more-btn" id="pend-more-btn" aria-expanded="false" title="Course &amp; Sort filters">
+          <i data-lucide="sliders-horizontal"></i><span>More</span>
+        </button>
+      </div>
+
+      <button type="button" class="lp-refresh" id="pend-refresh" aria-label="Refresh" title="Refresh">
+        <i data-lucide="refresh-cw"></i>
+      </button>
+    </div>
+
+    <div class="lp-toolbar-extra" id="pend-extra-filters" hidden>
+      <div class="lp-filter">
+        <span class="lp-filter-label" id="pend-course-label">Course</span>
+        <div id="pend-course-host" class="lp-filter-select"></div>
+      </div>
+      <div class="lp-filter">
+        <span class="lp-filter-label">Sort by</span>
+        <div id="pend-sort-host" class="lp-filter-select"></div>
+      </div>
+      <button type="button" class="ui-btn ghost sm" id="pend-clear-filters" hidden>
+        <i data-lucide="rotate-ccw"></i><span>Clear filters</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Results Table Card (exact same table wrapper, classes, and pager as Payment History) -->
+  <div class="adm-table-card" id="pend-table-card">
+    <div class="lp-card-head">
+      <div class="lp-card-title">
+        <i data-lucide="alarm-clock"></i>
+        <span id="pend-table-title">Overdue Payments</span>
+        <span class="lp-count" id="pend-row-count">0 items</span>
+      </div>
+      <span class="lp-sub" id="pend-asof-note"></span>
+    </div>
+
+    <div id="pend-error" class="empty-state" hidden>
+      <i data-lucide="alert-circle" style="color:var(--danger);"></i>
+      <h3>Could not load overdue fees</h3>
+      <p id="pend-error-msg">Unable to load overdue records right now.</p>
+      <button type="button" class="ui-btn primary" id="pend-retry"><i data-lucide="refresh-cw"></i><span>Retry</span></button>
+    </div>
+
+    <div class="adm-scroll" id="pend-scroll-wrap">
+      <table class="adm-table" id="pend-table">
+        <thead>
+          <tr>
+            <th>Student</th>
+            <th id="pend-th-cb">Course, Branch &amp; Batch</th>
+            <th id="pend-th-item">Installment</th>
+            <th>
+              <button type="button" class="fr-sort-th" id="pend-sort-due" title="Sort by days late">
+                <span>Due Date</span>
+                <i data-lucide="arrow-down"></i>
+              </button>
+            </th>
+            <th class="num">Fee</th>
+            <th class="num">Late Fee</th>
+            <th class="num">
+              <button type="button" class="fr-sort-th" id="pend-sort-total" title="Sort by total due">
+                <span>Total Due</span>
+                <i data-lucide="arrow-up-down"></i>
+              </button>
+            </th>
+            <th class="adm-actions fr-act-th">Action</th>
+          </tr>
+        </thead>
+        <tbody id="pend-tbody"></tbody>
+      </table>
+    </div>
+
+    <div class="adm-card-foot lp-card-foot" id="pend-foot" hidden></div>
+  </div>
+</div>

@@ -8,9 +8,11 @@ import {
   runTransaction,
   serverTimestamp
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { readStudentId, readReceiptNo, writeCounter } from './admission.service.js?v=1.8.140';
-import { fineFor, todayISO } from '../utils/session-rules.js?v=1.8.140';
-import { courseFeeOf } from '../utils/fees.js?v=1.8.140';
+import { readStudentId, readReceiptNo, writeCounter } from './admission.service.js?v=1.8.164';
+import { fineFor, todayISO, installmentSchedule, examWindowOf } from '../utils/session-rules.js?v=1.8.164';
+import { courseFeeOf } from '../utils/fees.js?v=1.8.164';
+import { formatPersonName } from '../utils/formatter.js?v=1.8.164';
+import { resolveUserDisplay } from './user-directory.service.js?v=1.8.164';
 
 const COL = 'students';
 
@@ -543,6 +545,7 @@ export async function recordPaymentTx(tx, {
   paymentDate,
   userEmail,
   userName,
+  userDesignation,
   userRole,
   branchId,
   branchCode,
@@ -611,6 +614,10 @@ export async function recordPaymentTx(tx, {
   const newPaid = currentPaid + numAmount;
   const newBalance = Math.max(0, Number(sData.feeTotal || studentDoc.feeTotal || 0) - newPaid);
 
+  const recDisp = resolveUserDisplay(userEmail, userName, userDesignation);
+  const recName = recDisp.name && recDisp.name !== '-' ? recDisp.name : (formatPersonName(userName || '') || userName || '');
+  const recDesig = recDisp.designation || userDesignation || '';
+
   const paymentData = {
     amount: numAmount,
     lateFee: numLate,
@@ -630,7 +637,8 @@ export async function recordPaymentTx(tx, {
     remarks: remarks || '',
     recordedBy: (userEmail || '').toLowerCase(),
     recordedByRole: userRole || '',
-    recordedByName: userName || '',
+    recordedByName: recName,
+    recordedByDesignation: recDesig,
     recordedAtBranchId: branchId || sData.branchId || 'HO',
     recordedAtBranchCode: bCode,
     recordedAtBranchName: branchName || sData.branchName || '',
@@ -915,6 +923,11 @@ export async function recordAdmissionWithPayment({
     // Write payment subcollection record(s):
     // Full plan: one 'FULL' record for fullAmt, plus one 'MAT' record if matFee > 0
     // Installments plan: one 'AD' record for admFee, plus one 'MAT' record if matFee > 0
+    const admEmail = (pp.userEmail || pa.userEmail || '').toLowerCase();
+    const admDisp = resolveUserDisplay(admEmail, pp.userName, pp.userDesignation);
+    const admRecName = admDisp.name && admDisp.name !== '-' ? admDisp.name : (formatPersonName(pp.userName || '') || pp.userName || '');
+    const admRecDesig = admDisp.designation || pp.userDesignation || '';
+
     const paymentRef = doc(collection(studentRef, 'payment'));
     const paymentData = {
       amount: primaryAmt,
@@ -935,9 +948,10 @@ export async function recordAdmissionWithPayment({
       txnId: pp.mode !== 'cash' ? (pp.txnId || '') : '',
       receiptNo: receiptNo,
       remarks: pp.remarks || '',
-      recordedBy: (pp.userEmail || pa.userEmail || '').toLowerCase(),
+      recordedBy: admEmail,
       recordedByRole: pp.userRole || '',
-      recordedByName: pp.userName || '',
+      recordedByName: admRecName,
+      recordedByDesignation: admRecDesig,
       recordedAtBranchId: pp.branchId || pa.branchId || 'HO',
       recordedAtBranchCode: pp.branchCode || pa.branchCode || 'HO',
       recordedAtBranchName: pp.branchName || pa.branchName || '',
@@ -966,9 +980,10 @@ export async function recordAdmissionWithPayment({
         txnId: pp.mode !== 'cash' ? (pp.txnId || '') : '',
         receiptNo: receiptNo,
         remarks: pp.remarks || '',
-        recordedBy: (pp.userEmail || pa.userEmail || '').toLowerCase(),
+        recordedBy: admEmail,
         recordedByRole: pp.userRole || '',
-        recordedByName: pp.userName || '',
+        recordedByName: admRecName,
+        recordedByDesignation: admRecDesig,
         recordedAtBranchId: pp.branchId || pa.branchId || 'HO',
         recordedAtBranchCode: pp.branchCode || pa.branchCode || 'HO',
         recordedAtBranchName: pp.branchName || pa.branchName || '',
@@ -1012,4 +1027,375 @@ export async function recordAdmissionWithPayment({
       totalPaid: payAmt
     };
   });
+}
+
+// ---------- Shared Dues & Payment History Evaluators (Single Source of Truth) ----------
+
+const NON_ELIGIBLE_STUDENT_STATUSES = new Set([
+  'inactive', 'dropped', 'left', 'completed', 'ended', 'transferred', 'deleted', 'archived'
+]);
+
+/**
+ * Only active students accrue pending/overdue installments or bills.
+ * Left/dropped/inactive/ended/completed/transferred/deleted students are excluded from Pending & Overdue
+ * while retaining full historical receipts in Payment History.
+ */
+export function isStudentEligibleForDues(student) {
+  if (!student) return false;
+  const st = String(student.status || 'active').toLowerCase().trim();
+  return !NON_ELIGIBLE_STUDENT_STATUSES.has(st);
+}
+
+/**
+ * Computes Youth student pending & overdue fee items + financials using shared single-source rules.
+ * - Course installments: full-plan students never appear for installments; unpaid installments become
+ *   Upcoming (< opens), Due (opens .. due), or Overdue (> due, late fee Rs 1/day via calculateLateFee).
+ * - Exam fee: due ONLY inside examWindowOf(session) (4th installment due + 1 day .. session end),
+ *   never overdue before that.
+ */
+export function evaluateYouthStudentDues(student, paymentsList = [], session = null, { asOfDate, course, coursesById, branchesById, batchesById } = {}) {
+  const financials = calculateStudentFinancials(student, paymentsList);
+  if (!student || student.ctx === 'school' || !isStudentEligibleForDues(student)) {
+    return { eligible: false, items: [], financials };
+  }
+
+  const today = asOfDate || todayISO();
+  const cObj = course || (coursesById && coursesById[student.courseId]) || null;
+  const brObj = (branchesById && branchesById[student.branchId]) || null;
+  const baObj = (batchesById && batchesById[student.batchId]) || null;
+
+  const baseMeta = {
+    ctx: 'youth',
+    studentDocId: student.id,
+    studentId: student.studentId || student.id || '',
+    studentName: student.name || 'Student',
+    phone: student.phone || '',
+    branchId: student.branchId || '',
+    branchCode: student.branchCode || brObj?.code || brObj?.branchCode || brObj?.shortCode || '',
+    branchName: student.branchName || brObj?.name || '',
+    courseId: student.courseId || '',
+    courseCode: cObj?.courseCode || cObj?.code || student.courseCode || '',
+    courseName: student.courseName || cObj?.name || '',
+    batchId: student.batchId || '',
+    batchName: student.batchName || baObj?.name || '',
+    sessionId: student.sessionId || session?.id || '',
+    sessionName: student.sessionName || session?.name || '',
+    student,
+    financials
+  };
+
+  const items = [];
+  const isFull = student.paymentPlan === 'full';
+
+  if (!isFull) {
+    const fallbackSched = session ? installmentSchedule(session) : [];
+    const rawSched = Array.isArray(student.feeSchedule) && student.feeSchedule.length ? student.feeSchedule : fallbackSched;
+    const defaultInstAmt = Number(student.feeSnapshot?.installment ?? cObj?.fees?.installment ?? 0);
+
+    for (const it of rawSched) {
+      const no = Number(it.no ?? it.installmentNo);
+      if (!no || !Number.isFinite(no)) continue;
+      if (isInstallmentPaid(it, paymentsList, student)) continue;
+
+      const month = it.month || '';
+      const opens = it.opens || (month ? `${month}-01` : '');
+      const dueDate = it.due || (month ? `${month}-10` : '');
+      const amt = Number(it.amount ?? defaultInstAmt ?? 0);
+
+      let status = 'upcoming';
+      let daysLate = 0;
+      let lateFee = 0;
+      if (dueDate && today > dueDate) {
+        status = 'overdue';
+        daysLate = calculateLateFee(dueDate, today);
+        lateFee = daysLate;
+      } else if (opens && today >= opens) {
+        status = 'due';
+      }
+
+      items.push({
+        ...baseMeta,
+        kind: 'IN',
+        installmentNo: no,
+        preselectedOption: 'IN_' + no,
+        whatIsDue: `Installment ${no}${month ? ' (' + month + ')' : ''}`,
+        month,
+        opens,
+        dueDate,
+        amount: amt,
+        daysLate,
+        lateFee,
+        totalPayable: amt + lateFee,
+        status
+      });
+    }
+  }
+
+  // Exam fee: due ONLY inside the exam window (day after 4th installment due until session end).
+  if (session) {
+    const ew = examWindowOf(session);
+    const inExamWindow = !!(ew.from && today >= ew.from && (!ew.to || today <= ew.to));
+    if (inExamWindow) {
+      const feesMap = session.examFeeCollection?.fees;
+      const hasLockedSessionFee = session.examFeeCollection?.started === true &&
+        feesMap && student.courseId && Object.prototype.hasOwnProperty.call(feesMap, student.courseId);
+      const examFee = hasLockedSessionFee
+        ? Number(feesMap[student.courseId])
+        : Number(cObj?.fees?.exam ?? student.feeSnapshot?.exam ?? student.examFee ?? 0);
+
+      if (examFee > 0 && !isExamFeePaid(examFee, paymentsList, student)) {
+        items.push({
+          ...baseMeta,
+          kind: 'EX',
+          installmentNo: null,
+          preselectedOption: 'EX',
+          whatIsDue: 'Examination Fee',
+          month: '',
+          opens: ew.from,
+          dueDate: ew.to || ew.from,
+          amount: examFee,
+          daysLate: 0,
+          lateFee: 0,
+          totalPayable: examFee,
+          status: 'due'
+        });
+      }
+    }
+  }
+
+  return { eligible: true, items, financials };
+}
+
+/**
+ * Normalizes raw Youth `students/{id}/payment/*` docs into ledger entries for Payment History:
+ * - Groups admission items (AD / FULL / MAT) sharing the same receipt number into ONE row with breakdown
+ *   so totals are never double counted.
+ * - Keeps each IN and EX payment as its own row with exact paid vs waived late fee split.
+ * - Flags pure waivers (WA) so they never add to money received.
+ */
+export function normalizeYouthPaymentsLedger(paymentsList = [], studentsById = new Map(), { branchesById = {}, coursesById = {}, requireParentStudent = false } = {}) {
+  const byStudentFullReceipts = new Map();
+  const groupedAdmissions = new Map();
+  const rows = [];
+
+  // Pass 1: collect FULL receipt numbers per student for legacy AD deduplication.
+  for (const p of (paymentsList || [])) {
+    if (!p) continue;
+    const sDocId = p.studentDocId || p._studentDocId || '';
+    const s = studentsById instanceof Map ? studentsById.get(sDocId) : studentsById[sDocId];
+    if (requireParentStudent && (!s || s.ctx === 'school')) continue;
+    const t = String(p.type || '').toUpperCase().trim();
+    if (t === 'FULL' && p.receiptNo) {
+      if (!byStudentFullReceipts.has(sDocId)) byStudentFullReceipts.set(sDocId, new Set());
+      byStudentFullReceipts.get(sDocId).add(p.receiptNo);
+    }
+  }
+
+  const labelForType = (t, p) => {
+    if (t === 'FULL') return 'Full course fee';
+    if (t === 'AD' || t === 'ADM' || t === 'ADMISSION') return 'Admission fee';
+    if (t === 'MAT' || t === 'MATERIAL' || t === 'STUDY_MATERIAL') return 'Study material';
+    if (t === 'EX' || t === 'EXAM' || t === 'EXAMINATION') return 'Exam fee';
+    if (t === 'IN' || t === 'INST' || t === 'INSTALLMENT') {
+      const no = p?.installmentNo != null ? p.installmentNo : '';
+      return `Installment ${no}`.trim();
+    }
+    if (t === 'WA' || t === 'WAIVER') return 'Fee waiver';
+    return t || 'Payment';
+  };
+
+  for (const p of (paymentsList || [])) {
+    if (!p) continue;
+    const sDocId = p.studentDocId || p._studentDocId || '';
+    const s = studentsById instanceof Map ? studentsById.get(sDocId) : studentsById[sDocId];
+    if (requireParentStudent && (!s || s.ctx === 'school')) continue;
+    if (s && s.ctx === 'school') continue;
+
+    const rawType = String(p.type || '').toUpperCase().trim();
+    const isAd = rawType === 'AD' || rawType === 'ADM' || rawType === 'ADMISSION';
+    const isFull = rawType === 'FULL';
+    const isMat = rawType === 'MAT' || rawType === 'MATERIAL' || rawType === 'STUDY_MATERIAL';
+    const isWaiver = rawType === 'WA' || rawType === 'WAIVER';
+    const isFullStudent = s?.paymentPlan === 'full';
+    const fullSet = byStudentFullReceipts.get(sDocId);
+
+    if (isAd && (isFullStudent || (p.receiptNo && fullSet && fullSet.has(p.receiptNo)))) {
+      continue;
+    }
+
+    const branchId = p.recordedAtBranchId || s?.branchId || '';
+    const brObj = branchesById[branchId] || {};
+    const cObj = (s && coursesById[s.courseId]) || {};
+    const date = p.paidOn || p.date || (p.createdAt?.seconds ? new Date(p.createdAt.seconds * 1000).toISOString().slice(0, 10) : '');
+    const mode = (p.mode || 'cash').toLowerCase();
+    const txnId = p.txnId || '';
+    const recordedBy = (p.recordedBy || s?.createdBy || '').toLowerCase();
+    const recordedByName = p.recordedByName || '';
+    const recordedByDesignation = p.recordedByDesignation || '';
+
+    if (isAd || isFull || isMat) {
+      const rcptKey = `${sDocId}|${p.receiptNo || s?.admissionReceiptNo || s?.receiptNo || p.id}`;
+      const normSub = isFull ? 'FULL' : (isMat ? 'MAT' : 'AD');
+      const amt = Number(p.amount || 0);
+      const lfVal = Number(p.lateFee ?? p.lateFeeAmount ?? 0);
+      const waived = !!(p.waived || p.lateFeeWaived);
+      const lfPaid = waived ? 0 : lfVal;
+      const lfWaived = waived ? lfVal : 0;
+
+      if (!groupedAdmissions.has(rcptKey)) {
+        groupedAdmissions.set(rcptKey, {
+          id: p.id,
+          ctx: 'youth',
+          isAdmissionGroup: true,
+          date,
+          receiptNo: p.receiptNo || s?.admissionReceiptNo || s?.receiptNo || '',
+          studentDocId: sDocId,
+          studentId: s?.studentId || sDocId,
+          studentName: s?.name || 'Student',
+          phone: s?.phone || '',
+          branchId,
+          branchCode: brObj.code || brObj.branchCode || p.recordedAtBranchCode || s?.branchCode || '',
+          branchName: p.recordedAtBranchName || s?.branchName || brObj.name || '',
+          courseId: s?.courseId || '',
+          courseCode: cObj.courseCode || cObj.code || s?.courseCode || '',
+          courseName: s?.courseName || cObj.name || '',
+          sessionId: s?.sessionId || '',
+          sessionName: s?.sessionName || '',
+          type: 'ADMISSION',
+          subTypes: new Set(),
+          breakdown: [],
+          mode,
+          txnId,
+          amount: 0,
+          lateFeePaid: 0,
+          lateFeeWaived: 0,
+          totalReceived: 0,
+          isPureWaiver: false,
+          recordedBy,
+          recordedByName,
+          recordedByDesignation,
+          remarks: p.remarks || '',
+          receiptRoute: sDocId ? `#/admissions/${encodeURIComponent(sDocId)}/receipt` : '',
+          createdAtSec: p.createdAt?.seconds || (typeof p.createdAt?.toMillis === 'function' ? Math.floor(p.createdAt.toMillis() / 1000) : 0)
+        });
+      }
+
+      const grp = groupedAdmissions.get(rcptKey);
+      grp.subTypes.add(normSub);
+      grp.breakdown.push({
+        id: p.id,
+        type: normSub,
+        label: labelForType(normSub, p),
+        amount: amt
+      });
+      grp.amount += amt;
+      grp.lateFeePaid += lfPaid;
+      grp.lateFeeWaived += lfWaived;
+      grp.totalReceived += (p.total != null ? Number(p.total) : (amt + lfPaid));
+      if (!grp.waiverReason && p.waiverReason) grp.waiverReason = p.waiverReason;
+      if (!isMat && p.id) grp.id = p.id;
+      if (date && (!grp.date || date > grp.date)) grp.date = date;
+      if (!grp.txnId && txnId) grp.txnId = txnId;
+      if (!grp.recordedBy && recordedBy) grp.recordedBy = recordedBy;
+      if (!grp.recordedByName && recordedByName) grp.recordedByName = recordedByName;
+      if (!grp.recordedByDesignation && recordedByDesignation) grp.recordedByDesignation = recordedByDesignation;
+      continue;
+    }
+
+    const normType = (rawType === 'INST' || rawType === 'INSTALLMENT')
+      ? 'IN'
+      : (rawType === 'EXAM' || rawType === 'EXAMINATION')
+        ? 'EX'
+        : (isWaiver ? 'WA' : (rawType || 'IN'));
+
+    const amt = isWaiver ? 0 : Number(p.amount || 0);
+    const lfVal = Number(p.lateFee ?? p.lateFeeAmount ?? 0);
+    const isLateWaived = !!(p.waived || p.lateFeeWaived);
+    const lfPaid = (!isWaiver && !isLateWaived) ? lfVal : 0;
+    const lfWaived = isWaiver
+      ? (Number(p.amount || 0) || lfVal || 0)
+      : (isLateWaived ? lfVal : 0);
+    const totalRecv = isWaiver
+      ? 0
+      : (p.total != null ? Number(p.total) : (amt + lfPaid));
+
+    const instNo = p.installmentNo != null ? Number(p.installmentNo) : null;
+    const schedMatch = instNo && Array.isArray(s?.feeSchedule)
+      ? s.feeSchedule.find((it) => Number(it.no ?? it.installmentNo) === instNo)
+      : null;
+    const instMonth = p.month || schedMatch?.month || '';
+    const dueDate = p.dueDate || schedMatch?.due || (instMonth ? `${instMonth}-10` : '');
+
+    rows.push({
+      id: p.id,
+      ctx: 'youth',
+      isAdmissionGroup: false,
+      date,
+      receiptNo: p.receiptNo || '',
+      studentDocId: sDocId,
+      studentId: s?.studentId || sDocId,
+      studentName: s?.name || 'Student',
+      phone: s?.phone || '',
+      branchId,
+      branchCode: brObj.code || brObj.branchCode || p.recordedAtBranchCode || s?.branchCode || '',
+      branchName: p.recordedAtBranchName || s?.branchName || brObj.name || '',
+      courseId: s?.courseId || '',
+      courseCode: cObj.courseCode || cObj.code || s?.courseCode || '',
+      courseName: s?.courseName || cObj.name || '',
+      sessionId: s?.sessionId || '',
+      sessionName: s?.sessionName || '',
+      type: normType,
+      subTypes: new Set([normType]),
+      typeLabel: labelForType(normType, p),
+      installmentNo: instNo,
+      month: instMonth,
+      dueDate,
+      breakdown: [],
+      mode: isWaiver ? 'waiver' : mode,
+      txnId,
+      amount: amt,
+      lateFeePaid: lfPaid,
+      lateFeeWaived: lfWaived,
+      waiverReason: p.waiverReason || '',
+      totalReceived: totalRecv,
+      isPureWaiver: isWaiver,
+      recordedBy,
+      recordedByName,
+      recordedByDesignation,
+      remarks: p.remarks || '',
+      receiptRoute: sDocId ? `#/payments/${encodeURIComponent(sDocId)}/${encodeURIComponent(p.id || 'latest')}/receipt?from=payments` : '',
+      createdAtSec: p.createdAt?.seconds || (typeof p.createdAt?.toMillis === 'function' ? Math.floor(p.createdAt.toMillis() / 1000) : 0)
+    });
+  }
+
+  for (const grp of groupedAdmissions.values()) {
+    const hasFull = grp.subTypes.has('FULL');
+    const hasAd = grp.subTypes.has('AD');
+    const hasMat = grp.subTypes.has('MAT');
+    if (hasFull && hasMat) grp.typeLabel = 'Full course fee + Study material';
+    else if (hasFull) grp.typeLabel = 'Full course fee';
+    else if (hasAd && hasMat) grp.typeLabel = 'Admission + Study material';
+    else if (hasAd) grp.typeLabel = 'Admission fee';
+    else if (hasMat) grp.typeLabel = 'Study material';
+    else grp.typeLabel = 'Admission';
+
+    grp.type = hasFull ? 'FULL' : (hasAd ? 'AD' : 'MAT');
+    grp.breakdown.sort((a, b) => {
+      const order = { FULL: 1, AD: 1, MAT: 2 };
+      return (order[a.type] || 9) - (order[b.type] || 9);
+    });
+    rows.push(grp);
+  }
+
+  rows.sort((a, b) => {
+    const da = a.date || '';
+    const dbDate = b.date || '';
+    if (da !== dbDate) return dbDate.localeCompare(da);
+    const ca = Number(a.createdAtSec || 0);
+    const cb = Number(b.createdAtSec || 0);
+    if (ca !== cb) return cb - ca;
+    return String(b.receiptNo || '').localeCompare(String(a.receiptNo || ''));
+  });
+
+  return rows;
 }

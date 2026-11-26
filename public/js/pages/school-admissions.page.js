@@ -9,21 +9,22 @@ import {
   collection, getDocs, query, where, doc, getDoc, addDoc, updateDoc, serverTimestamp,
   runTransaction, deleteField, writeBatch, deleteDoc
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.140';
-import { registerDirty, confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.140';
-import { buildStats, buildToolbar, renderPager } from '../components/list-page.js?v=1.8.140';
-import { createSelect } from '../components/ui-select.js?v=1.8.140';
-import { openMenu } from '../components/ui-menu.js?v=1.8.140';
-import { openPopup } from '../components/modal.js?v=1.8.140';
-import { createDatePicker, createMonthPicker } from '../components/ui-datepicker.js?v=1.8.140';
-import { confirmDialog } from '../components/ui-confirm.js?v=1.8.140';
-import { formatINR, formatDateIN, initials } from '../utils/formatter.js?v=1.8.140';
-import { validatePhone, validateEmail, validateDOB, validateName, validateRequired } from '../utils/validator.js?v=1.8.140';
-import { readStudentId, readReceiptNo, writeCounter } from '../services/admission.service.js?v=1.8.140';
-import { isCourseActive, batchAllowsCourse, todayISO } from '../utils/session-rules.js?v=1.8.140';
-import { compressTo100KB, readAsDataURL, blobToDataURL, isImageFile } from '../utils/image-compress.js?v=1.8.140';
-import { firstMonthlyMonth } from '../utils/school-receipt.js?v=1.8.140';
-import { playPaymentSuccessSound } from '../utils/sound.js?v=1.8.140';
+import { showToast } from '../components/toast.js?v=1.8.164';
+import { registerDirty, confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.164';
+import { buildStats, buildToolbar, renderPager, PAGE_SIZE } from '../components/list-page.js?v=1.8.164';
+import { createSelect } from '../components/ui-select.js?v=1.8.164';
+import { createBranchBatchFilter } from '../components/branch-batch-filter.js?v=1.8.164';
+import { openMenu } from '../components/ui-menu.js?v=1.8.164';
+import { openPopup } from '../components/modal.js?v=1.8.164';
+import { createDatePicker, createMonthPicker } from '../components/ui-datepicker.js?v=1.8.164';
+import { confirmDialog } from '../components/ui-confirm.js?v=1.8.164';
+import { formatINR, formatDateIN, initials } from '../utils/formatter.js?v=1.8.164';
+import { validatePhone, validateEmail, validateDOB, validateName, validateRequired } from '../utils/validator.js?v=1.8.164';
+import { readStudentId, readReceiptNo, writeCounter } from '../services/admission.service.js?v=1.8.164';
+import { isCourseActive, batchAllowsCourse, todayISO } from '../utils/session-rules.js?v=1.8.164';
+import { compressTo100KB, readAsDataURL, blobToDataURL, isImageFile } from '../utils/image-compress.js?v=1.8.164';
+import { firstMonthlyMonth } from '../utils/school-receipt.js?v=1.8.164';
+import { playPaymentSuccessSound } from '../utils/sound.js?v=1.8.164';
 
 const COL = 'students';
 const GENDERS = [
@@ -32,7 +33,6 @@ const GENDERS = [
   { value: 'other', label: 'Other', icon: 'user-x' }
 ];
 const DOC_KEYS = ['photo', 'signature'];
-const PAGE_SIZE = 10;
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 const AADHAAR_RE = /^\d{12}$/;
 
@@ -186,8 +186,7 @@ export async function mount({ container, profile, ctx }) {
       { value: 'all', label: 'All statuses' }, { value: 'active', label: 'Active' },
       { value: 'break', label: 'On break' }, { value: 'completed', label: 'Completed' }
     ]},
-    { id: 'level', label: 'Level', options: [{ value: 'all', label: 'All levels', icon: 'book-open' }] },
-    { id: 'batch', label: 'Batch', options: [{ value: 'all', label: 'All batches', icon: 'layers' }] }
+    { id: 'level', label: 'Level', options: [{ value: 'all', label: 'All levels', icon: 'book-open' }] }
   ];
   const tb = buildToolbar({
     placeholder: 'Search name, student ID or parent phone',
@@ -196,10 +195,23 @@ export async function mount({ container, profile, ctx }) {
     onRefresh: () => load(),
     rowLayout: true
   });
+  let bbFilter = null;
   const tbHost = $('adm-toolbar');
   if (tbHost) {
     tbHost.innerHTML = '';
     tbHost.appendChild(tb.el);
+
+    const bbHost = document.createElement('div');
+    bbHost.className = 'lp-bb-host';
+    bbFilter = createBranchBatchFilter(bbHost, {
+      persistKey: 'admissions.school',
+      profile,
+      ctx: 'school',
+      branches: [],
+      batches: [],
+      onChange: () => { page = 1; render(); }
+    });
+    tb.addFilterEl(bbHost);
 
     // Admission date filter dropdown + custom range row (inside row 3 container).
     const dateWrap = document.createElement('div');
@@ -424,12 +436,13 @@ export async function mount({ container, profile, ctx }) {
     const f = tb.state;
     const dr = admDateRange();
     if (dateErrEl) { dateErrEl.textContent = dr.err || ''; dateErrEl.hidden = !dr.err; }
+    const bbVal = bbFilter ? bbFilter.getValue() : { branchId: 'HO', batchId: 'all' };
     const list = students.filter((s) => {
       if (f.status && f.status !== 'all' && (s.status || 'active') !== f.status) return false;
       if (f.level && f.level !== 'all') {
         if (String(s.courseId || '') !== String(f.level)) return false;
       }
-      if (f.batch && f.batch !== 'all' && s.batchId !== f.batch) return false;
+      if (bbVal.batchId && bbVal.batchId !== 'all' && s.batchId !== bbVal.batchId) return false;
       const ad = s.admissionDate || '';
       if (dr.from && ad < dr.from) return false;
       if (dr.to && ad > dr.to) return false;
@@ -464,7 +477,7 @@ export async function mount({ container, profile, ctx }) {
       stats.update(3, students.filter((s) => { if (!s.admissionDate) return false; const d = new Date(s.admissionDate); return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear(); }).length, 'This calendar month');
       const clearBtn = $('adm-no-match-clear');
       if (clearBtn) {
-        clearBtn.onclick = (ev) => { ev.preventDefault(); tb.state.q = ''; tb.state.status = 'all'; tb.state.level = 'all'; tb.state.batch = 'all'; admDateFilter = 'all'; admDateFrom = ''; admDateTo = ''; dateSel.value = 'all'; dateCustomWrap.hidden = true; fromInp.value = ''; toInp.value = ''; render(); };
+        clearBtn.onclick = (ev) => { ev.preventDefault(); tb.state.q = ''; tb.state.status = 'all'; tb.state.level = 'all'; if (bbFilter) bbFilter.reset(); admDateFilter = 'all'; admDateFrom = ''; admDateTo = ''; dateSel.value = 'all'; dateCustomWrap.hidden = true; fromInp.value = ''; toInp.value = ''; render(); };
       }
       return;
     }
@@ -571,7 +584,7 @@ export async function mount({ container, profile, ctx }) {
       batches = bSnap.docs.map((d) => Object.assign({ id: d.id }, d.data())).filter(b => (b.status || 'active') === 'active');
       tb.setFilterOptions('level', [{ value: 'all', label: 'All levels' }].concat(levels.map((c) => ({ value: c.id, label: c.name || c.id, icon: 'book-open' }))));
       levelSel.setOptions([{ value: '', label: 'Select a level', icon: 'book-open' }].concat(levels.map((c) => ({ value: c.id, label: c.name || c.id, icon: 'book-open' }))));
-      tb.setFilterOptions('batch', [{ value: 'all', label: 'All batches', icon: 'layers' }].concat(batches.map((b) => ({ value: b.id, label: b.name || b.id, icon: 'layers' }))));
+      if (bbFilter) bbFilter.updateData({ ctx: 'school', batches, courses: levels });
       render();
     } catch (e) {
       console.error('[school-admissions] load failed', e);

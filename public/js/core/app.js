@@ -1,6 +1,6 @@
 import { app } from '../config/firebase-config.js';
 
-export const APP_VERSION = '1.8.140';
+export const APP_VERSION = '1.8.164';
 
 export const APP_CACHE = {
   currentUser: null,
@@ -16,6 +16,9 @@ export function clearAppCache() {
   APP_CACHE.branches = [];
   APP_CACHE.courses = [];
   APP_CACHE.levels = [];
+  APP_CACHE.org = null;
+  APP_CACHE.sessions = {};
+  APP_CACHE.currentSession = null;
 }
 
 export function setContext(ctx) {

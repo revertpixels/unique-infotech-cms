@@ -1,7 +1,27 @@
 // Shared session admission rules (Youth Centre: Jan-Jun / Jul-Dec sessions).
 
-export function todayISO() {
-  const d = new Date();
+export function getOrgTimezone() {
+  const tz = typeof window !== 'undefined' && window.APP_CACHE && window.APP_CACHE.org && window.APP_CACHE.org.timezone;
+  return (typeof tz === 'string' && tz.trim()) ? tz.trim() : 'Asia/Kolkata';
+}
+
+// Always resolves YYYY-MM-DD in the organisation timezone (India / Asia/Kolkata by default),
+// never browser UTC or OS timezone.
+export function todayISO(nowDate) {
+  const d = nowDate instanceof Date ? nowDate : new Date();
+  try {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: getOrgTimezone(),
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    }).formatToParts(d);
+    const map = {};
+    for (const p of parts) map[p.type] = p.value;
+    if (map.year && map.month && map.day) {
+      return `${map.year}-${map.month}-${map.day}`;
+    }
+  } catch (_) {}
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
@@ -70,13 +90,17 @@ export function examWindowOf(session) {
 
 // Late fine: Rs 1 per day for every day after the due date until paid.
 // day 11 = Rs 1, day 12 = Rs 2, ... on/before due = Rs 0.
+// Uses Date.UTC calendar arithmetic to prevent any DST / timezone shift.
 export function fineFor(dueISO, paidOrTodayISO) {
   if (!dueISO || !paidOrTodayISO) return 0;
-  const pd = toDate(paidOrTodayISO);
-  const dd = toDate(dueISO);
-  if (!pd || !dd) return 0;
-  const msPerDay = 86400000;
-  const days = Math.round((pd - dd) / msPerDay);
+  const dp = String(dueISO).slice(0, 10).split('-').map(Number);
+  const pp = String(paidOrTodayISO).slice(0, 10).split('-').map(Number);
+  if (dp.length !== 3 || pp.length !== 3 || dp.some(n => !Number.isFinite(n)) || pp.some(n => !Number.isFinite(n))) {
+    return 0;
+  }
+  const dueUtc = Date.UTC(dp[0], dp[1] - 1, dp[2]);
+  const paidUtc = Date.UTC(pp[0], pp[1] - 1, pp[2]);
+  const days = Math.round((paidUtc - dueUtc) / 86400000);
   return days > 0 ? days : 0;
 }
 

@@ -5,15 +5,15 @@ import {
   doc,
   getDoc
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { inWords } from '../utils/admission-receipt.js?v=1.8.140';
-import { showToast } from '../components/toast.js?v=1.8.140';
-import { fmtDate, todayISO } from '../utils/session-rules.js?v=1.8.140';
+import { inWords } from '../utils/admission-receipt.js?v=1.8.164';
+import { showToast } from '../components/toast.js?v=1.8.164';
+import { fmtDate, todayISO } from '../utils/session-rules.js?v=1.8.164';
 import {
   fetchStudentPayments,
   isInstallmentPaid,
   installmentCourseFee,
   installmentBalanceDue
-} from '../services/payment.service.js?v=1.8.140';
+} from '../services/payment.service.js?v=1.8.164';
 
 function $(id) {
   return document.getElementById(id);
@@ -86,6 +86,10 @@ function bindActions() {
       location.hash = `#/pay-fees?student=${encodeURIComponent(studentDocId)}`;
     } else if (fromParam === 'profile') {
       location.hash = `#/students/${encodeURIComponent(studentDocId)}?tab=payments`;
+    } else if (fromParam === 'payments') {
+      location.hash = '#/payments';
+    } else if (fromParam === 'school-payments') {
+      location.hash = '#/school-payments';
     } else if (window.history.length > 1) {
       window.history.back();
     } else {

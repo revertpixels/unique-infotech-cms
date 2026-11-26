@@ -27,9 +27,9 @@ import {
   collection, getDocs, query, where, doc, getDoc, addDoc, updateDoc, deleteDoc,
   serverTimestamp, runTransaction, writeBatch
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.140';
-import { firstMonthlyMonth } from './school-receipt.js?v=1.8.140';
-import { isCourseActive } from './session-rules.js?v=1.8.140';
+import { showToast } from '../components/toast.js?v=1.8.164';
+import { firstMonthlyMonth } from './school-receipt.js?v=1.8.164';
+import { isCourseActive, todayISO } from './session-rules.js?v=1.8.164';
 const ENROLMENTS_COL = 'enrolments';
 const BILLS_COL = 'bills';
 const PAYMENTS_COL = 'payments';
@@ -48,10 +48,9 @@ function pad4(n) { return String(n).padStart(4, '0'); }
 function rupees(n) { return Math.round(Number(n || 0) * 100) / 100; }
 function paise(n) { return Math.round(Number(n || 0) * 100); }
 
-// localToday: YYYY-MM-DD from local date components (NOT toISOString slice)
+// localToday: YYYY-MM-DD in organisation timezone (Asia/Kolkata by default, never UTC)
 export function localToday() {
-  const d = new Date();
-  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  return todayISO();
 }
 
 // nextMonth: calendar +1 month

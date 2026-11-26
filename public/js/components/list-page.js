@@ -1,5 +1,7 @@
 import { createSelect } from './ui-select.js';
 
+export const PAGE_SIZE = 10;
+
 function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
 function icon(name) { const i = document.createElement('i'); i.setAttribute('data-lucide', name); return i; }
 function paint() { if (typeof lucide !== 'undefined') lucide.createIcons(); }
@@ -112,7 +114,12 @@ export function buildToolbar(opts) {
     refreshBtn = r;
   }
   paint();
-  const api = { el: bar, state, setFilterOptions: (id, opts) => { if (selects[id]) selects[id].setOptions(opts); }, rowCustom, rowFilters,
+  const api = { el: bar, state,
+    setFilterOptions: (id, opts) => { if (selects[id]) selects[id].setOptions(opts); },
+    setFilterValue: (id, val) => { if (selects[id]) { selects[id].setValue(val); state[id] = val; } },
+    setFilterDisabled: (id, val) => { if (selects[id]) selects[id].setDisabled(val); },
+    clearSearch: () => { inp.value = ''; state.q = ''; },
+    rowCustom, rowFilters,
     // Insert an extra filter (e.g. Admission date) into the same row, before the refresh button.
     addFilterEl: (node) => { if (refreshBtn) rowFilters.insertBefore(node, refreshBtn); else rowFilters.appendChild(node); } };
   return api;

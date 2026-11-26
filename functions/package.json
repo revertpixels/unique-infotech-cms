@@ -1,16 +1,17 @@
 {
   "name": "functions",
-  "description": "Cloud Functions for Firebase - Identity Blocking Functions",
+  "description": "Cloud Functions for Unique Infotech CMS (Identity Blocking & Backup/Restore)",
   "scripts": {
-    "deploy": "firebase deploy --only functions"
+    "lint": "node --check index.js && node --check lib/backup-service.js",
+    "deploy": "firebase deploy --only functions:createCmsBackup,functions:clearCmsData,functions:restoreCmsBackup,functions:validateCmsBackup,functions:getCmsBackupStatus"
   },
   "engines": {
-    "node": "20"
+    "node": "22"
   },
   "main": "index.js",
   "dependencies": {
-    "firebase-admin": "^12.0.0",
-    "firebase-functions": "^5.0.0"
+    "firebase-admin": "^14.5.1",
+    "firebase-functions": "^7.4.0"
   },
   "private": true
 }

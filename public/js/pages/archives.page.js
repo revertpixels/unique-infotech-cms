@@ -1,5 +1,5 @@
 // archives.page.js — Youth Centre Archives UI (Phase 1: Download, Password Encryption, Verify & History)
-import { getContext } from '../core/app.js?v=1.8.172';
+import { getContext } from '../core/app.js?v=1.8.173';
 import {
   PAGE_SIZE,
   buildStats,
@@ -7,12 +7,12 @@ import {
   buildTableCard,
   renderPager,
   renderEmptyTableState
-} from '../components/list-page.js?v=1.8.172';
-import { openPopup } from '../components/modal.js?v=1.8.172';
-import { openMenu } from '../components/ui-menu.js?v=1.8.172';
-import { showToast } from '../components/toast.js?v=1.8.172';
-import { fmtDate } from '../utils/session-rules.js?v=1.8.172';
-import { formatINR } from '../utils/formatter.js?v=1.8.172';
+} from '../components/list-page.js?v=1.8.173';
+import { openPopup } from '../components/modal.js?v=1.8.173';
+import { openMenu } from '../components/ui-menu.js?v=1.8.173';
+import { showToast } from '../components/toast.js?v=1.8.173';
+import { fmtDate } from '../utils/session-rules.js?v=1.8.173';
+import { formatINR } from '../utils/formatter.js?v=1.8.173';
 import {
   ENABLE_ARCHIVE_SESSION_DELETE,
   computeArchiveSessionStatus,
@@ -21,7 +21,7 @@ import {
   scanSessionForExport,
   buildAndDownloadArchiveZip,
   verifyLocalArchiveZip
-} from '../services/archive.service.js?v=1.8.172';
+} from '../services/archive.service.js?v=1.8.173';
 
 let cleanups = [];
 

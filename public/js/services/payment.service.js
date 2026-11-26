@@ -8,11 +8,11 @@ import {
   runTransaction,
   serverTimestamp
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { readStudentId, readReceiptNo, writeCounter } from './admission.service.js?v=1.8.172';
-import { fineFor, todayISO, installmentSchedule, examWindowOf } from '../utils/session-rules.js?v=1.8.172';
-import { courseFeeOf } from '../utils/fees.js?v=1.8.172';
-import { formatPersonName } from '../utils/formatter.js?v=1.8.172';
-import { resolveUserDisplay } from './user-directory.service.js?v=1.8.172';
+import { readStudentId, readReceiptNo, writeCounter } from './admission.service.js?v=1.8.173';
+import { fineFor, todayISO, installmentSchedule, examWindowOf } from '../utils/session-rules.js?v=1.8.173';
+import { courseFeeOf } from '../utils/fees.js?v=1.8.173';
+import { formatPersonName } from '../utils/formatter.js?v=1.8.173';
+import { resolveUserDisplay } from './user-directory.service.js?v=1.8.173';
 
 const COL = 'students';
 

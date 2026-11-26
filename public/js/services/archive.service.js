@@ -2,7 +2,7 @@
 // permanent append-only archiveLogs manager, and reminder helpers.
 // Phase 2 deletion remains disabled until approved via ENABLE_ARCHIVE_SESSION_DELETE = false.
 
-import { auth, db } from '../config/firebase-config.js';
+import { auth, db, storage } from '../config/firebase-config.js';
 import {
   collection,
   doc,
@@ -17,24 +17,28 @@ import {
   getCountFromServer,
   serverTimestamp
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { APP_VERSION } from '../core/app.js?v=1.8.172';
-import { todayISO, installmentSchedule, getOrgTimezone } from '../utils/session-rules.js?v=1.8.172';
+import {
+  ref as storageRef,
+  getDownloadURL
+} from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-storage.js';
+import { APP_VERSION } from '../core/app.js?v=1.8.173';
+import { todayISO, installmentSchedule, getOrgTimezone } from '../utils/session-rules.js?v=1.8.173';
 import {
   calculateStudentFinancials,
   evaluateYouthStudentDues,
   normalizeYouthPaymentsLedger,
   installmentCourseFee,
   installmentBalanceDue
-} from './payment.service.js?v=1.8.172';
+} from './payment.service.js?v=1.8.173';
 import {
   loadUsersDirectory,
   resolveUserDisplay,
   getUserTitle
-} from './user-directory.service.js?v=1.8.172';
-import { formatPersonName, formatGenderDisplay } from '../utils/formatter.js?v=1.8.172';
-import { getStudentPhotoSrc, getStudentDocSrc, getStudentDocMime } from '../utils/student-media.js?v=1.8.172';
-import { buildOfflineViewerAssets } from '../utils/archive-viewer-builder.js?v=1.8.172';
-import { buildYouthReceiptData } from '../utils/admission-receipt.js?v=1.8.172';
+} from './user-directory.service.js?v=1.8.173';
+import { formatPersonName, formatGenderDisplay } from '../utils/formatter.js?v=1.8.173';
+import { getStudentPhotoSrc, getStudentDocRecord, getStudentDocSrc, getStudentDocMime } from '../utils/student-media.js?v=1.8.173';
+import { buildOfflineViewerAssets } from '../utils/archive-viewer-builder.js?v=1.8.173';
+import { buildYouthReceiptData } from '../utils/admission-receipt.js?v=1.8.173';
 
 /** Feature flag keeping Phase 2 session deletion OFF until Phase 1 is verified and approved. */
 export const ENABLE_ARCHIVE_SESSION_DELETE = false;
@@ -334,6 +338,53 @@ async function fetchUrlBinaryWithRetry(url, retries = 2) {
 
 function isIdDocumentKey(key = '') {
   return ID_DOC_KEY_RE.test(String(key || '').trim());
+}
+
+function canonicalDocKey(rawKey = '') {
+  const k = String(rawKey || '').trim();
+  const low = k.toLowerCase();
+  if (/^(photo|passportphoto|passport_photo|studentphoto|avatar|profilephoto|image|pic)$/.test(low)) return 'photo';
+  if (/^(signature|studentsignature|student_signature|sign|sig)$/.test(low)) return 'signature';
+  if (/^(dobproof|dob_proof|dob|idproof|id_proof|aadhaar|aadhaarcard|aadhar|birthcertificate|ageproof)$/.test(low)) return 'dobProof';
+  if (/^(marksheet|lastmarksheet|last_marksheet|academicmarksheet|academic_marksheet|qualification)$/.test(low)) return 'marksheet';
+  return k || 'doc';
+}
+
+function friendlyDocLabel(key = '', rawLabel = '') {
+  const canon = canonicalDocKey(key);
+  const labels = {
+    photo: 'Passport Photo',
+    signature: 'Student Signature',
+    dobProof: 'Date of Birth Proof',
+    marksheet: 'Academic Marksheet'
+  };
+  const rawTrim = String(rawLabel || '').trim();
+  if (labels[canon] && (!rawTrim || rawTrim.toLowerCase() === String(key || '').toLowerCase() || rawTrim.toLowerCase() === canon.toLowerCase())) {
+    return labels[canon];
+  }
+  if (rawTrim) return rawTrim;
+  return labels[canon] || formatPersonName(String(key).replace(/([A-Z])/g, ' $1').replace(/_/g, ' ')) || 'Document';
+}
+
+async function resolveDocBinaryWithFallbacks(d, fallbackSrc = '') {
+  const mimeHint = getStudentDocMime(d);
+  const docSrc = getStudentDocSrc(d, mimeHint) || fallbackSrc || '';
+  let bin = decodeDocBinary({
+    data: docSrc && docSrc.startsWith('data:') ? docSrc : '',
+    type: mimeHint
+  });
+  let remoteUrl = (docSrc && /^https?:\/\//i.test(docSrc))
+    ? docSrc
+    : (d?.url && /^https?:\/\//i.test(d.url) ? d.url : '');
+  if (!bin && !remoteUrl && d?.storagePath && storage) {
+    try {
+      remoteUrl = await getDownloadURL(storageRef(storage, d.storagePath));
+    } catch (_) {}
+  }
+  if (!bin && remoteUrl) {
+    bin = await fetchUrlBinaryWithRetry(remoteUrl, 2);
+  }
+  return { bin, remoteUrl };
 }
 
 function csvCell(v) {
@@ -745,6 +796,7 @@ export async function scanSessionForExport({
     const stDocsList = rawDocsByStudent[rawS.id] || [];
     const safeSid = sanitizeFilenamePart(rawS.studentId || rawS.id, rawS.id);
     const outDocs = [];
+    const exportedCanonKeys = new Set();
     let photoPath = '';
     const stDocsMap = {};
     stDocsList.forEach((dd) => {
@@ -752,36 +804,56 @@ export async function scanSessionForExport({
       stDocsMap[kName] = dd;
     });
 
-    for (const d of stDocsList) {
-      const key = String(d.id || d.key || 'doc').trim();
-      const keyNorm = key.toLowerCase();
-      const isIdDoc = isIdDocumentKey(key);
+    // Also inspect any inline student document objects/URLs when absent from docs subcollection
+    const extraInlineDocs = [];
+    const checkInlineKeys = ['photo', 'signature', 'dobProof', 'marksheet'];
+    checkInlineKeys.forEach((ck) => {
+      const hasSub = stDocsList.some((dd) => canonicalDocKey(dd.id || dd.key) === ck);
+      if (hasSub) return;
+      const rec = getStudentDocRecord(stDocsMap, ck, rawS);
+      if (rec && getStudentDocSrc(rec, getStudentDocMime(rec))) {
+        extraInlineDocs.push({ ...rec, id: rec.id || ck, key: ck });
+      }
+    });
+    if (rawS.docs && typeof rawS.docs === 'object' && !Array.isArray(rawS.docs)) {
+      Object.entries(rawS.docs).forEach(([dk, val]) => {
+        if (!val || typeof val !== 'object') return;
+        const canon = canonicalDocKey(dk);
+        const alreadyListed = stDocsList.concat(extraInlineDocs).some((dd) => canonicalDocKey(dd.id || dd.key) === canon);
+        if (!alreadyListed && getStudentDocSrc(val, getStudentDocMime(val))) {
+          extraInlineDocs.push({ ...val, id: val.id || dk, key: dk });
+        }
+      });
+    }
+
+    const combinedDocsList = stDocsList.concat(extraInlineDocs);
+    for (const d of combinedDocsList) {
+      const rawKey = String(d.id || d.key || d.docType || 'doc').trim();
+      const canonKey = canonicalDocKey(rawKey);
+      if (exportedCanonKeys.has(canonKey)) continue;
+      const isIdDoc = isIdDocumentKey(rawKey) || isIdDocumentKey(canonKey);
       if (isIdDoc && !includeIdDocs) continue;
       if (isIdDoc && includeIdDocs) idDocCount += 1;
 
-      const isPhoto = /^(photo|passportphoto|passport_photo|studentphoto|avatar|profilephoto|image)$/i.test(keyNorm)
-        || String(d.key || '').trim().toLowerCase() === 'photo';
-      const docSrc = getStudentDocSrc(d, getStudentDocMime(d));
-      let bin = decodeDocBinary({
-        data: docSrc && docSrc.startsWith('data:') ? docSrc : '',
-        type: getStudentDocMime(d)
-      });
-      const remoteUrl = (docSrc && /^https?:\/\//i.test(docSrc)) ? docSrc : (d.url && /^https?:\/\//i.test(d.url) ? d.url : '');
-      if (!bin && remoteUrl) {
-        try {
-          bin = await fetchUrlBinaryWithRetry(remoteUrl, 2);
-        } catch (err) {
-          missingFiles.push({
-            studentId: rawS.studentId || rawS.id,
-            key,
-            path: remoteUrl,
-            reason: err && err.message ? err.message : 'Download failed'
-          });
-        }
+      const isPhoto = canonKey === 'photo';
+      let bin = null;
+      let remoteUrl = '';
+      try {
+        const res = await resolveDocBinaryWithFallbacks(d);
+        bin = res.bin;
+        remoteUrl = res.remoteUrl;
+      } catch (err) {
+        missingFiles.push({
+          studentId: rawS.studentId || rawS.id,
+          key: canonKey,
+          path: d.storagePath || d.url || canonKey,
+          reason: err && err.message ? err.message : 'Download failed'
+        });
       }
 
       if (bin && bin.bytes) {
-        const safeDocType = sanitizeFilenamePart(key, 'file');
+        exportedCanonKeys.add(canonKey);
+        const safeDocType = sanitizeFilenamePart(canonKey, 'file');
         const relPath = isPhoto
           ? `files/photos/${safeSid}.${bin.ext}`
           : `files/docs/${safeSid}/${safeDocType}.${bin.ext}`;
@@ -795,39 +867,38 @@ export async function scanSessionForExport({
           docFileCount += 1;
         }
         outDocs.push({
-          key: isPhoto ? 'photo' : key,
-          label: d.label || key,
+          key: canonKey,
+          label: friendlyDocLabel(canonKey, d.label),
           name: d.name || displayFname,
           mime: bin.mime,
           sizeBytes: bin.bytes.byteLength,
           path: relPath
         });
-      } else if (d.storagePath || remoteUrl) {
+      } else if ((d.storagePath || remoteUrl) && !missingFiles.some((m) => m.studentId === (rawS.studentId || rawS.id) && m.key === canonKey)) {
         missingFiles.push({
           studentId: rawS.studentId || rawS.id,
-          key,
+          key: canonKey,
           path: d.storagePath || remoteUrl,
           reason: 'Binary document payload unavailable'
         });
       }
     }
 
-    // Fallback: resolve photo via shared getStudentPhotoSrc helper (inline student fields or alternate formats)
+    // Fallback: resolve photo via shared getStudentPhotoSrc helper (legacy inline fields)
     if (!photoPath) {
       const fallbackPhotoSrc = getStudentPhotoSrc(rawS, stDocsMap);
       if (fallbackPhotoSrc) {
-        let bin = decodeDocBinary({ data: fallbackPhotoSrc.startsWith('data:') ? fallbackPhotoSrc : '' });
-        if (!bin && /^https?:\/\//i.test(fallbackPhotoSrc)) {
-          try {
-            bin = await fetchUrlBinaryWithRetry(fallbackPhotoSrc, 2);
-          } catch (err) {
-            missingFiles.push({
-              studentId: rawS.studentId || rawS.id,
-              key: 'photo',
-              path: fallbackPhotoSrc,
-              reason: err && err.message ? err.message : 'Photo download failed'
-            });
-          }
+        let bin = null;
+        try {
+          const res = await resolveDocBinaryWithFallbacks({ data: fallbackPhotoSrc.startsWith('data:') ? fallbackPhotoSrc : '', url: /^https?:\/\//i.test(fallbackPhotoSrc) ? fallbackPhotoSrc : '' }, fallbackPhotoSrc);
+          bin = res.bin;
+        } catch (err) {
+          missingFiles.push({
+            studentId: rawS.studentId || rawS.id,
+            key: 'photo',
+            path: fallbackPhotoSrc,
+            reason: err && err.message ? err.message : 'Photo download failed'
+          });
         }
         if (bin && bin.bytes) {
           const relPath = `files/photos/${safeSid}.${bin.ext}`;
@@ -845,6 +916,22 @@ export async function scanSessionForExport({
           });
         }
       }
+    }
+
+    // Resolve student creator display (Name + Designation) without leaking raw email in UI
+    const creatorKey = String(rawS.createdBy || '').trim().toLowerCase();
+    if (creatorKey) {
+      const crDisp = resolveUserDisplay(creatorKey, '', '');
+      const rawCrName = crDisp.name && crDisp.name !== '-' ? formatPersonName(crDisp.name) : '';
+      const crName = rawCrName && !rawCrName.includes('@') ? rawCrName : '';
+      const crDesig = crDisp.designation ? formatPersonName(crDisp.designation) : '';
+      if (crName) {
+        cleanS._registeredByLabel = crDesig ? `${crName} (${crDesig})` : crName;
+      } else {
+        cleanS._registeredByLabel = crDesig ? `Authorised Staff (${crDesig})` : 'Authorised Staff';
+      }
+    } else {
+      cleanS._registeredByLabel = '-';
     }
 
     if (photoPath) {
@@ -927,6 +1014,10 @@ export async function scanSessionForExport({
   });
 
   // Resolve minimal collector info (name + designation at export time, zero extra user PII)
+  const cleanStaffName = (v) => {
+    const s = formatPersonName(String(v || '').trim());
+    return (!s || s === '-' || s.includes('@')) ? '' : s;
+  };
   const collectors = {};
   const ledgerByStudent = {};
   let collectedTotal = 0;
@@ -942,20 +1033,35 @@ export async function scanSessionForExport({
       if (!entry.batchName && stObj.batchName) entry.batchName = stObj.batchName;
     }
     const colDisp = resolveUserDisplay(entry.recordedBy, entry.recordedByName, entry.recordedByDesignation);
-    const colName = colDisp.name && colDisp.name !== '-' ? colDisp.name : (entry.recordedByName || '');
-    const colDesig = colDisp.designation || entry.recordedByDesignation || '';
+    const colName = cleanStaffName(colDisp.name) || cleanStaffName(entry.recordedByName) || '';
+    const colDesig = cleanStaffName(colDisp.designation || entry.recordedByDesignation || '');
     entry.recordedByName = colName;
     entry.recordedByDesignation = colDesig;
     entry.rowKey = `youth:${entry.id || i}:${entry.studentDocId || ''}`;
     entry.searchBlob = [entry.receiptNo, entry.studentName, entry.studentId, entry.phone, entry.txnId, entry.typeLabel, entry.remarks, colName].filter(Boolean).join(' ');
 
-    if (entry.recordedBy && !collectors[entry.recordedBy]) {
-      collectors[entry.recordedBy] = {
-        key: entry.recordedBy,
-        name: colName || entry.recordedBy,
+    const recKey = String(entry.recordedBy || '').trim().toLowerCase();
+    if (recKey && (!collectors[recKey] || (!collectors[recKey].name || collectors[recKey].name === 'Authorised Staff'))) {
+      collectors[recKey] = {
+        key: recKey,
+        name: colName || 'Authorised Staff',
         designation: colDesig || 'Staff',
         role: colDisp.role || ''
       };
+    }
+    if (stObj && stObj.createdBy) {
+      const crKey2 = String(stObj.createdBy).trim().toLowerCase();
+      if (crKey2 && !collectors[crKey2]) {
+        const crDisp2 = resolveUserDisplay(crKey2, '', '');
+        const crN = cleanStaffName(crDisp2.name);
+        const crD = cleanStaffName(crDisp2.designation);
+        collectors[crKey2] = {
+          key: crKey2,
+          name: crN || 'Authorised Staff',
+          designation: crD || 'Staff',
+          role: crDisp2.role || ''
+        };
+      }
     }
     if (!ledgerByStudent[entry.studentDocId]) ledgerByStudent[entry.studentDocId] = [];
     ledgerByStudent[entry.studentDocId].push(entry);
@@ -966,6 +1072,16 @@ export async function scanSessionForExport({
       if (entry.receiptNo) receiptCount += 1;
     }
     lateFeesWaived += Number(entry.lateFeeWaived || 0);
+  }
+
+  for (const st of scrubbedStudents) {
+    if (!st._registeredByLabel || /^Authorised Staff/i.test(st._registeredByLabel)) {
+      const ck = String(st.createdBy || '').trim().toLowerCase();
+      const col = ck ? collectors[ck] : null;
+      if (col && col.name && col.name !== 'Authorised Staff') {
+        st._registeredByLabel = col.designation ? `${col.name} (${col.designation})` : col.name;
+      }
+    }
   }
 
   const overdueStudentSet = new Set(overdueItems.map((it) => it.studentDocId));

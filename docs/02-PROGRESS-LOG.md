@@ -39,6 +39,31 @@
 
 ---
 
+### [2026-11-26 22:58] Version 1.8.173 — Archive Student Profile Parity, Media/Doc Alias Resolution & Image Hydration
+
+**What was built:**
+- **Archive Export Media & Collector Resolution (`public/js/services/archive.service.js`)**:
+  - Unified `canonicalDocKey`, `friendlyDocLabel`, and `resolveDocBinaryWithFallbacks` across `students/{id}/docs/*` subcollection docs, inline `s.docs` maps, parent document fields (`photo`, `signature`, `dobProof`, `marksheet`), and Storage path `getDownloadURL` fallbacks (`photo`/`passportPhoto`/`studentPhoto`, `dobProof`/`dob`/`birthCertificate`/`aadhaar`, `marksheet`/`lastMarksheet`/`qualification`, `signature`/`sign`).
+  - Added `_registeredByLabel` (`Name (Designation)` / `Authorised Staff`) and creator resolution in `collectors` so offline viewer never exposes raw creator emails on staff metadata.
+- **Offline Archive Viewer Parity (`public/js/utils/archive-viewer-builder.js`, `archive-viewer-styles.js`, `archive-viewer-receipts.js`)**:
+  - Enforced single active tab visibility (`.sp-pane:not(.active)` & `[hidden]`), 2-column document actions grid (`.sp-doc-actions`), friendly document card labels, `'Paid in Full'` KPI on full-payment plans, and `Name (Designation)` collector formatting.
+  - Removed the 5th `System & Audit Metadata` card and redundant masked Aadhaar field from Personal Details so only the 4 live CMS cards render (`Personal Information`, `Contact Information`, `Guardian Details`, `Academic Enrollment`), moving `Student Enrollment & Audit Metadata` into `About Archive`.
+  - Added URL hash deep-linking & back/forward navigation (`#/students/<id>?tab=...`), student avatars on the `Receipts` list and Payment Details modal tile, and single-pass `hydrateImages(scope)` with visible initials/placeholder fallbacks plus `console.warn('[archive] Image failed to load:', ...)` diagnostics.
+
+**Why:**
+- Ensures exported Student Profile tabs, document cards, photos/signatures across all views & receipts, and encrypted/plain `file://` image loading match the live CMS without altering any live CMS page, fee maths, receipt numbers, or security rules.
+
+**Files touched (created / modified / deleted):**
+- MODIFIED: `public/js/services/archive.service.js`, `public/js/utils/archive-viewer-builder.js`, `public/js/utils/archive-viewer-styles.js`, `public/js/utils/archive-viewer-receipts.js`, `docs/02-PROGRESS-LOG.md`, plus `?v=1.8.173` cache-buster query bumps across `public/` via `tools/bump-version.js`.
+
+**Firestore changes:**
+- None. No `firestore.rules`, `storage.rules`, or Cloud Functions changes.
+
+**Next task:**
+- Confirm with user whether live `public/js/pages/student-profile.page.js` (`Registered By` raw email) / `System & Audit Metadata` card should also be updated in a separate task.
+
+---
+
 ### [2026-11-26 15:10] Version 1.8.172 — Live Student Photo Fix, Title Case Audit & Full Offline Archive Parity
 
 **What was built:**

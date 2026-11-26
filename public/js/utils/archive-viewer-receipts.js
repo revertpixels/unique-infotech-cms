@@ -159,8 +159,13 @@ export const ARCHIVE_RECEIPTS_VIEWER_JS = `(function(){
     var photoRel = '';
     var sigRel = '';
     for (var i = 0; i < docsList.length; i++) {
-      if (docsList[i].key === 'photo' && docsList[i].path) photoRel = docsList[i].path;
-      if (docsList[i].key === 'signature' && docsList[i].path) sigRel = docsList[i].path;
+      var dk = String((docsList[i] && docsList[i].key) || '').toLowerCase();
+      if ((dk === 'photo' || dk === 'passportphoto' || dk === 'passport_photo' || dk === 'studentphoto' || dk === 'avatar' || dk === 'profilephoto') && docsList[i].path) {
+        photoRel = docsList[i].path;
+      }
+      if ((dk === 'signature' || dk === 'studentsignature' || dk === 'student_signature' || dk === 'sign' || dk === 'sig') && docsList[i].path) {
+        sigRel = docsList[i].path;
+      }
     }
     if (!photoRel) photoRel = student._photoPath || student.photo || '';
 
@@ -464,7 +469,11 @@ export const ARCHIVE_RECEIPTS_VIEWER_JS = `(function(){
     var docsList = (data.docsByStudent && data.docsByStudent[student.id]) || [];
     var photoPath = '';
     for (var d = 0; d < docsList.length; d++) {
-      if (docsList[d].key === 'photo' && docsList[d].path) { photoPath = docsList[d].path; break; }
+      var dk2 = String((docsList[d] && docsList[d].key) || '').toLowerCase();
+      if ((dk2 === 'photo' || dk2 === 'passportphoto' || dk2 === 'passport_photo' || dk2 === 'studentphoto' || dk2 === 'avatar' || dk2 === 'profilephoto') && docsList[d].path) {
+        photoPath = docsList[d].path;
+        break;
+      }
     }
     if (!photoPath) photoPath = student._photoPath || student.photo || '';
 

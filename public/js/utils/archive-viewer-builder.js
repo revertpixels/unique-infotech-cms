@@ -1,5 +1,5 @@
-import { ARCHIVE_VIEWER_OVERRIDES_CSS } from './archive-viewer-styles.js?v=1.8.172';
-import { ARCHIVE_RECEIPTS_VIEWER_JS } from './archive-viewer-receipts.js?v=1.8.172';
+import { ARCHIVE_VIEWER_OVERRIDES_CSS } from './archive-viewer-styles.js?v=1.8.173';
+import { ARCHIVE_RECEIPTS_VIEWER_JS } from './archive-viewer-receipts.js?v=1.8.173';
 
 /**
  * Builds the static viewer files packed into each archive ZIP:
@@ -195,6 +195,30 @@ const ARCHIVE_APP_VIEWER_JS = `(function(){
     return s.indexOf('files/') === 0 || s.indexOf('./files/') === 0;
   }
 
+  function canonicalArchiveDocKey(rawKey) {
+    var k = String(rawKey || '').trim().toLowerCase();
+    if (/^(photo|passportphoto|passport_photo|studentphoto|avatar|profilephoto|image|pic)$/.test(k)) return 'photo';
+    if (/^(signature|studentsignature|student_signature|sign|sig)$/.test(k)) return 'signature';
+    if (/^(dobproof|dob_proof|dob|idproof|id_proof|aadhaar|aadhaarcard|aadhar|birthcertificate|ageproof)$/.test(k)) return 'dobProof';
+    if (/^(marksheet|lastmarksheet|last_marksheet|academicmarksheet|academic_marksheet|qualification)$/.test(k)) return 'marksheet';
+    return String(rawKey || '').trim();
+  }
+
+  function friendlyArchiveDocLabel(key, rawLabel) {
+    var canon = canonicalArchiveDocKey(key);
+    var map = {
+      photo: 'Passport Photo',
+      signature: 'Student Signature',
+      dobProof: 'Date of Birth Proof',
+      marksheet: 'Academic Marksheet'
+    };
+    var trimRaw = String(rawLabel || '').trim();
+    if (map[canon] && (!trimRaw || trimRaw.toLowerCase() === String(key || '').toLowerCase() || trimRaw.toLowerCase() === canon.toLowerCase())) {
+      return map[canon];
+    }
+    return trimRaw || map[canon] || titleCase(String(key || 'Document').replace(/([A-Z])/g, ' $1').replace(/_/g, ' '));
+  }
+
   function getArchivePhotoSrc(s) {
     if (!s) return '';
     if (isRelativeMediaPath(s._photoPath)) return s._photoPath;
@@ -202,8 +226,7 @@ const ARCHIVE_APP_VIEWER_JS = `(function(){
     if (isRelativeMediaPath(s.photoPath)) return s.photoPath;
     var docs = (DATA.docsByStudent && DATA.docsByStudent[s.id]) || [];
     for (var i = 0; i < docs.length; i++) {
-      var k = String((docs[i] && docs[i].key) || '').toLowerCase();
-      if ((k === 'photo' || k === 'passportphoto' || k === 'studentphoto' || k === 'avatar') && docs[i].path) {
+      if (canonicalArchiveDocKey(docs[i] && docs[i].key) === 'photo' && docs[i].path) {
         return docs[i].path;
       }
     }
@@ -213,23 +236,32 @@ const ARCHIVE_APP_VIEWER_JS = `(function(){
   function findArchiveDocRecord(s, targetKey) {
     if (!s) return null;
     var docs = (DATA.docsByStudent && DATA.docsByStudent[s.id]) || [];
-    var low = String(targetKey || '').toLowerCase();
-    var aliases = {
-      photo: ['photo', 'passportphoto', 'studentphoto', 'avatar'],
-      signature: ['signature', 'studentsignature', 'sign'],
-      dobproof: ['dobproof', 'dob', 'birthcertificate', 'ageproof', 'aadhaar', 'aadhar'],
-      marksheet: ['marksheet', 'lastmarksheet', 'academicmarksheet', 'qualification', 'certificate']
-    };
-    var accept = aliases[low] || [low];
+    var targetCanon = canonicalArchiveDocKey(targetKey);
     for (var i = 0; i < docs.length; i++) {
-      var dk = String((docs[i] && docs[i].key) || '').toLowerCase();
-      if (accept.indexOf(dk) >= 0) return docs[i];
+      if (canonicalArchiveDocKey(docs[i] && docs[i].key) === targetCanon) return docs[i];
     }
-    if (low === 'photo') {
+    if (targetCanon === 'photo') {
       var ph = getArchivePhotoSrc(s);
       if (ph) return { key: 'photo', label: 'Passport Photo', name: (s.studentId || s.id || 'photo') + '.jpg', mime: 'image/jpeg', sizeBytes: 0, path: ph };
     }
     return null;
+  }
+
+  function resolveStaffLabel(email, fallbackName, fallbackDesig, prebuiltLabel) {
+    if (prebuiltLabel && String(prebuiltLabel).trim() && prebuiltLabel !== '-') {
+      return String(prebuiltLabel).trim();
+    }
+    var emKey = String(email || '').trim().toLowerCase();
+    var rec = (emKey && DATA.collectors && DATA.collectors[emKey]) || null;
+    var nm = titleCase((rec && rec.name) || fallbackName || '');
+    var dg = titleCase((rec && rec.designation) || fallbackDesig || '');
+    if (nm && nm !== '-' && nm.indexOf('@') < 0) {
+      return dg ? (nm + ' (' + dg + ')') : nm;
+    }
+    if (fallbackName && String(fallbackName).indexOf('@') < 0 && fallbackName !== '-') {
+      return titleCase(fallbackName) + (dg ? (' (' + dg + ')') : '');
+    }
+    return emKey && emKey !== '-' ? ('Authorised Staff' + (dg ? (' (' + dg + ')') : '')) : '-';
   }
 
   function lateFeeAsOf(dueIso, asOfIso) {
@@ -316,30 +348,91 @@ const ARCHIVE_APP_VIEWER_JS = `(function(){
     return p;
   }
 
+  function applyImageFallback(img, rel) {
+    if (!img) return;
+    if (!img.dataset.warnedFail) {
+      img.dataset.warnedFail = '1';
+      console.warn('[archive] Image failed to load:', rel || img.getAttribute('data-arc-src') || img.src || 'unknown');
+    }
+    var next = img.nextElementSibling;
+    if (next && next.hasAttribute('data-arc-fallback')) {
+      img.style.display = 'none';
+      next.hidden = false;
+      return;
+    }
+    var par = img.parentElement;
+    if (par && par.classList.contains('sp-doc-preview-area')) {
+      par.innerHTML = '<div class="sp-doc-top-pdf"><i data-lucide="image-off"></i><span>Image unavailable</span></div>';
+      paintIcons(par);
+      return;
+    }
+    if (par && (par.classList.contains('photo') || par.classList.contains('mpr-photo'))) {
+      par.innerHTML = '<span>Photo</span>';
+      return;
+    }
+    if (par && par.classList.contains('sig')) {
+      par.innerHTML = '<span style="color:var(--muted);font-size:11px">Signature</span>';
+      return;
+    }
+    if (par && (par.classList.contains('logo-box') || par.classList.contains('logo') || par.classList.contains('mpr-logo'))) {
+      par.classList.remove('img');
+      par.innerHTML = '<span>UI</span>';
+      return;
+    }
+    if (par && par.classList.contains('adm-view-tile')) {
+      par.style.padding = '';
+      par.style.overflow = '';
+      par.innerHTML = '<i data-lucide="' + esc(img.getAttribute('data-fallback-icon') || 'receipt') + '"></i>';
+      paintIcons(par);
+      return;
+    }
+    img.style.display = 'none';
+  }
+
+  function waitImgSettled(img) {
+    return new Promise(function(resolve){
+      if (!img) { resolve(); return; }
+      if (img.complete) {
+        if (!img.naturalWidth) applyImageFallback(img, img.getAttribute('data-arc-src'));
+        resolve();
+        return;
+      }
+      var done = false;
+      function fin(failed) {
+        if (done) return;
+        done = true;
+        if (failed || !img.naturalWidth) applyImageFallback(img, img.getAttribute('data-arc-src'));
+        resolve();
+      }
+      img.addEventListener('load', function(){ fin(false); }, { once: true });
+      img.addEventListener('error', function(){ fin(true); }, { once: true });
+      setTimeout(function(){ fin(!img.complete || !img.naturalWidth); }, 3500);
+    });
+  }
+
   function hydrateImages(scope) {
     var container = scope || ROOT;
+    if (!container) return Promise.resolve();
     var imgs = container.querySelectorAll('img[data-arc-src]');
     var iframes = container.querySelectorAll('iframe[data-arc-pdf]');
     var jobs = [];
-    function revealFallback(img) {
-      img.style.display = 'none';
-      var next = img.nextElementSibling;
-      if (next && next.hasAttribute('data-arc-fallback')) next.hidden = false;
-    }
     for (var i = 0; i < imgs.length; i++) {
       (function(img){
         var rel = img.getAttribute('data-arc-src');
-        if (!rel) return;
-        if (img.dataset.fallbackHide === '1') {
-          img.onerror = function(){ revealFallback(img); };
-        }
+        if (!rel) { applyImageFallback(img, ''); return; }
+        img.onerror = function(){ applyImageFallback(img, rel); };
         if (!unlockKey) {
           img.src = rel;
+          jobs.push(waitImgSettled(img));
           return;
         }
         jobs.push(resolveMediaUrl(rel).then(function(url){
-          if (url) img.src = url;
-          else if (img.dataset.fallbackHide === '1') revealFallback(img);
+          if (!url) {
+            applyImageFallback(img, rel);
+            return;
+          }
+          img.src = url;
+          return waitImgSettled(img);
         }));
       })(imgs[i]);
     }
@@ -353,6 +446,7 @@ const ARCHIVE_APP_VIEWER_JS = `(function(){
         }
         jobs.push(resolveMediaUrl(rel).then(function(url){
           if (url) fr.src = url;
+          else console.warn('[archive] PDF failed to load:', rel);
         }));
       })(iframes[j]);
     }
@@ -432,7 +526,9 @@ const ARCHIVE_APP_VIEWER_JS = `(function(){
     head.className = 'adm-view-head';
     var left = document.createElement('div');
     left.className = 'adm-view-head-left';
-    if (o.icon) {
+    if (o.tilePhoto) {
+      left.innerHTML += '<div class="adm-view-tile ' + esc(o.tone || 'default') + '" style="padding:0;overflow:hidden;"><img data-arc-src="' + esc(o.tilePhoto) + '" data-fallback-icon="' + esc(o.icon || 'receipt') + '" alt="' + esc(o.tileAlt || '') + '" style="width:100%;height:100%;object-fit:cover;display:block;"></div>';
+    } else if (o.icon) {
       left.innerHTML += '<div class="adm-view-tile ' + esc(o.tone || 'default') + '"><i data-lucide="' + esc(o.icon) + '"></i></div>';
     }
     var titles = document.createElement('div');
@@ -658,8 +754,88 @@ const ARCHIVE_APP_VIEWER_JS = `(function(){
     return out;
   }
 
-  function findStudent(id) {
-    return (DATA.studentsById && DATA.studentsById[id]) || null;
+  function findStudent(idOrSid) {
+    if (!idOrSid) return null;
+    if (DATA && DATA.studentsById && DATA.studentsById[idOrSid]) return DATA.studentsById[idOrSid];
+    var list = (DATA && DATA.students) || [];
+    var key = String(idOrSid).trim();
+    for (var i = 0; i < list.length; i++) {
+      if (list[i].id === key || String(list[i].studentId || '') === key) return list[i];
+    }
+    return null;
+  }
+
+  function hashForNav() {
+    if (NAV.page === 'student-profile' && NAV.studentDocId) {
+      var st = findStudent(NAV.studentDocId);
+      var refId = (st && (st.studentId || st.id)) || NAV.studentDocId;
+      return '#/students/' + encodeURIComponent(refId) + '?tab=' + encodeURIComponent(NAV.spTab || 'personal');
+    }
+    if (NAV.page === 'admission-receipt' && NAV.studentDocId) {
+      return '#/admissions/' + encodeURIComponent(NAV.studentDocId) + '/receipt';
+    }
+    if (NAV.page === 'payment-receipt' && NAV.studentDocId) {
+      return '#/payments/' + encodeURIComponent(NAV.studentDocId) + '/receipt';
+    }
+    return '#/' + (NAV.page || 'dashboard');
+  }
+
+  var lastSyncedHash = '';
+  function syncHashFromNav(replace) {
+    var target = hashForNav();
+    lastSyncedHash = target;
+    if (location.hash === target) return;
+    try {
+      if (replace && history && typeof history.replaceState === 'function') {
+        history.replaceState(null, '', target);
+      } else {
+        location.hash = target;
+      }
+    } catch (_) {}
+  }
+
+  function applyHashToNav(rawHash) {
+    var h = String(rawHash || location.hash || '').trim();
+    if (!h || h === '#' || h === '#/') return false;
+    var clean = h.replace(/^#\\/?/, '');
+    var qIdx = clean.indexOf('?');
+    var pathPart = qIdx >= 0 ? clean.slice(0, qIdx) : clean;
+    var queryPart = qIdx >= 0 ? clean.slice(qIdx + 1) : '';
+    var params = {};
+    if (queryPart) {
+      queryPart.split('&').forEach(function(pair){
+        var eq = pair.indexOf('=');
+        if (eq > 0) params[decodeURIComponent(pair.slice(0, eq))] = decodeURIComponent(pair.slice(eq + 1));
+      });
+    }
+    var segs = pathPart.split('/').filter(Boolean);
+    if (!segs.length) return false;
+    var top = segs[0].toLowerCase();
+    if (top === 'students' && segs[1]) {
+      var st = findStudent(decodeURIComponent(segs[1]));
+      if (st) {
+        NAV.page = 'student-profile';
+        NAV.studentDocId = st.id;
+        var reqTab = String(params.tab || 'personal').toLowerCase();
+        NAV.spTab = ['personal', 'documents', 'course', 'payments'].indexOf(reqTab) >= 0 ? reqTab : 'personal';
+        return true;
+      }
+    }
+    if (top === 'admissions' && segs[1] && segs[2] === 'receipt') {
+      var stAdm = findStudent(decodeURIComponent(segs[1]));
+      if (stAdm) {
+        NAV.page = 'admission-receipt';
+        NAV.studentDocId = stAdm.id;
+        NAV.receiptMode = 'admission';
+        NAV.receiptEntry = null;
+        return true;
+      }
+    }
+    if (['dashboard', 'students', 'payments', 'overdue', 'receipts', 'reports', 'about'].indexOf(top) >= 0) {
+      NAV.page = top;
+      return true;
+    }
+    return false;
   }
 
   function formatCourseBranchObj(row) {
@@ -701,6 +877,7 @@ const ARCHIVE_APP_VIEWER_JS = `(function(){
     NAV.receiptMode = 'admission';
     NAV.receiptEntry = null;
     NAV.page = 'admission-receipt';
+    syncHashFromNav(false);
     renderView();
     window.scrollTo(0, 0);
   }
@@ -719,6 +896,7 @@ const ARCHIVE_APP_VIEWER_JS = `(function(){
     NAV.receiptMode = 'payment';
     NAV.receiptEntry = entry;
     NAV.page = 'payment-receipt';
+    syncHashFromNav(false);
     renderView();
     window.scrollTo(0, 0);
   }
@@ -765,11 +943,10 @@ const ARCHIVE_APP_VIEWER_JS = `(function(){
       ? (cb.branchLabel + ' - ' + branchFull)
       : (branchFull || cb.branchLabel || '-');
     var courseLabel = [entry.courseCode, entry.courseName].filter(Boolean).join(' - ') || cb.courseLabel;
-    var colName = titleCase(entry.recordedByName || entry.recordedBy || '-');
-    var colDesig = entry.recordedByDesignation || 'Staff';
+    var colLabel = resolveStaffLabel(entry.recordedBy, entry.recordedByName, entry.recordedByDesignation, entry._collectorLabel);
     var mMeta = modeBadgeMeta(entry);
     var stRec = findStudent(entry.studentDocId);
-    var popupPhoto = getArchivePhotoSrc(stRec);
+    var popupPhoto = getArchivePhotoSrc(stRec || entry);
     var bdRows = (Array.isArray(entry.breakdown) && entry.breakdown.length > 0)
       ? entry.breakdown.map(function(b){ return '<div class="fr-det-breakdown-item"><span class="fr-det-breakdown-name">' + esc(b.label || b.type) + '</span><span class="fr-det-breakdown-amt">' + fmtINR(b.amount || 0) + '</span></div>'; }).join('')
       : '';
@@ -784,7 +961,7 @@ const ARCHIVE_APP_VIEWER_JS = `(function(){
       'Amount Received: ' + fmtINR(entry.totalReceived || 0) + (entry.lateFeePaid ? (' (incl. late fee ' + fmtINR(entry.lateFeePaid) + ')') : ''),
       'Mode: ' + mMeta.label + (entry.txnId ? (' | TXN: ' + entry.txnId) : ''),
       'Date: ' + fmtDateIN(entry.date),
-      'Collected By: ' + colName + ' (' + colDesig + ')',
+      'Collected By: ' + colLabel,
       entry.remarks ? ('Remarks: ' + entry.remarks) : ''
     ].filter(Boolean).join('\\n');
 
@@ -827,7 +1004,7 @@ const ARCHIVE_APP_VIEWER_JS = `(function(){
               '<tr><td class="adm-view-label">Total Received</td><td class="adm-view-value fr-val-strong">' + fmtINR(entry.totalReceived || 0) + '</td></tr>' +
               '<tr><td class="adm-view-label">Mode / Ref</td><td class="adm-view-value">' + esc(mMeta.label) + (entry.txnId ? (' · ' + esc(entry.txnId)) : '') + '</td></tr>' +
               '<tr><td class="adm-view-label">Date</td><td class="adm-view-value">' + esc(fmtDateIN(entry.date)) + '</td></tr>' +
-              '<tr><td class="adm-view-label">Collected By</td><td class="adm-view-value">' + esc(colName + ' · ' + colDesig) + '</td></tr>' +
+              '<tr><td class="adm-view-label">Collected By</td><td class="adm-view-value">' + esc(colLabel) + '</td></tr>' +
             '</tbody></table></div>' +
           '</div>' +
           '<div class="adm-view-card fr-det-card-full">' +
@@ -841,20 +1018,13 @@ const ARCHIVE_APP_VIEWER_JS = `(function(){
       titleHtml: '<span class="fr-det-head-row"><span>Payment Details</span>' + statusPill + '</span>',
       subtitle: entry.receiptNo || entry.typeLabel || '',
       icon: 'receipt',
+      tilePhoto: popupPhoto,
+      tileAlt: titleCase(entry.studentName),
       tone: entry.isPureWaiver ? 'amber' : 'success',
       wide: true,
       headActions: rcptHeadBtn ? [rcptHeadBtn, copyHeadBtn] : [copyHeadBtn],
       bodyHtml: bodyHtml
     });
-    if (popupPhoto && popup && popup.back) {
-      var headTile = popup.back.querySelector('.adm-view-tile');
-      if (headTile) {
-        headTile.style.padding = '0';
-        headTile.style.overflow = 'hidden';
-        headTile.innerHTML = '<img data-arc-src="' + esc(popupPhoto) + '" alt="" style="width:100%;height:100%;object-fit:cover;display:block;">';
-        hydrateImages(headTile);
-      }
-    }
     if (rcptHeadBtn) {
       rcptHeadBtn.onclick = function(){ popup.close(); openPaymentReceiptView(entry, NAV.page); };
     }
@@ -990,7 +1160,7 @@ const ARCHIVE_APP_VIEWER_JS = `(function(){
         var stPays = (DATA.ledgerByStudent && DATA.ledgerByStudent[sid]) || [];
         var items = [
           { section: 'View' },
-          { label: 'View student', icon: 'user', onClick: function(){ NAV.page = 'student-profile'; NAV.studentDocId = sid; NAV.spTab = 'personal'; renderView(); } },
+          { label: 'View student', icon: 'user', onClick: function(){ NAV.page = 'student-profile'; NAV.studentDocId = sid; NAV.spTab = 'personal'; syncHashFromNav(false); renderView(); } },
           { label: 'Admission receipt', icon: 'receipt', onClick: function(){ openAdmissionReceiptView(sid, 'students'); } }
         ];
         if (stPays.some(function(p){ return !p.isPureWaiver && p.receiptNo && !p.isAdmissionGroup && p.type !== 'AD' && p.type !== 'FULL' && p.type !== 'MAT'; })) {
@@ -1060,14 +1230,20 @@ const ARCHIVE_APP_VIEWER_JS = `(function(){
     BASE_DOC_KEYS.forEach(function(item){
       var rec = findArchiveDocRecord(s, item.key);
       seenDocKeys[item.key.toLowerCase()] = true;
-      if (rec && rec.key) seenDocKeys[String(rec.key).toLowerCase()] = true;
-      docItems.push({ key: item.key, label: (rec && rec.label) || item.label, docData: rec });
+      seenDocKeys[canonicalArchiveDocKey(item.key).toLowerCase()] = true;
+      if (rec && rec.key) {
+        seenDocKeys[String(rec.key).toLowerCase()] = true;
+        seenDocKeys[canonicalArchiveDocKey(rec.key).toLowerCase()] = true;
+      }
+      docItems.push({ key: item.key, label: friendlyArchiveDocLabel(item.key, rec && rec.label), docData: rec });
     });
     docs.forEach(function(d){
       var dk = String((d && d.key) || '').toLowerCase();
-      if (!dk || seenDocKeys[dk] || !d.path) return;
+      var dc = canonicalArchiveDocKey((d && d.key) || '').toLowerCase();
+      if (!dk || seenDocKeys[dk] || (dc && seenDocKeys[dc]) || !d.path) return;
       seenDocKeys[dk] = true;
-      docItems.push({ key: d.key, label: d.label || titleCase(String(d.key).replace(/([A-Z])/g, ' $1').replace(/_/g, ' ')), docData: d });
+      if (dc) seenDocKeys[dc] = true;
+      docItems.push({ key: d.key, label: friendlyArchiveDocLabel(d.key, d.label), docData: d });
     });
 
     var docsMap = Object.create(null);
@@ -1294,12 +1470,8 @@ const ARCHIVE_APP_VIEWER_JS = `(function(){
       var brDisp = brCodeTxt && brFullTxt && brCodeTxt.toUpperCase() !== brFullTxt.toUpperCase()
         ? (brCodeTxt + ' (' + brFullTxt + ')')
         : (brFullTxt || brCodeTxt || 'Branch');
-      var recEmail = p.recordedBy || s.createdBy || '-';
-      var recName = titleCase(p.recordedByName || '');
-      var recDesig = titleCase(p.recordedByDesignation || '');
-      var colTxt = brDisp;
-      if (recEmail && recEmail !== '-') colTxt += ' - ' + recEmail;
-      if (recName) colTxt += ' by ' + recName + (recDesig ? (' (' + recDesig + ')') : '');
+      var colLabel = resolveStaffLabel(p.recordedBy || s.createdBy, p.recordedByName, p.recordedByDesignation, p._collectorLabel);
+      var colTxt = brDisp + (colLabel && colLabel !== '-' ? (' · ' + colLabel) : '');
       var mdStr = String(p.mode || 'cash').toLowerCase();
       var remarksStr = p.remarks || (p.waiverReason ? ('Waived: ' + p.waiverReason) : '\\u2014');
       var actHtml = (p.receiptNo && !p.isPureWaiver)
@@ -1340,7 +1512,7 @@ const ARCHIVE_APP_VIEWER_JS = `(function(){
             '<div class="sp-hero-info">' +
               '<div class="sp-name-row"><h1 class="sp-student-name">' + esc(studentDisplayName) + '</h1><span class="sp-status-badge ' + esc(stStatus) + '"><span class="sp-status-dot"></span><span>' + esc(titleCase(stStatus)) + '</span></span></div>' +
               '<div class="sp-id-chip"><span>Student ID: <b>' + esc(s.studentId || '-') + '</b></span><button type="button" class="sp-id-copy-btn" id="av-sp-copy-id" title="Copy Student ID"><i data-lucide="copy"></i></button></div>' +
-              '<div class="sp-meta-inline-row"><span class="sp-meta-inline"><i data-lucide="layers"></i><span>' + esc(courseMetaLine) + '</span></span><span class="sp-meta-sep">|</span><span class="sp-meta-inline"><i data-lucide="users-round"></i><span>' + esc(s.batchName || '-') + '</span></span><span class="sp-meta-sep">|</span><span class="sp-meta-inline"><i data-lucide="calendar"></i><span>' + esc(s.sessionName || '-') + '</span></span></div>' +
+              '<div class="sp-meta-inline-row"><span class="sp-meta-inline"><i data-lucide="layers"></i><span>' + esc(courseMetaLine) + '</span></span><span class="sp-meta-sep">|</span><span class="sp-meta-inline"><i data-lucide="layers"></i><span>' + esc(s.batchName || '-') + '</span></span><span class="sp-meta-sep">|</span><span class="sp-meta-inline"><i data-lucide="calendar"></i><span>' + esc(s.sessionName || '-') + '</span></span></div>' +
               '<div class="sp-branch-row"><i data-lucide="building-2"></i><span>' + esc(branchDisplayName + (branchCodeDisp ? (' (' + branchCodeDisp + ')') : '')) + '</span></div>' +
             '</div>' +
           '</div>' +
@@ -1353,7 +1525,7 @@ const ARCHIVE_APP_VIEWER_JS = `(function(){
           '<div class="lp-stat indigo"><div class="lp-stat-ic"><i data-lucide="wallet"></i></div><div class="lp-stat-txt"><span class="lp-stat-label">Total Fee</span><span class="lp-stat-value">' + fmtINR(totalFee) + '</span><span class="lp-stat-sub">Course package</span></div></div>' +
           '<div class="lp-stat green sp-stat-paid-card"><div class="lp-stat-ic"><i data-lucide="check-circle"></i></div><div class="lp-stat-txt"><span class="lp-stat-label">Paid Amount</span><span class="lp-stat-value text-success">' + fmtINR(paidAmt) + '</span><span class="lp-stat-sub">' + pct + '% of course total</span><div class="sp-stat-bar-track"><div class="sp-stat-bar-fill" style="width:' + pct + '%;"></div></div></div></div>' +
           '<div class="lp-stat red"><div class="lp-stat-ic"><i data-lucide="alert-circle"></i></div><div class="lp-stat-txt"><span class="lp-stat-label">Outstanding</span><span class="lp-stat-value text-danger">' + fmtINR(outstanding) + '</span><span class="lp-stat-sub">Balance due</span></div></div>' +
-          '<div class="lp-stat violet"><div class="lp-stat-ic"><i data-lucide="list-checks"></i></div><div class="lp-stat-txt"><span class="lp-stat-label">Installments</span><span class="lp-stat-value">' + (s.paymentPlan === 'full' ? 'Full' : (paidInstCount + ' of ' + sched.length)) + '</span><span class="lp-stat-sub">' + (s.paymentPlan === 'full' ? 'Paid in full' : 'Paid of scheduled') + '</span></div></div>' +
+          '<div class="lp-stat violet"><div class="lp-stat-ic"><i data-lucide="list-checks"></i></div><div class="lp-stat-txt"><span class="lp-stat-label">Installments</span><span class="lp-stat-value">' + (s.paymentPlan === 'full' ? 'Paid in Full' : (paidInstCount + ' of ' + sched.length)) + '</span><span class="lp-stat-sub">' + (s.paymentPlan === 'full' ? 'Paid in full' : 'Paid of scheduled') + '</span></div></div>' +
         '</div></div>' +
         '<nav class="sp-tabs-nav" role="tablist">' +
           '<button type="button" class="sp-tab-btn' + (tab==='personal'?' active':'') + '" data-sp-tab="personal"><div class="sp-tab-icon-wrap"><i data-lucide="user"></i></div><div class="sp-tab-text-wrap"><span class="sp-tab-title">Personal Details</span><span class="sp-tab-desc">Profile, guardian &amp; contact info</span></div></button>' +
@@ -1368,7 +1540,6 @@ const ARCHIVE_APP_VIEWER_JS = `(function(){
               '<div class="sp-kv-item"><span class="sp-kv-label">Date of Birth</span><span class="sp-kv-val">' + esc(fmtDateIN(s.dob)) + '</span></div>' +
               '<div class="sp-kv-item"><span class="sp-kv-label">Gender</span><span class="sp-kv-val">' + esc(fmtGender(s.gender)) + '</span></div>' +
               '<div class="sp-kv-item"><span class="sp-kv-label">Educational Qualification</span><span class="sp-kv-val">' + esc(s.qualification || '-') + '</span></div>' +
-              (s.aadhaarMasked ? '<div class="sp-kv-item full-col"><span class="sp-kv-label">Aadhaar (Masked)</span><span class="sp-kv-val font-mono">' + esc(s.aadhaarMasked) + '</span></div>' : '') +
             '</div></div></div>' +
             '<div class="lp-card"><div class="lp-card-head"><div class="lp-card-title"><i data-lucide="phone"></i><span>Contact Information</span></div></div><div class="sp-card-body"><div class="sp-kv-grid">' +
               '<div class="sp-kv-item"><span class="sp-kv-label">Mobile Phone</span><span class="sp-kv-val font-semibold">' + esc(s.phone || '-') + '</span></div>' +
@@ -1384,12 +1555,6 @@ const ARCHIVE_APP_VIEWER_JS = `(function(){
               '<div class="sp-kv-item"><span class="sp-kv-label">Batch</span><span class="sp-kv-val font-semibold">' + esc(s.batchName || '-') + '</span></div>' +
               '<div class="sp-kv-item"><span class="sp-kv-label">Session</span><span class="sp-kv-val">' + esc(s.sessionName || '-') + '</span></div>' +
               '<div class="sp-kv-item"><span class="sp-kv-label">Branch</span><span class="sp-kv-val">' + esc(branchDisplayName) + '</span></div>' +
-            '</div></div></div>' +
-            '<div class="lp-card full-span"><div class="lp-card-head"><div class="lp-card-title"><i data-lucide="file-check"></i><span>System &amp; Audit Metadata</span></div></div><div class="sp-card-body"><div class="sp-kv-grid sp-kv-grid-4">' +
-              '<div class="sp-kv-item"><span class="sp-kv-label">Student Document ID</span><span class="sp-kv-val font-mono">' + esc(s.id || '-') + '</span></div>' +
-              '<div class="sp-kv-item"><span class="sp-kv-label">Admission Receipt No</span><span class="sp-kv-val font-mono font-semibold">' + esc(s.receiptNo || s.admissionReceiptNo || '-') + '</span></div>' +
-              '<div class="sp-kv-item"><span class="sp-kv-label">Registered By</span><span class="sp-kv-val">' + esc(s.createdBy || '-') + '</span></div>' +
-              '<div class="sp-kv-item"><span class="sp-kv-label">Registered On</span><span class="sp-kv-val">' + esc(createdAtFmt) + '</span></div>' +
             '</div></div></div>' +
           '</div></section>' +
           '<section class="sp-pane' + (tab==='documents'?' active':'') + '"' + (tab==='documents'?'':' hidden') + '><div class="sp-docs-grid">' + docsHtml + '</div></section>' +
@@ -1414,7 +1579,7 @@ const ARCHIVE_APP_VIEWER_JS = `(function(){
         '</div>' +
       '</div>';
 
-    document.getElementById('av-sp-back').onclick = function(){ NAV.page = 'students'; renderView(); };
+    document.getElementById('av-sp-back').onclick = function(){ NAV.page = 'students'; syncHashFromNav(false); renderView(); };
     document.getElementById('av-sp-copy-id').onclick = function(){ copyText(s.studentId || s.id, document.getElementById('av-sp-copy-id')); };
     document.getElementById('av-sp-adm-rcpt').onclick = function(){ openAdmissionReceiptView(s.id, 'student-profile'); };
     var crsRcptBtn = document.getElementById('av-sp-course-rcpt');
@@ -1423,7 +1588,7 @@ const ARCHIVE_APP_VIEWER_JS = `(function(){
       btn.onclick = function(){ openAdmissionReceiptView(s.id, 'student-profile'); };
     });
     el.querySelectorAll('[data-sp-tab]').forEach(function(b){
-      b.onclick = function(){ NAV.spTab = b.getAttribute('data-sp-tab'); renderView(); };
+      b.onclick = function(){ NAV.spTab = b.getAttribute('data-sp-tab'); syncHashFromNav(true); renderView(); };
     });
     el.querySelectorAll('[data-doc-dl]').forEach(function(btn){
       btn.onclick = function(ev){
@@ -1712,10 +1877,16 @@ const ARCHIVE_APP_VIEWER_JS = `(function(){
 
     var rowsHtml = slice.length ? slice.map(function(e){
       var isAdm = Boolean(e.isAdmissionGroup || e.type === 'AD' || e.type === 'FULL' || e.type === 'MAT');
+      var stRec = findStudent(e.studentDocId);
+      var stName = titleCase(e.studentName || (stRec && stRec.name) || '-');
+      var photoPath = getArchivePhotoSrc(stRec || e);
+      var avHtml = photoPath
+        ? '<img class="fr-avatar" data-arc-src="' + esc(photoPath) + '" data-fallback-hide="1" alt=""><span class="fr-avatar-fallback" data-arc-fallback="1" hidden>' + esc(initials(stName)) + '</span>'
+        : '<span class="fr-avatar-fallback">' + esc(initials(stName)) + '</span>';
       return '<tr>' +
         '<td data-label="Receipt No"><b>' + esc(e.receiptNo) + '</b></td>' +
         '<td data-label="Date">' + esc(fmtDateIN(e.date)) + '</td>' +
-        '<td data-label="Student"><button type="button" class="av-row-link" data-open-st="' + esc(e.studentDocId) + '">' + esc(titleCase(e.studentName)) + '</button><span class="lp-sub">' + esc(e.studentId || '-') + '</span></td>' +
+        '<td data-label="Student" class="fr-col-student"><div class="fr-student-cell">' + avHtml + '<div class="fr-student-meta"><button type="button" class="av-row-link" data-open-st="' + esc(e.studentDocId) + '">' + esc(stName) + '</button><span class="lp-sub">' + esc(e.studentId || '-') + '</span></div></div></td>' +
         '<td data-label="Template">' + (isAdm ? '<span class="pill neutral">Admission Receipt</span>' : '<span class="pill sky">Payment Receipt</span>') + '</td>' +
         '<td data-label="Amount" class="num"><b>' + fmtINR(e.totalReceived || 0) + '</b></td>' +
         '<td data-label="Action" class="act"><button type="button" class="ui-btn primary sm" data-open-rcpt="' + esc(e.rowKey) + '"><i data-lucide="printer"></i><span>Open Receipt</span></button></td>' +
@@ -1774,8 +1945,8 @@ const ARCHIVE_APP_VIEWER_JS = `(function(){
           '<div class="ar-stage" id="av-adm-sheet">' + admPagesHtml + '</div>' +
         '</div>';
 
-      document.getElementById('av-rc-back').onclick = function(){ NAV.page = NAV.receiptBackPage || 'receipts'; renderView(); };
-      document.getElementById('av-rc-profile').onclick = function(){ NAV.page = 'student-profile'; NAV.studentDocId = s.id; renderView(); };
+      document.getElementById('av-rc-back').onclick = function(){ NAV.page = NAV.receiptBackPage || 'receipts'; syncHashFromNav(false); renderView(); };
+      document.getElementById('av-rc-profile').onclick = function(){ NAV.page = 'student-profile'; NAV.studentDocId = s.id; NAV.spTab = 'personal'; syncHashFromNav(false); renderView(); };
       document.getElementById('av-rc-print').onclick = function(){ triggerPrintHtml(admPagesHtml); };
       document.getElementById('av-rc-pdf').onclick = async function(){
         var btn = document.getElementById('av-rc-pdf');
@@ -1810,8 +1981,8 @@ const ARCHIVE_APP_VIEWER_JS = `(function(){
         '<div class="mpr-stage"><div class="mpr-page" id="av-mpr-sheet">' + payInnerHtml + '</div></div>' +
       '</div>';
 
-    document.getElementById('av-mpr-back').onclick = function(){ NAV.page = NAV.receiptBackPage || 'payments'; renderView(); };
-    document.getElementById('av-mpr-profile').onclick = function(){ NAV.page = 'student-profile'; NAV.studentDocId = s.id; renderView(); };
+    document.getElementById('av-mpr-back').onclick = function(){ NAV.page = NAV.receiptBackPage || 'payments'; syncHashFromNav(false); renderView(); };
+    document.getElementById('av-mpr-profile').onclick = function(){ NAV.page = 'student-profile'; NAV.studentDocId = s.id; NAV.spTab = 'personal'; syncHashFromNav(false); renderView(); };
     document.getElementById('av-mpr-print').onclick = function(){
       triggerPrintHtml('<div class="mpr-wrap"><div class="mpr-stage"><div class="mpr-page">' + payInnerHtml + '</div></div></div>');
     };
@@ -1895,6 +2066,21 @@ const ARCHIVE_APP_VIEWER_JS = `(function(){
     ];
     var missing = m.missingFiles || [];
 
+    var enrollmentRowsHtml = (DATA.students || []).map(function(s){
+      var crFmt = (s.createdAt && s.createdAt.seconds)
+        ? fmtDateIN(new Date(s.createdAt.seconds * 1000).toISOString().slice(0, 10))
+        : (typeof s.createdAt === 'string' && s.createdAt ? fmtDateIN(s.createdAt) : (s.admissionDate ? fmtDateIN(s.admissionDate) : '-'));
+      var regLabel = resolveStaffLabel(s.createdBy, '', '', s._registeredByLabel);
+      return '<tr>' +
+        '<td data-label="Student ID" class="font-mono">' + esc(s.studentId || '-') + '</td>' +
+        '<td data-label="Student"><button type="button" class="av-row-link" data-open-st="' + esc(s.id) + '">' + esc(titleCase(s.name || '-')) + '</button></td>' +
+        '<td data-label="Document ID" class="font-mono text-mute">' + esc(s.id || '-') + '</td>' +
+        '<td data-label="Admission Receipt" class="font-mono">' + esc(s.receiptNo || s.admissionReceiptNo || '-') + '</td>' +
+        '<td data-label="Registered By">' + esc(regLabel) + '</td>' +
+        '<td data-label="Registered On">' + esc(crFmt) + '</td>' +
+      '</tr>';
+    }).join('') || '<tr><td colspan="6" class="text-mute text-center">No students in this archive.</td></tr>';
+
     el.innerHTML =
       '<div class="fr-wrap">' +
         '<section class="pg-head"><div class="pg-crumbs">Archive / <span>About &amp; Self-Check</span></div><h2>About This Archive</h2><p>Snapshot provenance, integrity self-check, archive manifest metadata, and missing file diagnostics.</p></section>' +
@@ -1924,6 +2110,9 @@ const ARCHIVE_APP_VIEWER_JS = `(function(){
             '<div class="sp-kv-item"><span class="sp-kv-label">ID / Aadhaar Docs Included</span><span class="sp-kv-val">' + (m.includesIdDocs ? 'Yes' : 'No') + '</span></div>' +
             '<div class="sp-kv-item"><span class="sp-kv-label">Packed Files (Manifest)</span><span class="sp-kv-val">' + esc(m.packedFileCount ? (m.packedFileCount + ' files with SHA-256 checksums') : 'Verified via manifest.json') + '</span></div>' +
           '</div></div></div>' +
+        '<div class="lp-card"><div class="lp-card-head"><div class="lp-card-title"><i data-lucide="file-check"></i><span>Student Enrollment &amp; Audit Metadata</span></div><span class="lp-count">' + (DATA.students || []).length + ' students</span></div>' +
+          '<div class="lp-scroll"><table class="lp-table lp-mobile-cards"><thead><tr><th>Student ID</th><th>Student</th><th>Document ID</th><th>Admission Receipt</th><th>Registered By</th><th>Registered On</th></tr></thead><tbody>' + enrollmentRowsHtml + '</tbody></table></div>' +
+        '</div>' +
         '<div class="lp-card"><div class="lp-card-head"><div class="lp-card-title"><i data-lucide="alert-circle"></i><span>Missing Files Report (' + missing.length + ')</span></div></div>' +
           (missing.length
             ? '<div class="lp-scroll"><table class="lp-table"><thead><tr><th>Path / Source</th><th>Reason</th></tr></thead><tbody>' + missing.map(function(x){ return '<tr><td>' + esc(x.path || x.studentId || '-') + '</td><td>' + esc(x.reason || '-') + '</td></tr>'; }).join('') + '</tbody></table></div>'
@@ -1975,7 +2164,7 @@ const ARCHIVE_APP_VIEWER_JS = `(function(){
     else if (NAV.page === 'about') renderAboutView(viewEl);
 
     viewEl.querySelectorAll('[data-open-st]').forEach(function(btn){
-      btn.onclick = function(){ NAV.page = 'student-profile'; NAV.spTab = 'personal'; NAV.studentDocId = btn.getAttribute('data-open-st'); renderView(); window.scrollTo(0, 0); };
+      btn.onclick = function(){ NAV.page = 'student-profile'; NAV.spTab = 'personal'; NAV.studentDocId = btn.getAttribute('data-open-st'); syncHashFromNav(false); renderView(); window.scrollTo(0, 0); };
     });
     viewEl.querySelectorAll('[data-pg]').forEach(function(btn){
       btn.onclick = function(){
@@ -2012,19 +2201,19 @@ const ARCHIVE_APP_VIEWER_JS = `(function(){
           '</div>' +
           '<nav class="sb-nav">' +
             '<div class="sb-section"><div class="sb-section-label"><span class="sl-text">Main</span></div>' +
-              '<a href="#dashboard" data-nav="dashboard"><i data-lucide="layout-dashboard"></i><span class="nl">Dashboard</span></a>' +
+              '<a href="#/dashboard" data-nav="dashboard"><i data-lucide="layout-dashboard"></i><span class="nl">Dashboard</span></a>' +
             '</div>' +
             '<div class="sb-section"><div class="sb-section-label"><span class="sl-text">Students &amp; Fees</span></div>' +
-              '<a href="#students" data-nav="students"><i data-lucide="users"></i><span class="nl">Students</span><span class="nav-count">' + esc(st.studentCount || 0) + '</span></a>' +
-              '<a href="#payments" data-nav="payments"><i data-lucide="history"></i><span class="nl">Payment History</span></a>' +
-              '<a href="#overdue" data-nav="overdue"><i data-lucide="alarm-clock"></i><span class="nl">Overdue (End Date)</span>' + ((st.overdueCount || 0) > 0 ? '<span class="nav-count alert">' + esc(st.overdueCount) + '</span>' : '') + '</a>' +
+              '<a href="#/students" data-nav="students"><i data-lucide="users"></i><span class="nl">Students</span><span class="nav-count">' + esc(st.studentCount || 0) + '</span></a>' +
+              '<a href="#/payments" data-nav="payments"><i data-lucide="history"></i><span class="nl">Payment History</span></a>' +
+              '<a href="#/overdue" data-nav="overdue"><i data-lucide="alarm-clock"></i><span class="nl">Overdue (End Date)</span>' + ((st.overdueCount || 0) > 0 ? '<span class="nav-count alert">' + esc(st.overdueCount) + '</span>' : '') + '</a>' +
             '</div>' +
             '<div class="sb-section"><div class="sb-section-label"><span class="sl-text">Receipts &amp; Reports</span></div>' +
-              '<a href="#receipts" data-nav="receipts"><i data-lucide="receipt"></i><span class="nl">Receipts</span></a>' +
-              '<a href="#reports" data-nav="reports"><i data-lucide="bar-chart-3"></i><span class="nl">Reports &amp; CSV</span></a>' +
+              '<a href="#/receipts" data-nav="receipts"><i data-lucide="receipt"></i><span class="nl">Receipts</span></a>' +
+              '<a href="#/reports" data-nav="reports"><i data-lucide="bar-chart-3"></i><span class="nl">Reports &amp; CSV</span></a>' +
             '</div>' +
             '<div class="sb-section"><div class="sb-section-label"><span class="sl-text">Archive</span></div>' +
-              '<a href="#about" data-nav="about"><i data-lucide="info"></i><span class="nl">About Archive</span></a>' +
+              '<a href="#/about" data-nav="about"><i data-lucide="info"></i><span class="nl">About Archive</span></a>' +
             '</div>' +
           '</nav>' +
           '<div class="sb-footer">' +
@@ -2052,6 +2241,7 @@ const ARCHIVE_APP_VIEWER_JS = `(function(){
         ev.preventDefault();
         NAV.page = a.getAttribute('data-nav');
         appEl.classList.remove('drawer-open');
+        syncHashFromNav(false);
         renderView();
       };
     });
@@ -2061,6 +2251,17 @@ const ARCHIVE_APP_VIEWER_JS = `(function(){
     };
     document.getElementById('av-backdrop').onclick = function(){ appEl.classList.remove('drawer-open'); };
 
+    window.addEventListener('hashchange', function(){
+      if (location.hash === lastSyncedHash) return;
+      if (applyHashToNav(location.hash)) {
+        lastSyncedHash = hashForNav();
+        renderView();
+        window.scrollTo(0, 0);
+      }
+    });
+
+    applyHashToNav(location.hash);
+    syncHashFromNav(true);
     paintIcons(ROOT);
     hydrateImages(ROOT);
     renderView();

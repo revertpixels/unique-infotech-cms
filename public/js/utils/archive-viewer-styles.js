@@ -14,6 +14,16 @@ export const ARCHIVE_VIEWER_OVERRIDES_CSS = `/* archive-overrides.css — Topbar
   flex-shrink: 0;
 }
 
+/* Guarantee single active tab pane & 2-column read-only Document actions */
+.sp-pane:not(.active),
+.sp-pane[hidden] {
+  display: none !important;
+}
+
+.sp-doc-actions {
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+}
+
 /* Native select styled cleanly to match live .lp-filter .ui-select-btn */
 .ui-select-native {
   width: 100%;

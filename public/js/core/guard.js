@@ -1,7 +1,7 @@
 import { auth } from '../config/firebase-config.js';
-import { clearAppCache } from './app.js?v=1.8.172';
+import { clearAppCache } from './app.js?v=1.8.173';
 import { resolveSession, signOutUser } from './auth.js';
-import { playLogoutSound } from '../utils/sound.js?v=1.8.172';
+import { playLogoutSound } from '../utils/sound.js?v=1.8.173';
 
 const INACTIVITY_LIMIT_MS = 30 * 60 * 1000;
 const LOGOUT_MIN_TRANSITION_MS = 1200;

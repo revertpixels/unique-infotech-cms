@@ -1,7 +1,7 @@
-import { formatPersonName } from '../utils/formatter.js?v=1.8.172';
-import { resolveUserDisplay } from '../services/user-directory.service.js?v=1.8.172';
-import { getContext } from '../core/app.js?v=1.8.172';
-import { loadDashboardArchiveReminder } from '../services/archive.service.js?v=1.8.172';
+import { formatPersonName } from '../utils/formatter.js?v=1.8.173';
+import { resolveUserDisplay } from '../services/user-directory.service.js?v=1.8.173';
+import { getContext } from '../core/app.js?v=1.8.173';
+import { loadDashboardArchiveReminder } from '../services/archive.service.js?v=1.8.173';
 
 let dashProfileCleanup = null;
 

@@ -2,7 +2,7 @@
 // using pdfmake. Produces real, selectable, searchable text with exact 2-page layout
 // matching reference-templates/Ui.html.
 
-import { fmtRs } from './admission-receipt.js?v=1.8.172';
+import { fmtRs } from './admission-receipt.js?v=1.8.173';
 
 const INK = '#1D1A3A';
 const MUTED = '#5B5F85';

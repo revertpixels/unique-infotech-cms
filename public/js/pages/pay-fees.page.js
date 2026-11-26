@@ -11,13 +11,14 @@ import {
   runTransaction,
   serverTimestamp
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { createSelect } from '../components/ui-select.js?v=1.8.164';
-import { openPopup } from '../components/modal.js?v=1.8.164';
-import { confirmDialog } from '../components/ui-confirm.js?v=1.8.164';
-import { showToast } from '../components/toast.js?v=1.8.164';
-import { getSelectedSessionId, getCachedSessions } from '../core/sessions.js?v=1.8.164';
-import { todayISO, fmtDate, examWindowOf, installmentSchedule } from '../utils/session-rules.js?v=1.8.164';
-import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.164';
+import { createSelect } from '../components/ui-select.js?v=1.8.168';
+import { openPopup } from '../components/modal.js?v=1.8.168';
+import { confirmDialog } from '../components/ui-confirm.js?v=1.8.168';
+import { showToast } from '../components/toast.js?v=1.8.168';
+import { getSelectedSessionId, getCachedSessions } from '../core/sessions.js?v=1.8.168';
+import { todayISO, fmtDate, examWindowOf, installmentSchedule } from '../utils/session-rules.js?v=1.8.168';
+import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.168';
+import { getRoleTitle, resolveUserDisplay } from '../services/user-directory.service.js?v=1.8.168';
 import {
   calculateLateFee,
   fetchStudentPayments,
@@ -27,7 +28,7 @@ import {
   courseBalanceWithoutExam,
   calculateStudentFinancials,
   repairStudentAdmissionPayment
-} from '../services/payment.service.js?v=1.8.164';
+} from '../services/payment.service.js?v=1.8.168';
 
 let currentUserProfile = null;
 let currentCtx = 'youth';
@@ -1015,7 +1016,7 @@ function renderExamFeeSection() {
     const statusTd = mk('td');
     statusTd.appendChild(mk('span', 'pill down', 'Not Set'));
     const actTd = mk('td', 'act');
-    const errMsg = mk('span', 'pf-action-disabled text-danger', 'Exam fee not set for this course in this session. Contact Super Admin.');
+    const errMsg = mk('span', 'pf-action-disabled text-danger', `Exam fee not set for this course in this session. Contact ${getRoleTitle('superadmin')}.`);
     actTd.appendChild(errMsg);
 
     tr.append(headTd, sessTd, dueTd, amtTd, lateTd, totalTd, statusTd, actTd);
@@ -1246,7 +1247,8 @@ function renderExamFeeManagementView() {
     if (isStarted) {
       metaLine.hidden = false;
       const startedAtStr = formatAnyDate(session?.examFeeCollection?.startedAt) || (examWindow.from ? formatDateIN(examWindow.from) : 'Recently');
-      const startedByStr = session?.examFeeCollection?.startedBy || 'Super Admin';
+      const rawStartedBy = session?.examFeeCollection?.startedBy;
+      const startedByStr = rawStartedBy ? resolveUserDisplay(rawStartedBy, '', '').name || rawStartedBy : getRoleTitle('superadmin');
       metaLine.innerHTML = `<i data-lucide="check-circle" class="text-success"></i><span>Collection started on <strong>${startedAtStr}</strong> by <strong>${startedByStr}</strong>. Locked fees apply to all students.</span>`;
     } else {
       metaLine.hidden = true;
@@ -1286,7 +1288,7 @@ function renderExamFeeManagementView() {
     tbody.textContent = '';
     const hintEl = $('pf-ev-lock-hint');
     if (hintEl) {
-      hintEl.textContent = isStarted ? 'Fees locked for this session' : 'Super Admin can edit fees before collection starts';
+      hintEl.textContent = isStarted ? 'Fees locked for this session' : `${getRoleTitle('superadmin')} can edit fees before collection starts`;
     }
 
     youthCourses.forEach(c => {

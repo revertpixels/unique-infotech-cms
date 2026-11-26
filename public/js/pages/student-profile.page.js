@@ -11,19 +11,19 @@ import {
   serverTimestamp,
   runTransaction
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.164';
-import { openPopup } from '../components/modal.js?v=1.8.164';
-import { createSelect } from '../components/ui-select.js?v=1.8.164';
-import { confirmDialog } from '../components/ui-confirm.js?v=1.8.164';
-import { openMenu } from '../components/ui-menu.js?v=1.8.164';
-import { formatINR, formatDateIN, formatPersonName, initials } from '../utils/formatter.js?v=1.8.164';
-import { validatePhone, validateEmail, validateDOB, validateName } from '../utils/validator.js?v=1.8.164';
-import { registerDirty } from '../utils/unsaved-guard.js?v=1.8.164';
-import { resolveUserDisplay } from '../services/user-directory.service.js?v=1.8.164';
-import { compressTo100KB, blobToDataURL, isImageFile, formatBytes } from '../utils/image-compress.js?v=1.8.164';
-import { todayISO } from '../utils/session-rules.js?v=1.8.164';
-import { getSelectedSessionId } from '../core/sessions.js?v=1.8.164';
-import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.164';
+import { showToast } from '../components/toast.js?v=1.8.168';
+import { openPopup } from '../components/modal.js?v=1.8.168';
+import { createSelect } from '../components/ui-select.js?v=1.8.168';
+import { confirmDialog } from '../components/ui-confirm.js?v=1.8.168';
+import { openMenu } from '../components/ui-menu.js?v=1.8.168';
+import { formatINR, formatDateIN, formatPersonName, initials } from '../utils/formatter.js?v=1.8.168';
+import { validatePhone, validateEmail, validateDOB, validateName } from '../utils/validator.js?v=1.8.168';
+import { registerDirty } from '../utils/unsaved-guard.js?v=1.8.168';
+import { resolveUserDisplay, getRoleTitle } from '../services/user-directory.service.js?v=1.8.168';
+import { compressTo100KB, blobToDataURL, isImageFile, formatBytes } from '../utils/image-compress.js?v=1.8.168';
+import { todayISO } from '../utils/session-rules.js?v=1.8.168';
+import { getSelectedSessionId } from '../core/sessions.js?v=1.8.168';
+import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.168';
 import {
   fetchStudentPayments,
   recordPaymentTx,
@@ -34,8 +34,8 @@ import {
   calculateStudentFinancials,
   buildReceiptMenuItems,
   repairStudentAdmissionPayment
-} from '../services/payment.service.js?v=1.8.164';
-import { courseFeeOf, discountOf } from '../utils/fees.js?v=1.8.164';
+} from '../services/payment.service.js?v=1.8.168';
+import { courseFeeOf, discountOf } from '../utils/fees.js?v=1.8.168';
 
 const COL = 'students';
 const QUALIFICATIONS = ['VIII Pass', 'Secondary (X) Pass', 'Higher Secondary (XII) Pass', 'ITI', 'Diploma', 'Undergraduate (Graduate)', 'Postgraduate', 'Other'];
@@ -2276,7 +2276,7 @@ function renderInstallmentStatusTable(sched) {
 
     const actionTd = mk('td', 'act');
     if (examFeeNotSetInSession && !isPaid) {
-      const errMsg = mk('span', 'pf-action-disabled text-danger text-xs', 'Exam fee not set for this course in this session. Contact Super Admin.');
+      const errMsg = mk('span', 'pf-action-disabled text-danger text-xs', `Exam fee not set for this course in this session. Contact ${getRoleTitle('superadmin')}.`);
       actionTd.appendChild(errMsg);
     } else {
       renderFeeActionCell(actionTd, {
@@ -2491,7 +2491,7 @@ function renderTransactionsLedger() {
       headName = currentUserProfile.name || '';
     }
     if (!headName && email && email !== '-') {
-      headName = t.userRole === 'superadmin' ? 'Super Admin' : 'Branch Head';
+      headName = getRoleTitle(t.userRole === 'superadmin' ? 'superadmin' : (t.userRole || 'branch_head'));
     }
     headName = headName ? (formatPersonName(headName) || headName) : '';
     const headDesig = (dirDisp.found && dirDisp.designation)

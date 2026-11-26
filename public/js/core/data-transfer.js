@@ -12,12 +12,20 @@ import {
   ref as storageRef,
   uploadBytesResumable
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-storage.js';
-import { showToast } from '../components/toast.js?v=1.8.164';
-import { getDatasetGeneration, initDatasetSession } from './dataset-session.js?v=1.8.164';
+import { showToast } from '../components/toast.js?v=1.8.168';
+import { getDatasetGeneration, initDatasetSession } from './dataset-session.js?v=1.8.168';
+import { getRoleTitle, getRolePluralTitle } from '../services/user-directory.service.js?v=1.8.168';
 
 const MAX_BYTES = 95 * 1024 * 1024;
 const UNLOCK_IDLE_MS = 10 * 60 * 1000;
 const UNLOCK_HARD_MS = 12 * 60 * 1000;
+
+function getCollectionLabel(key) {
+  if (key === 'users') {
+    return `${getRoleTitle('branch_head')} & ${getRoleTitle('school_head')} Users`;
+  }
+  return COLLECTION_LABELS[key] || key;
+}
 
 const COLLECTION_LABELS = {
   settings: 'Organisation & System Settings',
@@ -27,7 +35,7 @@ const COLLECTION_LABELS = {
   batches: 'Batches',
   sessions: 'Academic Sessions',
   counters: 'Student ID & Receipt Counters',
-  users: 'Branch & School Heads',
+  users: 'Authorised Users',
   students: 'Students (Youth & Unique Kids)',
   enrolments: 'Kids Enrolments',
   bills: 'Kids Monthly Bills',
@@ -463,7 +471,7 @@ export function createManageDataController({ profile, onLockChange, onDatasetMut
     for (const [key, count] of Object.entries(preview.counts || {})) {
       const tr = document.createElement('tr');
       const td1 = document.createElement('td');
-      td1.textContent = COLLECTION_LABELS[key] || key;
+      td1.textContent = getCollectionLabel(key);
       const td2 = document.createElement('td');
       td2.className = 'num';
       td2.textContent = fmtInt(count);
@@ -484,7 +492,7 @@ export function createManageDataController({ profile, onLockChange, onDatasetMut
     }
 
     const warnEl = $('md-preview-warning');
-    warnEl.textContent = 'Restore replaces the entire CMS state using exact document IDs, receipt numbers, counters, student files, and Branch/School Head users. Super Admin login always remains untouched.'
+    warnEl.textContent = `Restore replaces the entire CMS state using exact document IDs, receipt numbers, counters, student files, and ${getRoleTitle('branch_head')}/${getRoleTitle('school_head')} users. ${getRoleTitle('superadmin')} login always remains untouched.`
       + (preview.orphanCount ? ` Notice: ${preview.orphanCount} parentless student subcollection records were found in this backup and will be preserved exactly.` : '');
 
     renderQuotaBox('md-restore-quota', 'restore', preview.currentDocumentCount, preview.documentCount);
@@ -593,7 +601,7 @@ export function createManageDataController({ profile, onLockChange, onDatasetMut
     if ($(btnId)?.disabled) return;
 
     const confirmText = mode === 'clear'
-      ? 'MASTER DELETE: All CMS students, photos/docs, payments, bills, enrolments, counters, courses, batches, sessions, branches, org details, Branch/School Heads, and Storage files will be permanently deleted after creating a safety backup. Your Super Admin login and saved backups stay safe. Continue?'
+      ? `MASTER DELETE: All CMS students, photos/docs, payments, bills, enrolments, counters, courses, batches, sessions, branches, org details, ${getRolePluralTitle('branch_head')} & ${getRoleTitle('school_head')}, and Storage files will be permanently deleted after creating a safety backup. Your ${getRoleTitle('superadmin')} login and saved backups stay safe. Continue?`
       : 'RESTORE BACKUP: All validated records, counters, and files from this snapshot will be written live with their original IDs and receipt numbers. Continue?';
 
     if (!window.confirm(confirmText)) return;
@@ -703,7 +711,7 @@ export function createManageDataController({ profile, onLockChange, onDatasetMut
       const code = err && err.code ? err.code : '';
       let msg = 'Password verification failed. Check your password and try again.';
       if (code === 'auth/wrong-password' || code === 'auth/invalid-credential') {
-        msg = 'Incorrect Super Admin password.';
+        msg = `Incorrect ${getRoleTitle('superadmin')} password.`;
       } else if (code === 'auth/too-many-requests') {
         msg = 'Too many incorrect password attempts. Wait a few minutes before retrying.';
       } else if (err && err.message) {
@@ -720,8 +728,57 @@ export function createManageDataController({ profile, onLockChange, onDatasetMut
     }
   }
 
+  function applyRoleTitles() {
+    const saTitle = getRoleTitle('superadmin');
+    const bhTitle = getRoleTitle('branch_head');
+    const shTitle = getRoleTitle('school_head');
+    const dangerLabel = $('md-danger-label');
+    if (dangerLabel) {
+      const span = dangerLabel.querySelector('span');
+      if (span) span.textContent = `DANGER ZONE · ${saTitle.toUpperCase()} ONLY`;
+    }
+    const intro = $('md-gate-intro');
+    if (intro) {
+      intro.textContent = `Manage Data controls full database backups, permanent Master Delete, and system restores. Re-enter your ${saTitle} password and confirm the risk notice to unlock.`;
+    }
+    const riskHeads = $('md-risk-heads');
+    if (riskHeads) {
+      riskHeads.textContent = '';
+      const strong = document.createElement('strong');
+      strong.textContent = 'Master Delete';
+      riskHeads.append(strong, ` permanently deletes all students, photos/docs, payments, bills, enrolments, counters, courses, batches, sessions, branches, org details, ${bhTitle}/${shTitle} users, and Storage files.`);
+    }
+    const riskSurv = $('md-risk-survives');
+    if (riskSurv) {
+      riskSurv.textContent = '';
+      const strong = document.createElement('strong');
+      strong.textContent = `Your ${saTitle} access survives`;
+      riskSurv.append(strong, ' Master Delete and Restore, and saved backups remain private in Storage.');
+    }
+    const pwLabel = $('md-gate-pw-label');
+    if (pwLabel) pwLabel.textContent = `${saTitle} Password`;
+    const clearScope = $('md-clear-scope');
+    if (clearScope) {
+      clearScope.textContent = '';
+      const s1 = document.createElement('strong');
+      s1.textContent = 'PERMANENT DELETION SCOPE:';
+      const s2 = document.createElement('strong');
+      s2.textContent = 'Preserves:';
+      clearScope.append(
+        s1,
+        ` Deletes students (Youth & Kids), photos/docs/signatures/Aadhaar, payments, bills, enrolments, waivers, breaks, transfers, deletion logs, counters, courses, levels, batches, sessions, branches, org config, ${bhTitle}/${shTitle} users, and business Storage files. `,
+        s2,
+        ` ${saTitle} login & saved backups.`
+      );
+    }
+    if (preview) renderPreview();
+  }
+
   function wire() {
     if (!profile || profile.role !== 'superadmin') return;
+
+    applyRoleTitles();
+    window.addEventListener('uic:branding-updated', applyRoleTitles);
 
     const emailNote = $('md-gate-email');
     if (emailNote) emailNote.textContent = auth.currentUser?.email || profile.email || '';
@@ -792,6 +849,7 @@ export function createManageDataController({ profile, onLockChange, onDatasetMut
 
   function destroy() {
     destroyed = true;
+    window.removeEventListener('uic:branding-updated', applyRoleTitles);
     clearLockTimers();
     if (unlocked) lock();
   }

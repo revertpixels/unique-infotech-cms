@@ -69,6 +69,21 @@ service cloud.firestore {
         || get(/databases/$(database)/documents/_system/maintenance).data.mode == 'backup';
     }
 
+    function validBrandingDoc() {
+      let d = request.resource.data;
+      return d.keys().hasOnly(['superAdminTitle', 'branchHeadTitle', 'schoolHeadTitle', 'orgName', 'updatedAt'])
+        && (!('superAdminTitle' in d) || (d.superAdminTitle is string && d.superAdminTitle.size() > 0 && d.superAdminTitle.size() <= 80))
+        && (!('branchHeadTitle' in d) || (d.branchHeadTitle is string && d.branchHeadTitle.size() > 0 && d.branchHeadTitle.size() <= 80))
+        && (!('schoolHeadTitle' in d) || (d.schoolHeadTitle is string && d.schoolHeadTitle.size() > 0 && d.schoolHeadTitle.size() <= 80))
+        && (!('orgName' in d) || d.orgName == null || (d.orgName is string && d.orgName.size() <= 100));
+    }
+
+    // Public-to-all branding labels (no emails, no names, no PII) for pre-login UI titles.
+    match /public/branding {
+      allow read: if true;
+      allow write: if maintenanceOpen() && isSuperAdmin() && validBrandingDoc();
+    }
+
     // Public-to-signed-in client state for dataset generation / maintenance banner.
     // _system/maintenance, _system_backup_manifests/*, and _system_backup_operations/*
     // stay strictly server-only (denied by catch-all rule below).
@@ -93,11 +108,9 @@ service cloud.firestore {
         && (!('photoUrl' in d) || d.photoUrl == null || (d.photoUrl is string && d.photoUrl.size() <= 1024));
     }
 
-    function isSelfPhotoOnlyUpdate(userEmail) {
+    function isPhotoOnlyPayload() {
       let d = request.resource.data;
-      return isActiveHead()
-        && userEmail == authEmail()
-        && d.diff(resource.data).affectedKeys().hasOnly(['photoUrl', 'updatedAt'])
+      return d.diff(resource.data).affectedKeys().hasOnly(['photoUrl', 'updatedAt'])
         && (!('photoUrl' in d) || d.photoUrl == null || (d.photoUrl is string && (d.photoUrl == '' || d.photoUrl.matches('https://.*')) && d.photoUrl.size() <= 1024));
     }
 
@@ -124,8 +137,8 @@ service cloud.firestore {
       allow list: if readsOpen() && (isSuperAdmin() || isActiveHead());
       allow create: if maintenanceOpen() && isSuperAdmin() && validUserDoc(userEmail);
       allow update: if maintenanceOpen() && (
-                      (isSuperAdmin() && validUserDoc(userEmail))
-                      || isSelfPhotoOnlyUpdate(userEmail)
+                      (isSuperAdmin() && (validUserDoc(userEmail) || isPhotoOnlyPayload()))
+                      || (isActiveHead() && userEmail == authEmail() && isPhotoOnlyPayload())
                     );
       allow delete: if maintenanceOpen() && isSuperAdmin() && userEmail != authEmail();
     }

@@ -4,18 +4,18 @@
 // 10th, late fine Rs 1/day from the 11th.
 import { db } from '../config/firebase-config.js';
 import { collection, getDocs, query, where, doc, getDoc, updateDoc, runTransaction, serverTimestamp } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.164';
-import { registerDirty, confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.164';
-import { PAGE_SIZE, buildStats, buildToolbar, renderPager } from '../components/list-page.js?v=1.8.164';
-import { createSelect } from '../components/ui-select.js?v=1.8.164';
-import { openMenu } from '../components/ui-menu.js?v=1.8.164';
-import { confirmDialog } from '../components/ui-confirm.js?v=1.8.164';
-import { formatINR, formatDateIN, formatPersonName } from '../utils/formatter.js?v=1.8.164';
-import { resolveUserDisplay } from '../services/user-directory.service.js?v=1.8.164';
-import { isCourseActive } from '../utils/session-rules.js?v=1.8.164';
-import { localToday, monthSeq, nextMonth } from '../utils/school-lifecycle.js?v=1.8.164';
-import { playPaymentSuccessSound } from '../utils/sound.js?v=1.8.164';
-import { daysLate, computeLateFee } from '../utils/school-billing.js?v=1.8.164';
+import { showToast } from '../components/toast.js?v=1.8.168';
+import { registerDirty, confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.168';
+import { PAGE_SIZE, buildStats, buildToolbar, renderPager } from '../components/list-page.js?v=1.8.168';
+import { createSelect } from '../components/ui-select.js?v=1.8.168';
+import { openMenu } from '../components/ui-menu.js?v=1.8.168';
+import { confirmDialog } from '../components/ui-confirm.js?v=1.8.168';
+import { formatINR, formatDateIN, formatPersonName } from '../utils/formatter.js?v=1.8.168';
+import { resolveUserDisplay, getRoleTitle } from '../services/user-directory.service.js?v=1.8.168';
+import { isCourseActive } from '../utils/session-rules.js?v=1.8.168';
+import { localToday, monthSeq, nextMonth } from '../utils/school-lifecycle.js?v=1.8.168';
+import { playPaymentSuccessSound } from '../utils/sound.js?v=1.8.168';
+import { daysLate, computeLateFee } from '../utils/school-billing.js?v=1.8.168';
 
 const COL = 'students';
 const BILLS_COL = 'bills';
@@ -34,7 +34,7 @@ export async function mount({ container, profile, ctx }) {
   }
   const isSuper = profile && profile.role === 'superadmin';
   if (!isSuper) {
-    showToast({ type: 'error', message: 'Kids Fees is restricted to Super Admin.' });
+    showToast({ type: 'error', message: `Kids Fees is restricted to ${getRoleTitle('superadmin')}.` });
     return;
   }
 
@@ -49,11 +49,13 @@ export async function mount({ container, profile, ctx }) {
 
   // ---------- toolbar ----------
   const tbFilters = [
-    { id: 'status', label: 'Status', options: [
-      { value: 'all', label: 'All statuses' }, { value: 'unpaid', label: 'Unpaid' },
-      { value: 'paid', label: 'Paid' }, { value: 'partial', label: 'Partial' },
-      { value: 'overdue', label: 'Overdue' }
-    ]},
+    {
+      id: 'status', label: 'Status', options: [
+        { value: 'all', label: 'All statuses' }, { value: 'unpaid', label: 'Unpaid' },
+        { value: 'paid', label: 'Paid' }, { value: 'partial', label: 'Partial' },
+        { value: 'overdue', label: 'Overdue' }
+      ]
+    },
     { id: 'month', label: 'Month', options: [{ value: 'all', label: 'All months', icon: 'calendar' }] },
     { id: 'level', label: 'Level', options: [{ value: 'all', label: 'All levels', icon: 'book-open' }] }
   ];

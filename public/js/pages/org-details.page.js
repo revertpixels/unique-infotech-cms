@@ -1,9 +1,10 @@
 import { db } from '../config/firebase-config.js';
-import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.164';
-import { showToast } from '../components/toast.js?v=1.8.164';
-import { createManageDataController } from '../core/data-transfer.js?v=1.8.164';
-import { mount as mountBranchHeads } from './branch-heads.page.js?v=1.8.164';
-import { mountAuthorisedUsers } from './authorised-users.js?v=1.8.164';
+import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.168';
+import { showToast } from '../components/toast.js?v=1.8.168';
+import { createManageDataController } from '../core/data-transfer.js?v=1.8.168';
+import { mount as mountBranchHeads } from './branch-heads.page.js?v=1.8.168';
+import { mountAuthorisedUsers } from './authorised-users.js?v=1.8.168';
+import { syncPublicBranding } from '../services/user-directory.service.js?v=1.8.168';
 import { doc, getDoc, setDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
 
 const KEYS = ['name', 'tagline', 'phones', 'receiptCode', 'email', 'website', 'address'];
@@ -416,6 +417,7 @@ export async function mount({ profile }) {
         receiptCode: v.receiptCode, email: v.email, website: v.website, address: v.address
       });
       updateSidebarBrand(v.name, v.tagline);
+      syncPublicBranding({ orgName: v.name }).catch(() => { });
       saving = false;
       refresh();
       setState('All changes saved', '');

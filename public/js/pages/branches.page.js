@@ -4,9 +4,12 @@ import { createSelect } from '../components/ui-select.js';
 import { openMenu } from '../components/ui-menu.js';
 import { confirmDialog } from '../components/ui-confirm.js';
 import { showToast } from '../components/toast.js';
-import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.164';
-import { PAGE_SIZE, buildStats, buildToolbar, renderPager, renderEmptyTableState } from '../components/list-page.js?v=1.8.164';
-import { formatPersonName } from '../utils/formatter.js?v=1.8.164';
+import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.168';
+import { PAGE_SIZE, buildStats, buildToolbar, renderPager, renderEmptyTableState } from '../components/list-page.js?v=1.8.168';
+import { formatPersonName } from '../utils/formatter.js?v=1.8.168';
+import { getRoleTitle, getRolePluralTitle } from '../services/user-directory.service.js?v=1.8.168';
+
+let unbindBranchesBranding = null;
 
 const TEXT_KEYS = ['name', 'code', 'email', 'address', 'mapUrl'];
 const KEYS = ['name', 'code', 'phones', 'email', 'address', 'mapUrl', 'status'];
@@ -66,6 +69,17 @@ export async function mount({ profile }) {
   const cancelBtn = $('br-cancel');
   const statusHost = $('br-status');
   if (!form || !tbody || !addBtn || !saveBtn || !cancelBtn || !statusHost) return;
+
+  function applyRoleLabels() {
+    const sub = $('br-sub');
+    if (sub) sub.textContent = `Youth Centre branches. ${getRolePluralTitle('branch_head')} see only their own branch.`;
+    const th = $('br-th-head');
+    if (th) th.textContent = getRoleTitle('branch_head');
+  }
+  applyRoleLabels();
+  if (unbindBranchesBranding) unbindBranchesBranding();
+  window.addEventListener('uic:branding-updated', applyRoleLabels);
+  unbindBranchesBranding = () => window.removeEventListener('uic:branding-updated', applyRoleLabels);
 
   const statusSel = createSelect(statusHost, { options: STATUS_OPTIONS, value: 'active', ariaLabel: 'Status' });
 
@@ -228,7 +242,7 @@ export async function mount({ profile }) {
       return td;
     }
     if (list.length > 1) {
-      const warn = mk('span', '', list.length + ' heads \u2014 fix in Branch Heads');
+      const warn = mk('span', '', `${list.length} ${list.length === 1 ? getRoleTitle('branch_head').toLowerCase() : getRolePluralTitle('branch_head').toLowerCase()} \u2014 fix in ${getRolePluralTitle('branch_head')}`);
       warn.style.color = 'var(--danger)';
       warn.style.fontWeight = '700';
       td.appendChild(warn);
@@ -414,7 +428,7 @@ export async function mount({ profile }) {
     if (heads.length) {
       await confirmDialog({
         title: 'Cannot delete this branch',
-        message: '"' + r.name + '" has a branch head assigned (' + heads.map((h) => h.name || h.email).join(', ') + '). Remove or move the branch head first, or set the branch to Inactive to keep its history.',
+        message: `"${r.name}" has a ${getRoleTitle('branch_head').toLowerCase()} assigned (${heads.map((h) => h.name || h.email).join(', ')}). Remove or move them first, or set the branch to Inactive to keep its history.`,
         confirmText: 'OK', icon: 'shield-alert', infoOnly: true
       });
       return;
@@ -493,6 +507,13 @@ export async function mount({ profile }) {
   });
 
   await load();
+}
+
+export function unmount() {
+  if (unbindBranchesBranding) {
+    unbindBranchesBranding();
+    unbindBranchesBranding = null;
+  }
 }
 
 

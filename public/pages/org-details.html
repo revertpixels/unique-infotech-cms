@@ -110,20 +110,20 @@
       <div id="md-gate" class="md-gate">
         <div class="md-gate-card">
           <div class="md-gate-head">
-            <span class="md-danger-chip"><i data-lucide="shield-alert"></i><span>DANGER ZONE · SUPER ADMIN ONLY</span></span>
+            <span class="md-danger-chip" id="md-danger-label"><i data-lucide="shield-alert"></i><span>DANGER ZONE</span></span>
             <h3>Verify Identity &amp; Acknowledge Risks</h3>
-            <p>Manage Data controls full database backups, permanent Master Delete, and system restores. Re-enter your Super Admin password and confirm the risk notice to unlock.</p>
+            <p id="md-gate-intro">Manage Data controls full database backups, permanent Master Delete, and system restores. Re-enter your password and confirm the risk notice to unlock.</p>
           </div>
 
           <ul class="md-risk-list">
-            <li><i data-lucide="alert-triangle"></i><span><strong>Master Delete</strong> permanently deletes all students, photos/docs, payments, bills, enrolments, counters, courses, batches, sessions, branches, org details, Branch/School Heads, and Storage files.</span></li>
+            <li><i data-lucide="alert-triangle"></i><span id="md-risk-heads"><strong>Master Delete</strong> permanently deletes all students, photos/docs, payments, bills, enrolments, counters, courses, batches, sessions, branches, org details, authorised head users, and Storage files.</span></li>
             <li><i data-lucide="alert-triangle"></i><span><strong>Restore</strong> is only allowed on an empty database (after Master Delete) and restores the exact saved IDs, receipt numbers, counters, and files.</span></li>
-            <li class="info"><i data-lucide="info"></i><span><strong>Your Super Admin access survives</strong> Master Delete and Restore, and saved backups remain private in Storage.</span></li>
+            <li class="info"><i data-lucide="info"></i><span id="md-risk-survives"><strong>Your primary admin access survives</strong> Master Delete and Restore, and saved backups remain private in Storage.</span></li>
           </ul>
 
           <form id="md-gate-form" class="md-gate-form" autocomplete="off">
             <div class="md-field">
-              <label for="md-gate-pw">Super Admin Password (<span id="md-gate-email">—</span>)</label>
+              <label for="md-gate-pw"><span id="md-gate-pw-label">Password</span> (<span id="md-gate-email">—</span>)</label>
               <div class="md-pw-wrap">
                 <i data-lucide="key"></i>
                 <input type="password" id="md-gate-pw" class="md-input" autocomplete="current-password" placeholder="Re-enter your password">
@@ -235,8 +235,8 @@
 
           <div id="md-clear-quota" class="md-quota info">Calculating live counts and quota estimate...</div>
 
-          <div class="md-alert md-alert-danger">
-            <strong>PERMANENT DELETION SCOPE:</strong> Deletes students (Youth &amp; Kids), photos/docs/signatures/Aadhaar, payments, bills, enrolments, waivers, breaks, transfers, deletion logs, counters, courses, levels, batches, sessions, branches, org config, Branch/School Head users, and business Storage files. <strong>Preserves:</strong> Super Admin login &amp; saved backups.
+          <div class="md-alert md-alert-danger" id="md-clear-scope">
+            <strong>PERMANENT DELETION SCOPE:</strong> Deletes students (Youth &amp; Kids), photos/docs/signatures/Aadhaar, payments, bills, enrolments, waivers, breaks, transfers, deletion logs, counters, courses, levels, batches, sessions, branches, org config, authorised head users, and business Storage files. <strong>Preserves:</strong> Primary admin login &amp; saved backups.
           </div>
 
           <label class="md-consent-check" for="md-clear-ack">

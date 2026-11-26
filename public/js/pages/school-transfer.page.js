@@ -4,10 +4,11 @@
 // Youth: youth context, same authorised branch/session/course.
 import { db } from '../config/firebase-config.js';
 import { doc, getDoc, getDocs, query, where, updateDoc, runTransaction, serverTimestamp, collection } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.164';
-import { formatINR, formatDateIN } from '../utils/formatter.js?v=1.8.164';
-import { isCourseActive, batchAllowsCourse } from '../utils/session-rules.js?v=1.8.164';
-import { localToday } from '../utils/school-lifecycle.js?v=1.8.164';
+import { showToast } from '../components/toast.js?v=1.8.168';
+import { formatINR, formatDateIN } from '../utils/formatter.js?v=1.8.168';
+import { isCourseActive, batchAllowsCourse } from '../utils/session-rules.js?v=1.8.168';
+import { localToday } from '../utils/school-lifecycle.js?v=1.8.168';
+import { getRoleTitle } from '../services/user-directory.service.js?v=1.8.168';
 
 const COL = 'students';
 const ENROLMENTS_COL = 'enrolments';
@@ -52,7 +53,7 @@ export async function mount({ container, profile, ctx }) {
   let loadError = null;
 
   if (!isSuper && !isHead) {
-    setState(STATE_FORBIDDEN, 'Batch transfer is restricted to Super Admin or Branch Head.');
+    setState(STATE_FORBIDDEN, `Batch transfer is restricted to ${getRoleTitle('superadmin')} or ${getRoleTitle('branch_head')}.`);
     return;
   }
 

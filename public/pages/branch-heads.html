@@ -1,11 +1,11 @@
 <div class="bh-wrap">
   <div class="bh-head-row">
     <section class="pg-head">
-      <div class="pg-crumbs">Administration / <span>Branch Heads</span></div>
-      <h2>Branch Heads</h2>
+      <div class="pg-crumbs">Administration / <span id="bh-crumb">Users</span></div>
+      <h2 id="bh-title">Users</h2>
       <p>People who manage a branch. They sign in with their Google account.</p>
     </section>
-    <button type="button" id="bh-add" class="ui-btn primary"><i data-lucide="plus"></i>Add branch head</button>
+    <button type="button" id="bh-add" class="ui-btn primary"><i data-lucide="plus"></i><span id="bh-add-label">Add user</span></button>
   </div>
 
   <div id="bh-stats"></div>
@@ -13,8 +13,8 @@
 
   <div class="lp-card">
     <div class="lp-card-head">
-      <div class="lp-card-title"><i data-lucide="user-cog"></i><span>All branch heads</span></div>
-      <span class="lp-count" id="bh-count">0 heads</span>
+      <div class="lp-card-title"><i data-lucide="user-cog"></i><span id="bh-card-title">All users</span></div>
+      <span class="lp-count" id="bh-count">0 users</span>
     </div>
     <div class="lp-scroll">
       <table class="bh-table">
@@ -32,8 +32,8 @@
     </div>
     <div id="bh-empty" class="bh-empty" hidden>
       <i data-lucide="user-cog"></i>
-      <b>No branch heads yet</b>
-      <span>Branch heads you add will appear here.</span>
+      <b id="bh-empty-title">No users yet</b>
+      <span id="bh-empty-sub">Users you add will appear here.</span>
     </div>
     <div class="lp-card-foot" id="bh-foot" hidden></div>
   </div>
@@ -41,7 +41,7 @@
   <form id="bh-form" novalidate hidden>
     <div class="set-card">
       <div class="set-side">
-        <h3 id="bh-form-title">New branch head</h3>
+        <h3 id="bh-form-title">New user</h3>
         <p>Add a person who will manage a branch. They sign in with their own Google account.</p>
       </div>
       <div class="set-fields">
@@ -78,7 +78,7 @@
       <span id="bh-state" class="save-state" role="status" aria-live="polite">Fill in the details</span>
       <div class="save-actions">
         <button type="button" id="bh-cancel" class="ui-btn ghost"><i data-lucide="x"></i>Cancel</button>
-        <button type="submit" id="bh-save" class="ui-btn primary" disabled><i data-lucide="save"></i>Save branch head</button>
+        <button type="submit" id="bh-save" class="ui-btn primary" disabled><i data-lucide="save"></i><span id="bh-save-label">Save</span></button>
       </div>
     </div>
   </form>

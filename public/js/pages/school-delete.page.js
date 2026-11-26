@@ -6,8 +6,9 @@
 // disabled. No browser-only partial-delete fallback is provided.
 import { db } from '../config/firebase-config.js';
 import { doc, getDoc } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.164';
-import { formatINR, formatDateIN } from '../utils/formatter.js?v=1.8.164';
+import { showToast } from '../components/toast.js?v=1.8.168';
+import { formatINR, formatDateIN } from '../utils/formatter.js?v=1.8.168';
+import { getRoleTitle } from '../services/user-directory.service.js?v=1.8.168';
 
 const COL = 'students';
 
@@ -44,7 +45,7 @@ export async function mount({ container, profile, ctx }) {
   let loadError = null;
 
   if (!isSuper) {
-    setState(STATE_FORBIDDEN, 'Permanent delete is restricted to Super Admin.');
+    setState(STATE_FORBIDDEN, `Permanent delete is restricted to ${getRoleTitle('superadmin')}.`);
     return;
   }
 

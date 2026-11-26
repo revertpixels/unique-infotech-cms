@@ -5,8 +5,9 @@ import {
   resolveSession,
   sendResetEmailForUser,
   mapAuthError
-} from '../core/auth.js?v=1.8.164';
-import { preloadLoginSound, playLoginSound, stopLoginSound } from '../utils/sound.js?v=1.8.164';
+} from '../core/auth.js?v=1.8.168';
+import { preloadLoginSound, playLoginSound, stopLoginSound } from '../utils/sound.js?v=1.8.168';
+import { getRoleTitle, getRolePluralTitle, getPublicBranding, loadPublicBranding } from '../services/user-directory.service.js?v=1.8.168';
 
 const URL_REASONS = {
   timeout: true,
@@ -19,21 +20,27 @@ const URL_REASONS = {
   network: true
 };
 
-const MESSAGES = {
-  timeout: 'You were signed out because of inactivity.',
-  signedout: 'You have been signed out.',
-  'not-authorised': 'This account is not authorised to use this system. Please contact the Super Admin.',
-  disabled: 'This account has been disabled. Please contact the Super Admin.',
-  'wrong-method-admin': 'This account is a Super Admin. Please sign in on the Super Admin tab with your email and password. Google sign-in is not allowed for this account.',
-  'superadmin-password-only': 'This account is a Super Admin. Please sign in on the Super Admin tab with your email and password. Google sign-in is not allowed for this account.',
-  'wrong-method-head': 'Branch and School Heads must sign in with Google.',
-  network: 'Network problem. Check your internet connection and try again.',
-  'bad-credentials': 'Incorrect email or password.',
-  empty: 'Enter your email and password.',
-  'too-many': 'Too many attempts. Please wait a few minutes and try again.',
-  'popup-blocked': 'Your browser blocked the sign-in window. Allow pop-ups for this site and try again.',
-  generic: 'Sign-in failed. Please try again.'
-};
+function getLoginMessage(key) {
+  const saTitle = getRoleTitle('superadmin');
+  const bhPlural = getRolePluralTitle('branch_head');
+  const shTitle = getRoleTitle('school_head');
+  const messages = {
+    timeout: 'You were signed out because of inactivity.',
+    signedout: 'You have been signed out.',
+    'not-authorised': `This account is not authorised to use this system. Please contact the ${saTitle}.`,
+    disabled: `This account has been disabled. Please contact the ${saTitle}.`,
+    'wrong-method-admin': `This account is a ${saTitle}. Please sign in on the ${saTitle} tab with your email and password. Google sign-in is not allowed for this account.`,
+    'superadmin-password-only': `This account is a ${saTitle}. Please sign in on the ${saTitle} tab with your email and password. Google sign-in is not allowed for this account.`,
+    'wrong-method-head': `${bhPlural} and ${shTitle} must sign in with Google.`,
+    network: 'Network problem. Check your internet connection and try again.',
+    'bad-credentials': 'Incorrect email or password.',
+    empty: 'Enter your email and password.',
+    'too-many': 'Too many attempts. Please wait a few minutes and try again.',
+    'popup-blocked': 'Your browser blocked the sign-in window. Allow pop-ups for this site and try again.',
+    generic: 'Sign-in failed. Please try again.'
+  };
+  return messages[key] || '';
+}
 
 const LOGIN_MARKUP = `
   <div class="login-card">
@@ -42,8 +49,8 @@ const LOGIN_MARKUP = `
     <p class="subtitle">Choose how you sign in</p>
 
     <div role="tablist" class="tabs">
-      <button role="tab" aria-selected="true" id="tab-admin">Super Admin</button>
-      <button role="tab" aria-selected="false" id="tab-head">Branch / School Head</button>
+      <button role="tab" aria-selected="true" id="tab-admin">Admin</button>
+      <button role="tab" aria-selected="false" id="tab-head">Staff</button>
     </div>
 
     <section id="panel-admin" class="panel" aria-hidden="false">
@@ -71,7 +78,7 @@ const LOGIN_MARKUP = `
     </section>
 
     <section id="panel-head" class="panel" hidden aria-hidden="true">
-      <p class="head-hint">Branch Heads and the School Head sign in with their Google account.</p>
+      <p class="head-hint" id="head-hint"></p>
       <button type="button" id="google-btn" class="btn pri full">
         <i data-lucide="log-in"></i> Continue with Google
       </button>
@@ -95,6 +102,7 @@ export function renderLoginView(container, { reason = '', onAuthenticated } = {}
 
   const tabAdmin = container.querySelector('#tab-admin');
   const tabHead = container.querySelector('#tab-head');
+  const headHint = container.querySelector('#head-hint');
   const panelAdmin = container.querySelector('#panel-admin');
   const panelHead = container.querySelector('#panel-head');
   const adminForm = container.querySelector('#admin-form');
@@ -110,12 +118,32 @@ export function renderLoginView(container, { reason = '', onAuthenticated } = {}
 
   let running = false;
   let active = true;
+  let activeMessageKey = '';
+
+  function applyBrandingTitles() {
+    const saTitle = getRoleTitle('superadmin');
+    const bhTitle = getRoleTitle('branch_head');
+    const bhPlural = getRolePluralTitle('branch_head');
+    const shTitle = getRoleTitle('school_head');
+    if (tabAdmin) tabAdmin.textContent = saTitle;
+    if (tabHead) tabHead.textContent = `${bhTitle} / ${shTitle}`;
+    if (headHint) headHint.textContent = `${bhPlural} and ${shTitle} sign in with their Google account.`;
+    const branding = getPublicBranding();
+    if (branding && branding.orgName) {
+      document.title = `Sign in - ${branding.orgName}`;
+    }
+    if (activeMessageKey && msg && !msg.hidden && msgText) {
+      msgText.textContent = getLoginMessage(activeMessageKey);
+    }
+  }
 
   function showMessage(keyOrOpts) {
-    const opts = typeof keyOrOpts === 'string'
+    const isKey = typeof keyOrOpts === 'string';
+    activeMessageKey = isKey ? keyOrOpts : '';
+    const opts = isKey
       ? {
           type: (keyOrOpts === 'timeout' || keyOrOpts === 'signedout') ? 'info' : 'error',
-          text: MESSAGES[keyOrOpts] || ''
+          text: getLoginMessage(keyOrOpts)
         }
       : (keyOrOpts || {});
     const text = opts.text || '';
@@ -132,8 +160,14 @@ export function renderLoginView(container, { reason = '', onAuthenticated } = {}
   }
 
   function hideMessage() {
+    activeMessageKey = '';
     msg.hidden = true;
   }
+
+  applyBrandingTitles();
+  loadPublicBranding({ timeoutMs: 1500, notify: false }).then(() => {
+    if (active) applyBrandingTitles();
+  }).catch(() => {});
 
   function setRunning(isRunning) {
     running = isRunning;
@@ -172,7 +206,7 @@ export function renderLoginView(container, { reason = '', onAuthenticated } = {}
       if (running) return;
       const email = (adminEmail?.value || '').trim();
       if (!email) {
-        showMessage({ type: 'error', text: 'Enter your Super Admin email above first, then click Forgot password.' });
+        showMessage({ type: 'error', text: `Enter your ${getRoleTitle('superadmin')} email above first, then click Forgot password.` });
         if (adminEmail) adminEmail.focus();
         return;
       }

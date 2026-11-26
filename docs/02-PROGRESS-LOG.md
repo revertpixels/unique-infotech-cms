@@ -39,6 +39,50 @@
 
 ---
 
+### [2026-11-26 10:36] Version 1.8.168 — Branch/School Head Profile Photo Fallback (`saveUserProfilePhoto`)
+
+**What was built / changed:**
+- **Authenticated Profile Photo Upload Callable (`functions/index.js`, `public/js/services/user-directory.service.js`, `public/js/core/auth.js`)**: Added `saveUserProfilePhoto` (`asia-south1`) enforcing strict server-side authorization matching `storage.rules` (active verified Google head writing/removing only their own lowercased `user-photos/{email}/` avatar <= 350 KB WebP/JPEG with RIFF/WEBP or JPEG magic-byte verification, or password-signed-in Super Admin). Updated `saveOwnPhoto()` in `user-directory.service.js` to seamlessly fall back to `saveUserProfilePhoto` if direct client Storage upload rejects with `storage/unauthorized` due to cross-service `firestore.get()` IAM setup on the bucket, while still executing Firestore `updateDoc` through client `firestore.rules`. Mapped `functions/permission-denied` / `functions/invalid-argument` / `functions/unauthenticated` in `auth.js`.
+
+**Tested on:**
+- `npm --prefix functions run lint`, `node tools/check-imports.js`, `scratch/run-tests.mjs`, and `scratch/verify-auth-profile.mjs` (simulating cross-service 403 fallback for Branch Head self-photo upload + blocking cross-user upload with friendly modal error, `0` console errors).
+- Deployed `functions:saveUserProfilePhoto`, `hosting`, `firestore:rules`, `storage`.
+
+---
+
+### [2026-11-26 10:10] Version 1.8.167 — Authorised Users 3-Dot Kebab Menus, Branch Name Resolution, Crisp Table Headers & Cache-Busted Org Import
+
+**What was built / changed:**
+- **Authorised Users Action Menus & Branch Lookup (`public/js/pages/authorised-users.js`)**: Replaced inline row buttons on both **Branch Heads** and **School Computer Head** rows with shared 3-dot kebab menus (`ui-kebab` + `openMenu`: `Add Photo` / `Edit Photo`, `Edit Details`, and `Enable` / `Disable`). Added `ensureBranchesLoaded()` on mount so the **Branch** column always resolves branch code + name cleanly from `branches/` even on direct navigation without visiting Branches first.
+- **Table Header Contrast Alignment (`public/css/pages/settings.css`)**: Updated `.au-table th` and row hover background (`color-mix(in srgb, var(--primary-soft) 55%, var(--surface))`, `#F8F9FE`) to match Students / Payment History / Pending tables (`list-page.css`) instead of blending into the page background.
+- **Duplicate Import Fix & Cache Bust (`public/js/pages/org-details.page.js`, version `1.8.167`)**: Removed a duplicate `syncPublicBranding` import line and bumped `?v=1.8.167` across all `public/` assets and scripts.
+
+**Tested on:**
+- `node tools/check-imports.js`, duplicate-import & uniform-version check (`1.8.167`), `scratch/run-tests.mjs`, and `scratch/verify-auth-profile.mjs` across `1440px` and `390px` (0 console errors), plus Hosting deploy (`https://unique-infotech-cms.web.app`).
+
+---
+
+### [2026-11-26 09:50] Version 1.8.165 — Profile Photo Upload Fix (`storage.rules` / `firestore.rules`) & Dynamic Designations Everywhere
+
+**What was built / changed:**
+- **Profile Photo Upload Security Fix & Authorised Users Photo Controls (`storage.rules`, `firestore.rules`, `public/js/core/auth.js`, `public/js/components/profile-modal.js`, `public/js/services/user-directory.service.js`, `public/js/pages/authorised-users.js`, `public/css/pages/settings.css`)**:
+  - Updated `storage.rules` `/user-photos/{userEmail}/{fileName}` (`allow create, update` and `allow delete`) to allow `isSuperAdmin()` to manage photos in any user's lower-cased folder alongside active staff editing their own (`isActiveStaff() && userEmail == authEmail()`).
+  - Hardened `firestore.rules` on `/users/{userEmail}` with `isPhotoOnlyPayload()` so Super Admin can update `{ photoUrl, updatedAt }` on any user doc while active heads (`isActiveHead()`) can update ONLY their own `photoUrl` and `updatedAt`.
+  - Added Photo buttons to every Branch Head and School Head row in **Authorised Users** (`authorised-users.js`), fixed missing `auth` import in `profile-modal.js`, and suppressed raw Firebase error strings (`auth.js`, `profile-modal.js`).
+- **Dynamic Role Designations & Public Pre-Login Branding (`firestore.rules`, `public/js/services/user-directory.service.js`, `public/js/pages/login.page.js`, `public/index.html`, `public/js/core/router.js`, `public/js/components/topbar.js`, `public/js/components/sidebar.js`, `public/js/components/payment-popup.js`, `public/js/core/data-transfer.js`, `public/pages/org-details.html`, `public/js/pages/org-details.page.js`, `public/pages/branch-heads.html`, `public/js/pages/branch-heads.page.js`, `public/pages/branches.html`, `public/js/pages/branches.page.js`, `public/js/pages/batches.page.js`, `public/js/pages/pay-fees.page.js`, `public/js/pages/payment-receipt.page.js`, `public/js/pages/student-profile.page.js`, `public/js/pages/school-*.page.js`)**:
+  - Added single source of truth helpers (`getRoleTitle`, `getRolePluralTitle`, `pluralizeRoleTitle`, `getUserTitle`, `getPublicBranding`, `loadPublicBranding`, `syncPublicBranding`) in `user-directory.service.js` while leaving all internal role values (`'superadmin'`, `'branch_head'`, `'school_head'`) and `role ===` checks untouched.
+  - Added public read-only `/public/branding` Firestore doc (written only by Super Admin; zero PII) loaded non-blockingly (`1500ms` timeout) on the login page (`login.page.js`) and synced live via `uic:branding-updated` across Topbar, Sidebar, Profile, Authorised Users, Users (`branch-heads`), Branches, Manage Data, Payment History, and receipts (already-issued receipts retain saved snapshots).
+
+**Firestore / Storage rule changes:**
+- `storage.rules`: `/user-photos/{userEmail}/{fileName}` permits `isSuperAdmin()` or `isActiveStaff() && userEmail == authEmail()`.
+- `firestore.rules`: Added `/public/branding` (`allow read: if true; allow write: if maintenanceOpen() && isSuperAdmin() && validBrandingDoc();`) and `isPhotoOnlyPayload()` on `/users/{userEmail}`.
+
+**Tested on:**
+- `node tools/check-imports.js` (0 errors) & `node --check` across all `public/js/**/*.js`.
+- `scratch/run-tests.mjs` + `scratch/verify-auth-profile.mjs` (Chrome CDP across Super Admin, Branch Head, School Head at `1440px` & `390px`, 0 console errors), plus live deployment (`hosting`, `firestore:rules`, `storage`).
+
+---
+
 ### [2026-11-26 09:10] Version 1.8.164 — Authorised Users, Top-Bar Profile Menu, Dynamic Names/Designations & Section 5 Table Pagination
 
 **What was built / changed:**

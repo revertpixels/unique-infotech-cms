@@ -1,16 +1,20 @@
-import { openPopup } from '../components/modal.js?v=1.8.164';
-import { showToast } from '../components/toast.js?v=1.8.164';
-import { confirmDialog } from '../components/ui-confirm.js?v=1.8.164';
-import { PAGE_SIZE, renderPager } from '../components/list-page.js?v=1.8.164';
-import { formatPersonName, initials } from '../utils/formatter.js?v=1.8.164';
-import { sendResetEmailForUser, mapAuthError } from '../core/auth.js?v=1.8.164';
-import { openPhotoCropModal, openChangePasswordModal } from '../components/profile-modal.js?v=1.8.164';
+import { db } from '../config/firebase-config.js';
+import { collection, getDocs } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
+import { openPopup } from '../components/modal.js?v=1.8.168';
+import { showToast } from '../components/toast.js?v=1.8.168';
+import { confirmDialog } from '../components/ui-confirm.js?v=1.8.168';
+import { openMenu } from '../components/ui-menu.js?v=1.8.168';
+import { PAGE_SIZE, renderPager } from '../components/list-page.js?v=1.8.168';
+import { formatPersonName, initials } from '../utils/formatter.js?v=1.8.168';
+import { sendResetEmailForUser, mapAuthError } from '../core/auth.js?v=1.8.168';
+import { openPhotoCropModal, openChangePasswordModal } from '../components/profile-modal.js?v=1.8.168';
 import {
-  defaultDesignationForRole,
+  getRoleTitle,
+  getRolePluralTitle,
   loadUsersDirectory,
   resolveUserDisplay,
   saveUserFields
-} from '../services/user-directory.service.js?v=1.8.164';
+} from '../services/user-directory.service.js?v=1.8.168';
 
 function el(tag, cls, text) {
   const node = document.createElement(tag);
@@ -69,7 +73,8 @@ function makeUiInput({ id, label, type = 'text', value = '', placeholder = '', m
  */
 function openEditUserModal(userRec, { title = 'Edit User Details', fallbackDesig = '' } = {}) {
   let busy = false;
-  const disp = resolveUserDisplay(userRec.email, userRec.name, userRec.designation || fallbackDesig);
+  const roleDefault = fallbackDesig || getRoleTitle(userRec.role);
+  const disp = resolveUserDisplay(userRec.email, userRec.name, userRec.designation || roleDefault);
 
   const popup = openPopup({
     title,
@@ -92,8 +97,8 @@ function openEditUserModal(userRec, { title = 'Edit User Details', fallbackDesig
   const desigObj = makeUiInput({
     id: 'au-edit-desig',
     label: 'Designation',
-    value: disp.designation || fallbackDesig,
-    placeholder: fallbackDesig || 'e.g. Branch Head',
+    value: disp.designation || roleDefault,
+    placeholder: roleDefault ? `e.g. ${roleDefault}` : 'Enter designation',
     maxLength: 60,
     required: true,
     icon: 'badge-check'
@@ -164,8 +169,9 @@ function openEditUserModal(userRec, { title = 'Edit User Details', fallbackDesig
  */
 function openAddSchoolHeadModal(existingEmails) {
   let busy = false;
+  const shTitle = getRoleTitle('school_head');
   const popup = openPopup({
-    title: 'Add School Computer Head',
+    title: `Add ${shTitle}`,
     subtitle: 'Authorise a Google account for Unique Kids',
     icon: 'user-plus',
     saving: () => busy
@@ -194,7 +200,7 @@ function openAddSchoolHeadModal(existingEmails) {
   const desigObj = makeUiInput({
     id: 'au-sh-desig',
     label: 'Designation',
-    value: 'School Computer Head',
+    value: shTitle,
     maxLength: 60,
     required: true,
     icon: 'badge-check'
@@ -218,7 +224,7 @@ function openAddSchoolHeadModal(existingEmails) {
   cancelBtn.addEventListener('click', () => popup.close());
   const saveBtn = el('button', 'ui-btn primary');
   saveBtn.type = 'submit';
-  saveBtn.innerHTML = '<i data-lucide="user-check"></i> Authorise Head';
+  saveBtn.innerHTML = '<i data-lucide="user-check"></i> Authorise User';
   actions.append(cancelBtn, saveBtn);
 
   form.append(emailObj.field, nameObj.field, desigObj.field, phoneObj.field, note, errBox, actions);
@@ -230,7 +236,7 @@ function openAddSchoolHeadModal(existingEmails) {
     if (busy) return;
     const email = (emailObj.inp.value || '').trim().toLowerCase();
     const cleanName = formatPersonName(nameObj.inp.value);
-    const cleanDesig = formatPersonName(desigObj.inp.value) || 'School Computer Head';
+    const cleanDesig = formatPersonName(desigObj.inp.value) || shTitle;
     const phone = (phoneObj.inp.value || '').trim();
 
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
@@ -278,20 +284,89 @@ function openAddSchoolHeadModal(existingEmails) {
       busy = false;
       popup.close(true);
     } catch (err) {
-      errBox.textContent = mapAuthError(err, 'Failed to add School Computer Head.');
+      errBox.textContent = mapAuthError(err, `Failed to add ${shTitle}.`);
       errBox.hidden = false;
       busy = false;
       saveBtn.disabled = false;
       cancelBtn.disabled = false;
-      saveBtn.innerHTML = '<i data-lucide="user-check"></i> Authorise Head';
+      saveBtn.innerHTML = '<i data-lucide="user-check"></i> Authorise User';
       if (typeof lucide !== 'undefined') lucide.createIcons();
     }
   });
 }
 
 /**
- * Renders the three Authorised Users category cards: Super Admin, Branch Heads, and School Computer Head.
+ * Renders the three Authorised Users cards (Primary Admin, Branch Heads, and School Head).
  */
+function createRowKebabCell(u, disp, { roleTitle, editModalTitle } = {}) {
+  const tdAct = el('td', 'au-actions-col act');
+  tdAct.dataset.label = 'Actions';
+  const isOff = u.status === 'inactive' || u.status === 'disabled';
+
+  const kebab = el('button', 'ui-kebab');
+  kebab.type = 'button';
+  kebab.setAttribute('aria-label', `Actions for ${disp.name || u.email}`);
+  kebab.setAttribute('aria-haspopup', 'menu');
+  kebab.setAttribute('aria-expanded', 'false');
+  const ki = document.createElement('i');
+  ki.setAttribute('data-lucide', 'more-vertical');
+  kebab.appendChild(ki);
+
+  kebab.addEventListener('click', () => {
+    openMenu(kebab, [
+      {
+        label: disp.photoUrl ? 'Edit Photo' : 'Add Photo',
+        icon: 'camera',
+        onClick: () => {
+          openPhotoCropModal({
+            email: u.email,
+            name: disp.name,
+            currentPhotoUrl: disp.photoUrl
+          });
+        }
+      },
+      {
+        label: 'Edit Details',
+        icon: 'pencil',
+        onClick: () => {
+          openEditUserModal(u, { title: editModalTitle, fallbackDesig: roleTitle });
+        }
+      },
+      'sep',
+      {
+        label: isOff ? 'Enable' : 'Disable',
+        icon: isOff ? 'play-circle' : 'pause-circle',
+        danger: !isOff,
+        onClick: async () => {
+          const nextStatus = isOff ? 'active' : 'inactive';
+          const ok = await confirmDialog({
+            title: isOff ? `Enable ${roleTitle}?` : `Disable ${roleTitle}?`,
+            message: isOff
+              ? `Allow ${disp.name} (${u.email}) to sign in again.`
+              : `${disp.name} (${u.email}) will immediately lose access.`,
+            confirmText: isOff ? 'Enable' : 'Disable',
+            danger: !isOff
+          });
+          if (!ok) return;
+          try {
+            await saveUserFields(u.email, { status: nextStatus });
+            showToast({
+              type: 'success',
+              title: isOff ? 'Enabled' : 'Disabled',
+              message: `${disp.name} is now ${nextStatus === 'active' ? 'active' : 'inactive'}.`
+            });
+          } catch (err) {
+            showToast({ type: 'error', title: 'Update failed', message: mapAuthError(err, 'Could not change status.') });
+          }
+        }
+      }
+    ]);
+  });
+
+  tdAct.appendChild(kebab);
+  return tdAct;
+}
+
 export async function mountAuthorisedUsers({ container, profile, onSwitchToUsers } = {}) {
   if (!container) return () => {};
   let active = true;
@@ -302,14 +377,30 @@ export async function mountAuthorisedUsers({ container, profile, onSwitchToUsers
   const root = el('div', 'au-wrap');
   container.appendChild(root);
 
+  async function ensureBranchesLoaded() {
+    const cached = window.APP_CACHE && Array.isArray(window.APP_CACHE.branches) ? window.APP_CACHE.branches : [];
+    if (cached.length && cached.some((b) => b && b.id && b.name)) return cached;
+    try {
+      const snap = await getDocs(collection(db, 'branches'));
+      const loaded = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      loaded.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+      window.APP_CACHE = window.APP_CACHE || {};
+      window.APP_CACHE.branches = loaded;
+      return loaded;
+    } catch (err) {
+      console.warn('[authorised-users] branches load failed:', err && err.code ? err.code : err);
+      return cached;
+    }
+  }
+
   function branchLabel(branchId) {
     if (!branchId) return null;
     const branches = (window.APP_CACHE && Array.isArray(window.APP_CACHE.branches)) ? window.APP_CACHE.branches : [];
-    const hit = branches.find((b) => b.id === branchId);
-    if (!hit) return { code: '', name: branchId, missing: true };
+    const hit = branches.find((b) => b.id === branchId || (b.code && b.code === branchId));
+    if (!hit) return { code: '', name: 'Branch unavailable', missing: true };
     return {
       code: String(hit.code || hit.shortCode || hit.branchCode || '').trim(),
-      name: hit.name || branchId,
+      name: hit.name || hit.code || branchId,
       missing: false
     };
   }
@@ -328,14 +419,19 @@ export async function mountAuthorisedUsers({ container, profile, onSwitchToUsers
 
     root.textContent = '';
 
+    const saTitle = getRoleTitle('superadmin');
+    const bhTitle = getRoleTitle('branch_head');
+    const bhPlural = getRolePluralTitle('branch_head');
+    const shTitle = getRoleTitle('school_head');
+
     // =========================================================================
-    // A) SUPER ADMIN CARD
+    // A) PRIMARY ADMIN CARD
     // =========================================================================
-    const saDisp = resolveUserDisplay(superUser.email, superUser.name, superUser.designation || 'Super Admin');
+    const saDisp = resolveUserDisplay(superUser.email, superUser.name, superUser.designation || saTitle);
     const saCard = el('section', 'au-card');
     const saHead = el('div', 'au-card-head');
     const saTitleGroup = el('div', 'au-card-title-group');
-    saTitleGroup.appendChild(el('h2', 'au-card-title', 'Super Admin'));
+    saTitleGroup.appendChild(el('h2', 'au-card-title', saTitle));
     saTitleGroup.appendChild(el('p', 'au-card-sub', 'Primary owner profile, display identity, and password security'));
 
     const saActions = el('div', 'au-card-actions');
@@ -343,7 +439,7 @@ export async function mountAuthorisedUsers({ container, profile, onSwitchToUsers
     btnSaEdit.type = 'button';
     btnSaEdit.innerHTML = '<i data-lucide="pencil"></i> Edit Name &amp; Designation';
     btnSaEdit.addEventListener('click', () => {
-      openEditUserModal(superUser, { title: 'Edit Super Admin Profile', fallbackDesig: 'Super Admin' });
+      openEditUserModal(superUser, { title: `Edit ${saTitle} Profile`, fallbackDesig: saTitle });
     });
 
     const btnSaPhoto = el('button', 'ui-btn ghost pm-btn-sm');
@@ -393,7 +489,7 @@ export async function mountAuthorisedUsers({ container, profile, onSwitchToUsers
     const saInfo = el('div', 'au-super-info');
     saInfo.appendChild(el('div', 'au-super-name', saDisp.name));
     const saMeta = el('div', 'au-super-meta');
-    saMeta.appendChild(el('span', 'au-role-chip', saDisp.designation || 'Super Admin'));
+    saMeta.appendChild(el('span', 'au-role-chip', saDisp.designation || saTitle));
     saMeta.appendChild(el('span', 'au-email-text', superUser.email));
     saInfo.appendChild(saMeta);
     saBody.appendChild(saInfo);
@@ -408,7 +504,7 @@ export async function mountAuthorisedUsers({ container, profile, onSwitchToUsers
     const bhHead = el('div', 'au-card-head');
     const bhTitleGroup = el('div', 'au-card-title-group');
     const bhHeadingRow = el('div', 'au-title-with-count');
-    bhHeadingRow.appendChild(el('h2', 'au-card-title', 'Branch Heads'));
+    bhHeadingRow.appendChild(el('h2', 'au-card-title', bhPlural));
     bhHeadingRow.appendChild(el('span', 'au-count-pill', String(branchHeads.length)));
     bhTitleGroup.appendChild(bhHeadingRow);
     bhTitleGroup.appendChild(el('p', 'au-card-sub', 'Synced live from user records. Create accounts or change branches in the Users tab.'));
@@ -446,7 +542,7 @@ export async function mountAuthorisedUsers({ container, profile, onSwitchToUsers
       const td = document.createElement('td');
       td.colSpan = 5;
       td.className = 'au-empty-cell lp-table-empty-td';
-      td.textContent = 'No Branch Heads added yet. Use the Users tab to add a Branch Head.';
+      td.textContent = `No ${bhPlural} added yet. Use the Users tab to add a ${bhTitle}.`;
       tr.appendChild(td);
       bhTbody.appendChild(tr);
     } else {
@@ -455,7 +551,7 @@ export async function mountAuthorisedUsers({ container, profile, onSwitchToUsers
       const start = (bhPage - 1) * PAGE_SIZE;
       const slice = branchHeads.slice(start, start + PAGE_SIZE);
       slice.forEach((u) => {
-        const disp = resolveUserDisplay(u.email, u.name, u.designation || defaultDesignationForRole(u.role));
+        const disp = resolveUserDisplay(u.email, u.name, u.designation || bhTitle);
         const br = branchLabel(u.branchId);
         const tr = document.createElement('tr');
 
@@ -469,16 +565,18 @@ export async function mountAuthorisedUsers({ container, profile, onSwitchToUsers
         userCell.appendChild(txt);
         tdUser.appendChild(userCell);
 
-        const tdDesig = el('td', '', disp.designation || 'Branch Head');
+        const tdDesig = el('td', '', disp.designation || bhTitle);
         tdDesig.dataset.label = 'Designation';
 
         const tdBranch = el('td');
         tdBranch.dataset.label = 'Branch';
         if (!br) {
           tdBranch.appendChild(el('span', 'bh-branch-missing', 'Not assigned'));
+        } else if (br.missing) {
+          tdBranch.appendChild(el('span', 'bh-branch-missing', br.name));
         } else {
           if (br.code) tdBranch.appendChild(el('span', 'pill neutral', br.code));
-          tdBranch.appendChild(el('span', 'au-branch-name', ' ' + br.name));
+          tdBranch.appendChild(el('span', 'au-branch-name', (br.code ? ' ' : '') + br.name));
         }
 
         const tdStatus = el('td');
@@ -486,16 +584,10 @@ export async function mountAuthorisedUsers({ container, profile, onSwitchToUsers
         const isOff = u.status === 'inactive' || u.status === 'disabled';
         tdStatus.appendChild(el('span', `bh-pill ${isOff ? 'off' : 'on'}`, isOff ? 'Inactive' : 'Active'));
 
-        const tdAct = el('td', 'au-actions-col act');
-        tdAct.dataset.label = 'Actions';
-        const editBtn = el('button', 'ui-btn ghost pm-btn-sm');
-        editBtn.type = 'button';
-        editBtn.innerHTML = '<i data-lucide="pencil"></i> Edit';
-        editBtn.title = 'Edit name & designation';
-        editBtn.addEventListener('click', () => {
-          openEditUserModal(u, { title: 'Edit Branch Head Details', fallbackDesig: 'Branch Head' });
+        const tdAct = createRowKebabCell(u, disp, {
+          roleTitle: bhTitle,
+          editModalTitle: `Edit ${bhTitle} Details`
         });
-        tdAct.appendChild(editBtn);
 
         tr.append(tdUser, tdDesig, tdBranch, tdStatus, tdAct);
         bhTbody.appendChild(tr);
@@ -519,13 +611,13 @@ export async function mountAuthorisedUsers({ container, profile, onSwitchToUsers
     root.appendChild(bhCard);
 
     // =========================================================================
-    // C) SCHOOL COMPUTER HEAD CARD
+    // C) SCHOOL HEAD CARD
     // =========================================================================
     const shCard = el('section', 'au-card');
     const shHead = el('div', 'au-card-head');
     const shTitleGroup = el('div', 'au-card-title-group');
     const shHeadingRow = el('div', 'au-title-with-count');
-    shHeadingRow.appendChild(el('h2', 'au-card-title', 'School Computer Head'));
+    shHeadingRow.appendChild(el('h2', 'au-card-title', shTitle));
     shHeadingRow.appendChild(el('span', 'au-count-pill', String(schoolHeads.length)));
     shTitleGroup.appendChild(shHeadingRow);
     shTitleGroup.appendChild(el('p', 'au-card-sub', 'Unique Kids read-only access for attendance, documents, and reporting'));
@@ -533,7 +625,9 @@ export async function mountAuthorisedUsers({ container, profile, onSwitchToUsers
     const shActions = el('div', 'au-card-actions');
     const addShBtn = el('button', 'ui-btn primary pm-btn-sm');
     addShBtn.type = 'button';
-    addShBtn.innerHTML = '<i data-lucide="plus"></i> Add School Head';
+    const addShIcon = document.createElement('i');
+    addShIcon.setAttribute('data-lucide', 'plus');
+    addShBtn.append(addShIcon, ` Add ${shTitle}`);
     addShBtn.addEventListener('click', () => openAddSchoolHeadModal(existingEmails));
     shActions.appendChild(addShBtn);
     shHead.append(shTitleGroup, shActions);
@@ -560,7 +654,7 @@ export async function mountAuthorisedUsers({ container, profile, onSwitchToUsers
       const td = document.createElement('td');
       td.colSpan = 4;
       td.className = 'au-empty-cell lp-table-empty-td';
-      td.textContent = 'No School Computer Head configured yet. Click "Add School Head" to authorise one.';
+      td.textContent = `No ${shTitle} configured yet. Click "Add ${shTitle}" to authorise one.`;
       tr.appendChild(td);
       shTbody.appendChild(tr);
     } else {
@@ -570,7 +664,7 @@ export async function mountAuthorisedUsers({ container, profile, onSwitchToUsers
       const slice = schoolHeads.slice(start, start + PAGE_SIZE);
 
       slice.forEach((u) => {
-        const disp = resolveUserDisplay(u.email, u.name, u.designation || 'School Computer Head');
+        const disp = resolveUserDisplay(u.email, u.name, u.designation || shTitle);
         const tr = document.createElement('tr');
 
         const tdUser = el('td', 'lp-td-primary');
@@ -583,7 +677,7 @@ export async function mountAuthorisedUsers({ container, profile, onSwitchToUsers
         userCell.appendChild(txt);
         tdUser.appendChild(userCell);
 
-        const tdDesig = el('td', '', disp.designation || 'School Computer Head');
+        const tdDesig = el('td', '', disp.designation || shTitle);
         tdDesig.dataset.label = 'Designation';
 
         const tdStatus = el('td');
@@ -591,45 +685,10 @@ export async function mountAuthorisedUsers({ container, profile, onSwitchToUsers
         const isOff = u.status === 'inactive' || u.status === 'disabled';
         tdStatus.appendChild(el('span', `bh-pill ${isOff ? 'off' : 'on'}`, isOff ? 'Inactive' : 'Active'));
 
-        const tdAct = el('td', 'au-actions-col act');
-        tdAct.dataset.label = 'Actions';
-        const actGroup = el('div', 'au-row-btns');
-
-        const editBtn = el('button', 'ui-btn ghost pm-btn-sm');
-        editBtn.type = 'button';
-        editBtn.innerHTML = '<i data-lucide="pencil"></i> Edit';
-        editBtn.addEventListener('click', () => {
-          openEditUserModal(u, { title: 'Edit School Computer Head', fallbackDesig: 'School Computer Head' });
+        const tdAct = createRowKebabCell(u, disp, {
+          roleTitle: shTitle,
+          editModalTitle: `Edit ${shTitle}`
         });
-
-        const toggleBtn = el('button', 'ui-btn ghost pm-btn-sm');
-        toggleBtn.type = 'button';
-        toggleBtn.textContent = isOff ? 'Enable' : 'Disable';
-        toggleBtn.addEventListener('click', async () => {
-          const nextStatus = isOff ? 'active' : 'inactive';
-          const ok = await confirmDialog({
-            title: isOff ? 'Enable School Computer Head?' : 'Disable School Computer Head?',
-            message: isOff
-              ? `Allow ${disp.name} (${u.email}) to sign in again.`
-              : `${disp.name} (${u.email}) will immediately lose access.`,
-            confirmText: isOff ? 'Enable' : 'Disable',
-            danger: !isOff
-          });
-          if (!ok) return;
-          try {
-            await saveUserFields(u.email, { status: nextStatus });
-            showToast({
-              type: 'success',
-              title: isOff ? 'Enabled' : 'Disabled',
-              message: `${disp.name} is now ${nextStatus === 'active' ? 'active' : 'inactive'}.`
-            });
-          } catch (err) {
-            showToast({ type: 'error', title: 'Update failed', message: mapAuthError(err, 'Could not change status.') });
-          }
-        });
-
-        actGroup.append(editBtn, toggleBtn);
-        tdAct.appendChild(actGroup);
 
         tr.append(tdUser, tdDesig, tdStatus, tdAct);
         shTbody.appendChild(tr);
@@ -658,12 +717,14 @@ export async function mountAuthorisedUsers({ container, profile, onSwitchToUsers
 
   const onUsersUpdated = () => { renderAll(); };
   window.addEventListener('uic:users-updated', onUsersUpdated);
+  window.addEventListener('uic:branding-updated', onUsersUpdated);
 
-  await loadUsersDirectory({ forceRefresh: true });
+  await Promise.all([loadUsersDirectory({ forceRefresh: true }), ensureBranchesLoaded()]);
   await renderAll();
 
   return () => {
     active = false;
     window.removeEventListener('uic:users-updated', onUsersUpdated);
+    window.removeEventListener('uic:branding-updated', onUsersUpdated);
   };
 }

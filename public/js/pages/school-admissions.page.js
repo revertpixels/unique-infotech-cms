@@ -9,22 +9,23 @@ import {
   collection, getDocs, query, where, doc, getDoc, addDoc, updateDoc, serverTimestamp,
   runTransaction, deleteField, writeBatch, deleteDoc
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.164';
-import { registerDirty, confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.164';
-import { buildStats, buildToolbar, renderPager, PAGE_SIZE } from '../components/list-page.js?v=1.8.164';
-import { createSelect } from '../components/ui-select.js?v=1.8.164';
-import { createBranchBatchFilter } from '../components/branch-batch-filter.js?v=1.8.164';
-import { openMenu } from '../components/ui-menu.js?v=1.8.164';
-import { openPopup } from '../components/modal.js?v=1.8.164';
-import { createDatePicker, createMonthPicker } from '../components/ui-datepicker.js?v=1.8.164';
-import { confirmDialog } from '../components/ui-confirm.js?v=1.8.164';
-import { formatINR, formatDateIN, initials } from '../utils/formatter.js?v=1.8.164';
-import { validatePhone, validateEmail, validateDOB, validateName, validateRequired } from '../utils/validator.js?v=1.8.164';
-import { readStudentId, readReceiptNo, writeCounter } from '../services/admission.service.js?v=1.8.164';
-import { isCourseActive, batchAllowsCourse, todayISO } from '../utils/session-rules.js?v=1.8.164';
-import { compressTo100KB, readAsDataURL, blobToDataURL, isImageFile } from '../utils/image-compress.js?v=1.8.164';
-import { firstMonthlyMonth } from '../utils/school-receipt.js?v=1.8.164';
-import { playPaymentSuccessSound } from '../utils/sound.js?v=1.8.164';
+import { showToast } from '../components/toast.js?v=1.8.168';
+import { registerDirty, confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.168';
+import { buildStats, buildToolbar, renderPager, PAGE_SIZE } from '../components/list-page.js?v=1.8.168';
+import { createSelect } from '../components/ui-select.js?v=1.8.168';
+import { createBranchBatchFilter } from '../components/branch-batch-filter.js?v=1.8.168';
+import { openMenu } from '../components/ui-menu.js?v=1.8.168';
+import { openPopup } from '../components/modal.js?v=1.8.168';
+import { createDatePicker, createMonthPicker } from '../components/ui-datepicker.js?v=1.8.168';
+import { confirmDialog } from '../components/ui-confirm.js?v=1.8.168';
+import { formatINR, formatDateIN, initials } from '../utils/formatter.js?v=1.8.168';
+import { validatePhone, validateEmail, validateDOB, validateName, validateRequired } from '../utils/validator.js?v=1.8.168';
+import { readStudentId, readReceiptNo, writeCounter } from '../services/admission.service.js?v=1.8.168';
+import { isCourseActive, batchAllowsCourse, todayISO } from '../utils/session-rules.js?v=1.8.168';
+import { compressTo100KB, readAsDataURL, blobToDataURL, isImageFile } from '../utils/image-compress.js?v=1.8.168';
+import { firstMonthlyMonth } from '../utils/school-receipt.js?v=1.8.168';
+import { playPaymentSuccessSound } from '../utils/sound.js?v=1.8.168';
+import { getRoleTitle } from '../services/user-directory.service.js?v=1.8.168';
 
 const COL = 'students';
 const GENDERS = [
@@ -55,7 +56,7 @@ export async function mount({ container, profile, ctx }) {
   const isSuper = profile && profile.role === 'superadmin';
   const isHead = profile && profile.role === 'school_head';
   if (!isSuper && !isHead) {
-    showToast({ type: 'error', message: 'Kids Admissions is restricted to Super Admin and School Head.' });
+    showToast({ type: 'error', message: `Kids Admissions is restricted to ${getRoleTitle('superadmin')} and ${getRoleTitle('school_head')}.` });
     return;
   }
 

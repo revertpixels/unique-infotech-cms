@@ -1,12 +1,12 @@
 // payment-popup.js — Single Shared Payment Popup for Student Profile and Pay Fees
 import { auth } from '../config/firebase-config.js';
-import { openPopup } from './modal.js?v=1.8.164';
-import { createSelect } from './ui-select.js?v=1.8.164';
-import { formatINR, formatDateIN } from '../utils/formatter.js?v=1.8.164';
-import { todayISO } from '../utils/session-rules.js?v=1.8.164';
-import { resolveUserDisplay } from '../services/user-directory.service.js?v=1.8.164';
-import { showToast } from './toast.js?v=1.8.164';
-import { playPaymentSuccessSound } from '../utils/sound.js?v=1.8.164';
+import { openPopup } from './modal.js?v=1.8.168';
+import { createSelect } from './ui-select.js?v=1.8.168';
+import { formatINR, formatDateIN } from '../utils/formatter.js?v=1.8.168';
+import { todayISO } from '../utils/session-rules.js?v=1.8.168';
+import { getRoleTitle, resolveUserDisplay } from '../services/user-directory.service.js?v=1.8.168';
+import { showToast } from './toast.js?v=1.8.168';
+import { playPaymentSuccessSound } from '../utils/sound.js?v=1.8.168';
 import {
   recordPayment,
   recordAdmissionWithPayment,
@@ -16,7 +16,7 @@ import {
   isAdmissionFeePaid,
   isMaterialFeePaid,
   isExamFeePaid
-} from '../services/payment.service.js?v=1.8.164';
+} from '../services/payment.service.js?v=1.8.168';
 
 function formatDateTime(d) {
   const dt = d instanceof Date ? d : new Date(d);
@@ -370,7 +370,7 @@ export async function openPaymentPopup({
     }
 
     if (preselectedOption === 'EX' && !canCollectExam) {
-      showToast({ type: 'error', message: 'Exam fee not set for this course in this session. Contact Super Admin.' });
+      showToast({ type: 'error', message: `Exam fee not set for this course in this session. Contact ${getRoleTitle('superadmin')}.` });
       return;
     }
   }

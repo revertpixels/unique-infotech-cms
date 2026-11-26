@@ -1,11 +1,15 @@
-import { getRunningPeriod, getPeriodOptions } from '../utils/date.utils.js?v=1.8.164';
-import { loadSessions, getSelectedSessionId, setSelectedSession } from '../core/sessions.js?v=1.8.164';
-import { confirmLeave } from '../utils/unsaved-guard.js?v=1.8.164';
-import { formatPersonName } from '../utils/formatter.js?v=1.8.164';
-import { defaultDesignationForRole, resolveUserDisplay } from '../services/user-directory.service.js?v=1.8.164';
-import { openProfileModal } from './profile-modal.js?v=1.8.164';
+import { getRunningPeriod, getPeriodOptions } from '../utils/date.utils.js?v=1.8.168';
+import { loadSessions, getSelectedSessionId, setSelectedSession } from '../core/sessions.js?v=1.8.168';
+import { confirmLeave } from '../utils/unsaved-guard.js?v=1.8.168';
+import { formatPersonName } from '../utils/formatter.js?v=1.8.168';
+import { getRoleTitle, getUserTitle, resolveUserDisplay } from '../services/user-directory.service.js?v=1.8.168';
+import { openProfileModal } from './profile-modal.js?v=1.8.168';
 
 let topbarProfileCleanup = null;
+
+function roleLabel(role) {
+  return role ? getRoleTitle(role) : '';
+}
 
 let listenersRegistered = false;
 let sessionsListenerRegistered = false;
@@ -21,11 +25,8 @@ function initials(profile) {
   return email.slice(0, 2).toUpperCase();
 }
 
-function roleLabel(role) {
-  if (role === 'superadmin') return 'Super Admin';
-  if (role === 'branch_head') return 'Branch Head';
-  if (role === 'school_head') return 'School Head';
-  return role || '';
+function getPeriodLabelCompat(role) {
+  return roleLabel(role);
 }
 
 export function renderTopbar({ profile, ctx, canSwitch, onMenu, onSwitch, onOpenOrganisation, onLogout }) {
@@ -318,7 +319,7 @@ export function renderTopbar({ profile, ctx, canSwitch, onMenu, onSwitch, onOpen
       profile && profile.designation
     );
     const displayName = disp.name || formatPersonName(profile && (profile.name || profile.email)) || '';
-    const displayRole = disp.designation || defaultDesignationForRole(profile && profile.role) || roleLabel(profile && profile.role);
+    const displayRole = getUserTitle(profile) || disp.designation || roleLabel(profile && profile.role);
 
     avatar.textContent = '';
     if (disp.photoUrl) {
@@ -387,12 +388,14 @@ export function renderTopbar({ profile, ctx, canSwitch, onMenu, onSwitch, onOpen
   document.addEventListener('keydown', onDocKey);
   window.addEventListener('uic:profile-updated', onProfileChange);
   window.addEventListener('uic:users-updated', onProfileChange);
+  window.addEventListener('uic:branding-updated', onProfileChange);
 
   topbarProfileCleanup = () => {
     document.removeEventListener('click', onDocClick);
     document.removeEventListener('keydown', onDocKey);
     window.removeEventListener('uic:profile-updated', onProfileChange);
     window.removeEventListener('uic:users-updated', onProfileChange);
+    window.removeEventListener('uic:branding-updated', onProfileChange);
   };
 
   syncTopbarIdentity();

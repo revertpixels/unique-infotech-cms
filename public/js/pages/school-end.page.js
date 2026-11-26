@@ -4,9 +4,10 @@
 // are preserved. Idempotent (repeated clicks do not duplicate end events).
 import { db } from '../config/firebase-config.js';
 import { doc, getDoc, getDocs, query, where, updateDoc, runTransaction, serverTimestamp, collection } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.164';
-import { localToday, nextMonth } from '../utils/school-lifecycle.js?v=1.8.164';
-import { formatINR, formatDateIN } from '../utils/formatter.js?v=1.8.164';
+import { showToast } from '../components/toast.js?v=1.8.168';
+import { localToday, nextMonth } from '../utils/school-lifecycle.js?v=1.8.168';
+import { formatINR, formatDateIN } from '../utils/formatter.js?v=1.8.168';
+import { getRoleTitle } from '../services/user-directory.service.js?v=1.8.168';
 
 const COL = 'students';
 const ENROLMENTS_COL = 'enrolments';
@@ -48,7 +49,7 @@ export async function mount({ container, profile, ctx }) {
   let loadError = null;
 
   if (!isSuper) {
-    setState(STATE_FORBIDDEN, 'End course is restricted to Super Admin.');
+    setState(STATE_FORBIDDEN, `End course is restricted to ${getRoleTitle('superadmin')}.`);
     return;
   }
 

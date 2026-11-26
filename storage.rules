@@ -28,54 +28,39 @@ service firebase.storage {
         && request.auth.token.email_verified == true;
     }
 
-    function isActiveSuperAdminDoc(userDoc) {
-      return userDoc != null
-        && userDoc.data != null
-        && ('role' in userDoc.data)
-        && ('status' in userDoc.data)
-        && userDoc.data.role == 'superadmin'
-        && userDoc.data.status == 'active';
-    }
-
-    function isActiveStaffDoc(userDoc) {
+    function isActiveHeadDoc(userDoc) {
       return userDoc != null
         && userDoc.data != null
         && ('role' in userDoc.data)
         && ('status' in userDoc.data)
         && userDoc.data.status == 'active'
-        && (
-             (isPasswordSignIn() && userDoc.data.role == 'superadmin')
-             || (isGoogleSignIn() && userDoc.data.role in ['branch_head', 'school_head'])
-           );
+        && userDoc.data.role in ['branch_head', 'school_head'];
     }
 
-    // Uses the CMS role registry (`users/{email}`) with a single cross-service read
-    // (Firebase Storage allows at most 2 firestore.get/exists calls per request).
+    // Password-locked Super Admin identity matching firestore.rules `isSuperAdmin()`.
     function isSuperAdmin() {
       return isPasswordSignIn()
-        && isActiveSuperAdminDoc(
-             firestore.get(/databases/(default)/documents/users/$(authEmail()))
-           );
+        && authEmail() == 'haranathsaha1@gmail.com';
     }
 
     function isActiveStaff() {
-      return signedIn()
-        && isActiveStaffDoc(
-             firestore.get(/databases/(default)/documents/users/$(authEmail()))
-           );
+      return isSuperAdmin()
+        || (isGoogleSignIn()
+            && isActiveHeadDoc(
+                 firestore.get(/databases/(default)/documents/users/$(authEmail()))
+               ));
     }
 
     // ---------- PER-USER PROFILE PHOTOS ----------
-    // Any active CMS user may read staff avatars; users may write/delete ONLY their own email folder.
+    // Active CMS staff may read avatars; Super Admin may manage any user's photo,
+    // while active heads may upload/delete ONLY in their own lowercased-email folder.
     match /user-photos/{userEmail}/{fileName} {
       allow read: if isActiveStaff();
-      allow create, update: if isActiveStaff()
-                            && userEmail == authEmail()
+      allow create, update: if (isSuperAdmin() || (isActiveStaff() && userEmail == authEmail()))
                             && request.resource.size > 0
                             && request.resource.size <= 350 * 1024
                             && request.resource.contentType.matches('image/(jpeg|webp)');
-      allow delete: if isActiveStaff()
-                    && userEmail == authEmail();
+      allow delete: if isSuperAdmin() || (isActiveStaff() && userEmail == authEmail());
     }
 
     // ---------- PRIVATE BACKUP FILES ----------

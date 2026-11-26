@@ -5,15 +5,16 @@ import {
   doc,
   getDoc
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { inWords } from '../utils/admission-receipt.js?v=1.8.164';
-import { showToast } from '../components/toast.js?v=1.8.164';
-import { fmtDate, todayISO } from '../utils/session-rules.js?v=1.8.164';
+import { inWords } from '../utils/admission-receipt.js?v=1.8.168';
+import { showToast } from '../components/toast.js?v=1.8.168';
+import { fmtDate, todayISO } from '../utils/session-rules.js?v=1.8.168';
+import { getRoleTitle } from '../services/user-directory.service.js?v=1.8.168';
 import {
   fetchStudentPayments,
   isInstallmentPaid,
   installmentCourseFee,
   installmentBalanceDue
-} from '../services/payment.service.js?v=1.8.164';
+} from '../services/payment.service.js?v=1.8.168';
 
 function $(id) {
   return document.getElementById(id);
@@ -346,7 +347,7 @@ function renderReceiptHTML({ student, payment, org, orgLogo, branch, allPayments
         </div>
         <div>
           <em>Late fine</em>
-          <b>${payment.waived ? 'Waived (Super Admin)' : (lateFee > 0 ? fmtMoney(lateFee) : 'Rs. 0.00')}</b>
+          <b>${payment.waived ? `Waived (${payment.waivedByDesignation || payment.recordedByDesignation || getRoleTitle('superadmin')})` : (lateFee > 0 ? fmtMoney(lateFee) : 'Rs. 0.00')}</b>
         </div>
       </div>
 

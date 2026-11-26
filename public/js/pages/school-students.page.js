@@ -4,15 +4,16 @@
 // permanent delete). Search by name, Student ID, or parent phone. Siblings may share phone.
 import { db } from '../config/firebase-config.js';
 import { collection, getDocs, query, where, doc, getDoc } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.164';
-import { registerDirty, confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.164';
-import { buildStats, buildToolbar } from '../components/list-page.js?v=1.8.164';
-import { createSelect } from '../components/ui-select.js?v=1.8.164';
-import { openMenu } from '../components/ui-menu.js?v=1.8.164';
-import { confirmDialog } from '../components/ui-confirm.js?v=1.8.164';
-import { formatINR, formatDateIN } from '../utils/formatter.js?v=1.8.164';
-import { isCourseActive } from '../utils/session-rules.js?v=1.8.164';
-import { localToday } from '../utils/school-lifecycle.js?v=1.8.164';
+import { showToast } from '../components/toast.js?v=1.8.168';
+import { registerDirty, confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.168';
+import { buildStats, buildToolbar } from '../components/list-page.js?v=1.8.168';
+import { createSelect } from '../components/ui-select.js?v=1.8.168';
+import { openMenu } from '../components/ui-menu.js?v=1.8.168';
+import { confirmDialog } from '../components/ui-confirm.js?v=1.8.168';
+import { formatINR, formatDateIN } from '../utils/formatter.js?v=1.8.168';
+import { isCourseActive } from '../utils/session-rules.js?v=1.8.168';
+import { localToday } from '../utils/school-lifecycle.js?v=1.8.168';
+import { getRoleTitle } from '../services/user-directory.service.js?v=1.8.168';
 
 const COL = 'students';
 const GENDER_LABELS = { male: 'Male', female: 'Female', other: 'Other' };
@@ -44,7 +45,7 @@ export async function mount({ container, profile, ctx }) {
     return;
   }
   if (!isSuper) {
-    setError('Kids Students is restricted to Super Admin.');
+    setError(`Kids Students is restricted to ${getRoleTitle('superadmin')}.`);
     return;
   }
 

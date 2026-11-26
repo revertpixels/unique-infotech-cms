@@ -599,12 +599,12 @@
   text-align: left;
   padding: 11px 18px;
   font-size: 11.5px;
-  font-weight: 700;
-  letter-spacing: .04em;
+  font-weight: 800;
+  letter-spacing: .06em;
   text-transform: uppercase;
-  color: var(--text-mute);
-  background: var(--bg);
-  border-bottom: 1px solid var(--border);
+  color: var(--primary);
+  background: color-mix(in srgb, var(--primary-soft) 55%, var(--surface));
+  border-bottom: 1px solid color-mix(in srgb, var(--primary) 14%, var(--surface));
   white-space: nowrap;
 }
 
@@ -620,7 +620,7 @@
 }
 
 .au-table tbody tr:hover td {
-  background: color-mix(in srgb, var(--primary) 3%, transparent);
+  background: #F8F9FE;
 }
 
 .au-actions-col {
@@ -665,6 +665,7 @@
 .au-row-btns {
   display: inline-flex;
   align-items: center;
+  flex-wrap: nowrap;
   gap: 8px;
   justify-content: flex-end;
 }
@@ -1023,6 +1024,9 @@
   }
   .au-table.lp-mobile-cards tbody td.au-actions-col {
     justify-content: space-between;
+  }
+  .au-table.lp-mobile-cards .au-row-btns {
+    flex-wrap: wrap;
   }
   .au-table.lp-mobile-cards tbody td.lp-td-primary {
     border-bottom: 1px solid var(--border);

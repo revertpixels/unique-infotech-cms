@@ -128,7 +128,7 @@ unique-infotech-cms/
         ├── school-fees.html
         ├── school-students.html
         └── students.html
-router.js is added to public/js/core/ as the single source of truth for dashboard routes, menu, titles and access control.
+`router.js` is added to `public/js/core/` as the single source of truth for dashboard routes, menu, titles and access control. `user-directory.service.js` serves as the single source of truth for dynamic role/user titles (`getRoleTitle`, `getUserTitle`, `/public/branding`) and profile photo uploads (`/user-photos/{email}/...`).
 
 **TEMPORARY:** `temp_ref_dashboard.html` at the project root — owner's visual reference containing demo data; not deployed; delete after Phase 2.
 

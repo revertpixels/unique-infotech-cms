@@ -1,8 +1,8 @@
-import { ROUTES, ROLE_LABELS } from '../core/router.js?v=1.8.164';
-import { APP_VERSION } from '../core/app.js?v=1.8.164';
-import { getRunningPeriod, getNextDueDate, formatDayMonth } from '../utils/date.utils.js?v=1.8.164';
-import { getRunningSession, toPeriod, daysLeft, expectedStatus } from '../core/sessions.js?v=1.8.164';
-import { resolveUserDisplay } from '../services/user-directory.service.js?v=1.8.164';
+import { ROUTES } from '../core/router.js?v=1.8.168';
+import { APP_VERSION } from '../core/app.js?v=1.8.168';
+import { getRunningPeriod, getNextDueDate, formatDayMonth } from '../utils/date.utils.js?v=1.8.168';
+import { getRunningSession, toPeriod, daysLeft, expectedStatus } from '../core/sessions.js?v=1.8.168';
+import { getUserTitle, resolveUserDisplay } from '../services/user-directory.service.js?v=1.8.168';
 
 let removeSidebarProfileListener = null;
 
@@ -222,7 +222,7 @@ export function renderSidebar({ profile, ctx, orgName, tagline, onNavigate, onLo
   function syncSidebarIdentity() {
     const disp = resolveUserDisplay(profile.email, profile.name, profile.designation);
     idName.textContent = disp.name || profile.name || profile.email || '';
-    idRole.textContent = disp.designation || ROLE_LABELS[profile.role] || profile.role;
+    idRole.textContent = getUserTitle(profile) || disp.designation || 'Staff';
   }
   syncSidebarIdentity();
   if (removeSidebarProfileListener) {
@@ -232,9 +232,11 @@ export function renderSidebar({ profile, ctx, orgName, tagline, onNavigate, onLo
   const onSidebarProfileChange = () => syncSidebarIdentity();
   window.addEventListener('uic:profile-updated', onSidebarProfileChange);
   window.addEventListener('uic:users-updated', onSidebarProfileChange);
+  window.addEventListener('uic:branding-updated', onSidebarProfileChange);
   removeSidebarProfileListener = () => {
     window.removeEventListener('uic:profile-updated', onSidebarProfileChange);
     window.removeEventListener('uic:users-updated', onSidebarProfileChange);
+    window.removeEventListener('uic:branding-updated', onSidebarProfileChange);
   };
 
   const signout = document.createElement('button');

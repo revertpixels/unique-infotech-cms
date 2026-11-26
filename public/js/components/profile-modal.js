@@ -1,16 +1,17 @@
-import { openPopup } from './modal.js?v=1.8.164';
-import { showToast } from './toast.js?v=1.8.164';
-import { confirmDialog } from './ui-confirm.js?v=1.8.164';
-import { cropSquareAvatarToBlob, isImageFile, formatBytes } from '../utils/image-compress.js?v=1.8.164';
-import { formatPersonName, initials } from '../utils/formatter.js?v=1.8.164';
+import { auth } from '../config/firebase-config.js';
+import { openPopup } from './modal.js?v=1.8.168';
+import { showToast } from './toast.js?v=1.8.168';
+import { confirmDialog } from './ui-confirm.js?v=1.8.168';
+import { cropSquareAvatarToBlob, isImageFile, formatBytes } from '../utils/image-compress.js?v=1.8.168';
+import { formatPersonName, initials } from '../utils/formatter.js?v=1.8.168';
 import {
-  ROLE_LABELS,
-  defaultDesignationForRole,
+  getRoleTitle,
+  getUserTitle,
   resolveUserDisplay,
   saveOwnPhoto,
   saveUserFields
-} from '../services/user-directory.service.js?v=1.8.164';
-import { changeSuperAdminPassword, mapAuthError } from '../core/auth.js?v=1.8.164';
+} from '../services/user-directory.service.js?v=1.8.168';
+import { changeSuperAdminPassword, mapAuthError } from '../core/auth.js?v=1.8.168';
 
 function el(tag, cls, text) {
   const node = document.createElement(tag);
@@ -293,13 +294,18 @@ export function openPhotoCropModal({ email, name, currentPhotoUrl = '', onSaved 
     setBusy(true, 'Uploading...');
     try {
       const { blob, mime } = await cropSquareAvatarToBlob(decodedImg, { zoom, fx, fy }, { maxBytes: 300 * 1024, size: 512 });
+      const isSelf = ((auth.currentUser?.email || '').toLowerCase() === String(email || '').trim().toLowerCase());
       const url = await saveOwnPhoto(email, { blob, mime, remove: false });
-      showToast({ type: 'success', title: 'Photo saved', message: 'Your profile photo has been updated.' });
+      showToast({
+        type: 'success',
+        title: 'Photo saved',
+        message: isSelf ? 'Your profile photo has been updated.' : `${name || email}'s profile photo has been updated.`
+      });
       busy = false;
       popup.close(true);
       if (typeof onSaved === 'function') onSaved(url);
     } catch (err) {
-      showError(mapAuthError(err, err?.message || 'Failed to upload profile photo.'));
+      showError(mapAuthError(err, 'Failed to upload profile photo. Please try again.'));
       setBusy(false);
       saveBtn.innerHTML = '<i data-lucide="check"></i> Save Photo';
       if (typeof lucide !== 'undefined') lucide.createIcons();
@@ -308,9 +314,12 @@ export function openPhotoCropModal({ email, name, currentPhotoUrl = '', onSaved 
 
   removeBtn.addEventListener('click', async () => {
     if (busy) return;
+    const isSelf = ((auth.currentUser?.email || '').toLowerCase() === String(email || '').trim().toLowerCase());
     const ok = await confirmDialog({
       title: 'Remove profile photo?',
-      message: 'Your initials will be shown instead of your photo across the system.',
+      message: isSelf
+        ? 'Your initials will be shown instead of your photo across the system.'
+        : `${name || email}'s initials will be shown instead of their photo across the system.`,
       confirmText: 'Remove Photo',
       danger: true
     });
@@ -319,7 +328,11 @@ export function openPhotoCropModal({ email, name, currentPhotoUrl = '', onSaved 
     setBusy(true, 'Removing...');
     try {
       await saveOwnPhoto(email, { remove: true });
-      showToast({ type: 'info', title: 'Photo removed', message: 'Profile photo cleared.' });
+      showToast({
+        type: 'info',
+        title: 'Photo removed',
+        message: isSelf ? 'Profile photo cleared.' : `${name || email}'s profile photo has been cleared.`
+      });
       busy = false;
       popup.close(true);
       if (typeof onSaved === 'function') onSaved('');
@@ -335,9 +348,10 @@ export function openPhotoCropModal({ email, name, currentPhotoUrl = '', onSaved 
  */
 export function openChangePasswordModal({ email } = {}) {
   let busy = false;
+  const saTitle = getRoleTitle('superadmin');
   const popup = openPopup({
     title: 'Change Password',
-    subtitle: email ? `Account: ${email}` : 'Super Admin account security',
+    subtitle: email ? `Account: ${email}` : `${saTitle} account security`,
     icon: 'key-round',
     saving: () => busy
   });
@@ -436,7 +450,7 @@ export function openChangePasswordModal({ email } = {}) {
     saveBtn.textContent = 'Updating...';
     try {
       await changeSuperAdminPassword(currentPassword, newPassword);
-      showToast({ type: 'success', title: 'Password updated', message: 'Your Super Admin password has been changed.' });
+      showToast({ type: 'success', title: 'Password updated', message: `Your ${saTitle} password has been changed.` });
       busy = false;
       popup.close(true);
     } catch (err) {
@@ -481,7 +495,9 @@ export function openProfileModal({ profile, onOpenOrganisation } = {}) {
   function renderContent() {
     body.textContent = '';
     const disp = resolveUserDisplay(profile.email, profile.name, profile.designation);
-    const desigText = disp.designation || defaultDesignationForRole(profile.role);
+    const desigText = getUserTitle(profile);
+    const saTitle = getRoleTitle('superadmin');
+    const roleTitle = getRoleTitle(profile.role);
 
     const header = el('div', 'pm-hero');
     const avatarBox = el('div', 'pm-avatar');
@@ -521,7 +537,7 @@ export function openProfileModal({ profile, onOpenOrganisation } = {}) {
       item.appendChild(el('strong', 'pm-meta-v', val || '-'));
       metaGrid.appendChild(item);
     };
-    addMeta('Role', ROLE_LABELS[profile.role] || profile.role);
+    addMeta('Role Title', roleTitle || profile.role);
     addMeta('Designation', desigText);
     if (profile.branchId) {
       addMeta('Assigned Branch', resolveBranchText());
@@ -547,7 +563,7 @@ export function openProfileModal({ profile, onOpenOrganisation } = {}) {
         id: 'pm-self-desig',
         label: 'Designation',
         value: desigText,
-        placeholder: 'e.g. Director, Super Admin',
+        placeholder: 'e.g. Director',
         maxLength: 60,
         required: true,
         icon: 'badge-check'
@@ -579,7 +595,7 @@ export function openProfileModal({ profile, onOpenOrganisation } = {}) {
         e.preventDefault();
         if (busy) return;
         const cleanName = formatPersonName(nameObj.inp.value);
-        const cleanDesig = formatPersonName(desigObj.inp.value) || 'Super Admin';
+        const cleanDesig = formatPersonName(desigObj.inp.value) || saTitle;
         if (!cleanName || cleanName.length < 2) {
           errBox.textContent = 'Enter a valid name (at least 2 characters).';
           errBox.hidden = false;
@@ -611,7 +627,7 @@ export function openProfileModal({ profile, onOpenOrganisation } = {}) {
 
       body.appendChild(form);
     } else {
-      const note = el('div', 'pm-readonly-note', 'Only the Super Admin can change your name, designation, or role. You can update or remove your own profile photo above.');
+      const note = el('div', 'pm-readonly-note', `Only the ${saTitle} can change your name, designation, or role. You can update or remove your own profile photo above.`);
       body.appendChild(note);
       const footer = el('div', 'pm-modal-actions-right');
       const doneBtn = el('button', 'ui-btn primary', 'Done');

@@ -14,7 +14,7 @@ import {
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js';
 import { doc, getDoc } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
 
-export function mapAuthError(err) {
+export function mapAuthError(err, fallback = 'Request failed. Please try again.') {
   const code = err && err.code ? err.code : '';
   if (code === 'auth/wrong-password' || code === 'auth/invalid-credential') {
     return 'Incorrect current password.';
@@ -34,10 +34,32 @@ export function mapAuthError(err) {
   if (code === 'auth/invalid-email') {
     return 'Enter a valid email address.';
   }
-  if (code === 'auth/network-request-failed') {
+  if (code === 'auth/network-request-failed' || code === 'unavailable') {
     return 'Network problem. Check your internet connection and try again.';
   }
-  return (err && err.message) ? err.message : 'Authentication request failed. Please try again.';
+  if (code === 'storage/unauthorized' || code === 'permission-denied' || code === 'functions/permission-denied') {
+    return 'You do not have permission to update this profile photo.';
+  }
+  if (code === 'functions/unauthenticated') {
+    return 'Please sign in again to continue.';
+  }
+  if (code === 'functions/invalid-argument') {
+    return 'Please select a valid JPG, PNG, or WebP photo under 300 KB.';
+  }
+  if (code === 'storage/canceled') {
+    return 'Upload was cancelled.';
+  }
+  if (code === 'storage/quota-exceeded') {
+    return 'Storage limit reached. Please try again later.';
+  }
+  if (code === 'storage/retry-limit-exceeded' || code === 'storage/unknown') {
+    return 'Upload timed out due to network issues. Please try again.';
+  }
+  const rawMsg = err && err.message ? String(err.message) : '';
+  if (!rawMsg || /FirebaseError|Firebase Storage|Missing or insufficient permissions|\(storage\/|\(auth\//i.test(rawMsg)) {
+    return fallback;
+  }
+  return rawMsg;
 }
 
 export async function changeSuperAdminPassword(currentPassword, newPassword) {

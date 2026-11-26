@@ -1,13 +1,13 @@
 import { db } from '../config/firebase-config.js';
 import { collection, getDocs, doc, getDoc, setDoc, updateDoc, deleteDoc, query, where, serverTimestamp } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { createSelect } from '../components/ui-select.js?v=1.8.164';
-import { openMenu } from '../components/ui-menu.js?v=1.8.164';
-import { confirmDialog } from '../components/ui-confirm.js?v=1.8.164';
-import { showToast } from '../components/toast.js?v=1.8.164';
-import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.164';
-import { PAGE_SIZE, buildStats, buildToolbar, renderPager, renderEmptyTableState } from '../components/list-page.js?v=1.8.164';
-import { formatPersonName } from '../utils/formatter.js?v=1.8.164';
-import { loadUsersDirectory } from '../services/user-directory.service.js?v=1.8.164';
+import { createSelect } from '../components/ui-select.js?v=1.8.168';
+import { openMenu } from '../components/ui-menu.js?v=1.8.168';
+import { confirmDialog } from '../components/ui-confirm.js?v=1.8.168';
+import { showToast } from '../components/toast.js?v=1.8.168';
+import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.168';
+import { PAGE_SIZE, buildStats, buildToolbar, renderPager, renderEmptyTableState } from '../components/list-page.js?v=1.8.168';
+import { formatPersonName } from '../utils/formatter.js?v=1.8.168';
+import { loadUsersDirectory, getRoleTitle, getRolePluralTitle } from '../services/user-directory.service.js?v=1.8.168';
 
 const TEXT_KEYS = ['name', 'email', 'phone'];
 const KEYS = ['name', 'email', 'phone', 'branchId', 'status'];
@@ -41,17 +41,49 @@ export async function mount({ profile }) {
   const branchSel = createSelect(branchHost, { options: [], value: '', ariaLabel: 'Branch' });
   const statusSel = createSelect(statusHost, { options: STATUS_OPTIONS, value: 'active', ariaLabel: 'Status' });
 
+  const roleSingular = () => getRoleTitle('branch_head');
+  const rolePlural = () => getRolePluralTitle('branch_head');
+
   let rows = [];
   let branches = [];
   let page = 1;
   const stats = buildStats([
-    { label: 'Total heads', value: 0, sub: 'All branch heads', icon: 'user-cog', tone: 'indigo' },
+    { label: `Total`, value: 0, sub: 'All users', icon: 'user-cog', tone: 'indigo' },
     { label: 'Active', value: 0, sub: 'Can sign in', icon: 'check-circle', tone: 'green' },
     { label: 'Inactive', value: 0, sub: 'Signed out', icon: 'pause-circle', tone: 'amber' },
-    { label: 'Branches without a head', value: 0, sub: 'Active branches with no active head', icon: 'git-branch', tone: 'violet' }
+    { label: 'Unassigned branches', value: 0, sub: 'Active branches covered', icon: 'git-branch', tone: 'violet' }
   ]);
   const statsHost = $('bh-stats');
   if (statsHost) statsHost.appendChild(stats.el);
+
+  function applyRoleLabels() {
+    const sing = roleSingular();
+    const plur = rolePlural();
+    const singLo = sing.toLowerCase();
+    const plurLo = plur.toLowerCase();
+    const crumb = $('bh-crumb');
+    if (crumb) crumb.textContent = plur;
+    const titleEl = $('bh-title');
+    if (titleEl) titleEl.textContent = plur;
+    const addLbl = $('bh-add-label');
+    if (addLbl) addLbl.textContent = `Add ${sing}`;
+    const cardTitle = $('bh-card-title');
+    if (cardTitle) cardTitle.textContent = `All ${plurLo}`;
+    const emptyTitle = $('bh-empty-title');
+    if (emptyTitle) emptyTitle.textContent = `No ${plurLo} yet`;
+    const emptySub = $('bh-empty-sub');
+    if (emptySub) emptySub.textContent = `${plur} you add will appear here.`;
+    const saveLbl = $('bh-save-label');
+    if (saveLbl) saveLbl.textContent = `Save ${singLo}`;
+    const statLabels = stats.el.querySelectorAll('.lp-stat-label');
+    if (statLabels[0]) statLabels[0].textContent = `Total ${plurLo}`;
+    if (statLabels[3]) statLabels[3].textContent = `Branches without ${singLo}`;
+    if (!form.hidden) {
+      const ft = $('bh-form-title');
+      if (ft) ft.textContent = `${editId ? 'Edit' : 'New'} ${singLo}`;
+    }
+  }
+  applyRoleLabels();
   const tb = buildToolbar({
     placeholder: 'Search name, email or phone',
     filters: [
@@ -103,7 +135,10 @@ export async function mount({ profile }) {
     if (!v.branchId) err.branch = 'Branch is required.';
     if (v.branchId) {
       const other = rows.find((r) => r.id !== editId && r.branchId === v.branchId);
-      if (other) err.branch = '"' + (other.name || other.email) + '" is already the head of this branch. Delete them first to assign a new head.';
+      if (other) {
+        const singLo = roleSingular().toLowerCase();
+        err.branch = `"${other.name || other.email}" is already the ${singLo} of this branch. Delete them first to assign a new ${singLo}.`;
+      }
     }
     return err;
   }
@@ -163,7 +198,7 @@ export async function mount({ profile }) {
       if (b) { opts.push({ value: b.id, label: b.name + ' (inactive)', icon: 'git-branch' }); freeCount++; }
     }
     if (freeCount === 0) {
-      opts.push({ value: '', label: 'All branches have a head', icon: 'git-branch' });
+      opts.push({ value: '', label: `All branches have a ${roleSingular().toLowerCase()}`, icon: 'git-branch' });
     } else {
       opts.unshift({ value: '', label: 'Select a branch', icon: 'git-branch' });
     }
@@ -190,12 +225,14 @@ export async function mount({ profile }) {
     const headsByBranch = {};
     rows.filter((r) => (r.status || 'active') === 'active').forEach((r) => { if (r.branchId) headsByBranch[r.branchId] = true; });
     const withoutHead = branches.filter((b) => (b.status || 'active') === 'active' && !headsByBranch[b.id]).length;
-    stats.update(0, rows.length, rows.length === 1 ? '1 head' : rows.length + ' heads');
+    const singLo = roleSingular().toLowerCase();
+    const plurLo = rolePlural().toLowerCase();
+    stats.update(0, rows.length, rows.length === 1 ? `1 ${singLo}` : `${rows.length} ${plurLo}`);
     stats.update(1, active, 'Can sign in');
     stats.update(2, rows.length - active, 'Signed out');
-    stats.update(3, withoutHead, withoutHead === 0 ? 'All active branches covered' : withoutHead + ' without a head');
+    stats.update(3, withoutHead, withoutHead === 0 ? 'All active branches covered' : `${withoutHead} unassigned`);
     const cnt = $('bh-count');
-    if (cnt) cnt.textContent = list.length + (list.length === 1 ? ' head' : ' heads');
+    if (cnt) cnt.textContent = list.length + ' ' + (list.length === 1 ? singLo : plurLo);
     const foot = $('bh-foot');
     const totalPages = Math.max(1, Math.ceil(list.length / PAGE_SIZE));
     if (page > totalPages) page = totalPages;
@@ -217,8 +254,8 @@ export async function mount({ profile }) {
     if (rows.length && !list.length) {
       renderEmptyTableState(tbody, {
         colSpan: 5,
-        title: 'No matching branch heads',
-        desc: 'No branch heads match your search or filter criteria.',
+        title: `No matching ${plurLo}`,
+        desc: `No ${plurLo} match your search or filter criteria.`,
         onClear: () => {
           tb.state.q = '';
           tb.state.status = 'all';
@@ -248,7 +285,7 @@ export async function mount({ profile }) {
       const tdAct = mk('td', 'bh-actions');
       const k = mk('button', 'ui-kebab');
       k.type = 'button';
-      k.setAttribute('aria-label', 'Actions for ' + (r.name || 'branch head'));
+      k.setAttribute('aria-label', 'Actions for ' + (r.name || roleSingular().toLowerCase()));
       k.setAttribute('aria-haspopup', 'menu');
       k.setAttribute('aria-expanded', 'false');
       const ki = document.createElement('i');
@@ -280,7 +317,7 @@ export async function mount({ profile }) {
       rows.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
     } catch (e) {
       console.error('[branch-heads] load heads failed', e);
-      note('Could not load branch heads (' + (e.code || 'error') + ').', true);
+      note(`Could not load ${rolePlural().toLowerCase()} (` + (e.code || 'error') + ').', true);
       rows = [];
     }
     try {
@@ -324,7 +361,7 @@ export async function mount({ profile }) {
   async function tryDeleteHead(r) {
     if (r.role && r.role !== 'branch_head') return;
     const ok = await confirmDialog({
-      title: 'Delete branch head?',
+      title: `Delete ${roleSingular().toLowerCase()}?`,
       message: 'Delete "' + (r.name || r.email) + '" (' + r.email + ')? They will no longer be able to sign in. Type DELETE to confirm.',
       confirmText: 'Delete', danger: true, requireText: 'DELETE'
     });
@@ -335,7 +372,7 @@ export async function mount({ profile }) {
       if (editId === r.id) closeForm();
       await load();
       await syncDirectoryAfterMutation();
-      showToast('Branch head deleted.', 'success');
+      showToast(`${roleSingular()} deleted.`, 'success');
     } catch (e) {
       console.error('[branch-heads] delete failed', e);
       showToast('Delete failed (' + (e.code || e.message || 'error') + ').', 'error');
@@ -350,12 +387,12 @@ export async function mount({ profile }) {
     branchSel.setOptions(branchOptions());
     branchSel.value = saved.branchId || '';
     fillForm(saved);
-    $('bh-form-title').textContent = r ? 'Edit branch head' : 'New branch head';
+    $('bh-form-title').textContent = `${r ? 'Edit' : 'New'} ${roleSingular().toLowerCase()}`;
     const emailInput = $('bh-email');
     const emailHelp = $('bh-email-help');
     if (r) {
       emailInput.readOnly = true;
-      emailHelp.textContent = 'Email cannot be changed. To change it, delete this head and add again.';
+      emailHelp.textContent = `Email cannot be changed. To change it, delete this ${roleSingular().toLowerCase()} and add again.`;
     } else {
       emailInput.readOnly = false;
       emailHelp.textContent = 'Must be the Google account they will sign in with.';
@@ -435,7 +472,7 @@ export async function mount({ profile }) {
         const data = {
           email: v.email,
           name: formattedName,
-          designation: 'Branch Head',
+          designation: roleSingular(),
           role: 'branch_head',
           branchId: v.branchId,
           status: v.status,
@@ -450,7 +487,7 @@ export async function mount({ profile }) {
       closeForm();
       await load();
       await syncDirectoryAfterMutation();
-      note(editId ? 'Branch head updated.' : 'Branch head added.', false);
+      note(editId ? `${roleSingular()} updated.` : `${roleSingular()} added.`, false);
     } catch (e) {
       console.error('[branch-heads] save failed', e);
       saving = false;
@@ -461,11 +498,14 @@ export async function mount({ profile }) {
   });
 
   const onExternalUpdate = () => { load(); };
+  const onBrandingUpdate = () => { applyRoleLabels(); render(); };
   window.addEventListener('uic:users-updated', onExternalUpdate);
+  window.addEventListener('uic:branding-updated', onBrandingUpdate);
   await load();
   return () => {
     unregisterDirty();
     window.removeEventListener('uic:users-updated', onExternalUpdate);
+    window.removeEventListener('uic:branding-updated', onBrandingUpdate);
   };
 }
 

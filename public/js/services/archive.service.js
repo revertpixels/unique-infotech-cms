@@ -17,23 +17,24 @@ import {
   getCountFromServer,
   serverTimestamp
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { APP_VERSION } from '../core/app.js?v=1.8.171';
-import { todayISO, installmentSchedule, getOrgTimezone } from '../utils/session-rules.js?v=1.8.171';
+import { APP_VERSION } from '../core/app.js?v=1.8.172';
+import { todayISO, installmentSchedule, getOrgTimezone } from '../utils/session-rules.js?v=1.8.172';
 import {
   calculateStudentFinancials,
   evaluateYouthStudentDues,
   normalizeYouthPaymentsLedger,
   installmentCourseFee,
   installmentBalanceDue
-} from './payment.service.js?v=1.8.171';
+} from './payment.service.js?v=1.8.172';
 import {
   loadUsersDirectory,
   resolveUserDisplay,
   getUserTitle
-} from './user-directory.service.js?v=1.8.171';
-import { formatPersonName } from '../utils/formatter.js?v=1.8.171';
-import { buildOfflineViewerAssets } from '../utils/archive-viewer-builder.js?v=1.8.171';
-import { buildYouthReceiptData } from '../utils/admission-receipt.js?v=1.8.171';
+} from './user-directory.service.js?v=1.8.172';
+import { formatPersonName, formatGenderDisplay } from '../utils/formatter.js?v=1.8.172';
+import { getStudentPhotoSrc, getStudentDocSrc, getStudentDocMime } from '../utils/student-media.js?v=1.8.172';
+import { buildOfflineViewerAssets } from '../utils/archive-viewer-builder.js?v=1.8.172';
+import { buildYouthReceiptData } from '../utils/admission-receipt.js?v=1.8.172';
 
 /** Feature flag keeping Phase 2 session deletion OFF until Phase 1 is verified and approved. */
 export const ENABLE_ARCHIVE_SESSION_DELETE = false;
@@ -353,7 +354,17 @@ function scrubStudentForArchive(rawStudent = {}, { includeIdDocs = false } = {})
   const clean = { ...rawStudent };
   delete clean.data;
   delete clean.photo;
+  delete clean.photoUrl;
+  delete clean.photoDataUrl;
   delete clean.signature;
+  delete clean.signatureUrl;
+  if (clean.docs && typeof clean.docs === 'object' && !Array.isArray(clean.docs)) {
+    const flags = {};
+    for (const [k, v] of Object.entries(clean.docs)) {
+      flags[k] = Boolean(v);
+    }
+    clean.docs = flags;
+  }
   const rawAadhaar = clean.aadhaar || clean.aadhaarNo || clean.aadhaarNumber || '';
   clean.aadhaarMasked = includeIdDocs ? maskAadhaarValue(rawAadhaar) : '-';
   delete clean.aadhaar;
@@ -735,32 +746,46 @@ export async function scanSessionForExport({
     const safeSid = sanitizeFilenamePart(rawS.studentId || rawS.id, rawS.id);
     const outDocs = [];
     let photoPath = '';
+    const stDocsMap = {};
+    stDocsList.forEach((dd) => {
+      const kName = String(dd.id || dd.key || 'doc').trim();
+      stDocsMap[kName] = dd;
+    });
 
     for (const d of stDocsList) {
       const key = String(d.id || d.key || 'doc').trim();
+      const keyNorm = key.toLowerCase();
       const isIdDoc = isIdDocumentKey(key);
       if (isIdDoc && !includeIdDocs) continue;
       if (isIdDoc && includeIdDocs) idDocCount += 1;
 
-      const isPhoto = key === 'photo';
-      let bin = decodeDocBinary(d);
-      if (!bin && d.url && /^https?:\/\//i.test(d.url)) {
+      const isPhoto = /^(photo|passportphoto|passport_photo|studentphoto|avatar|profilephoto|image)$/i.test(keyNorm)
+        || String(d.key || '').trim().toLowerCase() === 'photo';
+      const docSrc = getStudentDocSrc(d, getStudentDocMime(d));
+      let bin = decodeDocBinary({
+        data: docSrc && docSrc.startsWith('data:') ? docSrc : '',
+        type: getStudentDocMime(d)
+      });
+      const remoteUrl = (docSrc && /^https?:\/\//i.test(docSrc)) ? docSrc : (d.url && /^https?:\/\//i.test(d.url) ? d.url : '');
+      if (!bin && remoteUrl) {
         try {
-          bin = await fetchUrlBinaryWithRetry(d.url, 2);
+          bin = await fetchUrlBinaryWithRetry(remoteUrl, 2);
         } catch (err) {
           missingFiles.push({
             studentId: rawS.studentId || rawS.id,
             key,
-            path: d.url,
+            path: remoteUrl,
             reason: err && err.message ? err.message : 'Download failed'
           });
         }
       }
 
       if (bin && bin.bytes) {
-        const folder = isPhoto ? 'files/photos' : 'files/docs';
-        const fname = `${safeSid}_${sanitizeFilenamePart(key, 'file')}.${bin.ext}`;
-        const relPath = `${folder}/${fname}`;
+        const safeDocType = sanitizeFilenamePart(key, 'file');
+        const relPath = isPhoto
+          ? `files/photos/${safeSid}.${bin.ext}`
+          : `files/docs/${safeSid}/${safeDocType}.${bin.ext}`;
+        const displayFname = isPhoto ? `${safeSid}.${bin.ext}` : `${safeDocType}.${bin.ext}`;
         mediaFiles.push({ path: relPath, bytes: bin.bytes, mime: bin.mime });
         mediaBytesTotal += bin.bytes.byteLength;
         if (isPhoto) {
@@ -770,46 +795,64 @@ export async function scanSessionForExport({
           docFileCount += 1;
         }
         outDocs.push({
-          key,
+          key: isPhoto ? 'photo' : key,
           label: d.label || key,
-          name: d.name || fname,
+          name: d.name || displayFname,
           mime: bin.mime,
           sizeBytes: bin.bytes.byteLength,
           path: relPath
         });
-      } else if (d.storagePath || d.url) {
+      } else if (d.storagePath || remoteUrl) {
         missingFiles.push({
           studentId: rawS.studentId || rawS.id,
           key,
-          path: d.storagePath || d.url,
-          reason: 'Binary image payload unavailable'
+          path: d.storagePath || remoteUrl,
+          reason: 'Binary document payload unavailable'
         });
       }
     }
 
-    // Legacy external photoUrl on student doc if docs/photo was not present
-    if (!photoPath && rawS.photoUrl && /^https?:\/\//i.test(rawS.photoUrl)) {
-      try {
-        const bin = await fetchUrlBinaryWithRetry(rawS.photoUrl, 2);
+    // Fallback: resolve photo via shared getStudentPhotoSrc helper (inline student fields or alternate formats)
+    if (!photoPath) {
+      const fallbackPhotoSrc = getStudentPhotoSrc(rawS, stDocsMap);
+      if (fallbackPhotoSrc) {
+        let bin = decodeDocBinary({ data: fallbackPhotoSrc.startsWith('data:') ? fallbackPhotoSrc : '' });
+        if (!bin && /^https?:\/\//i.test(fallbackPhotoSrc)) {
+          try {
+            bin = await fetchUrlBinaryWithRetry(fallbackPhotoSrc, 2);
+          } catch (err) {
+            missingFiles.push({
+              studentId: rawS.studentId || rawS.id,
+              key: 'photo',
+              path: fallbackPhotoSrc,
+              reason: err && err.message ? err.message : 'Photo download failed'
+            });
+          }
+        }
         if (bin && bin.bytes) {
-          const relPath = `files/photos/${safeSid}_photo.${bin.ext}`;
+          const relPath = `files/photos/${safeSid}.${bin.ext}`;
           mediaFiles.push({ path: relPath, bytes: bin.bytes, mime: bin.mime });
           mediaBytesTotal += bin.bytes.byteLength;
           photoPath = relPath;
           photoCount += 1;
-          outDocs.unshift({ key: 'photo', label: 'Photo', name: `${safeSid}_photo.${bin.ext}`, mime: bin.mime, sizeBytes: bin.bytes.byteLength, path: relPath });
+          outDocs.unshift({
+            key: 'photo',
+            label: 'Passport Photo',
+            name: `${safeSid}.${bin.ext}`,
+            mime: bin.mime,
+            sizeBytes: bin.bytes.byteLength,
+            path: relPath
+          });
         }
-      } catch (err) {
-        missingFiles.push({
-          studentId: rawS.studentId || rawS.id,
-          key: 'photo',
-          path: rawS.photoUrl,
-          reason: err && err.message ? err.message : 'Photo download failed'
-        });
       }
     }
 
-    cleanS._photoPath = photoPath;
+    if (photoPath) {
+      cleanS._photoPath = photoPath;
+      cleanS.photo = photoPath;
+    } else {
+      cleanS._photoPath = '';
+    }
     docsByStudent[rawS.id] = outDocs;
     scrubbedStudents.push(cleanS);
     studentsById[rawS.id] = cleanS;
@@ -1118,6 +1161,23 @@ export async function buildAndDownloadArchiveZip({
   try {
     emit(8, 'Preparing structured session data...');
 
+    const viewerAssets = buildOfflineViewerAssets({
+      sessionName: snapshot.session.name,
+      orgName: (snapshot.org && snapshot.org.orgName) || 'Unique Infotech',
+      scopeLabel: snapshot.scopeLabel,
+      generatedAtIST,
+      generatedByLabel: snapshot.generatedByLabel,
+      isEncrypted: encrypt,
+      includesIdDocs: snapshot.includeIdDocs,
+      counts: snapshot.counts,
+      totals: snapshot.totals
+    });
+    const bundledStaticAssets = await collectViewerStaticAssets();
+    const jsonDataCount = 10;
+    const csvDataCount = 3;
+    // Viewer + static assets + archive-data.js + json + csv + media + manifest.json
+    const packedFileCount = bundledStaticAssets.length + viewerAssets.length + 1 + jsonDataCount + csvDataCount + snapshot.mediaFiles.length + 1;
+
     const meta = {
       schemaVersion: 1,
       appVersion: APP_VERSION,
@@ -1133,6 +1193,7 @@ export async function buildAndDownloadArchiveZip({
       generatedByName: snapshot.generatedByName,
       generatedByDesignation: snapshot.generatedByDesignation,
       generatedByLabel: snapshot.generatedByLabel,
+      packedFileCount,
       missingFiles: snapshot.missingFiles
     };
 
@@ -1271,18 +1332,6 @@ export async function buildAndDownloadArchiveZip({
       archiveDataJsText = `window.ARCHIVE_DATA = ${serializedDataJson};\n`;
     }
 
-    const viewerAssets = buildOfflineViewerAssets({
-      sessionName: snapshot.session.name,
-      orgName: (snapshot.org && snapshot.org.orgName) || 'Unique Infotech',
-      scopeLabel: snapshot.scopeLabel,
-      generatedAtIST,
-      generatedByLabel: snapshot.generatedByLabel,
-      isEncrypted: encrypt,
-      includesIdDocs: snapshot.includeIdDocs,
-      counts: snapshot.counts,
-      totals: snapshot.totals
-    });
-
     // Assemble ZIP sequentially via streaming fflate.Zip so memory stays low
     const zipChunks = [];
     const manifestFiles = [];
@@ -1302,8 +1351,7 @@ export async function buildAndDownloadArchiveZip({
       entry.push(uint8Bytes, true);
     }
 
-    // 1. Viewer HTML / README / CSS overrides / Classic JS + real live CMS CSS/Fonts/Vendor libs
-    const bundledStaticAssets = await collectViewerStaticAssets();
+    // 1. Viewer HTML / README / CSS overrides / Classic JS + real live CMS CSS/Fonts/Vendor libs (precomputed above)
     for (const sa of bundledStaticAssets) {
       await pushZipEntry(sa.path, sa.bytes, { compress: sa.compress });
     }

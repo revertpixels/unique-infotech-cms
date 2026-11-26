@@ -20,19 +20,20 @@ import {
   evaluateYouthStudentDues,
   normalizeYouthPaymentsLedger,
   fetchStudentPayments
-} from './payment.service.js?v=1.8.171';
+} from './payment.service.js?v=1.8.172';
 import {
   evaluateKidsPendingBills,
   buildKidsPaymentLedger
-} from '../utils/school-billing.js?v=1.8.171';
+} from '../utils/school-billing.js?v=1.8.172';
+import { getStudentPhotoSrc } from '../utils/student-media.js?v=1.8.172';
 import {
   todayISO,
   fmtDate,
   getOrgTimezone
-} from '../utils/session-rules.js?v=1.8.171';
-import { formatINR } from '../utils/formatter.js?v=1.8.171';
-import { formatPersonName } from '../utils/formatter.js?v=1.8.171';
-import { resolveUserDisplay, loadUsersDirectory } from './user-directory.service.js?v=1.8.171';
+} from '../utils/session-rules.js?v=1.8.172';
+import { formatINR } from '../utils/formatter.js?v=1.8.172';
+import { formatPersonName } from '../utils/formatter.js?v=1.8.172';
+import { resolveUserDisplay, loadUsersDirectory } from './user-directory.service.js?v=1.8.172';
 
 const CACHE_KEY = 'financialReports';
 
@@ -203,28 +204,48 @@ export async function ensureReferenceData({ forceRefresh = false, profile = null
 /**
  * Lazily fetches student avatar photos ONLY for visible student IDs on the active page.
  */
-export async function loadStudentPhotos(studentDocIds = []) {
+export async function loadStudentPhotos(studentDocIds = [], studentsById = null) {
   const root = ensureCacheRoot();
   const missing = [];
   const seen = new Set();
+  const lookupStudent = (sid) => {
+    if (!studentsById) return null;
+    if (studentsById instanceof Map) return studentsById.get(sid) || null;
+    return studentsById[sid] || null;
+  };
   for (const id of studentDocIds) {
     if (!id || seen.has(id)) continue;
     seen.add(id);
+    const cached = root.photos.get(id);
+    if (cached) continue;
+    const directSrc = getStudentPhotoSrc(lookupStudent(id), null);
+    if (directSrc) {
+      root.photos.set(id, directSrc);
+      continue;
+    }
     if (!root.photos.has(id)) missing.push(id);
   }
   if (!missing.length) return root.photos;
 
   await runInChunks(missing, 6, async (sid) => {
+    const stObj = lookupStudent(sid);
     try {
       const snap = await getDoc(doc(db, 'students', sid, 'docs', 'photo'));
       if (snap.exists()) {
-        const d = snap.data() || {};
-        root.photos.set(sid, d.data || d.dataUrl || d.url || '');
-      } else {
-        root.photos.set(sid, '');
+        const docsMap = { photo: { id: snap.id, ...snap.data() } };
+        const src = getStudentPhotoSrc(stObj, docsMap);
+        if (src) {
+          root.photos.set(sid, src);
+          return;
+        }
       }
+      // Fallback: inspect docs subcollection in case photo was saved under an alternate ID/key
+      const colSnap = await getDocs(collection(db, 'students', sid, 'docs'));
+      const docsMap = {};
+      colSnap.docs.forEach((d) => { docsMap[d.id] = { id: d.id, ...d.data() }; });
+      root.photos.set(sid, getStudentPhotoSrc(stObj, docsMap));
     } catch (_) {
-      root.photos.set(sid, '');
+      root.photos.set(sid, getStudentPhotoSrc(stObj, null));
     }
   });
   return root.photos;

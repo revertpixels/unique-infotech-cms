@@ -1,7 +1,8 @@
 // school-receipt.js � pure view-model builders for the Kids admission receipt.
 // No Firebase, no DOM. Safe to unit-test in plain Node.
 
-import { formatDateIN } from './formatter.js?v=1.8.171';
+import { formatDateIN, formatPersonName, formatGenderDisplay } from './formatter.js?v=1.8.172';
+import { getStudentPhotoSrc, getStudentDocSrc } from './student-media.js?v=1.8.172';
 
 const MONTH_NAMES = [
   'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
@@ -141,13 +142,13 @@ export function buildSchoolReceiptData({ admission, photo, signature, org, payme
   const noPaymentOther = (p && p.noPaymentOther) || a.noPaymentOther || '';
 
   return {
-    studentName: a.name || '-',
+    studentName: formatPersonName(a.name || '') || '-',
     schoolClass: a.schoolClass || '-',
     schoolName: 'Unique Kids',
-    guardianName: a.guardianName || '-',
+    guardianName: formatPersonName(a.guardianName || '') || '-',
     dob: formatDateIN(a.dob) || '-',
     aadhaar: aadhaarMasked,
-    gender,
+    gender: formatGenderDisplay(a.gender, '-'),
     phone: a.phone || '-',
     altPhone: a.altPhone || '-',
     address: a.address || '-',
@@ -173,8 +174,8 @@ export function buildSchoolReceiptData({ admission, photo, signature, org, payme
     noPaymentReasonFormatted: formatNoPaymentReason(noPaymentReason, noPaymentOther),
     
     // Media & Docs
-    photoUrl: photo && photo.data ? photo.data : '',
-    signatureUrl: signature && signature.data ? signature.data : '',
+    photoUrl: getStudentPhotoSrc(a, photo ? { photo } : null),
+    signatureUrl: getStudentDocSrc(signature, 'image/jpeg'),
     
     // Org branding
     orgPhones: phones,

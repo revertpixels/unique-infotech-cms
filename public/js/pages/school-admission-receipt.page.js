@@ -3,11 +3,12 @@
 // Scope: Super Admin.
 import { db } from '../config/firebase-config.js';
 import { doc, getDoc, getDocs, collection, query, where } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.171';
-import { createSelect } from '../components/ui-select.js?v=1.8.171';
-import { formatDateIN } from '../utils/formatter.js?v=1.8.171';
-import { buildSchoolReceiptData, fmtRs } from '../utils/school-receipt.js?v=1.8.171';
-import { downloadSchoolReceiptPdf } from '../utils/school-receipt-pdf.js?v=1.8.171';
+import { showToast } from '../components/toast.js?v=1.8.172';
+import { createSelect } from '../components/ui-select.js?v=1.8.172';
+import { formatDateIN } from '../utils/formatter.js?v=1.8.172';
+import { buildSchoolReceiptData, fmtRs } from '../utils/school-receipt.js?v=1.8.172';
+import { downloadSchoolReceiptPdf } from '../utils/school-receipt-pdf.js?v=1.8.172';
+import { getStudentDocRecord } from '../utils/student-media.js?v=1.8.172';
 
 const COL = 'students';
 let studentDocId = '';
@@ -104,7 +105,7 @@ export async function mount({ container, profile, ctx }) {
       }
     } catch (_) { /* non-fatal */ }
 
-    // Media docs (photo & signature)
+    // Media docs (photo & signature) via shared lookup + subcollection fallback
     try {
       const [phSnap, sgSnap] = await Promise.all([
         getDoc(doc(db, COL, studentDocId, 'docs', 'photo')),
@@ -112,6 +113,13 @@ export async function mount({ container, profile, ctx }) {
       ]);
       if (phSnap.exists()) photo = Object.assign({ id: phSnap.id }, phSnap.data());
       if (sgSnap.exists()) signature = Object.assign({ id: sgSnap.id }, sgSnap.data());
+      if (!photo || !signature) {
+        const docsSnap = await getDocs(collection(db, COL, studentDocId, 'docs'));
+        const docsMap = {};
+        docsSnap.docs.forEach((d) => { docsMap[d.id] = { id: d.id, ...d.data() }; });
+        if (!photo) photo = getStudentDocRecord(docsMap, 'photo', admission);
+        if (!signature) signature = getStudentDocRecord(docsMap, 'signature', admission);
+      }
     } catch (_) { /* non-fatal */ }
 
   } catch (e) {

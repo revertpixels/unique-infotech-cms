@@ -115,6 +115,7 @@ unique-infotech-cms/
     │       ├── helpers.js
     │       ├── pdf.utils.js
     │       ├── sound.js
+    │       ├── student-media.js
     │       └── validator.js
     ├── vendor/
     │   ├── archive/

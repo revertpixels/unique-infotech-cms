@@ -2,8 +2,9 @@
 // Matching reference-templates/Ui.html.
 // Shared by the on-screen HTML sheet and the vector PDF builder.
 
-import { formatDateIN } from './formatter.js?v=1.8.171';
-import { courseFeeOf, discountOf } from './fees.js?v=1.8.171';
+import { formatDateIN, formatPersonName, formatGenderDisplay } from './formatter.js?v=1.8.172';
+import { courseFeeOf, discountOf } from './fees.js?v=1.8.172';
+import { getStudentDocSrc, getStudentPhotoSrc } from './student-media.js?v=1.8.172';
 
 // Format currency as "Rs. 1,000.00"
 export function fmtRs(n) {
@@ -103,7 +104,8 @@ export function buildYouthReceiptData({ admission, photo, signature, org, paymen
   const orgEmail = o.email || 'utpal.goutam@gmail.com';
   const orgPhones = o.phone || o.phones || '9851771893, 9832147650, 8641209375';
 
-  const branchName = (br.name && br.name !== adm.branchId) ? br.name : ((adm.branchName && adm.branchName !== adm.branchId) ? adm.branchName : 'BANKURA ZILLA YOUTH COMPUTER TRAINING CENTRE');
+  const branchRaw = (br.name && br.name !== adm.branchId) ? br.name : ((adm.branchName && adm.branchName !== adm.branchId) ? adm.branchName : 'BANKURA ZILLA YOUTH COMPUTER TRAINING CENTRE');
+  const branchName = formatPersonName(branchRaw) || branchRaw;
   const branchCode = br.code || adm.branchCode || 'BZYCTC';
   const branchAddress = br.address || 'Kenduadihi, Bankura, West Bengal - 722101';
   const branchPhones = br.phone || br.mobile || '9733518246, 7003624981, 9475036218';
@@ -111,10 +113,10 @@ export function buildYouthReceiptData({ admission, photo, signature, org, paymen
   const receiptNo = adm.receiptNo || pay.receiptNo || '-';
   const receiptDate = adm.admissionDate ? formatDateIN(adm.admissionDate) : (pay.paymentDate ? formatDateIN(pay.paymentDate) : '-');
 
-  const studentName = (adm.name || '-').toUpperCase();
-  const guardianName = (adm.guardianName || '-').toUpperCase();
+  const studentName = formatPersonName(adm.name || '') || '-';
+  const guardianName = formatPersonName(adm.guardianName || '') || '-';
   const dob = adm.dob ? formatDateIN(adm.dob) : '-';
-  const gender = adm.gender ? (adm.gender.charAt(0).toUpperCase() + adm.gender.slice(1).toLowerCase()) : '-';
+  const gender = formatGenderDisplay(adm.gender, '-');
   const phone = adm.phone || '-';
   const altPhone = adm.altPhone || '-';
   const email = adm.email || '-';
@@ -254,8 +256,8 @@ export function buildYouthReceiptData({ admission, photo, signature, org, paymen
 
   const feeTotal = totalCourseFee;
 
-  const photoUrl = imageSrc(photo);
-  const signatureUrl = imageSrc(signature);
+  const photoUrl = getStudentPhotoSrc(adm, photo ? { photo } : null) || null;
+  const signatureUrl = getStudentDocSrc(signature, 'image/jpeg') || null;
 
   return {
     orgName,

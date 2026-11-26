@@ -1,53 +1,17 @@
 // Thin archive-specific CSS layer placed cleanly ON TOP OF the copied live CMS stylesheets.
 // Never duplicates CMS palette, buttons, tables, sidebar, topbar, or receipt CSS.
-export const ARCHIVE_VIEWER_OVERRIDES_CSS = `/* archive-overrides.css — Read-only banner, unlock gate, native select parity, and clean print staging */
+export const ARCHIVE_VIEWER_OVERRIDES_CSS = `/* archive-overrides.css — Topbar Archive pill, unlock gate, native select parity, and clean print staging */
 
-/* Sticky Read-Only banner sitting cleanly above live .topbar inside .main */
-.arx-offline-banner {
-  display: flex;
+/* Compact Archive badge paired with topbar session chip (exact .pill.neutral app style) */
+.arx-tb-session-group {
+  display: inline-flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
-  padding: 7px 20px;
-  background: var(--sidebar-bg, #14163A);
-  color: #E2E8F0;
-  font-size: 12.5px;
-  font-weight: 500;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
-}
-
-.arx-offline-banner-left {
-  display: flex;
-  align-items: center;
-  gap: 10px;
+  gap: 8px;
   min-width: 0;
-  flex-wrap: wrap;
 }
 
-.arx-offline-tag {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 2px 9px;
-  border-radius: 999px;
-  background: rgba(142, 152, 247, 0.22);
-  border: 1px solid rgba(142, 152, 247, 0.45);
-  color: #FFFFFF;
-  font-size: 10.5px;
-  font-weight: 800;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  white-space: nowrap;
-}
-
-.arx-offline-meta {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 11.5px;
-  color: #CBD5E1;
-  white-space: nowrap;
+.arx-tb-badge {
+  flex-shrink: 0;
 }
 
 /* Native select styled cleanly to match live .lp-filter .ui-select-btn */
@@ -218,20 +182,23 @@ export const ARCHIVE_VIEWER_OVERRIDES_CSS = `/* archive-overrides.css — Read-o
 
 /* Override student hero action block on archive so icons wrap neatly */
 @media (max-width: 768px) {
-  .arx-offline-banner {
-    padding: 6px 12px;
-    gap: 6px;
-    font-size: 11px;
-  }
-  .arx-offline-tag {
-    font-size: 9.5px;
-    padding: 1px 7px;
-  }
-  .arx-offline-meta {
-    display: none;
-  }
   .arx-tb-chip {
+    display: inline-flex;
+    height: 30px;
+    padding: 0 9px;
+    font-size: 11.5px;
+    max-width: 150px;
+  }
+  .arx-tb-chip span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .arx-tb-scope-chip {
     display: none;
+  }
+  .arx-tb-badge {
+    padding: 3px 8px;
+    font-size: 11px;
   }
 }
 
@@ -250,7 +217,6 @@ export const ARCHIVE_VIEWER_OVERRIDES_CSS = `/* archive-overrides.css — Read-o
   body.av-printing .ui-toast-stack,
   body.av-printing .sidebar,
   body.av-printing .topbar,
-  body.av-printing .arx-offline-banner,
   body.av-printing .ar-toolbar,
   body.av-printing .mpr-toolbar {
     display: none !important;
@@ -271,7 +237,6 @@ export const ARCHIVE_VIEWER_OVERRIDES_CSS = `/* archive-overrides.css — Read-o
   body:not(.av-printing) .ui-toast-stack,
   body:not(.av-printing) .sidebar,
   body:not(.av-printing) .topbar,
-  body:not(.av-printing) .arx-offline-banner,
   body:not(.av-printing) .ar-toolbar,
   body:not(.av-printing) .mpr-toolbar {
     display: none !important;

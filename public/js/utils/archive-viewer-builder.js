@@ -1,5 +1,5 @@
-import { ARCHIVE_VIEWER_OVERRIDES_CSS } from './archive-viewer-styles.js?v=1.8.171';
-import { ARCHIVE_RECEIPTS_VIEWER_JS } from './archive-viewer-receipts.js?v=1.8.171';
+import { ARCHIVE_VIEWER_OVERRIDES_CSS } from './archive-viewer-styles.js?v=1.8.172';
+import { ARCHIVE_RECEIPTS_VIEWER_JS } from './archive-viewer-receipts.js?v=1.8.172';
 
 /**
  * Builds the static viewer files packed into each archive ZIP:
@@ -170,6 +170,86 @@ const ARCHIVE_APP_VIEWER_JS = `(function(){
     return parts[0].slice(0, 2).toUpperCase();
   }
 
+  function fmtGender(value) {
+    var raw = String(value || '').trim().toLowerCase();
+    if (!raw) return '-';
+    if (raw === 'm' || raw === 'male') return 'Male';
+    if (raw === 'f' || raw === 'female') return 'Female';
+    if (raw === 'o' || raw === 'other' || raw === 'others') return 'Other';
+    return titleCase(raw);
+  }
+
+  function formatBytesNice(bytes) {
+    var n = Number(bytes || 0);
+    if (!Number.isFinite(n) || n <= 0) return '';
+    if (n < 1024) return n + ' B';
+    if (n < 1048576) return (n / 1024).toFixed(1) + ' KB';
+    return (n / 1048576).toFixed(2) + ' MB';
+  }
+
+  function isRelativeMediaPath(val) {
+    var s = String(val || '').trim();
+    if (!s) return false;
+    if (/^data:/i.test(s)) return false;
+    if (/^https?:/i.test(s)) return false;
+    return s.indexOf('files/') === 0 || s.indexOf('./files/') === 0;
+  }
+
+  function getArchivePhotoSrc(s) {
+    if (!s) return '';
+    if (isRelativeMediaPath(s._photoPath)) return s._photoPath;
+    if (isRelativeMediaPath(s.photo)) return s.photo;
+    if (isRelativeMediaPath(s.photoPath)) return s.photoPath;
+    var docs = (DATA.docsByStudent && DATA.docsByStudent[s.id]) || [];
+    for (var i = 0; i < docs.length; i++) {
+      var k = String((docs[i] && docs[i].key) || '').toLowerCase();
+      if ((k === 'photo' || k === 'passportphoto' || k === 'studentphoto' || k === 'avatar') && docs[i].path) {
+        return docs[i].path;
+      }
+    }
+    return '';
+  }
+
+  function findArchiveDocRecord(s, targetKey) {
+    if (!s) return null;
+    var docs = (DATA.docsByStudent && DATA.docsByStudent[s.id]) || [];
+    var low = String(targetKey || '').toLowerCase();
+    var aliases = {
+      photo: ['photo', 'passportphoto', 'studentphoto', 'avatar'],
+      signature: ['signature', 'studentsignature', 'sign'],
+      dobproof: ['dobproof', 'dob', 'birthcertificate', 'ageproof', 'aadhaar', 'aadhar'],
+      marksheet: ['marksheet', 'lastmarksheet', 'academicmarksheet', 'qualification', 'certificate']
+    };
+    var accept = aliases[low] || [low];
+    for (var i = 0; i < docs.length; i++) {
+      var dk = String((docs[i] && docs[i].key) || '').toLowerCase();
+      if (accept.indexOf(dk) >= 0) return docs[i];
+    }
+    if (low === 'photo') {
+      var ph = getArchivePhotoSrc(s);
+      if (ph) return { key: 'photo', label: 'Passport Photo', name: (s.studentId || s.id || 'photo') + '.jpg', mime: 'image/jpeg', sizeBytes: 0, path: ph };
+    }
+    return null;
+  }
+
+  function lateFeeAsOf(dueIso, asOfIso) {
+    if (!dueIso || !asOfIso || asOfIso <= dueIso) return 0;
+    var a = Date.parse(String(dueIso).slice(0, 10) + 'T00:00:00Z');
+    var b = Date.parse(String(asOfIso).slice(0, 10) + 'T00:00:00Z');
+    if (isNaN(a) || isNaN(b) || b <= a) return 0;
+    return Math.max(0, Math.round((b - a) / 86400000));
+  }
+
+  function triggerBlobDownload(url, filename) {
+    if (!url) return;
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = filename || 'document';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }
+
   function paintIcons(scope) {
     if (typeof window.lucide !== 'undefined' && typeof window.lucide.createIcons === 'function') {
       try {
@@ -239,23 +319,42 @@ const ARCHIVE_APP_VIEWER_JS = `(function(){
   function hydrateImages(scope) {
     var container = scope || ROOT;
     var imgs = container.querySelectorAll('img[data-arc-src]');
+    var iframes = container.querySelectorAll('iframe[data-arc-pdf]');
     var jobs = [];
+    function revealFallback(img) {
+      img.style.display = 'none';
+      var next = img.nextElementSibling;
+      if (next && next.hasAttribute('data-arc-fallback')) next.hidden = false;
+    }
     for (var i = 0; i < imgs.length; i++) {
       (function(img){
         var rel = img.getAttribute('data-arc-src');
         if (!rel) return;
+        if (img.dataset.fallbackHide === '1') {
+          img.onerror = function(){ revealFallback(img); };
+        }
         if (!unlockKey) {
           img.src = rel;
-          if (img.dataset.fallbackHide === '1') {
-            img.onerror = function(){ img.style.display = 'none'; };
-          }
           return;
         }
         jobs.push(resolveMediaUrl(rel).then(function(url){
           if (url) img.src = url;
-          else if (img.dataset.fallbackHide === '1') img.style.display = 'none';
+          else if (img.dataset.fallbackHide === '1') revealFallback(img);
         }));
       })(imgs[i]);
+    }
+    for (var j = 0; j < iframes.length; j++) {
+      (function(fr){
+        var rel = fr.getAttribute('data-arc-pdf');
+        if (!rel) return;
+        if (!unlockKey) {
+          fr.src = rel;
+          return;
+        }
+        jobs.push(resolveMediaUrl(rel).then(function(url){
+          if (url) fr.src = url;
+        }));
+      })(iframes[j]);
     }
     return Promise.all(jobs);
   }
@@ -534,7 +633,7 @@ const ARCHIVE_APP_VIEWER_JS = `(function(){
     var out = '<option value="all"' + (selected === 'all' ? ' selected' : '') + '>All branches</option>';
     list.forEach(function(b){
       var code = b.code || b.branchCode || b.shortCode || '';
-      out += '<option value="' + esc(b.id) + '"' + (selected === b.id ? ' selected' : '') + '>' + esc((code ? code + ' - ' : '') + (b.name || b.id)) + '</option>';
+      out += '<option value="' + esc(b.id) + '"' + (selected === b.id ? ' selected' : '') + '>' + esc((code ? code + ' - ' : '') + titleCase(b.name || b.id)) + '</option>';
     });
     return out;
   }
@@ -660,11 +759,17 @@ const ARCHIVE_APP_VIEWER_JS = `(function(){
 
   function openPaymentDetailsModal(entry) {
     var cb = formatCourseBranchObj(entry);
-    var branchLabel = [cb.branchLabel, titleCase((DATA.branchesById && DATA.branchesById[entry.branchId] && DATA.branchesById[entry.branchId].name) || entry.branchName)].filter(Boolean).join(' - ') || '-';
+    var brObj = (DATA.branchesById && DATA.branchesById[entry.branchId]) || {};
+    var branchFull = titleCase(brObj.name || entry.branchName || '');
+    var branchLabel = (cb.hasBranchCode && branchFull && branchFull.toLowerCase() !== String(cb.branchLabel || '').toLowerCase())
+      ? (cb.branchLabel + ' - ' + branchFull)
+      : (branchFull || cb.branchLabel || '-');
     var courseLabel = [entry.courseCode, entry.courseName].filter(Boolean).join(' - ') || cb.courseLabel;
     var colName = titleCase(entry.recordedByName || entry.recordedBy || '-');
     var colDesig = entry.recordedByDesignation || 'Staff';
     var mMeta = modeBadgeMeta(entry);
+    var stRec = findStudent(entry.studentDocId);
+    var popupPhoto = getArchivePhotoSrc(stRec);
     var bdRows = (Array.isArray(entry.breakdown) && entry.breakdown.length > 0)
       ? entry.breakdown.map(function(b){ return '<div class="fr-det-breakdown-item"><span class="fr-det-breakdown-name">' + esc(b.label || b.type) + '</span><span class="fr-det-breakdown-amt">' + fmtINR(b.amount || 0) + '</span></div>'; }).join('')
       : '';
@@ -741,6 +846,15 @@ const ARCHIVE_APP_VIEWER_JS = `(function(){
       headActions: rcptHeadBtn ? [rcptHeadBtn, copyHeadBtn] : [copyHeadBtn],
       bodyHtml: bodyHtml
     });
+    if (popupPhoto && popup && popup.back) {
+      var headTile = popup.back.querySelector('.adm-view-tile');
+      if (headTile) {
+        headTile.style.padding = '0';
+        headTile.style.overflow = 'hidden';
+        headTile.innerHTML = '<img data-arc-src="' + esc(popupPhoto) + '" alt="" style="width:100%;height:100%;object-fit:cover;display:block;">';
+        hydrateImages(headTile);
+      }
+    }
     if (rcptHeadBtn) {
       rcptHeadBtn.onclick = function(){ popup.close(); openPaymentReceiptView(entry, NAV.page); };
     }
@@ -807,16 +921,21 @@ const ARCHIVE_APP_VIEWER_JS = `(function(){
       var cCode = cs.courseCode || cs.code || s.courseCode || '';
       var cName = cs.name || s.courseName || '';
       var courseLine = cCode && cName ? (cCode + ' - ' + cName) : (cCode || cName || '-');
+      var stName = titleCase(s.name || '-');
+      var stPhoto = getArchivePhotoSrc(s);
+      var avHtml = stPhoto
+        ? '<img class="fr-avatar" data-arc-src="' + esc(stPhoto) + '" data-fallback-hide="1" alt=""><span class="fr-avatar-fallback" data-arc-fallback="1" hidden>' + esc(initials(stName)) + '</span>'
+        : '<span class="fr-avatar-fallback">' + esc(initials(stName)) + '</span>';
       var stKey = (s.status || 'active').toLowerCase();
       var stLabel = titleCase(stKey);
       return '<tr>' +
         '<td data-label="Student ID"><button type="button" class="av-row-link" data-open-st="' + esc(s.id) + '">' + esc(s.studentId || '-') + '</button></td>' +
-        '<td data-label="Student"><button type="button" class="av-row-link" data-open-st="' + esc(s.id) + '">' + esc(titleCase(s.name || '-')) + '</button><span class="adm-sub">' + esc(titleCase(s.guardianName || s.fatherName || '-')) + '</span></td>' +
+        '<td data-label="Student"><div class="fr-student-cell">' + avHtml + '<div class="fr-student-meta"><button type="button" class="av-row-link" data-open-st="' + esc(s.id) + '">' + esc(stName) + '</button><span class="adm-sub">' + esc(titleCase(s.guardianName || s.fatherName || '-')) + '</span></div></div></td>' +
         '<td data-label="Phone" class="hide-sm">' + esc(s.phone || '-') + '</td>' +
         '<td data-label="Course &amp; Batch"><span>' + esc(courseLine) + '</span><span class="adm-sub">' + esc(s.batchName || '-') + (cb.branchLabel ? (' · ' + esc(cb.branchLabel)) : '') + '</span></td>' +
         '<td data-label="Admission Date" class="hide-sm">' + esc(fmtDateIN(s.admissionDate)) + '</td>' +
         '<td data-label="Status" class="hide-md"><span class="adm-pill ' + esc(stKey) + '">' + esc(stLabel) + '</span></td>' +
-        '<td data-label="Actions" class="adm-actions"><button type="button" class="ui-kebab" data-st-menu="' + esc(s.id) + '" aria-label="Actions for ' + esc(s.name || 'student') + '"><i data-lucide="more-vertical"></i></button></td>' +
+        '<td data-label="Actions" class="adm-actions"><button type="button" class="ui-kebab" data-st-menu="' + esc(s.id) + '" aria-label="Actions for ' + esc(stName) + '"><i data-lucide="more-vertical"></i></button></td>' +
       '</tr>';
     }).join('') : '<tr><td colspan="7" class="adm-empty"><b>No matching students</b><span>Try adjusting search or filters.</span></td></tr>';
 
@@ -894,81 +1013,340 @@ const ARCHIVE_APP_VIEWER_JS = `(function(){
     var pays = (DATA.ledgerByStudent && DATA.ledgerByStudent[s.id]) || [];
     var sched = (Array.isArray(s.feeSchedule) && s.feeSchedule.length) ? s.feeSchedule : (DATA.defaultSchedule || []);
     var rawPays = (DATA.paymentsByStudent && DATA.paymentsByStudent[s.id]) || [];
+    var snap = s.feeSnapshot || {};
+    var dueAt = s.dueAtAdmission || {};
+    var ss = DATA.session || {};
+    var br = (DATA.branchesById && DATA.branchesById[s.branchId]) || {};
+    var cs = (DATA.coursesById && DATA.coursesById[s.courseId]) || {};
+    var bt = (DATA.batchesById && DATA.batchesById[s.batchId]) || {};
+    var asOfDate = (DATA.meta && DATA.meta.asOfDate) || ss.endDate || '';
+
     var totalFee = Number(fin.total || s.feeTotal || 0);
     var paidAmt = Number(fin.paid || 0);
     var outstanding = Number(fin.outstanding != null ? fin.outstanding : Math.max(0, totalFee - paidAmt));
     var pct = totalFee > 0 ? Math.min(100, Math.round((paidAmt / totalFee) * 100)) : 0;
 
-    var paidInstCount = 0;
-    sched.forEach(function(it){
+    function isInstPaid(it) {
       var no = Number(it.no != null ? it.no : it.installmentNo);
-      var isP = (Array.isArray(s.paidInstallments) && s.paidInstallments.indexOf(no) >= 0) ||
-        rawPays.some(function(p){ var t = String(p.type||'').toUpperCase(); return (t==='IN'||t==='INST') && Number(p.installmentNo)===no; });
-      if (isP) paidInstCount += 1;
+      if (Array.isArray(s.paidInstallments) && s.paidInstallments.indexOf(no) >= 0) return true;
+      return rawPays.some(function(p){
+        var t = String(p.type || '').toUpperCase().trim();
+        var pNo = Number(p.installmentNo != null ? p.installmentNo : (p.installment != null ? p.installment : (p.no != null ? p.no : p.instNo)));
+        return (t === 'IN' || t === 'INST' || t === 'INSTALLMENT' || t === 'WA') && pNo === no;
+      });
+    }
+
+    var paidInstCount = 0;
+    sched.forEach(function(it){ if (isInstPaid(it)) paidInstCount += 1; });
+
+    var studentDisplayName = titleCase(s.name || '') || '-';
+    var guardianDisplayName = titleCase(s.guardianName || s.fatherName || '') || '-';
+    var branchDisplayName = titleCase(br.name || s.branchName || '') || '-';
+    var branchCodeDisp = s.branchCode || br.code || br.branchCode || '';
+    var stPhoto = getArchivePhotoSrc(s);
+    var heroPhoto = stPhoto
+      ? '<img class="sp-avatar-img" data-arc-src="' + esc(stPhoto) + '" data-fallback-hide="1" alt="' + esc(studentDisplayName) + '"><span class="sp-avatar-initials" data-arc-fallback="1" hidden>' + esc(initials(studentDisplayName)) + '</span>'
+      : '<span class="sp-avatar-initials">' + esc(initials(studentDisplayName)) + '</span>';
+
+    // Documents list matching live DOC_KEYS + extra keys (read-only: View + Download only)
+    var BASE_DOC_KEYS = [
+      { key: 'dobProof', label: 'Date of Birth Proof' },
+      { key: 'marksheet', label: 'Academic Marksheet' },
+      { key: 'photo', label: 'Passport Photo' },
+      { key: 'signature', label: 'Student Signature' }
+    ];
+    var docItems = [];
+    var seenDocKeys = Object.create(null);
+    BASE_DOC_KEYS.forEach(function(item){
+      var rec = findArchiveDocRecord(s, item.key);
+      seenDocKeys[item.key.toLowerCase()] = true;
+      if (rec && rec.key) seenDocKeys[String(rec.key).toLowerCase()] = true;
+      docItems.push({ key: item.key, label: (rec && rec.label) || item.label, docData: rec });
+    });
+    docs.forEach(function(d){
+      var dk = String((d && d.key) || '').toLowerCase();
+      if (!dk || seenDocKeys[dk] || !d.path) return;
+      seenDocKeys[dk] = true;
+      docItems.push({ key: d.key, label: d.label || titleCase(String(d.key).replace(/([A-Z])/g, ' $1').replace(/_/g, ' ')), docData: d });
     });
 
-    var heroPhoto = s._photoPath
-      ? '<img class="sp-avatar-img" data-arc-src="' + esc(s._photoPath) + '" data-fallback-hide="1" alt="' + esc(s.name) + '">'
-      : '<span class="sp-avatar-initials">' + esc(initials(s.name)) + '</span>';
-
-    var docsHtml = docs.length ? docs.map(function(d, idx){
-      return '<div class="sp-doc-card" data-doc-idx="' + idx + '" style="cursor:pointer;">' +
-        '<div class="sp-doc-preview-area">' + (d.path ? '<img class="sp-doc-top-img" data-arc-src="' + esc(d.path) + '" alt="' + esc(d.label || d.key) + '">' : '<span class="lp-sub">Missing</span>') + '</div>' +
+    var docsMap = Object.create(null);
+    var presentDocsCount = 0;
+    var docsHtml = docItems.map(function(entry){
+      var k = entry.key;
+      var label = entry.label;
+      var rec = entry.docData;
+      var hasFile = Boolean(rec && rec.path);
+      if (hasFile) {
+        presentDocsCount += 1;
+        var isPdf = String(rec.mime || '').toLowerCase().indexOf('pdf') >= 0 || /\\.pdf$/i.test(String(rec.path));
+        docsMap[k] = { label: label, docData: rec, isPdf: isPdf };
+        var sizeTxt = formatBytesNice(rec.sizeBytes);
+        var metaTxt = (rec.name || rec.path) + (sizeTxt ? (' · ' + sizeTxt) : '');
+        var previewHtml = isPdf
+          ? '<div class="sp-doc-top-pdf" data-doc-view="' + esc(k) + '" title="Click to preview PDF" style="cursor:pointer;"><i data-lucide="file-text"></i><span>PDF Document</span></div>'
+          : '<img class="sp-doc-top-img" data-arc-src="' + esc(rec.path) + '" data-doc-view="' + esc(k) + '" title="Click to preview document" style="cursor:pointer;" alt="' + esc(label) + '">';
+        return '<div class="sp-doc-card">' +
+          '<div class="sp-doc-preview-area">' + previewHtml + '</div>' +
+          '<div class="sp-doc-body">' +
+            '<div class="sp-doc-title-row"><h4 class="sp-doc-title">' + esc(label) + '</h4><span class="pill up">Archived</span></div>' +
+            '<div class="sp-doc-meta">' + esc(metaTxt) + '</div>' +
+            '<div class="sp-doc-actions">' +
+              '<button type="button" class="ui-btn ghost sm" data-doc-view="' + esc(k) + '"><i data-lucide="eye"></i><span>View</span></button>' +
+              '<button type="button" class="ui-btn ghost sm" data-doc-dl="' + esc(k) + '"><i data-lucide="download"></i><span>Download</span></button>' +
+            '</div>' +
+          '</div>' +
+        '</div>';
+      }
+      var isExcluded = !(DATA.meta && DATA.meta.includesIdDocs) && /^(aadhaar|aadhar|dobproof|id)/i.test(k);
+      return '<div class="sp-doc-card">' +
         '<div class="sp-doc-body">' +
-          '<div class="sp-doc-title-row"><h4 class="sp-doc-title">' + esc(d.label || d.key) + '</h4><span class="pill up">Archived</span></div>' +
-          '<div class="sp-doc-meta">' + esc(d.name || d.path || '-') + '</div>' +
+          '<div class="sp-doc-title-row"><h4 class="sp-doc-title">' + esc(label) + '</h4><span class="pill neutral">' + (isExcluded ? 'Excluded' : 'Missing') + '</span></div>' +
+          '<div class="sp-doc-dashed-zone" style="cursor:default;"><i data-lucide="' + (isExcluded ? 'shield-off' : 'file-x') + '"></i><span>' + (isExcluded ? 'ID proof excluded for this archive scope' : 'Not uploaded in archived record') + '</span></div>' +
         '</div>' +
       '</div>';
-    }).join('') : '<div style="padding:18px;color:var(--text-mute);">No uploaded documents included in this snapshot.</div>';
+    }).join('');
 
-    var schedHtml = s.paymentPlan === 'full'
-      ? '<div class="sp-card-body">Course fee paid in full on <b>' + esc(fmtDateIN(s.fullPaidOn || s.admissionDate)) + '</b>. Only Board Examination fee (if applicable) is separate.</div>'
-      : '<div class="lp-scroll"><table class="lp-table"><thead><tr><th>Installment</th><th>Month</th><th>Due Date</th><th class="num">Amount</th><th>Status</th></tr></thead><tbody>' +
-        sched.map(function(it){
-          var no = Number(it.no != null ? it.no : it.installmentNo);
-          var paid = (Array.isArray(s.paidInstallments) && s.paidInstallments.indexOf(no) >= 0) ||
-            rawPays.some(function(p){ var t = String(p.type||'').toUpperCase(); return (t==='IN'||t==='INST') && Number(p.installmentNo)===no; });
-          return '<tr><td><b>Installment ' + no + '</b></td><td>' + esc(it.month || '-') + '</td><td>' + esc(fmtDateIN(it.due)) + '</td><td class="num">' + fmtINR(it.amount || 0) + '</td><td><span class="pill ' + (paid ? 'paid' : 'due') + '">' + (paid ? 'Paid' : 'Unpaid') + '</span></td></tr>';
-        }).join('') + '</tbody></table></div>';
+    // Course details computations
+    var cCode = cs.courseCode || cs.code || s.courseCode || '-';
+    var cName = cs.name || s.courseName || '-';
+    var lv = Number(cs.level || (s.studentId && String(s.studentId).length === 8 ? String(s.studentId).slice(2, 4) : 1));
+    var dur = cs.durationMonths || cs.duration || s.courseDuration || (lv === 2 ? 12 : (lv === 3 ? 18 : 6));
+    var durStr = String(dur).toLowerCase().indexOf('month') >= 0 ? String(dur) : (dur + ' Months');
+    var pId = cs.prerequisiteId || (s.prereqCheck && s.prereqCheck.courseId) || null;
+    var pCode = cs.prerequisiteCode || bt.prerequisiteCourseCode || bt.prerequisite || s.prerequisite || null;
+    var prereqCourse = (pId && DATA.coursesById && DATA.coursesById[pId]) || null;
+    if (!prereqCourse && pCode && DATA.courses) {
+      var upCode = String(pCode).trim().toUpperCase();
+      prereqCourse = DATA.courses.find(function(x){ return String(x.code || x.courseCode || '').trim().toUpperCase() === upCode; }) || null;
+    }
+    var prereqDisplay = '';
+    if (prereqCourse) {
+      prereqDisplay = (prereqCourse.code || prereqCourse.courseCode || pCode) + (prereqCourse.name ? (' \\u2014 ' + prereqCourse.name) : '');
+    } else if (pCode && String(pCode).trim().toLowerCase() !== 'none') {
+      prereqDisplay = String(pCode).trim();
+    } else if (cs.eligibility && String(cs.eligibility).toLowerCase().indexOf('class') !== 0) {
+      prereqDisplay = cs.eligibility;
+    } else if (lv === 2) {
+      prereqDisplay = cs.eligibility || 'Requires Semester 1 Base Course';
+    } else if (lv === 3) {
+      prereqDisplay = cs.eligibility || 'Requires Semester 2 Combo Course';
+    } else {
+      prereqDisplay = (cs.eligibility && String(cs.eligibility).toLowerCase().indexOf('completed') < 0)
+        ? ('None (Base Course \\u2014 ' + cs.eligibility + ')')
+        : 'None (Base Course)';
+    }
+    if (s.prereqCheck && s.prereqCheck.status === 'auto') prereqDisplay += ' (Verified)';
+    else if (s.prereqCheck && s.prereqCheck.status === 'manual') prereqDisplay += ' (Verified manually)';
 
-    var paysHtml = pays.length ? pays.map(function(p){
+    var sStart = s.sessionStartDate || ss.startDate || ss.startISO || '';
+    var sEnd = s.sessionEndDate || ss.endDate || ss.endISO || '';
+    var admFee = Number(snap.admission != null ? snap.admission : (s.admissionFee != null ? s.admissionFee : (dueAt.admission || 0)));
+    var matFee = Number(snap.material != null ? snap.material : (s.materialFee != null ? s.materialFee : (s.studyMaterialFee || 0)));
+    var instFee = Number(snap.installment != null ? snap.installment : (s.feeInstallment || 0));
+    var examStarted = Boolean(ss.examFeeCollection && ss.examFeeCollection.started === true);
+    var examFeeNotSet = false;
+    var sessionExamFee = 0;
+    if (examStarted) {
+      if (ss.examFeeCollection.fees && s.courseId && Object.prototype.hasOwnProperty.call(ss.examFeeCollection.fees, s.courseId)) {
+        sessionExamFee = Number(ss.examFeeCollection.fees[s.courseId]);
+      } else if (snap.exam != null && Number(snap.exam) > 0) {
+        sessionExamFee = Number(snap.exam);
+      } else {
+        examFeeNotSet = true;
+      }
+    }
+    var examTxn = rawPays.find(function(p){ var t = String(p.type||'').toUpperCase().trim(); return t==='EX'||t==='EXAM'||t==='EXAMINATION'; });
+    var isExamPaidFlag = Boolean(examTxn) || Boolean(s.examFeePaid) || Boolean(s.examPaid);
+
+    // Fee Breakdown HTML (Card 2 of Course Details)
+    var feeBreakRowsHtml = '';
+    if (s.paymentPlan === 'full') {
+      var fullAmt = Number(s.fullPaymentAmount || dueAt.full || s.feeTotal || 0);
+      var stdFee = Number(snap.total || (admFee + instFee * 4 > 0 ? admFee + instFee * 4 : (s.feeTotal || fullAmt)));
+      var discRs = snap.discountRs != null ? Number(snap.discountRs) : Math.max(0, stdFee - fullAmt);
+      var discPct = snap.discountPct != null ? Number(snap.discountPct) : (stdFee > 0 ? Math.round((discRs / stdFee) * 100) : 0);
+      feeBreakRowsHtml += '<tr><td>Course Package Fee (Standard)</td><td class="num font-semibold">' + fmtINR(stdFee) + '</td></tr>';
+      if (discRs > 0) {
+        feeBreakRowsHtml += '<tr><td class="text-success">Full-Payment Discount (' + discPct + '% off)</td><td class="num font-semibold text-success">-' + fmtINR(discRs) + '</td></tr>';
+      }
+      feeBreakRowsHtml += '<tr><td class="font-bold">Full Course Fee</td><td class="num font-bold text-success">' + fmtINR(fullAmt) + '</td></tr>';
+      if (matFee > 0) feeBreakRowsHtml += '<tr><td>Study Material &amp; Kit (Paid at admission)</td><td class="num font-semibold">' + fmtINR(matFee) + '</td></tr>';
+    } else {
+      feeBreakRowsHtml += '<tr><td>Admission Fee</td><td class="num font-semibold">' + fmtINR(admFee) + '</td></tr>';
+      feeBreakRowsHtml += '<tr><td>Tuition Fee (Per Installment)</td><td class="num font-semibold">' + fmtINR(instFee) + '</td></tr>';
+      feeBreakRowsHtml += '<tr><td>Total Scheduled Installments</td><td class="num font-semibold">' + fmtINR(instFee * (sched.length || 4)) + '</td></tr>';
+      feeBreakRowsHtml += '<tr><td class="font-bold">Total Course Package Fee</td><td class="num font-bold text-success">' + fmtINR(admFee + instFee * (sched.length || 4)) + '</td></tr>';
+      if (matFee > 0) feeBreakRowsHtml += '<tr><td>Study Material &amp; Kit (Paid at admission)</td><td class="num font-semibold">' + fmtINR(matFee) + '</td></tr>';
+    }
+    if (examStarted && !examFeeNotSet) {
+      feeBreakRowsHtml += '<tr><td class="font-semibold">Exam fee (locked): ' + fmtINR(sessionExamFee) + ' \\u2014 ' + (isExamPaidFlag ? 'Paid' : 'Due') + '</td><td class="num font-bold">' + fmtINR(sessionExamFee) + '</td></tr>';
+    }
+
+    // Scheduled Installment Plan HTML (Card 3 of Course Details)
+    var courseSchedRowsHtml = '';
+    if (s.paymentPlan === 'full') {
+      var fullPaidAmtDisp = Number(s.fullPaymentAmount || s.feeTotal || 0);
+      courseSchedRowsHtml = '<tr><td colspan="5" class="text-center font-semibold text-success" style="padding:16px 12px;">Course fee paid in full on ' + esc(fmtDateIN(s.fullPaidOn || s.admissionDate)) + '. Paid: ' + fmtINR(fullPaidAmtDisp) + ', Outstanding: Rs 0. Only the examination fee remains.</td></tr>';
+    } else if (!sched.length) {
+      courseSchedRowsHtml = '<tr><td colspan="5" class="text-mute text-center">No installment schedule configured.</td></tr>';
+    } else {
+      courseSchedRowsHtml = sched.map(function(it){
+        var no = Number(it.no != null ? it.no : it.installmentNo);
+        return '<tr>' +
+          '<td class="font-semibold">Installment ' + no + '</td>' +
+          '<td>' + esc(it.month || '-') + '</td>' +
+          '<td>' + esc(fmtDateIN(it.opens)) + '</td>' +
+          '<td class="font-semibold">' + esc(fmtDateIN(it.due)) + '</td>' +
+          '<td class="num font-semibold">' + fmtINR(it.amount != null ? it.amount : instFee) + '</td>' +
+        '</tr>';
+      }).join('');
+    }
+
+    // Payment History Tab — Card 1: Fee Schedule & Installment Status (as of archive date, read-only)
+    var statusRowsHtml = '';
+    if (admFee > 0 && s.paymentPlan !== 'full') {
+      var admTxn = rawPays.find(function(p){ var t = String(p.type||'').toUpperCase().trim(); return t==='AD'||t==='ADM'||t==='ADMISSION'; });
+      var admLed = pays.find(function(p){ return !p.isPureWaiver && (p.type==='AD'||p.isAdmissionGroup); });
+      var admPaidFlag = Boolean(admTxn) || Number(dueAt.admission || dueAt.total || 0) > 0 || Boolean(s.receiptNo || s.admissionReceiptNo);
+      var admWaivedFlag = Boolean(admTxn && admTxn.waived);
+      var admPaidVal = admTxn ? (admTxn.amount || admFee) : (Number(dueAt.admission || dueAt.total || 0) > 0 ? Number(dueAt.admission || dueAt.total) : admFee);
+      var admPaidDate = (admTxn && admTxn.date) || s.admissionDate || '';
+      var admAct = admPaidFlag && (admLed || s.receiptNo || s.admissionReceiptNo)
+        ? '<button type="button" class="ui-btn ghost sm sp-table-action-btn" data-adm-rcpt="1"><i data-lucide="receipt"></i><span>Receipt</span></button>'
+        : '<span class="text-mute">\\u2014</span>';
+      statusRowsHtml += '<tr><td class="font-semibold">Admission Fee</td><td class="text-mute">At Admission</td><td>\\u2014</td><td class="num">' + fmtINR(admFee) + '</td><td class="num font-semibold text-success">' + (admPaidFlag ? fmtINR(admPaidVal) : '\\u2014') + '</td><td>' + (admPaidFlag && admPaidDate ? esc(fmtDateIN(admPaidDate)) : '\\u2014') + '</td><td><span class="pill ' + (admPaidFlag ? 'up' : 'neutral') + '">' + (admWaivedFlag ? 'Waived' : (admPaidFlag ? 'Paid' : 'Pending')) + '</span></td><td class="act">' + admAct + '</td></tr>';
+    }
+    if (matFee > 0) {
+      var matTxn = rawPays.find(function(p){ var t = String(p.type||'').toUpperCase().trim(); return t==='MAT'||t==='MATERIAL'||t==='STUDY_MATERIAL'; });
+      var matLed = pays.find(function(p){ return !p.isPureWaiver && p.type==='MAT'; });
+      var matPaidAtAdm = Number(dueAt.material || 0);
+      var matPaidFlag = Boolean(matTxn) || matPaidAtAdm > 0 || Boolean(s.materialPaid || s.isMaterialPaid) || (s.paymentPlan === 'full' && Boolean(s.receiptNo || s.admissionReceiptNo));
+      var matWaivedFlag = Boolean(matTxn && matTxn.waived);
+      var matPaidVal = matTxn ? (matTxn.amount || matFee) : (matPaidAtAdm > 0 ? matPaidAtAdm : matFee);
+      var matPaidDate = (matTxn && matTxn.date) || (matPaidFlag ? s.admissionDate : '');
+      var matAct = matPaidFlag
+        ? (matLed && !matLed.isAdmissionGroup ? '<button type="button" class="ui-btn ghost sm sp-table-action-btn" data-view-rcpt="' + esc(matLed.rowKey) + '"><i data-lucide="receipt"></i><span>Receipt</span></button>' : '<button type="button" class="ui-btn ghost sm sp-table-action-btn" data-adm-rcpt="1"><i data-lucide="receipt"></i><span>Receipt</span></button>')
+        : '<span class="text-mute">\\u2014</span>';
+      statusRowsHtml += '<tr><td class="font-semibold">Study Material Fee</td><td class="text-mute">At Admission</td><td>\\u2014</td><td class="num">' + fmtINR(matFee) + '</td><td class="num font-semibold text-success">' + (matPaidFlag ? fmtINR(matPaidVal) : '\\u2014') + '</td><td>' + (matPaidFlag && matPaidDate ? esc(fmtDateIN(matPaidDate)) : '\\u2014') + '</td><td><span class="pill ' + (matPaidFlag ? 'up' : 'neutral') + '">' + (matWaivedFlag ? 'Waived' : (matPaidFlag ? 'Paid' : 'Pending')) + '</span></td><td class="act">' + matAct + '</td></tr>';
+    }
+    if (s.paymentPlan === 'full') {
+      var fullAmt2 = Number(s.fullPaymentAmount || s.feeTotal || 0);
+      var fullPaidDate2 = s.fullPaidOn || s.admissionDate || '';
+      statusRowsHtml += '<tr><td colspan="3" class="font-semibold">Course fee paid in full on ' + esc(fmtDateIN(fullPaidDate2)) + '</td><td class="num font-semibold">' + fmtINR(fullAmt2) + '</td><td class="num font-semibold text-success">' + fmtINR(fullAmt2) + '</td><td>' + esc(fmtDateIN(fullPaidDate2)) + '</td><td><span class="pill up">Paid in Full</span></td><td class="act"><button type="button" class="ui-btn ghost sm sp-table-action-btn" data-adm-rcpt="1"><i data-lucide="receipt"></i><span>Receipt</span></button></td></tr>';
+      statusRowsHtml += '<tr><td colspan="8" class="text-mute text-center" style="font-size:12px;padding:8px;">Paid = ' + fmtINR(fullAmt2) + ', Outstanding = Rs 0. Only the examination fee remains.</td></tr>';
+    } else {
+      sched.forEach(function(it){
+        var no = Number(it.no != null ? it.no : it.installmentNo);
+        var paidRec = rawPays.find(function(p){
+          var t = String(p.type || '').toUpperCase().trim();
+          var pNo = Number(p.installmentNo != null ? p.installmentNo : (p.installment != null ? p.installment : (p.no != null ? p.no : p.instNo)));
+          return (t === 'IN' || t === 'INST' || t === 'INSTALLMENT' || t === 'WA') && pNo === no;
+        });
+        var ledRec = pays.find(function(p){ return !p.isPureWaiver && (p.type === 'IN' || p.type === 'INST') && Number(p.installmentNo) === no; });
+        var paid = isInstPaid(it);
+        var waived = Boolean((paidRec && paidRec.waived) || it.waived);
+        var lblTxt = 'Upcoming', pillCls = 'neutral';
+        if (waived) { lblTxt = 'Waived'; pillCls = 'up'; }
+        else if (paid) { lblTxt = 'Paid'; pillCls = 'up'; }
+        else if (asOfDate && it.due && asOfDate > it.due) {
+          var lf = lateFeeAsOf(it.due, asOfDate);
+          lblTxt = 'Overdue' + (lf > 0 ? (' (+Rs ' + lf + ')') : '');
+          pillCls = 'down';
+        } else if (asOfDate && it.opens && asOfDate >= it.opens) {
+          lblTxt = 'Due'; pillCls = 'neutral';
+        }
+        var instAct = paid && ledRec && ledRec.receiptNo
+          ? '<button type="button" class="ui-btn ghost sm sp-table-action-btn" data-view-rcpt="' + esc(ledRec.rowKey) + '"><i data-lucide="receipt"></i><span>Receipt</span></button>'
+          : '<span class="text-mute">\\u2014</span>';
+        statusRowsHtml += '<tr><td class="font-semibold">Installment ' + no + '</td><td>' + esc(it.month || '-') + '</td><td class="font-semibold">' + esc(fmtDateIN(it.due)) + '</td><td class="num">' + fmtINR(it.amount != null ? it.amount : instFee) + '</td><td class="num font-semibold text-success">' + (paid ? fmtINR((paidRec && paidRec.amount != null) ? paidRec.amount : (it.amount || 0)) : '\\u2014') + '</td><td>' + (paid && paidRec && paidRec.date ? esc(fmtDateIN(paidRec.date)) : '\\u2014') + '</td><td><span class="pill ' + pillCls + '">' + esc(lblTxt) + '</span></td><td class="act">' + instAct + '</td></tr>';
+      });
+    }
+    if (examStarted) {
+      var exLed = pays.find(function(p){ return !p.isPureWaiver && p.type === 'EX'; });
+      var exWaived = Boolean(examTxn && examTxn.waived);
+      var exPaidVal = examTxn ? (examTxn.amount || sessionExamFee) : 0;
+      var exAct = isExamPaidFlag && exLed && exLed.receiptNo
+        ? '<button type="button" class="ui-btn ghost sm sp-table-action-btn" data-view-rcpt="' + esc(exLed.rowKey) + '"><i data-lucide="receipt"></i><span>Receipt</span></button>'
+        : (examFeeNotSet ? '<span class="text-danger text-xs">Exam fee not set</span>' : '<span class="text-mute">\\u2014</span>');
+      statusRowsHtml += '<tr><td class="font-semibold">Examination Fee</td><td class="text-mute">Pre-Exam</td><td>\\u2014</td><td class="num">' + (examFeeNotSet ? '\\u2014' : fmtINR(sessionExamFee)) + '</td><td class="num font-semibold text-success">' + (isExamPaidFlag ? fmtINR(exPaidVal) : '\\u2014') + '</td><td>' + (isExamPaidFlag && examTxn && examTxn.date ? esc(fmtDateIN(examTxn.date)) : '\\u2014') + '</td><td><span class="pill ' + (isExamPaidFlag ? 'up' : (examFeeNotSet ? 'down' : 'neutral')) + '">' + (exWaived ? 'Waived' : (isExamPaidFlag ? 'Paid' : (examFeeNotSet ? 'Not Set' : 'Pending'))) + '</span></td><td class="act">' + exAct + '</td></tr>';
+    }
+    if (!statusRowsHtml) {
+      statusRowsHtml = '<tr><td colspan="8" class="text-mute text-center">No scheduled fee items.</td></tr>';
+    }
+
+    // Payment History Tab — Card 2: Chronological Payment Transactions (9 columns matching live #sp-txns-tbody)
+    var sortedPays = pays.slice().sort(function(a, b){
+      var da = a.date || '', db = b.date || '';
+      if (da !== db) return db.localeCompare(da);
+      var order = { AD: 1, FULL: 1, MAT: 2, IN: 3, EX: 4 };
+      return (order[a.type] || 5) - (order[b.type] || 5);
+    });
+    var txnsHtml = sortedPays.length ? sortedPays.map(function(p){
+      var tCode = String(p.type || '').toUpperCase();
+      var pillStyle = p.isPureWaiver ? 'neutral' : (tCode === 'MAT' ? 'sky' : (tCode === 'EX' ? 'purple' : 'up'));
+      var tLbl = p.typeLabel || p.type || 'Payment';
+      if (p.isPureWaiver && tLbl.indexOf('Waived') < 0) tLbl += ' [Waived]';
+      var amtDisplay = fmtINR(p.amount != null ? p.amount : (p.totalReceived || 0)) + (p.lateFeePaid ? (' (+ Rs ' + p.lateFeePaid + ')') : '');
+      var brObj = (DATA.branchesById && DATA.branchesById[p.recordedAtBranchId || s.branchId]) || br || {};
+      var brCodeTxt = brObj.code || brObj.branchCode || branchCodeDisp || '';
+      var brFullTxt = titleCase(brObj.name || branchDisplayName || '');
+      var brDisp = brCodeTxt && brFullTxt && brCodeTxt.toUpperCase() !== brFullTxt.toUpperCase()
+        ? (brCodeTxt + ' (' + brFullTxt + ')')
+        : (brFullTxt || brCodeTxt || 'Branch');
+      var recEmail = p.recordedBy || s.createdBy || '-';
+      var recName = titleCase(p.recordedByName || '');
+      var recDesig = titleCase(p.recordedByDesignation || '');
+      var colTxt = brDisp;
+      if (recEmail && recEmail !== '-') colTxt += ' - ' + recEmail;
+      if (recName) colTxt += ' by ' + recName + (recDesig ? (' (' + recDesig + ')') : '');
+      var mdStr = String(p.mode || 'cash').toLowerCase();
+      var remarksStr = p.remarks || (p.waiverReason ? ('Waived: ' + p.waiverReason) : '\\u2014');
+      var actHtml = (p.receiptNo && !p.isPureWaiver)
+        ? '<button type="button" class="ui-btn ghost sm sp-table-action-btn" data-view-rcpt="' + esc(p.rowKey) + '"><i data-lucide="receipt"></i><span>Receipt</span></button>'
+        : '<span class="text-mute">\\u2014</span>';
       return '<tr>' +
         '<td data-label="Date">' + esc(fmtDateIN(p.date)) + '</td>' +
-        '<td data-label="Receipt No"><b>' + esc(p.receiptNo || '-') + '</b></td>' +
-        '<td data-label="For"><span class="pill sky">' + esc(p.typeLabel || p.type) + '</span></td>' +
-        '<td data-label="Mode">' + esc(modeBadgeMeta(p).label) + '</td>' +
-        '<td data-label="Received" class="num"><b>' + fmtINR(p.totalReceived || 0) + '</b></td>' +
-        '<td data-label="Action" class="act"><button type="button" class="ui-btn ghost sm" data-view-rcpt="' + esc(p.rowKey) + '"><i data-lucide="receipt"></i><span>Receipt</span></button></td>' +
+        '<td data-label="Receipt no" class="font-semibold font-mono">' + esc(p.receiptNo || '-') + '</td>' +
+        '<td data-label="Type"><span class="pill ' + pillStyle + '">' + esc(tLbl) + '</span></td>' +
+        '<td data-label="Amount collected" class="num font-semibold text-success">' + esc(amtDisplay) + '</td>' +
+        '<td data-label="Mode"><span class="la-mode ' + esc(mdStr) + '">' + esc(mdStr.toUpperCase()) + '</span></td>' +
+        '<td data-label="Transaction ID" class="font-mono text-mute">' + esc(p.txnId || '\\u2014') + '</td>' +
+        '<td data-label="Collected &amp; Recorded by" class="sp-collector-cell">' + esc(colTxt) + '</td>' +
+        '<td data-label="Remarks">' + esc(remarksStr) + '</td>' +
+        '<td data-label="Action" class="act">' + actHtml + '</td>' +
       '</tr>';
-    }).join('') : '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-mute);">No payment receipts recorded.</td></tr>';
+    }).join('') : '<tr><td colspan="9" class="text-mute text-center">No payment transactions recorded yet.</td></tr>';
 
     var stStatus = (s.status || 'active').toLowerCase();
-    var br = (DATA.branchesById && DATA.branchesById[s.branchId]) || {};
-    var cs = (DATA.coursesById && DATA.coursesById[s.courseId]) || {};
     var cCodeMeta = cs.courseCode || cs.code || s.courseCode || '';
     var cNameMeta = cs.name || s.courseName || '';
     var courseMetaLine = cCodeMeta && cNameMeta ? (cCodeMeta + ' \\u2014 ' + cNameMeta) : (cCodeMeta || cNameMeta || '-');
+    var batchTiming = s.batchTiming || bt.timing || bt.schedule || 'Standard Batch Schedule';
+    var createdAtFmt = (s.createdAt && s.createdAt.seconds)
+      ? fmtDateIN(new Date(s.createdAt.seconds * 1000).toISOString().slice(0, 10))
+      : (typeof s.createdAt === 'string' && s.createdAt ? fmtDateIN(s.createdAt) : (s.admissionDate ? fmtDateIN(s.admissionDate) : '-'));
     var tab = NAV.spTab || 'personal';
 
     el.innerHTML =
       '<div class="sp-wrap">' +
         '<div class="sp-head-row">' +
-          '<section class="pg-head"><div class="pg-crumbs">Students / <span>Student Profile</span></div><h2>Student Profile</h2><p>Read-only archived profile, documents, course schedule, and receipts.</p></section>' +
+          '<section class="pg-head"><div class="pg-crumbs">Students / <span>Student Profile</span></div><h2>Student Profile</h2><p>Read-only archived profile, documents, course details, and payment receipts.</p></section>' +
           '<button type="button" class="ui-btn ghost sp-back-btn" id="av-sp-back"><i data-lucide="arrow-left"></i><span>Back to students</span></button>' +
         '</div>' +
         '<div class="lp-card sp-hero-card"><div class="sp-hero-inner">' +
           '<div class="sp-hero-left">' +
             '<div class="sp-avatar">' + heroPhoto + '</div>' +
             '<div class="sp-hero-info">' +
-              '<div class="sp-name-row"><h1 class="sp-student-name">' + esc(titleCase(s.name || '-')) + '</h1><span class="sp-status-badge ' + esc(stStatus) + '"><span class="sp-status-dot"></span><span>' + esc(titleCase(stStatus)) + '</span></span></div>' +
+              '<div class="sp-name-row"><h1 class="sp-student-name">' + esc(studentDisplayName) + '</h1><span class="sp-status-badge ' + esc(stStatus) + '"><span class="sp-status-dot"></span><span>' + esc(titleCase(stStatus)) + '</span></span></div>' +
               '<div class="sp-id-chip"><span>Student ID: <b>' + esc(s.studentId || '-') + '</b></span><button type="button" class="sp-id-copy-btn" id="av-sp-copy-id" title="Copy Student ID"><i data-lucide="copy"></i></button></div>' +
               '<div class="sp-meta-inline-row"><span class="sp-meta-inline"><i data-lucide="layers"></i><span>' + esc(courseMetaLine) + '</span></span><span class="sp-meta-sep">|</span><span class="sp-meta-inline"><i data-lucide="users-round"></i><span>' + esc(s.batchName || '-') + '</span></span><span class="sp-meta-sep">|</span><span class="sp-meta-inline"><i data-lucide="calendar"></i><span>' + esc(s.sessionName || '-') + '</span></span></div>' +
-              '<div class="sp-branch-row"><i data-lucide="building-2"></i><span>' + esc((br.name || s.branchName || '-') + (s.branchCode ? ' (' + s.branchCode + ')' : '')) + '</span></div>' +
+              '<div class="sp-branch-row"><i data-lucide="building-2"></i><span>' + esc(branchDisplayName + (branchCodeDisp ? (' (' + branchCodeDisp + ')') : '')) + '</span></div>' +
             '</div>' +
           '</div>' +
           '<div class="sp-hero-divider" aria-hidden="true"></div>' +
           '<div class="sp-hero-actions">' +
-            '<button type="button" class="sp-notify-btn" id="av-sp-adm-rcpt"><i data-lucide="receipt"></i><span>Admission Receipt</span></button>' +
+            '<button type="button" class="ui-btn ghost" id="av-sp-adm-rcpt"><i data-lucide="receipt"></i><span>Admission Receipt</span></button>' +
           '</div>' +
         '</div></div>' +
         '<div class="sp-stats-wrapper"><div class="lp-stats sp-stats-grid-4">' +
@@ -978,50 +1356,111 @@ const ARCHIVE_APP_VIEWER_JS = `(function(){
           '<div class="lp-stat violet"><div class="lp-stat-ic"><i data-lucide="list-checks"></i></div><div class="lp-stat-txt"><span class="lp-stat-label">Installments</span><span class="lp-stat-value">' + (s.paymentPlan === 'full' ? 'Full' : (paidInstCount + ' of ' + sched.length)) + '</span><span class="lp-stat-sub">' + (s.paymentPlan === 'full' ? 'Paid in full' : 'Paid of scheduled') + '</span></div></div>' +
         '</div></div>' +
         '<nav class="sp-tabs-nav" role="tablist">' +
-          '<button type="button" class="sp-tab-btn' + (tab==='personal'?' active':'') + '" data-sp-tab="personal"><div class="sp-tab-icon-wrap"><i data-lucide="user"></i></div><div class="sp-tab-text-wrap"><span class="sp-tab-title">Personal Details</span><span class="sp-tab-desc">Profile, guardian &amp; contact</span></div></button>' +
-          '<button type="button" class="sp-tab-btn' + (tab==='documents'?' active':'') + '" data-sp-tab="documents"><div class="sp-tab-icon-wrap"><i data-lucide="file-text"></i></div><div class="sp-tab-text-wrap"><span class="sp-tab-title">Documents (' + docs.length + ')</span><span class="sp-tab-desc">Photos &amp; certificates</span></div></button>' +
-          '<button type="button" class="sp-tab-btn' + (tab==='course'?' active':'') + '" data-sp-tab="course"><div class="sp-tab-icon-wrap"><i data-lucide="book-open"></i></div><div class="sp-tab-text-wrap"><span class="sp-tab-title">Course &amp; Schedule</span><span class="sp-tab-desc">Enrolment &amp; instalments</span></div></button>' +
-          '<button type="button" class="sp-tab-btn' + (tab==='payments'?' active':'') + '" data-sp-tab="payments"><div class="sp-tab-icon-wrap"><i data-lucide="receipt"></i></div><div class="sp-tab-text-wrap"><span class="sp-tab-title">Payment History (' + pays.length + ')</span><span class="sp-tab-desc">Receipts &amp; ledger</span></div></button>' +
+          '<button type="button" class="sp-tab-btn' + (tab==='personal'?' active':'') + '" data-sp-tab="personal"><div class="sp-tab-icon-wrap"><i data-lucide="user"></i></div><div class="sp-tab-text-wrap"><span class="sp-tab-title">Personal Details</span><span class="sp-tab-desc">Profile, guardian &amp; contact info</span></div></button>' +
+          '<button type="button" class="sp-tab-btn' + (tab==='documents'?' active':'') + '" data-sp-tab="documents"><div class="sp-tab-icon-wrap"><i data-lucide="file-text"></i></div><div class="sp-tab-text-wrap"><span class="sp-tab-title">Documents (' + presentDocsCount + ')</span><span class="sp-tab-desc">Certificates &amp; identification proofs</span></div></button>' +
+          '<button type="button" class="sp-tab-btn' + (tab==='course'?' active':'') + '" data-sp-tab="course"><div class="sp-tab-icon-wrap"><i data-lucide="book-open"></i></div><div class="sp-tab-text-wrap"><span class="sp-tab-title">Course Details</span><span class="sp-tab-desc">Course, batch &amp; enrollment info</span></div></button>' +
+          '<button type="button" class="sp-tab-btn' + (tab==='payments'?' active':'') + '" data-sp-tab="payments"><div class="sp-tab-icon-wrap"><i data-lucide="receipt"></i></div><div class="sp-tab-text-wrap"><span class="sp-tab-title">Payment History (' + pays.length + ')</span><span class="sp-tab-desc">Fee schedule, dues &amp; ledger</span></div></button>' +
         '</nav>' +
         '<div class="sp-panes-wrap">' +
-          '<section class="sp-pane' + (tab==='personal'?' active':'') + '"><div class="sp-grid-2">' +
+          '<section class="sp-pane' + (tab==='personal'?' active':'') + '"' + (tab==='personal'?'':' hidden') + '><div class="sp-grid-2">' +
             '<div class="lp-card"><div class="lp-card-head"><div class="lp-card-title"><i data-lucide="user"></i><span>Personal Information</span></div></div><div class="sp-card-body"><div class="sp-kv-grid">' +
-              '<div class="sp-kv-item"><span class="sp-kv-label">Full Name</span><span class="sp-kv-val">' + esc(titleCase(s.name || '-')) + '</span></div>' +
-              '<div class="sp-kv-item"><span class="sp-kv-label">Guardian Name</span><span class="sp-kv-val">' + esc(titleCase(s.guardianName || s.fatherName || '-')) + '</span></div>' +
+              '<div class="sp-kv-item"><span class="sp-kv-label">Full Name</span><span class="sp-kv-val">' + esc(studentDisplayName) + '</span></div>' +
               '<div class="sp-kv-item"><span class="sp-kv-label">Date of Birth</span><span class="sp-kv-val">' + esc(fmtDateIN(s.dob)) + '</span></div>' +
-              '<div class="sp-kv-item"><span class="sp-kv-label">Gender</span><span class="sp-kv-val">' + esc(titleCase(s.gender || '-')) + '</span></div>' +
-              '<div class="sp-kv-item"><span class="sp-kv-label">Aadhaar (Masked)</span><span class="sp-kv-val">' + esc(s.aadhaarMasked || '-') + '</span></div>' +
-              '<div class="sp-kv-item"><span class="sp-kv-label">Qualification</span><span class="sp-kv-val">' + esc(s.qualification || '-') + '</span></div>' +
+              '<div class="sp-kv-item"><span class="sp-kv-label">Gender</span><span class="sp-kv-val">' + esc(fmtGender(s.gender)) + '</span></div>' +
+              '<div class="sp-kv-item"><span class="sp-kv-label">Educational Qualification</span><span class="sp-kv-val">' + esc(s.qualification || '-') + '</span></div>' +
+              (s.aadhaarMasked ? '<div class="sp-kv-item full-col"><span class="sp-kv-label">Aadhaar (Masked)</span><span class="sp-kv-val font-mono">' + esc(s.aadhaarMasked) + '</span></div>' : '') +
             '</div></div></div>' +
-            '<div class="lp-card"><div class="lp-card-head"><div class="lp-card-title"><i data-lucide="phone"></i><span>Contact &amp; Address</span></div></div><div class="sp-card-body"><div class="sp-kv-grid">' +
-              '<div class="sp-kv-item"><span class="sp-kv-label">Mobile</span><span class="sp-kv-val">' + esc(s.phone || '-') + '</span></div>' +
-              '<div class="sp-kv-item"><span class="sp-kv-label">Alt Mobile</span><span class="sp-kv-val">' + esc(s.altPhone || '-') + '</span></div>' +
-              '<div class="sp-kv-item"><span class="sp-kv-label">Email</span><span class="sp-kv-val">' + esc(s.email || '-') + '</span></div>' +
-              '<div class="sp-kv-item"><span class="sp-kv-label">Address</span><span class="sp-kv-val">' + esc(s.address || '-') + '</span></div>' +
+            '<div class="lp-card"><div class="lp-card-head"><div class="lp-card-title"><i data-lucide="phone"></i><span>Contact Information</span></div></div><div class="sp-card-body"><div class="sp-kv-grid">' +
+              '<div class="sp-kv-item"><span class="sp-kv-label">Mobile Phone</span><span class="sp-kv-val font-semibold">' + esc(s.phone || '-') + '</span></div>' +
+              '<div class="sp-kv-item"><span class="sp-kv-label">Alternative Phone</span><span class="sp-kv-val">' + esc(s.altPhone || '-') + '</span></div>' +
+              '<div class="sp-kv-item full-col"><span class="sp-kv-label">Email Address</span><span class="sp-kv-val">' + esc(s.email || '-') + '</span></div>' +
+              '<div class="sp-kv-item full-col"><span class="sp-kv-label">Residential Address</span><span class="sp-kv-val">' + esc(s.address || '-') + '</span></div>' +
+            '</div></div></div>' +
+            '<div class="lp-card"><div class="lp-card-head"><div class="lp-card-title"><i data-lucide="shield"></i><span>Guardian Details</span></div></div><div class="sp-card-body"><div class="sp-kv-grid">' +
+              '<div class="sp-kv-item full-col"><span class="sp-kv-label">Guardian / Parent Name</span><span class="sp-kv-val">' + esc(guardianDisplayName) + '</span></div>' +
+            '</div></div></div>' +
+            '<div class="lp-card"><div class="lp-card-head"><div class="lp-card-title"><i data-lucide="graduation-cap"></i><span>Academic Enrollment</span></div></div><div class="sp-card-body"><div class="sp-kv-grid">' +
+              '<div class="sp-kv-item"><span class="sp-kv-label">Course</span><span class="sp-kv-val font-semibold text-primary">' + esc(courseMetaLine) + '</span></div>' +
+              '<div class="sp-kv-item"><span class="sp-kv-label">Batch</span><span class="sp-kv-val font-semibold">' + esc(s.batchName || '-') + '</span></div>' +
+              '<div class="sp-kv-item"><span class="sp-kv-label">Session</span><span class="sp-kv-val">' + esc(s.sessionName || '-') + '</span></div>' +
+              '<div class="sp-kv-item"><span class="sp-kv-label">Branch</span><span class="sp-kv-val">' + esc(branchDisplayName) + '</span></div>' +
+            '</div></div></div>' +
+            '<div class="lp-card full-span"><div class="lp-card-head"><div class="lp-card-title"><i data-lucide="file-check"></i><span>System &amp; Audit Metadata</span></div></div><div class="sp-card-body"><div class="sp-kv-grid sp-kv-grid-4">' +
+              '<div class="sp-kv-item"><span class="sp-kv-label">Student Document ID</span><span class="sp-kv-val font-mono">' + esc(s.id || '-') + '</span></div>' +
+              '<div class="sp-kv-item"><span class="sp-kv-label">Admission Receipt No</span><span class="sp-kv-val font-mono font-semibold">' + esc(s.receiptNo || s.admissionReceiptNo || '-') + '</span></div>' +
+              '<div class="sp-kv-item"><span class="sp-kv-label">Registered By</span><span class="sp-kv-val">' + esc(s.createdBy || '-') + '</span></div>' +
+              '<div class="sp-kv-item"><span class="sp-kv-label">Registered On</span><span class="sp-kv-val">' + esc(createdAtFmt) + '</span></div>' +
             '</div></div></div>' +
           '</div></section>' +
-          '<section class="sp-pane' + (tab==='documents'?' active':'') + '"><div class="lp-card"><div class="lp-card-head"><div class="lp-card-title"><i data-lucide="file-text"></i><span>Documents (' + docs.length + ')</span></div></div><div class="sp-docs-grid">' + docsHtml + '</div></div></section>' +
-          '<section class="sp-pane' + (tab==='course'?' active':'') + '"><div class="lp-card"><div class="lp-card-head"><div class="lp-card-title"><i data-lucide="calendar"></i><span>Installment Schedule</span></div></div>' + schedHtml + '</div></section>' +
-          '<section class="sp-pane' + (tab==='payments'?' active':'') + '"><div class="lp-card"><div class="lp-card-head"><div class="lp-card-title"><i data-lucide="history"></i><span>Payment History</span></div></div><div class="lp-scroll"><table class="lp-table lp-mobile-cards"><thead><tr><th>Date</th><th>Receipt No</th><th>Payment For</th><th>Mode</th><th class="num">Received</th><th class="act">Action</th></tr></thead><tbody>' + paysHtml + '</tbody></table></div></div></section>' +
+          '<section class="sp-pane' + (tab==='documents'?' active':'') + '"' + (tab==='documents'?'':' hidden') + '><div class="sp-docs-grid">' + docsHtml + '</div></section>' +
+          '<section class="sp-pane' + (tab==='course'?' active':'') + '"' + (tab==='course'?'':' hidden') + '><div class="sp-stack">' +
+            '<div class="lp-card"><div class="lp-card-head"><div class="lp-card-title"><i data-lucide="book-open"></i><div class="sp-course-title-wrap"><div style="display:flex;align-items:center;gap:8px;"><span>' + esc(cName) + '</span><span class="cs-code">' + esc(cCode) + '</span></div></div></div><button type="button" class="ui-btn ghost sm" id="av-sp-course-rcpt"><i data-lucide="receipt"></i><span>View admission receipt</span></button></div><div class="sp-card-body"><div class="sp-kv-grid sp-kv-grid-4">' +
+              '<div class="sp-kv-item"><span class="sp-kv-label">Course Duration</span><span class="sp-kv-val font-semibold">' + esc(durStr) + '</span></div>' +
+              '<div class="sp-kv-item"><span class="sp-kv-label">Prerequisites</span><span class="sp-kv-val">' + esc(prereqDisplay) + '</span></div>' +
+              '<div class="sp-kv-item"><span class="sp-kv-label">Batch Name</span><span class="sp-kv-val font-semibold">' + esc(s.batchName || bt.name || '-') + '</span></div>' +
+              '<div class="sp-kv-item"><span class="sp-kv-label">Batch Timing</span><span class="sp-kv-val">' + esc(batchTiming) + '</span></div>' +
+              '<div class="sp-kv-item"><span class="sp-kv-label">Session Begins</span><span class="sp-kv-val">' + esc(sStart ? fmtDateIN(sStart) : '-') + '</span></div>' +
+              '<div class="sp-kv-item"><span class="sp-kv-label">Session Ends</span><span class="sp-kv-val">' + esc(sEnd ? fmtDateIN(sEnd) : '-') + '</span></div>' +
+              '<div class="sp-kv-item"><span class="sp-kv-label">Branch</span><span class="sp-kv-val">' + esc(branchDisplayName) + '</span></div>' +
+              '<div class="sp-kv-item"><span class="sp-kv-label">Certification</span><span class="sp-kv-val font-semibold text-success">On Passing Exam</span></div>' +
+            '</div></div></div>' +
+            '<div class="lp-card"><div class="lp-card-head"><div class="lp-card-title"><i data-lucide="credit-card"></i><span>Fee Breakdown (Locked at Admission)</span></div></div><div class="lp-scroll"><table class="lp-table"><thead><tr><th>Fee head</th><th class="num">Amount</th></tr></thead><tbody>' + feeBreakRowsHtml + '</tbody></table></div></div>' +
+            '<div class="lp-card"><div class="lp-card-head"><div class="lp-card-title"><i data-lucide="calendar"></i><span>Scheduled Installment Plan</span></div></div><div class="lp-scroll"><table class="lp-table"><thead><tr><th>Installment</th><th>Billing month</th><th>Opens on</th><th>Due date</th><th class="num">Installment fee</th></tr></thead><tbody>' + courseSchedRowsHtml + '</tbody></table></div></div>' +
+          '</div></section>' +
+          '<section class="sp-pane' + (tab==='payments'?' active':'') + '"' + (tab==='payments'?'':' hidden') + '><div class="sp-stack">' +
+            '<div class="lp-card"><div class="lp-card-head"><div class="lp-card-title"><i data-lucide="calendar"></i><span>Fee Schedule &amp; Installment Status</span></div></div><div class="lp-scroll"><table class="lp-table"><thead><tr><th>Fee head</th><th>Billing month</th><th>Due date</th><th class="num">Scheduled</th><th class="num">Paid amount</th><th>Paid on</th><th>Status</th><th class="act">Action</th></tr></thead><tbody>' + statusRowsHtml + '</tbody></table></div></div>' +
+            '<div class="lp-card"><div class="lp-card-head"><div class="lp-card-title"><i data-lucide="receipt"></i><span>Chronological Payment Transactions</span></div></div><div class="lp-scroll"><table class="lp-table"><thead><tr><th>Date</th><th>Receipt no</th><th>Type</th><th class="num">Amount collected</th><th>Mode</th><th>Transaction ID</th><th>Collected &amp; Recorded by</th><th>Remarks</th><th class="act">Action</th></tr></thead><tbody>' + txnsHtml + '</tbody></table></div></div>' +
+          '</div></section>' +
         '</div>' +
       '</div>';
 
     document.getElementById('av-sp-back').onclick = function(){ NAV.page = 'students'; renderView(); };
     document.getElementById('av-sp-copy-id').onclick = function(){ copyText(s.studentId || s.id, document.getElementById('av-sp-copy-id')); };
     document.getElementById('av-sp-adm-rcpt').onclick = function(){ openAdmissionReceiptView(s.id, 'student-profile'); };
+    var crsRcptBtn = document.getElementById('av-sp-course-rcpt');
+    if (crsRcptBtn) crsRcptBtn.onclick = function(){ openAdmissionReceiptView(s.id, 'student-profile'); };
+    el.querySelectorAll('[data-adm-rcpt]').forEach(function(btn){
+      btn.onclick = function(){ openAdmissionReceiptView(s.id, 'student-profile'); };
+    });
     el.querySelectorAll('[data-sp-tab]').forEach(function(b){
       b.onclick = function(){ NAV.spTab = b.getAttribute('data-sp-tab'); renderView(); };
     });
-    el.querySelectorAll('[data-doc-idx]').forEach(function(card){
-      card.onclick = function(){
-        var d = docs[Number(card.getAttribute('data-doc-idx'))];
-        if (!d || !d.path) return;
+    el.querySelectorAll('[data-doc-dl]').forEach(function(btn){
+      btn.onclick = function(ev){
+        ev.stopPropagation();
+        var dk = btn.getAttribute('data-doc-dl');
+        var item = docsMap[dk];
+        if (!item || !item.docData || !item.docData.path) return;
+        resolveMediaUrl(item.docData.path).then(function(url){
+          if (url) triggerBlobDownload(url, item.docData.name || ((s.studentId || s.id) + '_' + dk));
+          else showToastNotice('File could not be loaded offline.', 'error');
+        });
+      };
+    });
+    el.querySelectorAll('[data-doc-view]').forEach(function(node){
+      node.onclick = function(ev){
+        ev.stopPropagation();
+        var dk = node.getAttribute('data-doc-view');
+        var item = docsMap[dk];
+        if (!item || !item.docData || !item.docData.path) return;
+        var dlHeadBtn = document.createElement('button');
+        dlHeadBtn.type = 'button';
+        dlHeadBtn.className = 'ui-btn ghost sm';
+        dlHeadBtn.innerHTML = '<i data-lucide="download"></i><span>Download</span>';
+        dlHeadBtn.onclick = function(){
+          resolveMediaUrl(item.docData.path).then(function(url){
+            if (url) triggerBlobDownload(url, item.docData.name || ((s.studentId || s.id) + '_' + dk));
+          });
+        };
         openPopup({
-          title: d.label || d.key,
-          subtitle: d.path,
-          icon: 'image',
+          title: item.label,
+          subtitle: item.docData.name || item.docData.path,
+          icon: item.isPdf ? 'file-text' : 'image',
           wide: true,
-          bodyHtml: '<div style="text-align:center;"><img data-arc-src="' + esc(d.path) + '" style="max-width:100%;max-height:70vh;border-radius:8px;border:1px solid var(--border);" alt=""></div>'
+          headActions: [dlHeadBtn],
+          bodyHtml: item.isPdf
+            ? '<div style="width:100%;"><iframe data-arc-pdf="' + esc(item.docData.path) + '" style="width:100%;height:72vh;border:1px solid var(--border);border-radius:8px;background:#fff;" title="' + esc(item.label) + '"></iframe></div>'
+            : '<div style="text-align:center;"><img data-arc-src="' + esc(item.docData.path) + '" style="max-width:100%;max-height:70vh;border-radius:8px;border:1px solid var(--border);" alt="' + esc(item.label) + '"></div>'
         });
       };
     });
@@ -1080,9 +1519,9 @@ const ARCHIVE_APP_VIEWER_JS = `(function(){
     var rowsHtml = slice.length ? slice.map(function(e){
       var s = findStudent(e.studentDocId);
       var stName = titleCase(e.studentName || '-');
-      var photoPath = (s && s._photoPath) || '';
+      var photoPath = getArchivePhotoSrc(s);
       var avHtml = photoPath
-        ? '<img class="fr-avatar" data-arc-src="' + esc(photoPath) + '" data-fallback-hide="1" alt="">'
+        ? '<img class="fr-avatar" data-arc-src="' + esc(photoPath) + '" data-fallback-hide="1" alt=""><span class="fr-avatar-fallback" data-arc-fallback="1" hidden>' + esc(initials(stName)) + '</span>'
         : '<span class="fr-avatar-fallback">' + esc(initials(stName)) + '</span>';
       var cb = formatCourseBranchObj(e);
       var bName = e.batchName || (s && s.batchName) || ((DATA.batchesById && DATA.batchesById[e.batchId] && DATA.batchesById[e.batchId].name) || '');
@@ -1196,9 +1635,9 @@ const ARCHIVE_APP_VIEWER_JS = `(function(){
     var rowsHtml = slice.length ? slice.map(function(it){
       var s = findStudent(it.studentDocId);
       var stName = titleCase(it.studentName || '-');
-      var photoPath = (s && s._photoPath) || '';
+      var photoPath = getArchivePhotoSrc(s);
       var avHtml = photoPath
-        ? '<img class="fr-avatar" data-arc-src="' + esc(photoPath) + '" data-fallback-hide="1" alt="">'
+        ? '<img class="fr-avatar" data-arc-src="' + esc(photoPath) + '" data-fallback-hide="1" alt=""><span class="fr-avatar-fallback" data-arc-fallback="1" hidden>' + esc(initials(stName)) + '</span>'
         : '<span class="fr-avatar-fallback">' + esc(initials(stName)) + '</span>';
       var cb = formatCourseBranchObj(it);
       var days = Number(it.daysLate || 0);
@@ -1446,6 +1885,7 @@ const ARCHIVE_APP_VIEWER_JS = `(function(){
   function renderAboutView(el) {
     var m = DATA.meta || {};
     var st = DATA.stats || {};
+    var ss = DATA.session || {};
     var checks = [
       { label: 'Students loaded vs archive count', expected: st.studentCount, actual: (DATA.students || []).length },
       { label: 'Normalized ledger rows', expected: st.ledgerCount, actual: (DATA.ledger || []).length },
@@ -1457,7 +1897,16 @@ const ARCHIVE_APP_VIEWER_JS = `(function(){
 
     el.innerHTML =
       '<div class="fr-wrap">' +
-        '<section class="pg-head"><div class="pg-crumbs">Archive / <span>About &amp; Self-Check</span></div><h2>About This Archive</h2><p>Integrity self-check, archive manifest metadata, and missing file diagnostics.</p></section>' +
+        '<section class="pg-head"><div class="pg-crumbs">Archive / <span>About &amp; Self-Check</span></div><h2>About This Archive</h2><p>Snapshot provenance, integrity self-check, archive manifest metadata, and missing file diagnostics.</p></section>' +
+        '<div class="lp-card"><div class="lp-card-head"><div class="lp-card-title"><i data-lucide="archive"></i><span>Archive Snapshot Overview</span></div><span class="pill neutral">Read Only</span></div>' +
+          '<div class="sp-card-body"><div class="sp-kv-grid">' +
+            '<div class="sp-kv-item"><span class="sp-kv-label">Mode</span><span class="sp-kv-val">Read-only offline archive \\u2014 Works offline (no internet required)</span></div>' +
+            '<div class="sp-kv-item"><span class="sp-kv-label">Programme &amp; Session</span><span class="sp-kv-val">Youth Centre \\u00B7 ' + esc(m.sessionName || ss.name || '-') + '</span></div>' +
+            '<div class="sp-kv-item"><span class="sp-kv-label">Branch Scope</span><span class="sp-kv-val">' + esc(titleCase(m.scopeLabel || 'All branches')) + '</span></div>' +
+            '<div class="sp-kv-item"><span class="sp-kv-label">Session Dates</span><span class="sp-kv-val">' + esc(fmtDateIN(ss.startDate)) + ' \\u2013 ' + esc(fmtDateIN(ss.endDate)) + '</span></div>' +
+            '<div class="sp-kv-item"><span class="sp-kv-label">Generated On (IST)</span><span class="sp-kv-val">' + esc(m.generatedAtIST || '-') + '</span></div>' +
+            '<div class="sp-kv-item"><span class="sp-kv-label">Generated By</span><span class="sp-kv-val">' + esc(m.generatedByLabel || '-') + '</span></div>' +
+          '</div></div></div>' +
         '<div class="lp-card"><div class="lp-card-head"><div class="lp-card-title"><i data-lucide="shield-check"></i><span>Runtime Self-Check</span></div></div>' +
           '<div class="lp-scroll"><table class="lp-table"><thead><tr><th>Check</th><th class="num">Expected</th><th class="num">Observed</th><th>Result</th></tr></thead><tbody>' +
           checks.map(function(c){
@@ -1470,9 +1919,10 @@ const ARCHIVE_APP_VIEWER_JS = `(function(){
             '<div class="sp-kv-item"><span class="sp-kv-label">Schema / App Version</span><span class="sp-kv-val">v' + esc(m.schemaVersion || 1) + ' · App ' + esc(m.appVersion || '-') + '</span></div>' +
             '<div class="sp-kv-item"><span class="sp-kv-label">Generated At (IST)</span><span class="sp-kv-val">' + esc(m.generatedAtIST || '-') + '</span></div>' +
             '<div class="sp-kv-item"><span class="sp-kv-label">Generated By</span><span class="sp-kv-val">' + esc(m.generatedByLabel || '-') + '</span></div>' +
-            '<div class="sp-kv-item"><span class="sp-kv-label">Scope</span><span class="sp-kv-val">' + esc(m.scopeLabel || '-') + '</span></div>' +
+            '<div class="sp-kv-item"><span class="sp-kv-label">Scope</span><span class="sp-kv-val">' + esc(titleCase(m.scopeLabel || '-')) + '</span></div>' +
             '<div class="sp-kv-item"><span class="sp-kv-label">Encryption</span><span class="sp-kv-val">' + (m.encrypted ? 'Yes (AES-256-GCM + PBKDF2)' : 'No (Plain ZIP)') + '</span></div>' +
             '<div class="sp-kv-item"><span class="sp-kv-label">ID / Aadhaar Docs Included</span><span class="sp-kv-val">' + (m.includesIdDocs ? 'Yes' : 'No') + '</span></div>' +
+            '<div class="sp-kv-item"><span class="sp-kv-label">Packed Files (Manifest)</span><span class="sp-kv-val">' + esc(m.packedFileCount ? (m.packedFileCount + ' files with SHA-256 checksums') : 'Verified via manifest.json') + '</span></div>' +
           '</div></div></div>' +
         '<div class="lp-card"><div class="lp-card-head"><div class="lp-card-title"><i data-lucide="alert-circle"></i><span>Missing Files Report (' + missing.length + ')</span></div></div>' +
           (missing.length
@@ -1583,12 +2033,14 @@ const ARCHIVE_APP_VIEWER_JS = `(function(){
           '</div>' +
         '</aside>' +
         '<div class="main">' +
-          '<div class="arx-offline-banner"><div class="arx-offline-banner-left"><span class="arx-offline-tag">Read Only</span><span>ARCHIVE - read only - ' + esc(sessionName) + ' - generated ' + esc(genDate) + ' by ' + esc(genBy) + '</span></div><span class="arx-offline-meta">Works offline</span></div>' +
           '<header class="topbar" id="topbar">' +
             '<button type="button" id="menu-btn" aria-label="Menu"><i data-lucide="menu"></i></button>' +
             '<h1 id="page-title">Dashboard</h1>' +
-            '<div class="arx-tb-chip"><i data-lucide="calendar"></i><span>' + esc(sessionName) + '</span></div>' +
-            '<div class="arx-tb-chip"><i data-lucide="git-branch"></i><span>' + esc(m.scopeLabel || 'All branches') + '</span></div>' +
+            '<div class="arx-tb-session-group">' +
+              '<div class="arx-tb-chip"><i data-lucide="calendar"></i><span>' + esc(sessionName) + '</span></div>' +
+              '<span class="pill neutral arx-tb-badge">Archive</span>' +
+            '</div>' +
+            '<div class="arx-tb-chip arx-tb-scope-chip"><i data-lucide="git-branch"></i><span>' + esc(titleCase(m.scopeLabel || 'All branches')) + '</span></div>' +
           '</header>' +
           '<main class="view" id="view" tabindex="-1"></main>' +
         '</div>' +

@@ -76,6 +76,27 @@ export const ARCHIVE_RECEIPTS_VIEWER_JS = `(function(){
     return fb || '-';
   }
 
+  function titleCase(value) {
+    var raw = String(value || '').trim().replace(/\\s+/g, ' ');
+    if (!raw) return '';
+    if (raw.indexOf('@') >= 0 && raw.indexOf(' ') < 0) return raw;
+    return raw.split(' ').map(function(word){
+      if (!/[a-zA-Z]/.test(word)) return word;
+      return word.toLowerCase().replace(/(^|[-'./])([a-z])/g, function(_, sep, ch){
+        return sep + ch.toUpperCase();
+      });
+    }).join(' ');
+  }
+
+  function fmtGender(value) {
+    var raw = String(value || '').trim().toLowerCase();
+    if (!raw) return '-';
+    if (raw === 'm' || raw === 'male') return 'Male';
+    if (raw === 'f' || raw === 'female') return 'Female';
+    if (raw === 'o' || raw === 'other' || raw === 'others') return 'Other';
+    return titleCase(raw);
+  }
+
   function courseFeeOf(feesObj) {
     var f = feesObj || {};
     var instAmt = Number(f.installment != null ? f.installment : (f.feeInstallment || 500));
@@ -141,20 +162,26 @@ export const ARCHIVE_RECEIPTS_VIEWER_JS = `(function(){
       if (docsList[i].key === 'photo' && docsList[i].path) photoRel = docsList[i].path;
       if (docsList[i].key === 'signature' && docsList[i].path) sigRel = docsList[i].path;
     }
+    if (!photoRel) photoRel = student._photoPath || student.photo || '';
 
     if (base) {
       var cloned = JSON.parse(JSON.stringify(base));
       cloned.orgLogoRel = data.orgLogoPath || '';
-      cloned.photoRel = photoRel;
-      cloned.signatureRel = sigRel;
+      cloned.photoRel = photoRel || cloned.photoRel || '';
+      cloned.signatureRel = sigRel || cloned.signatureRel || '';
+      if (cloned.branchName) cloned.branchName = titleCase(cloned.branchName);
+      if (cloned.studentName) cloned.studentName = titleCase(cloned.studentName);
+      if (cloned.guardianName) cloned.guardianName = titleCase(cloned.guardianName);
+      if (cloned.gender) cloned.gender = fmtGender(cloned.gender);
       return cloned;
     }
 
     var orgName = o.orgName || 'Unique Infotech';
     var isoLine = o.isoLine || o.isoText || o.tagline || 'An ISO 9001:2015 Certified Organisation';
     var orgEmail = o.email || 'utpal.goutam@gmail.com';
+    var branchRaw = (br.name && br.name !== student.branchId) ? br.name : ((student.branchName && student.branchName !== student.branchId) ? student.branchName : 'BANKURA ZILLA YOUTH COMPUTER TRAINING CENTRE');
     var orgPhones = joinPhones(o.phone || o.phones, '9851771893, 9832147650, 8641209375');
-    var branchName = (br.name && br.name !== student.branchId) ? br.name : ((student.branchName && student.branchName !== student.branchId) ? student.branchName : 'BANKURA ZILLA YOUTH COMPUTER TRAINING CENTRE');
+    var branchName = titleCase(branchRaw) || 'Bankura Zilla Youth Computer Training Centre';
     var branchCode = br.code || br.branchCode || student.branchCode || 'BZYCTC';
     var branchAddress = br.address || 'Kenduadihi, Bankura, West Bengal - 722101';
     var branchPhones = joinPhones(br.phone || br.phones || br.mobile, '9733518246, 7003624981, 9475036218');
@@ -234,10 +261,10 @@ export const ARCHIVE_RECEIPTS_VIEWER_JS = `(function(){
       branchPhones: branchPhones,
       receiptNo: receiptNo,
       receiptDate: receiptDate,
-      studentName: String(student.name || '-').toUpperCase(),
-      guardianName: String(student.guardianName || student.fatherName || '-').toUpperCase(),
+      studentName: titleCase(student.name || '') || '-',
+      guardianName: titleCase(student.guardianName || student.fatherName || '') || '-',
       dob: student.dob ? fmtDateIN(student.dob) : '-',
-      gender: student.gender ? (student.gender.charAt(0).toUpperCase() + student.gender.slice(1).toLowerCase()) : '-',
+      gender: fmtGender(student.gender),
       phone: student.phone || '-',
       altPhone: student.altPhone || '-',
       email: student.email || '-',
@@ -391,7 +418,7 @@ export const ARCHIVE_RECEIPTS_VIEWER_JS = `(function(){
 
     var orgName = o.orgName || 'Unique Infotech';
     var orgSub = o.orgSubtitle || o.isoLine || o.isoText || 'An ISO 9001:2015 Certified Organisation';
-    var branchName = branch.name || student.branchName || 'BANKURA ZILLA YOUTH COMPUTER TRAINING CENTRE';
+    var branchName = titleCase((branch.name && branch.name !== student.branchId ? branch.name : '') || (student.branchName && student.branchName !== student.branchId ? student.branchName : '') || 'BANKURA ZILLA YOUTH COMPUTER TRAINING CENTRE');
     var orgPhones = joinPhones(o.phones || o.phone, '9851771893, 9832147650, 8641209375');
     var orgEmail = o.email || 'utpal.goutam@gmail.com';
     var branchPhones = joinPhones(branch.phone || branch.phones, '9733518246, 7003624981, 9475036218');
@@ -439,6 +466,7 @@ export const ARCHIVE_RECEIPTS_VIEWER_JS = `(function(){
     for (var d = 0; d < docsList.length; d++) {
       if (docsList[d].key === 'photo' && docsList[d].path) { photoPath = docsList[d].path; break; }
     }
+    if (!photoPath) photoPath = student._photoPath || student.photo || '';
 
     var ledgerRows = '';
     if (isExam) {
@@ -484,9 +512,9 @@ export const ARCHIVE_RECEIPTS_VIEWER_JS = `(function(){
       '<div class="mpr-title">' + esc(titleText) + '</div>' +
       '<div class="mpr-rno">Receipt no: <strong>' + esc(rNo) + '</strong> &nbsp;|&nbsp; Date: <strong>' + esc(pDateStr) + '</strong></div>' +
       '<table class="mpr-d">' +
-        '<tr><th>Student name</th><td><strong>' + esc(student.name || '-') + '</strong></td>' +
+        '<tr><th>Student name</th><td><strong>' + esc(titleCase(student.name || '') || '-') + '</strong></td>' +
           '<td class="mpr-pc" rowspan="5"><div class="mpr-photo">' + (photoPath ? '<img data-arc-src="' + esc(photoPath) + '" alt="Student photo">' : '<span>Photo</span>') + '</div></td></tr>' +
-        '<tr><th>Guardian name</th><td>' + esc(student.guardianName || student.fatherName || '-') + '</td></tr>' +
+        '<tr><th>Guardian name</th><td>' + esc(titleCase(student.guardianName || student.fatherName || '') || '-') + '</td></tr>' +
         '<tr><th>Student ID</th><td><strong>' + esc(student.studentId || '-') + '</strong></td></tr>' +
         '<tr><th>Course</th><td>' + esc(student.courseName || student.courseCode || '-') + '</td></tr>' +
         '<tr><th>Batch / Session</th><td>' + esc(student.batchName || 'Standard') + ' &nbsp;|&nbsp; ' + esc(student.sessionName || '-') + '</td></tr>' +

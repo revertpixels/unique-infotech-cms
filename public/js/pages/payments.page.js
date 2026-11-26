@@ -1,16 +1,16 @@
 // payments.page.js — Payment History page for Youth Centre (#/payments) & Unique Kids (#/school-payments).
 // Follows Rule 1 (global toolbar session only, plain-text subtitle) & Rule 2 (shared [ Branch -> Batch ] box).
 
-import { createSelect } from '../components/ui-select.js?v=1.8.171';
-import { createBranchBatchFilter, clearPersistedBranchBatchFilters } from '../components/branch-batch-filter.js?v=1.8.171';
-import { openPopup } from '../components/modal.js?v=1.8.171';
-import { showToast } from '../components/toast.js?v=1.8.171';
-import { renderPager, renderEmptyTableState, PAGE_SIZE } from '../components/list-page.js?v=1.8.171';
+import { createSelect } from '../components/ui-select.js?v=1.8.172';
+import { createBranchBatchFilter, clearPersistedBranchBatchFilters } from '../components/branch-batch-filter.js?v=1.8.172';
+import { openPopup } from '../components/modal.js?v=1.8.172';
+import { showToast } from '../components/toast.js?v=1.8.172';
+import { renderPager, renderEmptyTableState, PAGE_SIZE } from '../components/list-page.js?v=1.8.172';
 import {
   getCachedSessions,
   loadSessions,
   getSelectedSession
-} from '../core/sessions.js?v=1.8.171';
+} from '../core/sessions.js?v=1.8.172';
 import {
   ensureReferenceData,
   scopeReferenceDataByCtx,
@@ -37,9 +37,9 @@ import {
   formatINR,
   fmtDate,
   todayISO
-} from '../services/report.service.js?v=1.8.171';
-import { formatPersonName, initials } from '../utils/formatter.js?v=1.8.171';
-import { resolveUserDisplay } from '../services/user-directory.service.js?v=1.8.171';
+} from '../services/report.service.js?v=1.8.172';
+import { formatPersonName, initials } from '../utils/formatter.js?v=1.8.172';
+import { resolveUserDisplay } from '../services/user-directory.service.js?v=1.8.172';
 
 let state = null;
 let sessionListener = null;
@@ -1080,7 +1080,19 @@ async function openPaymentDetailsPopup(entry) {
     }
   });
 
-  // Add status badge right beside "Payment Details" title
+  // Add status badge right beside "Payment Details" title, and student photo on header tile if available
+  const popupPhoto = getCachedStudentPhoto(entry.studentDocId);
+  const headTile = popup.head.querySelector('.adm-view-tile');
+  if (headTile && popupPhoto) {
+    headTile.style.padding = '0';
+    headTile.style.overflow = 'hidden';
+    headTile.innerHTML = '';
+    const phImg = document.createElement('img');
+    phImg.src = popupPhoto;
+    phImg.alt = entry.studentName || '';
+    phImg.style.cssText = 'width:100%;height:100%;object-fit:cover;display:block;';
+    headTile.appendChild(phImg);
+  }
   const titleEl = popup.head.querySelector('.adm-view-title');
   if (titleEl) {
     titleEl.textContent = '';

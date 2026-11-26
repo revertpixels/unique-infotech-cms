@@ -15,26 +15,28 @@ import {
   arrayUnion,
   addDoc
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.171';
-import { registerDirty, confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.171';
-import { buildStats, buildToolbar, renderPager, renderEmptyTableState, PAGE_SIZE } from '../components/list-page.js?v=1.8.171';
-import { createSelect } from '../components/ui-select.js?v=1.8.171';
-import { createBranchBatchFilter } from '../components/branch-batch-filter.js?v=1.8.171';
-import { openMenu } from '../components/ui-menu.js?v=1.8.171';
-import { confirmDialog } from '../components/ui-confirm.js?v=1.8.171';
-import { openPopup } from '../components/modal.js?v=1.8.171';
-import { createDatePicker } from '../components/ui-datepicker.js?v=1.8.171';
-import { getSelectedSessionId, getSelectedSession, getCachedSessions, loadSessions, todayISO } from '../core/sessions.js?v=1.8.171';
-import { firstInstallmentOf, admissionState, sessionLabel, installmentSchedule, batchAllowsCourse, batchCourseLabel, isCourseActive } from '../utils/session-rules.js?v=1.8.171';
-import { formatINR, formatDateIN, initials } from '../utils/formatter.js?v=1.8.171';
-import { validatePhone, validateEmail, validateDOB, validateName, validateRequired } from '../utils/validator.js?v=1.8.171';
-import { listStudentsRaw, checkDuplicatePhone, readStudentId, readReceiptNo, writeCounter, createStudentWithDocs, updateStudentWithDocs, updateStudent, deleteStudent } from '../services/admission.service.js?v=1.8.171';
-import { feeTotal, courseFeeOf, discountOf } from '../utils/fees.js?v=1.8.171';
-import { compressTo100KB, readAsDataURL, blobToDataURL, isImageFile, formatBytes } from '../utils/image-compress.js?v=1.8.171';
-import { fetchStudentPayments, calculateStudentFinancials, buildReceiptMenuItems } from '../services/payment.service.js?v=1.8.171';
-import { playPaymentSuccessSound } from '../utils/sound.js?v=1.8.171';
-import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.171';
-import { APP_CACHE } from '../core/app.js?v=1.8.171';
+import { showToast } from '../components/toast.js?v=1.8.172';
+import { registerDirty, confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.172';
+import { buildStats, buildToolbar, renderPager, renderEmptyTableState, PAGE_SIZE } from '../components/list-page.js?v=1.8.172';
+import { createSelect } from '../components/ui-select.js?v=1.8.172';
+import { createBranchBatchFilter } from '../components/branch-batch-filter.js?v=1.8.172';
+import { openMenu } from '../components/ui-menu.js?v=1.8.172';
+import { confirmDialog } from '../components/ui-confirm.js?v=1.8.172';
+import { openPopup } from '../components/modal.js?v=1.8.172';
+import { createDatePicker } from '../components/ui-datepicker.js?v=1.8.172';
+import { getSelectedSessionId, getSelectedSession, getCachedSessions, loadSessions, todayISO } from '../core/sessions.js?v=1.8.172';
+import { firstInstallmentOf, admissionState, sessionLabel, installmentSchedule, batchAllowsCourse, batchCourseLabel, isCourseActive } from '../utils/session-rules.js?v=1.8.172';
+import { formatINR, formatDateIN, formatPersonName, formatGenderDisplay, initials } from '../utils/formatter.js?v=1.8.172';
+import { validatePhone, validateEmail, validateDOB, validateName, validateRequired } from '../utils/validator.js?v=1.8.172';
+import { listStudentsRaw, checkDuplicatePhone, readStudentId, readReceiptNo, writeCounter, createStudentWithDocs, updateStudentWithDocs, updateStudent, deleteStudent } from '../services/admission.service.js?v=1.8.172';
+import { feeTotal, courseFeeOf, discountOf } from '../utils/fees.js?v=1.8.172';
+import { compressTo100KB, readAsDataURL, blobToDataURL, isImageFile, formatBytes } from '../utils/image-compress.js?v=1.8.172';
+import { fetchStudentPayments, calculateStudentFinancials, buildReceiptMenuItems } from '../services/payment.service.js?v=1.8.172';
+import { loadStudentPhotos, getCachedStudentPhoto } from '../services/report.service.js?v=1.8.172';
+import { getStudentPhotoSrc, getStudentDocSrc, getStudentDocMime } from '../utils/student-media.js?v=1.8.172';
+import { playPaymentSuccessSound } from '../utils/sound.js?v=1.8.172';
+import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.172';
+import { APP_CACHE } from '../core/app.js?v=1.8.172';
 
 const COL = 'students';
 
@@ -1383,43 +1385,49 @@ export async function mount({ container, profile, ctx }) {
     onCourseChange();
     updateSeats();
 
-    DOC_KEYS.forEach((k) => {
-      setDocPreview(k, null);
-      if (docOriginals[k]) {
-        const preview = $('adm-' + k + '-preview');
-        const upload = $('adm-' + k + '-upload');
-        const emptyEl = upload ? upload.querySelector('.adm-upload-empty') : null;
-        if (preview) {
-          preview.style.display = 'flex';
-          const box = mk('div', 'adm-doc-box');
-          box.style.position = 'relative';
-          box.style.overflow = 'visible';
-          const img = mk('img', 'adm-doc-thumb');
-          if (isDataUrl(docOriginals[k].data)) {
-            img.src = docOriginals[k].data;
-            img.style.objectFit = (k === 'photo') ? 'cover' : 'contain';
-            if (k === 'signature') img.style.background = '#FFFFFF';
-            box.appendChild(img);
+      DOC_KEYS.forEach((k) => {
+        setDocPreview(k, null);
+        const origSrc = getStudentDocSrc(docOriginals[k], getStudentDocMime(docOriginals[k]));
+        if (docOriginals[k] && origSrc) {
+          const preview = $('adm-' + k + '-preview');
+          const upload = $('adm-' + k + '-upload');
+          const emptyEl = upload ? upload.querySelector('.adm-upload-empty') : null;
+          if (preview) {
+            preview.style.display = 'flex';
+            const box = mk('div', 'adm-doc-box');
+            box.style.position = 'relative';
+            box.style.overflow = 'visible';
+            const mime = getStudentDocMime(docOriginals[k]);
+            if (mime.includes('pdf') || /^data:application\/pdf/i.test(origSrc)) {
+              const tag = mk('div', 'adm-doc-thumb', 'PDF');
+              tag.style.cssText = 'display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;background:#EEF2FF;color:#333B84;';
+              box.appendChild(tag);
+            } else {
+              const img = mk('img', 'adm-doc-thumb');
+              img.src = origSrc;
+              img.style.objectFit = (k === 'photo') ? 'cover' : 'contain';
+              if (k === 'signature') img.style.background = '#FFFFFF';
+              box.appendChild(img);
+            }
+            const remove = mk('button', 'adm-doc-remove');
+            remove.type = 'button';
+            remove.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+            remove.setAttribute('aria-label', 'Remove file');
+            remove.addEventListener('click', (ev) => { ev.stopPropagation(); docOriginals[k] = null; setDocPreview(k, null); });
+            box.appendChild(remove);
+            preview.appendChild(box);
+            if (emptyEl) emptyEl.style.display = 'none';
+            if (upload) upload.classList.add('has-preview');
+            const sizeEl = $('adm-' + k + '-size');
+            if (sizeEl) {
+              sizeEl.textContent = 'Saved: ' + formatBytes(docOriginals[k].sizeBytes || 0);
+              sizeEl.className = 'adm-doc-size saved';
+            }
+            if (typeof lucide !== 'undefined') lucide.createIcons();
           }
-          const remove = mk('button', 'adm-doc-remove');
-          remove.type = 'button';
-          remove.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>';
-          remove.setAttribute('aria-label', 'Remove file');
-          remove.addEventListener('click', (ev) => { ev.stopPropagation(); docOriginals[k] = null; setDocPreview(k, null); });
-          box.appendChild(remove);
-          preview.appendChild(box);
-          if (emptyEl) emptyEl.style.display = 'none';
-          if (upload) upload.classList.add('has-preview');
-          const sizeEl = $('adm-' + k + '-size');
-          if (sizeEl) {
-            sizeEl.textContent = 'Saved: ' + formatBytes(docOriginals[k].sizeBytes || 0);
-            sizeEl.className = 'adm-doc-size saved';
-          }
-          if (typeof lucide !== 'undefined') lucide.createIcons();
+          docFiles[k] = docOriginals[k];
         }
-        docFiles[k] = docOriginals[k];
-      }
-    });
+      });
   }
 
   function snapshot() {
@@ -1601,9 +1609,32 @@ export async function mount({ container, profile, ctx }) {
             tr.appendChild(mk('td', '', s.studentId || ' - '));
 
             const tdSt = mk('td');
-            tdSt.appendChild(mk('b', '', s.name || ' - '));
-            tdSt.appendChild(mk('br'));
-            tdSt.appendChild(mk('span', 'adm-sub', s.guardianName || '-'));
+            const stNameDisp = formatPersonName(s.name || '') || ' - ';
+            const guardDisp = formatPersonName(s.guardianName || '') || '-';
+            const stCell = mk('div', 'fr-student-cell');
+            const cachedPh = getCachedStudentPhoto(s.id) || getStudentPhotoSrc(s, null);
+            if (cachedPh) {
+              const avImg = document.createElement('img');
+              avImg.className = 'fr-avatar';
+              avImg.src = cachedPh;
+              avImg.alt = stNameDisp;
+              stCell.appendChild(avImg);
+            } else {
+              const avFb = mk('span', 'fr-avatar-fallback fr-avatar-slot', initials(stNameDisp || 'ST'));
+              avFb.dataset.sid = s.id || '';
+              stCell.appendChild(avFb);
+            }
+            const stMeta = mk('div', 'fr-student-meta');
+            const nameBtn = mk('button', 'fr-student-link', stNameDisp);
+            nameBtn.type = 'button';
+            nameBtn.title = stNameDisp;
+            nameBtn.addEventListener('click', () => {
+              if (s.studentId) location.hash = '#/students/' + s.studentId;
+              else if (s.id) location.hash = '#/students/' + s.id;
+            });
+            stMeta.append(nameBtn, mk('span', 'adm-sub', guardDisp));
+            stCell.appendChild(stMeta);
+            tdSt.appendChild(stCell);
             tr.appendChild(tdSt);
 
             tr.appendChild(mk('td', 'hide-sm', s.phone || ' - '));
@@ -1735,6 +1766,26 @@ export async function mount({ container, profile, ctx }) {
       }
 
       if (typeof lucide !== 'undefined') lucide.createIcons();
+
+      const pageStudentsMap = {};
+      pageList.forEach((stItem) => { if (stItem && stItem.id) pageStudentsMap[stItem.id] = stItem; });
+      const visibleIds = Object.keys(pageStudentsMap);
+      if (visibleIds.length) {
+        loadStudentPhotos(visibleIds, pageStudentsMap).then(() => {
+          visibleIds.forEach((sid) => {
+            const url = getCachedStudentPhoto(sid);
+            if (!url) return;
+            const slot = rowsHost.querySelector(`.fr-avatar-slot[data-sid="${CSS.escape(sid)}"]`);
+            if (slot && slot.tagName !== 'IMG') {
+              const avImg = document.createElement('img');
+              avImg.className = 'fr-avatar';
+              avImg.src = url;
+              avImg.alt = formatPersonName(pageStudentsMap[sid]?.name || '') || '';
+              slot.replaceWith(avImg);
+            }
+          });
+        }).catch(() => {});
+      }
     } catch (e) {
       console.error('[admissions] render failed', e);
       const msg = e && e.message ? e.message : String(e);
@@ -2010,6 +2061,11 @@ export async function mount({ container, profile, ctx }) {
           };
           return;
         }
+        // Preserve untouched pre-existing docs (loaded into docOriginals -> docFiles on Edit)
+        if (df && getStudentDocSrc(df, getStudentDocMime(df))) {
+          docs[k] = Object.assign({}, df, { updatedAt: serverTimestamp() });
+          return;
+        }
         docs[k] = false;
       }));
     } catch (e) {
@@ -2229,22 +2285,33 @@ export async function mount({ container, profile, ctx }) {
     photo.textContent = initials(s.name || '');
     head.appendChild(photo);
 
-    // T1: load photo from students/<id>/docs/photo (one getDoc, not whole subcollection)
+    // Load photo using shared helper (checking docs/photo, docs subcollection, and student fields)
     try {
+      let docsMap = {};
       const photoSnap = await getDoc(doc(db, 'students', s.id, 'docs', 'photo'));
       if (photoSnap.exists()) {
-        const data = photoSnap.data();
-        const photoUrl = data && data.data ? data.data : null;
-        if (photoUrl && isDataUrl(photoUrl)) {
-          photo.textContent = '';
-          const img = document.createElement('img');
-          img.src = photoUrl;
-          img.style.width = '100%';
-          img.style.height = '100%';
-          img.style.objectFit = 'cover';
-          img.style.display = 'block';
-          photo.appendChild(img);
-        }
+        docsMap.photo = { id: photoSnap.id, ...photoSnap.data() };
+      }
+      let photoUrl = getStudentPhotoSrc(s, docsMap);
+      if (!photoUrl) {
+        const docsSnap = await getDocs(collection(db, 'students', s.id, 'docs'));
+        docsMap = {};
+        docsSnap.docs.forEach((d) => { docsMap[d.id] = { id: d.id, ...d.data() }; });
+        photoUrl = getStudentPhotoSrc(s, docsMap);
+      }
+      if (photoUrl) {
+        photo.textContent = '';
+        const img = document.createElement('img');
+        img.src = photoUrl;
+        img.style.width = '100%';
+        img.style.height = '100%';
+        img.style.objectFit = 'cover';
+        img.style.display = 'block';
+        img.onerror = () => {
+          img.remove();
+          photo.textContent = initials(s.name || '');
+        };
+        photo.appendChild(img);
       }
     } catch (e) {
       // non-fatal, keep initials
@@ -2254,7 +2321,7 @@ export async function mount({ container, profile, ctx }) {
     info.className = 'adm-view-info';
     const nameEl = document.createElement('h2');
     nameEl.className = 'adm-view-name';
-    nameEl.textContent = s.name || ' - ';
+    nameEl.textContent = formatPersonName(s.name || '') || ' - ';
     // T2: status dot next to name
     const stValue = (s.status || 'active');
     const statusLabel = stValue.charAt(0).toUpperCase() + stValue.slice(1);
@@ -2354,9 +2421,9 @@ export async function mount({ container, profile, ctx }) {
     const sections = [
       {
         id: 'personal', icon: 'user', title: 'Personal', rows: [
-          ['Guardian', s.guardianName || '-'],
+          ['Guardian', formatPersonName(s.guardianName || '') || '-'],
           ['DOB', formatDateIN(s.dob)],
-          ['Gender', s.gender ? (s.gender.charAt(0).toUpperCase() + s.gender.slice(1)) : '-'],
+          ['Gender', formatGenderDisplay(s.gender, '-')],
           ['Highest qualification', s.qualification || '-']
         ]
       },
@@ -2371,7 +2438,7 @@ export async function mount({ container, profile, ctx }) {
       {
         id: 'course', icon: 'book-open', title: 'Course & batch', rows: [
           ['Session', selS.name || '-'],
-          ['Branch', (s.branchName && s.branchName !== s.branchId) ? s.branchName : (branchNameOf(s.branchId) || 'Unknown branch')],
+          ['Branch', formatPersonName((s.branchName && s.branchName !== s.branchId) ? s.branchName : (branchNameOf(s.branchId) || 'Unknown branch')) || '-'],
           ['Course', ((c.courseCode || c.code || '') + '  -  ' + (c.name || '')) || '-'],
           ['Batch', b.name || '-'],
           ['Admission date', formatDateIN(s.admissionDate)],

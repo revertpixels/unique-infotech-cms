@@ -4,16 +4,18 @@
 // permanent delete). Search by name, Student ID, or parent phone. Siblings may share phone.
 import { db } from '../config/firebase-config.js';
 import { collection, getDocs, query, where, doc, getDoc } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.171';
-import { registerDirty, confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.171';
-import { buildStats, buildToolbar } from '../components/list-page.js?v=1.8.171';
-import { createSelect } from '../components/ui-select.js?v=1.8.171';
-import { openMenu } from '../components/ui-menu.js?v=1.8.171';
-import { confirmDialog } from '../components/ui-confirm.js?v=1.8.171';
-import { formatINR, formatDateIN } from '../utils/formatter.js?v=1.8.171';
-import { isCourseActive } from '../utils/session-rules.js?v=1.8.171';
-import { localToday } from '../utils/school-lifecycle.js?v=1.8.171';
-import { getRoleTitle } from '../services/user-directory.service.js?v=1.8.171';
+import { showToast } from '../components/toast.js?v=1.8.172';
+import { registerDirty, confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.172';
+import { buildStats, buildToolbar } from '../components/list-page.js?v=1.8.172';
+import { createSelect } from '../components/ui-select.js?v=1.8.172';
+import { openMenu } from '../components/ui-menu.js?v=1.8.172';
+import { confirmDialog } from '../components/ui-confirm.js?v=1.8.172';
+import { formatINR, formatDateIN, formatPersonName, initials } from '../utils/formatter.js?v=1.8.172';
+import { isCourseActive } from '../utils/session-rules.js?v=1.8.172';
+import { localToday } from '../utils/school-lifecycle.js?v=1.8.172';
+import { getRoleTitle } from '../services/user-directory.service.js?v=1.8.172';
+import { loadStudentPhotos, getCachedStudentPhoto } from '../services/report.service.js?v=1.8.172';
+import { getStudentPhotoSrc } from '../utils/student-media.js?v=1.8.172';
 
 const COL = 'students';
 const GENDER_LABELS = { male: 'Male', female: 'Female', other: 'Other' };
@@ -172,11 +174,18 @@ export async function mount({ container, profile, ctx }) {
 
     list.forEach(s => {
       const c = coursesById[s.courseId] || {};
+      const stName = formatPersonName(s.name || '') || '-';
+      const gName = formatPersonName(s.guardianName || '') || '-';
+      const cachedPh = getCachedStudentPhoto(s.id) || getStudentPhotoSrc(s, null);
+      const safeName = stName.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+      const avHtml = cachedPh
+        ? `<img class="fr-avatar" src="${cachedPh.replace(/"/g, '&quot;')}" alt="${safeName}">`
+        : `<span class="fr-avatar-fallback fr-avatar-slot" data-sid="${s.id}">${initials(stName || 'ST')}</span>`;
       const tr = document.createElement('tr');
       tr.innerHTML =
         '<td class="sk-id"><b>' + (s.studentId || '-') + '</b></td>' +
-        '<td>' + (s.name || '-') + '</td>' +
-        '<td class="hide-sm">' + (s.guardianName || '-') + '</td>' +
+        '<td><div class="fr-student-cell">' + avHtml + '<span class="fr-student-meta"><b>' + safeName + '</b></span></div></td>' +
+        '<td class="hide-sm">' + gName + '</td>' +
         '<td class="hide-sm">' + (s.phone || '-') + '</td>' +
         '<td>' + (c.name || '-') + '</td>' +
         '<td>' + (s.batchName || '-') + '</td>' +
@@ -212,6 +221,26 @@ export async function mount({ container, profile, ctx }) {
     rowsHost.querySelectorAll('.delete').forEach(b => {
       b.addEventListener('click', () => { location.hash = '#/school-delete/' + b.dataset.id; });
     });
+
+    const visibleMap = {};
+    list.forEach((stItem) => { if (stItem && stItem.id) visibleMap[stItem.id] = stItem; });
+    const visibleIds = Object.keys(visibleMap);
+    if (visibleIds.length) {
+      loadStudentPhotos(visibleIds, visibleMap).then(() => {
+        visibleIds.forEach((sid) => {
+          const url = getCachedStudentPhoto(sid);
+          if (!url) return;
+          const slot = rowsHost.querySelector(`.fr-avatar-slot[data-sid="${CSS.escape(sid)}"]`);
+          if (slot && slot.tagName !== 'IMG') {
+            const img = document.createElement('img');
+            img.className = 'fr-avatar';
+            img.src = url;
+            img.alt = formatPersonName(visibleMap[sid]?.name || '') || '';
+            slot.replaceWith(img);
+          }
+        });
+      }).catch(() => {});
+    }
   }
 
   // ---------- actions ----------

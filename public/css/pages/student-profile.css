@@ -123,6 +123,10 @@
   font-weight: 700;
   color: var(--primary, #323A85);
 }
+.sp-avatar-initials[hidden],
+.sp-avatar-img[hidden] {
+  display: none !important;
+}
 .sp-avatar-img {
   width: 100%;
   height: 100%;

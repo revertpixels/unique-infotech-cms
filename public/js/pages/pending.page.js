@@ -1,17 +1,17 @@
 // pending.page.js — Shared Overdue Payments view for Youth Centre (#/pending) & Unique Kids (#/school-pending).
 // Matches payments.page.js layout (no inner scroll, shared 10-row pager, short codes, icon actions, details popup).
 
-import { createSelect } from '../components/ui-select.js?v=1.8.171';
-import { createBranchBatchFilter, clearPersistedBranchBatchFilters } from '../components/branch-batch-filter.js?v=1.8.171';
-import { openPopup } from '../components/modal.js?v=1.8.171';
-import { showToast } from '../components/toast.js?v=1.8.171';
-import { renderPager, renderEmptyTableState, PAGE_SIZE } from '../components/list-page.js?v=1.8.171';
-import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.171';
+import { createSelect } from '../components/ui-select.js?v=1.8.172';
+import { createBranchBatchFilter, clearPersistedBranchBatchFilters } from '../components/branch-batch-filter.js?v=1.8.172';
+import { openPopup } from '../components/modal.js?v=1.8.172';
+import { showToast } from '../components/toast.js?v=1.8.172';
+import { renderPager, renderEmptyTableState, PAGE_SIZE } from '../components/list-page.js?v=1.8.172';
+import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.172';
 import {
   getCachedSessions,
   loadSessions,
   getSelectedSession
-} from '../core/sessions.js?v=1.8.171';
+} from '../core/sessions.js?v=1.8.172';
 import {
   ensureReferenceData,
   scopeReferenceDataByCtx,
@@ -33,8 +33,8 @@ import {
   formatINR,
   fmtDate,
   todayISO
-} from '../services/report.service.js?v=1.8.171';
-import { initials } from '../utils/formatter.js?v=1.8.171';
+} from '../services/report.service.js?v=1.8.172';
+import { initials } from '../utils/formatter.js?v=1.8.172';
 
 let state = null;
 let sessionListener = null;
@@ -953,7 +953,19 @@ function openOverdueDetailsPopup(item) {
     }
   });
 
-  // Add Overdue badge beside title (same pattern as Payment Details popup)
+  // Add Overdue badge beside title (same pattern as Payment Details popup) and show student photo in tile if available
+  const popupPhoto = getCachedStudentPhoto(item.studentDocId);
+  const headTile = popup.head.querySelector('.adm-view-tile');
+  if (headTile && popupPhoto) {
+    headTile.style.padding = '0';
+    headTile.style.overflow = 'hidden';
+    headTile.innerHTML = '';
+    const phImg = document.createElement('img');
+    phImg.src = popupPhoto;
+    phImg.alt = item.studentName || '';
+    phImg.style.cssText = 'width:100%;height:100%;object-fit:cover;display:block;';
+    headTile.appendChild(phImg);
+  }
   const titleEl = popup.head.querySelector('.adm-view-title');
   if (titleEl) {
     titleEl.textContent = '';

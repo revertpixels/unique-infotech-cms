@@ -10,10 +10,11 @@ import {
   query,
   where
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.171';
-import { createSelect } from '../components/ui-select.js?v=1.8.171';
-import { buildYouthReceiptData, fmtRs } from '../utils/admission-receipt.js?v=1.8.171';
-import { downloadYouthReceiptPdf } from '../utils/admission-receipt-pdf.js?v=1.8.171';
+import { showToast } from '../components/toast.js?v=1.8.172';
+import { createSelect } from '../components/ui-select.js?v=1.8.172';
+import { buildYouthReceiptData, fmtRs } from '../utils/admission-receipt.js?v=1.8.172';
+import { downloadYouthReceiptPdf } from '../utils/admission-receipt-pdf.js?v=1.8.172';
+import { getStudentDocRecord } from '../utils/student-media.js?v=1.8.172';
 
 const COL = 'students';
 let studentDocId = '';
@@ -122,14 +123,21 @@ async function loadReceipt(docId) {
       }
     } catch (_) { /* non-fatal */ }
 
-    // Docs (photo, signature from subcollection)
+    // Docs (photo, signature from subcollection with full collection fallback for legacy/alt doc IDs)
     try {
       const [photoSnap, sigSnap] = await Promise.all([
         getDoc(doc(db, COL, docId, 'docs', 'photo')),
         getDoc(doc(db, COL, docId, 'docs', 'signature'))
       ]);
-      if (photoSnap.exists()) photo = photoSnap.data();
-      if (sigSnap.exists()) signature = sigSnap.data();
+      if (photoSnap.exists()) photo = { id: photoSnap.id, ...photoSnap.data() };
+      if (sigSnap.exists()) signature = { id: sigSnap.id, ...sigSnap.data() };
+      if (!photo || !signature) {
+        const docsSnap = await getDocs(collection(db, COL, docId, 'docs'));
+        const docsMap = {};
+        docsSnap.docs.forEach((d) => { docsMap[d.id] = { id: d.id, ...d.data() }; });
+        if (!photo) photo = getStudentDocRecord(docsMap, 'photo', admission);
+        if (!signature) signature = getStudentDocRecord(docsMap, 'signature', admission);
+      }
     } catch (_) { /* non-fatal */ }
 
     // Linked docs: branch, course, session

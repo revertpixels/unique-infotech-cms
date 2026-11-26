@@ -61,3 +61,13 @@ export function formatPersonName(value) {
     return word;
   }).join(' ');
 }
+
+export function formatGenderDisplay(value, fallback = '-') {
+  const raw = String(value || '').trim();
+  if (!raw) return fallback;
+  const low = raw.toLowerCase();
+  if (low === 'male' || low === 'm') return 'Male';
+  if (low === 'female' || low === 'f') return 'Female';
+  if (low === 'other' || low === 'others' || low === 'o') return 'Other';
+  return raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase();
+}

@@ -11,9 +11,9 @@ import {
   collection, getDocs, query, where, doc, getDoc, addDoc, updateDoc, serverTimestamp,
   runTransaction
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.171';
-import { localToday, monthSeq, nextMonth, previousMonth } from './school-lifecycle.js?v=1.8.171';
-import { fineFor } from './session-rules.js?v=1.8.171';
+import { showToast } from '../components/toast.js?v=1.8.172';
+import { localToday, monthSeq, nextMonth, previousMonth } from './school-lifecycle.js?v=1.8.172';
+import { fineFor } from './session-rules.js?v=1.8.172';
 
 const BILLS_COL = 'bills';
 const PAYMENTS_COL = 'payments';

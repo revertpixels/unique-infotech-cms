@@ -1,5 +1,5 @@
 // archives.page.js — Youth Centre Archives UI (Phase 1: Download, Password Encryption, Verify & History)
-import { getContext } from '../core/app.js?v=1.8.171';
+import { getContext } from '../core/app.js?v=1.8.172';
 import {
   PAGE_SIZE,
   buildStats,
@@ -7,12 +7,12 @@ import {
   buildTableCard,
   renderPager,
   renderEmptyTableState
-} from '../components/list-page.js?v=1.8.171';
-import { openPopup } from '../components/modal.js?v=1.8.171';
-import { openMenu } from '../components/ui-menu.js?v=1.8.171';
-import { showToast } from '../components/toast.js?v=1.8.171';
-import { fmtDate } from '../utils/session-rules.js?v=1.8.171';
-import { formatINR } from '../utils/formatter.js?v=1.8.171';
+} from '../components/list-page.js?v=1.8.172';
+import { openPopup } from '../components/modal.js?v=1.8.172';
+import { openMenu } from '../components/ui-menu.js?v=1.8.172';
+import { showToast } from '../components/toast.js?v=1.8.172';
+import { fmtDate } from '../utils/session-rules.js?v=1.8.172';
+import { formatINR } from '../utils/formatter.js?v=1.8.172';
 import {
   ENABLE_ARCHIVE_SESSION_DELETE,
   computeArchiveSessionStatus,
@@ -21,7 +21,7 @@ import {
   scanSessionForExport,
   buildAndDownloadArchiveZip,
   verifyLocalArchiveZip
-} from '../services/archive.service.js?v=1.8.171';
+} from '../services/archive.service.js?v=1.8.172';
 
 let cleanups = [];
 
@@ -880,7 +880,7 @@ export async function mount({ container, profile, ctx }) {
         ['Students', String(snapshot.counts.students), `${snapshot.scopeBranches.length} branch${snapshot.scopeBranches.length === 1 ? '' : 'es'}`],
         ['Payments & Waivers', String(snapshot.counts.payments), `${formatINR(snapshot.totals.collected)} collected`],
         ['Receipts', String(snapshot.counts.receipts), 'Admission & payment'],
-        ['Photos & Docs', `${snapshot.counts.photos} / ${snapshot.counts.docs}`, idNote],
+        ['Photos & Docs', `Photos: ${snapshot.counts.photos} | Documents: ${snapshot.counts.docs}`, idNote],
         ['Estimated Reads', String(snapshot.readsUsed), 'Pre-scanned once'],
         ['Estimated ZIP Size', formatBytesCompact(snapshot.estimatedZipBytes), snapshot.over200MB ? 'Large archive' : 'Ready to build']
       ];

@@ -1,20 +1,19 @@
 // payment-receipt.page.js — Monthly and Exam Payment Receipt page module.
 // Matches reference-templates/monthly-payment-receipt (2).html and monthly-payment-receipt-late-fine (1).html
 import { db } from '../config/firebase-config.js';
-import {
-  doc,
-  getDoc
-} from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { inWords } from '../utils/admission-receipt.js?v=1.8.171';
-import { showToast } from '../components/toast.js?v=1.8.171';
-import { fmtDate, todayISO } from '../utils/session-rules.js?v=1.8.171';
-import { getRoleTitle } from '../services/user-directory.service.js?v=1.8.171';
+import { doc, getDoc, getDocs, collection } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
+import { inWords } from '../utils/admission-receipt.js?v=1.8.172';
+import { showToast } from '../components/toast.js?v=1.8.172';
+import { fmtDate, todayISO } from '../utils/session-rules.js?v=1.8.172';
+import { formatPersonName } from '../utils/formatter.js?v=1.8.172';
+import { getStudentPhotoSrc } from '../utils/student-media.js?v=1.8.172';
+import { getRoleTitle } from '../services/user-directory.service.js?v=1.8.172';
 import {
   fetchStudentPayments,
   isInstallmentPaid,
   installmentCourseFee,
   installmentBalanceDue
-} from '../services/payment.service.js?v=1.8.171';
+} from '../services/payment.service.js?v=1.8.172';
 
 function $(id) {
   return document.getElementById(id);
@@ -185,14 +184,18 @@ async function loadAndRenderReceipt() {
     // 4. Fetch all payments for ledger
     const allStudentPayments = await fetchStudentPayments(studentDocId);
 
-    // 5. Fetch student photo (matching admission receipt logic)
-    let photoUrl = student.photoUrl || '';
+    // 5. Fetch student photo using shared getStudentPhotoSrc helper
+    let photoUrl = getStudentPhotoSrc(student, null);
     if (!photoUrl) {
       try {
+        const docsMap = {};
         const photoDoc = await getDoc(doc(db, 'students', studentDocId, 'docs', 'photo'));
-        if (photoDoc.exists()) {
-          const d = photoDoc.data();
-          photoUrl = (d && (d.data || d.dataUrl || d.url)) || '';
+        if (photoDoc.exists()) docsMap.photo = { id: photoDoc.id, ...photoDoc.data() };
+        photoUrl = getStudentPhotoSrc(student, docsMap);
+        if (!photoUrl) {
+          const allDocs = await getDocs(collection(db, 'students', studentDocId, 'docs'));
+          allDocs.docs.forEach((d) => { docsMap[d.id] = { id: d.id, ...d.data() }; });
+          photoUrl = getStudentPhotoSrc(student, docsMap);
         }
       } catch (_) {}
     }
@@ -230,7 +233,8 @@ function renderReceiptHTML({ student, payment, org, orgLogo, branch, allPayments
 
   const orgName = org.orgName || 'Unique Infotech';
   const orgSub = org.orgSubtitle || org.isoLine || org.isoText || 'An ISO 9001:2015 Certified Organisation';
-  const branchName = branch?.name || student.branchName || 'BANKURA ZILLA YOUTH COMPUTER TRAINING CENTRE';
+  const branchRaw = branch?.name || student.branchName || 'BANKURA ZILLA YOUTH COMPUTER TRAINING CENTRE';
+  const branchName = formatPersonName(branchRaw) || branchRaw;
   const orgPhones = org.phones || org.phone || '9851771893, 9832147650, 8641209375';
   const orgEmail = org.email || 'utpal.goutam@gmail.com';
   const branchPhones = branch?.phone || branch?.phones || '9733518246, 7003624981, 9475036218';
@@ -299,7 +303,7 @@ function renderReceiptHTML({ student, payment, org, orgLogo, branch, allPayments
     <table class="mpr-d">
       <tr>
         <th>Student name</th>
-        <td><strong>${escapeHtml(student.name || '—')}</strong></td>
+        <td><strong>${escapeHtml(formatPersonName(student.name || '') || '—')}</strong></td>
         <td class="mpr-pc" rowspan="5">
           <div class="mpr-photo">
             ${photoUrl ? `<img src="${photoUrl}" alt="Student photo" onerror="this.remove();" />` : `<span>Photo</span>`}
@@ -308,7 +312,7 @@ function renderReceiptHTML({ student, payment, org, orgLogo, branch, allPayments
       </tr>
       <tr>
         <th>Guardian name</th>
-        <td>${escapeHtml(student.guardianName || student.fatherName || '—')}</td>
+        <td>${escapeHtml(formatPersonName(student.guardianName || student.fatherName || '') || '—')}</td>
       </tr>
       <tr>
         <th>Student ID</th>

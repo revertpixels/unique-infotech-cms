@@ -1,5 +1,6 @@
 import { db } from '../config/firebase-config.js';
 import { collection, getDocs, query, where } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
+import { todayISO as istTodayISO } from '../utils/session-rules.js?v=1.8.169';
 
 // Shared session state lives on window so every module copy sees the same data.
 function cache() {
@@ -57,8 +58,7 @@ export function setSelectedSession(ctx, s) {
 export function toPeriod(s) {
   const start = toDate(s.startDate);
   const end = toDate(s.endDate);
-  const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const today = toDate(todayISO());
   const DAY = 86400000;
   const total = Math.max(1, Math.round((end - start) / DAY) + 1);
   const done = Math.min(total, Math.max(0, Math.round((today - start) / DAY) + 1));
@@ -76,11 +76,7 @@ export function notifySessionsChanged() {
   window.dispatchEvent(new Event('uic:sessions-changed'));
 }
 export function todayISO() {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return y + '-' + m + '-' + day;
+  return istTodayISO();
 }
 export function expectedStatus(start, end, today = todayISO()) {
   if (start && start > today) return 'upcoming';

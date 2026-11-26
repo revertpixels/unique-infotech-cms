@@ -39,6 +39,22 @@
 
 ---
 
+### [2026-11-26 13:29] Version 1.8.169 — Clean-up Before Archives
+
+**What was built / changed:**
+- **Unified IST Dates (`public/js/core/sessions.js`)**: Replaced the browser-local `todayISO()` and `toPeriod()` today calculation with IST `todayISO()` imported from `public/js/utils/session-rules.js` (`Asia/Kolkata`), keeping `status !== 'archived'` filtering and all fee maths untouched.
+- **Cache-Busted Org Users Tab Fetch (`public/js/pages/org-details.page.js`)**: Appended `?v=1.8.169` to `fetch('pages/branch-heads.html?v=...')` so `tools/bump-version.js` updates it alongside router template fetches.
+- **Immutable Receipt Snapshot Documentation (`public/js/pages/payment-receipt.page.js`)**: Added an inline code comment clarifying why waived late-fine designations preserve the saved payment snapshot (issued receipts are immutable legal records) with zero runtime behaviour change.
+- **Pre-Handover Checklist Logged (`docs/06-KNOWN-ISSUES.md`)**: Logged `ISS-009` ("Switch to client email before handover" for temporary `haranathsaha1@gmail.com`) and `ISS-010` ("Decide before handover: server-side sign-in blocking (needs Identity Platform)" for undeployed `beforeUserSignedIn`).
+- **Version Bump (`tools/bump-version.js`)**: Bumped `APP_VERSION`, `window.__BUILD__`, and `277` `?v=` references across `47` files to `1.8.169`.
+
+**Tested on:**
+- `node tools/check-imports.js`: Passed (`109` files, `355` imports, `0` errors).
+- `node --check` on `sessions.js`, `org-details.page.js`, and `payment-receipt.page.js`: Passed.
+- Deployed `hosting` (`v1.8.169`) cleanly. Live browser confirmation checklist provided to user.
+
+---
+
 ### [2026-11-26 10:36] Version 1.8.168 — Branch/School Head Profile Photo Fallback (`saveUserProfilePhoto`)
 
 **What was built / changed:**

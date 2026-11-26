@@ -1,15 +1,15 @@
 import { db } from '../config/firebase-config.js';
 import { collection, getDocs, getDoc, query, where, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, deleteField } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.168';
-import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.168';
-import { PAGE_SIZE, buildStats, buildToolbar, renderPager, renderEmptyTableState } from '../components/list-page.js?v=1.8.168';
-import { createSelect } from '../components/ui-select.js?v=1.8.168';
-import { createMultiSelect } from '../components/multi-select.js?v=1.8.168';
-import { openMenu } from '../components/ui-menu.js?v=1.8.168';
-import { confirmDialog } from '../components/ui-confirm.js?v=1.8.168';
-import { loadSessions, getSelectedSessionId, getSelectedSession, getCachedSessions } from '../core/sessions.js?v=1.8.168';
-import { batchAllowsCourse, batchCourseLabel, batchCourseTooltip, isCourseActive } from '../utils/session-rules.js?v=1.8.168';
-import { getRoleTitle } from '../services/user-directory.service.js?v=1.8.168';
+import { showToast } from '../components/toast.js?v=1.8.169';
+import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.169';
+import { PAGE_SIZE, buildStats, buildToolbar, renderPager, renderEmptyTableState } from '../components/list-page.js?v=1.8.169';
+import { createSelect } from '../components/ui-select.js?v=1.8.169';
+import { createMultiSelect } from '../components/multi-select.js?v=1.8.169';
+import { openMenu } from '../components/ui-menu.js?v=1.8.169';
+import { confirmDialog } from '../components/ui-confirm.js?v=1.8.169';
+import { loadSessions, getSelectedSessionId, getSelectedSession, getCachedSessions } from '../core/sessions.js?v=1.8.169';
+import { batchAllowsCourse, batchCourseLabel, batchCourseTooltip, isCourseActive } from '../utils/session-rules.js?v=1.8.169';
+import { getRoleTitle } from '../services/user-directory.service.js?v=1.8.169';
 // Batches Part 2A/2B: add/edit form, delete, student capacity
 
 const TEXT_KEYS = ['name', 'code', 'capacity'];

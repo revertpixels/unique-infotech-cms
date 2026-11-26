@@ -1,5 +1,5 @@
-import { formatPersonName } from '../utils/formatter.js?v=1.8.168';
-import { resolveUserDisplay } from '../services/user-directory.service.js?v=1.8.168';
+import { formatPersonName } from '../utils/formatter.js?v=1.8.169';
+import { resolveUserDisplay } from '../services/user-directory.service.js?v=1.8.169';
 
 let dashProfileCleanup = null;
 

@@ -39,6 +39,34 @@
 
 ---
 
+### [2026-11-26 14:00] Version 1.8.170 — Youth Centre Archives (Phase 1: Offline ZIP Viewer, Encryption, Verification & History)
+
+**What was built:**
+- **Archives Page & UI (`public/pages/archives.html`, `public/js/pages/archives.page.js`, `public/css/pages/archives.css`, `public/css/main.css`)**:
+  - Added Youth Centre `Archives` page accessible to `superadmin` and `branch_head`, hidden in Sidebar and redirected in `public/js/core/router.js` + `public/index.html` for `school_head` and Unique Kids context switches.
+  - Session list reads `sessions` directly (including `status === 'archived'` sessions while leaving `sessions.js` toolbar switcher unchanged), derives real IST status from `endDate` (`Ongoing`, `Completed`, `Locked for deletion`, `Deleted - archive only`), displays student counts via `getCountFromServer`, last archive summary, SHA-256 fingerprint, and Archive Reminder banners.
+  - Pre-download export wizard displays scope selector (`Full Session` vs `Specific Branches` for superadmin; locked own branch for `branch_head`), pre-scan summary (students, payments/waivers, receipts, photos/docs, missing remote files, estimated Firestore reads, estimated ZIP size with >200 MB warning), progress bar with working Cancel control, and **Open / verify an archive** local `.zip` integrity verification tool.
+- **Archive Packager, Encryption & Permanent Logs (`public/js/services/archive.service.js`, `firestore.rules`, vendored `public/vendor/fflate.umd.js` & `fflate.LICENSE.txt`)**:
+  - **Rule 4a**: Aadhaar (`students/{id}/aadhaar`) and ID docs (`dobProof`/ID keys) are included **only** in superadmin full-session exports (masked `XXXX XXXX 1234` in viewer/JSON), never in branch-head or partial-branch exports. Password encryption (`PBKDF2` SHA-256 `600,000` iterations + `AES-GCM` 256-bit) defaults ON whenever ID documents are included, with an explicit warning if unticked and clear warning that lost passwords cannot be recovered.
+  - **Rule 4b**: Base64 student photos/documents from `students/{id}/docs` are decoded to binary files in `files/photos/` and `files/docs/` (or `.enc.js` modules in encrypted exports) and stripped from `data/archive-data.js` and `data/json/*.json` so base64 payloads are never duplicated.
+  - Added append-only `/archiveLogs/{logId}` rules in `firestore.rules` (`allow update, delete: if false;` for everyone; `branch_head` scoped strictly to own `branchId` and `includesIdDocs == false`).
+  - Phase 2 deletion stays locked off via `ENABLE_ARCHIVE_SESSION_DELETE = false`.
+- **Self-Contained `file://` Offline Viewer (`public/js/utils/archive-viewer-builder.js`, `archive-viewer-styles.js`, `archive-viewer-icons.js`, `archive-viewer-receipts.js`)**:
+  - Zero-CDN, zero-ES-module, zero-`fetch` HTML/CSS/JS viewer opening cleanly via double-clicking `index.html` on `file://` (both plain and AES-256-GCM password-locked archives), with Read Only banner, Dashboard Summary, Students (10/page, Branch -> Batch filters), Student Profile + Documents Gallery Lightbox, Payment History + Details modal, Overdue as of session end date, Admission & Monthly/Exam Printable Receipts, Reports + CSV exports, and SHA-256 manifest About/Self-Check.
+- **Dashboard Archive Reminder (`public/pages/dashboard.html`, `public/js/pages/dashboard.page.js`)**:
+  - Displays lightweight reminder strip in Youth Centre view when completed sessions are unarchived or last download is over 30 days old (zero student doc reads).
+
+**Firestore / Rules changes:**
+- `firestore.rules`: Added `validArchiveLogBase()` and immutable append-only `/archiveLogs/{logId}` rules.
+
+**Tested on:**
+- `node tools/check-imports.js`, `node --check` on all new JS modules + `new Function` syntax verification on generated offline viewer assets.
+- `scratch/run-tests.mjs` (all unit & security suites passed after fixes).
+- `scratch/verify-archives.mjs` in headless Chrome (`1440px` desktop & `390px` mobile, zero console/network errors): `school_head` block/redirect, Super Admin & Branch Head scoping + Rule 4a/4b verification, encrypted + plain ZIP build, `verifyLocalArchiveZip` pass & tamper detection, and offline `file://` Chrome verification across all 8 viewer views (`Network.emulateNetworkConditions({ offline: true })`).
+- Live Firebase login & real storage/receipts click-through verification checklist supplied to user (`ENABLE_ARCHIVE_SESSION_DELETE` stays `false` until Phase 1 live confirmation).
+
+---
+
 ### [2026-11-26 13:29] Version 1.8.169 — Clean-up Before Archives
 
 **What was built / changed:**

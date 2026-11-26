@@ -1,0 +1,359 @@
+/* archives.css — Session-wise Youth Centre Archives layout built strictly on CMS tokens */
+
+.arx-wrap {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+/* Dashboard & Archives reminder strip */
+.arx-reminder {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  border-radius: var(--r-card, 10px);
+  border: 1px solid color-mix(in srgb, var(--warning, #D97706) 35%, var(--border));
+  background: var(--warning-soft, #FFFBEB);
+  color: var(--text);
+}
+
+.arx-reminder.is-info {
+  border-color: color-mix(in srgb, var(--info, #2563EB) 30%, var(--border));
+  background: var(--info-soft, #EFF6FF);
+}
+
+.arx-reminder-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex: 1 1 260px;
+}
+
+.arx-reminder-ic {
+  width: 34px;
+  height: 34px;
+  border-radius: var(--r-ctrl, 8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: rgba(217, 119, 6, 0.14);
+  color: var(--warning, #D97706);
+}
+
+.arx-reminder.is-info .arx-reminder-ic {
+  background: rgba(37, 99, 235, 0.12);
+  color: var(--info, #2563EB);
+}
+
+.arx-reminder-ic svg.lucide {
+  width: 17px;
+  height: 17px;
+}
+
+.arx-reminder-txt {
+  font-size: 13.5px;
+  line-height: 1.45;
+  color: var(--text);
+}
+
+.arx-reminder-txt strong {
+  font-weight: 700;
+}
+
+/* Scope pill & fingerprint monospace badge */
+.arx-fp {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11.5px;
+  color: var(--text-sec);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 2px 7px;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.arx-session-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.arx-session-name {
+  font-weight: 700;
+  color: var(--text);
+}
+
+.arx-session-dates {
+  font-size: 12.5px;
+  color: var(--text-mute);
+}
+
+.arx-stat-mini {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.arx-stat-mini strong {
+  font-weight: 700;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.arx-stat-mini span {
+  font-size: 12px;
+  color: var(--text-mute);
+}
+
+.arx-phase-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  margin-bottom: 14px;
+  border-radius: var(--r-ctrl, 8px);
+  border: 1px solid var(--border);
+  background: var(--bg);
+  font-size: 12.5px;
+  color: var(--text-sec);
+}
+
+.arx-phase-note svg.lucide {
+  width: 15px;
+  height: 15px;
+  color: var(--primary);
+  flex-shrink: 0;
+}
+
+/* Modal Export Wizard / Summary */
+.arx-modal-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.arx-scope-box {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: var(--r-ctrl, 8px);
+  border: 1px solid var(--border);
+  background: var(--bg);
+}
+
+.arx-scope-opts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.arx-radio-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.arx-radio-pill.is-selected {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+
+.arx-branch-checklist {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.arx-branch-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: var(--r, 6px);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.arx-sum-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.arx-sum-item {
+  padding: 10px 12px;
+  border-radius: var(--r-ctrl, 8px);
+  border: 1px solid var(--border);
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.arx-sum-item span {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: var(--text-mute);
+}
+
+.arx-sum-item strong {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.arx-sum-item small {
+  font-size: 11.5px;
+  color: var(--text-mute);
+}
+
+.arx-warn-box {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 10px 12px;
+  border-radius: var(--r-ctrl, 8px);
+  border: 1px solid color-mix(in srgb, var(--warning) 40%, var(--border));
+  background: var(--warning-soft);
+  color: #78350F;
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.arx-warn-box.danger {
+  border-color: color-mix(in srgb, var(--danger) 40%, var(--border));
+  background: var(--danger-soft);
+  color: #7F1D1D;
+}
+
+.arx-warn-box svg.lucide {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.arx-pw-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: var(--r-ctrl, 8px);
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.arx-check-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.arx-pw-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.arx-progress-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px;
+  border-radius: var(--r-ctrl, 8px);
+  border: 1px solid color-mix(in srgb, var(--primary) 25%, var(--border));
+  background: var(--primary-soft);
+}
+
+.arx-progress-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--primary);
+}
+
+.arx-progress-track {
+  width: 100%;
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(50, 58, 133, 0.16);
+  overflow: hidden;
+}
+
+.arx-progress-bar {
+  height: 100%;
+  width: 0%;
+  border-radius: 999px;
+  background: var(--primary);
+  transition: width .15s ease;
+}
+
+.arx-progress-sub {
+  font-size: 12px;
+  color: var(--text-sec);
+}
+
+.arx-verify-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 220px;
+  overflow-y: auto;
+  padding: 10px 12px;
+  border-radius: var(--r-ctrl, 8px);
+  border: 1px solid var(--border);
+  background: var(--bg);
+  font-size: 12.5px;
+}
+
+@media (max-width: 720px) {
+  .arx-sum-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .arx-pw-fields {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 480px) {
+  .arx-sum-grid {
+    grid-template-columns: 1fr;
+  }
+}

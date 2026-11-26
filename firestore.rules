@@ -319,6 +319,44 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    function validArchiveLogBase() {
+      let d = request.resource.data;
+      return d.ctx == 'youth'
+        && d.sessionId is string && d.sessionId.size() > 0 && d.sessionId.size() <= 120
+        && d.sessionName is string && d.sessionName.size() <= 160
+        && d.scopeType in ['full', 'branches', 'branch']
+        && d.scopeLabel is string && d.scopeLabel.size() <= 240
+        && d.branchId is string && d.branchId.size() <= 120
+        && d.branchIds is list && d.branchIds.size() <= 100
+        && d.includesIdDocs is bool
+        && d.encrypted is bool
+        && d.filename is string && d.filename.size() <= 240
+        && d.sizeBytes is number && d.sizeBytes >= 0
+        && d.zipSha256 is string && d.zipSha256.size() <= 128
+        && d.byEmail == authEmail()
+        && d.byUid == request.auth.uid
+        && d.byRole in ['superadmin', 'branch_head'];
+    }
+
+    match /archiveLogs/{logId} {
+      allow read: if readsOpen() && (
+        isSuperAdmin()
+        || (isBranchHead() && resource.data.branchId == myBranchId())
+      );
+      allow create: if maintenanceOpen() && validArchiveLogBase() && (
+        (isSuperAdmin()
+          && request.resource.data.byRole == 'superadmin'
+          && request.resource.data.action in ['DOWNLOAD', 'VERIFY', 'LOCK', 'UNLOCK', 'DELETE_STARTED', 'DELETE_COMPLETED', 'FAILED'])
+        || (isBranchHead()
+          && request.resource.data.byRole == 'branch_head'
+          && request.resource.data.scopeType == 'branch'
+          && request.resource.data.branchId == myBranchId()
+          && request.resource.data.includesIdDocs == false
+          && request.resource.data.action in ['DOWNLOAD', 'VERIFY', 'FAILED'])
+      );
+      allow update, delete: if false;
+    }
+
     // Everything else (including _system/maintenance, _system_backup_manifests,
     // _system_backup_operations) is denied to client reads and writes.
     match /{document=**} {

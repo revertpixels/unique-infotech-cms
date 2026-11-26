@@ -1,0 +1,43 @@
+<section class="br-wrap">
+  <div class="br-head-row">
+    <section class="pg-head">
+      <div class="pg-crumbs">Administration / <span>Archives</span></div>
+      <h2>Youth Centre Archives</h2>
+      <p>Download self-contained offline session archives, verify ZIP integrity, and review permanent archive history.</p>
+    </section>
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+      <input type="file" id="arx-verify-file" accept=".zip,application/zip" hidden>
+      <button type="button" class="ui-btn ghost" id="arx-open-verify-btn">
+        <i data-lucide="shield-check"></i>
+        <span>Open / verify an archive</span>
+      </button>
+    </div>
+  </div>
+
+  <div class="org-tabs" id="arx-tabs" role="tablist" aria-label="Archive sections">
+    <button type="button" class="org-tab is-active" id="arx-tab-sessions" role="tab" aria-selected="true" aria-controls="arx-panel-sessions" data-tab="sessions">
+      <i data-lucide="archive"></i>
+      <span>Sessions</span>
+    </button>
+    <button type="button" class="org-tab" id="arx-tab-history" role="tab" aria-selected="false" aria-controls="arx-panel-history" data-tab="history">
+      <i data-lucide="history"></i>
+      <span>Archive History</span>
+    </button>
+  </div>
+
+  <div id="arx-panel-sessions" role="tabpanel" aria-labelledby="arx-tab-sessions">
+    <div id="arx-reminder-host"></div>
+    <div class="arx-phase-note" id="arx-phase-note">
+      <i data-lucide="info"></i>
+      <span><b>Phase 1 active:</b> Offline ZIP download and SHA-256 verification are enabled. Session deletion stays locked off until archives are reviewed and approved.</span>
+    </div>
+    <div id="arx-kpi-host"></div>
+    <div id="arx-sess-toolbar-host"></div>
+    <div id="arx-sess-table-host"></div>
+  </div>
+
+  <div id="arx-panel-history" role="tabpanel" aria-labelledby="arx-tab-history" hidden>
+    <div id="arx-hist-toolbar-host"></div>
+    <div id="arx-hist-table-host"></div>
+  </div>
+</section>

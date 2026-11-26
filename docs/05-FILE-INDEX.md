@@ -57,7 +57,8 @@ unique-infotech-cms/
     │       ├── auth.css
     │       ├── dashboard.css
     │       ├── financial-reports.css
-    │       └── login.css
+    │       ├── archives.css
+│       └── login.css
     ├── js/
     │   ├── components/
     │   │   ├── branch-batch-filter.js
@@ -105,12 +106,20 @@ unique-infotech-cms/
     │   │   ├── student.service.js
     │   │   └── user-directory.service.js
     │   └── utils/
-    │       ├── date.utils.js
+    │       ├── archive-viewer-builder.js
+│       ├── archive-viewer-icons.js
+│       ├── archive-viewer-receipts.js
+│       ├── archive-viewer-styles.js
+│       ├── date.utils.js
     │       ├── formatter.js
     │       ├── helpers.js
     │       ├── pdf.utils.js
     │       ├── sound.js
     │       └── validator.js
+    ├── vendor/
+    │   ├── fflate.LICENSE.txt
+    │   ├── fflate.umd.js
+    │   └── pdfmake.min.js
     └── pages/
         ├── admissions.html
         ├── archives.html

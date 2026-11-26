@@ -1,5 +1,5 @@
-import { confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.169';
-import { getRoleTitle } from '../services/user-directory.service.js?v=1.8.169';
+import { confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.170';
+import { getRoleTitle } from '../services/user-directory.service.js?v=1.8.170';
 
 export const ROLE_LABELS = {
   get superadmin() { return getRoleTitle('superadmin'); },
@@ -30,7 +30,7 @@ export const ROUTES = {
   'youth-transfer': { label: 'Change Batch', icon: 'shuffle', group: 'Students', page: 'school-transfer', ctx: ['youth'], roles: ['superadmin'], nav: false },
   'youth-end': { label: 'End Course', icon: 'x-circle', group: 'Students', page: 'school-end', ctx: ['youth'], roles: ['superadmin'], nav: false },
   reports: { label: 'Reports', icon: 'bar-chart-3', group: 'Insights', page: 'reports', ctx: ['youth', 'school'], roles: ['superadmin'] },
-  archives: { label: 'Archives', icon: 'archive', group: 'Insights', page: 'archives', ctx: ['youth', 'school'], roles: ['superadmin'] },
+  archives: { label: 'Archives', icon: 'archive', group: 'Insights', page: 'archives', ctx: ['youth'], roles: ['superadmin', 'branch_head'] },
   'branch-heads': { label: 'Users', icon: 'user-cog', group: 'Administration', page: 'org-details', nav: false, redirect: 'org?tab=users', ctx: ['youth', 'school'], roles: ['superadmin'] },
   sessions: { label: 'Sessions', icon: 'calendar-clock', group: 'Administration', page: 'sessions', ctx: ['youth'], roles: ['superadmin'] },
   org: { label: 'Organisation', icon: 'landmark', group: 'Administration', page: 'org-details', ctx: ['youth', 'school'], roles: ['superadmin'] }
@@ -111,7 +111,7 @@ export function startRouter({ profile, getContext, setContext, onRouteChange }) 
   async function renderStudentProfile(studentId, routeKey) {
     const thisNav = ++navCounter;
     try {
-      const resp = await fetch('/pages/student-profile.html?v=1.8.169', { cache: 'no-cache' });
+      const resp = await fetch('/pages/student-profile.html?v=1.8.170', { cache: 'no-cache' });
       if (thisNav !== navCounter) return;
       if (!resp.ok) {
         renderEmpty('inbox', "This page isn't available yet", 'The student profile page could not be loaded.');
@@ -160,7 +160,7 @@ export function startRouter({ profile, getContext, setContext, onRouteChange }) 
   async function renderAdmissionReceipt(key) {
     const thisNav = ++navCounter;
     try {
-      const resp = await fetch('/pages/admission-receipt.html?v=1.8.169', { cache: 'no-cache' });
+      const resp = await fetch('/pages/admission-receipt.html?v=1.8.170', { cache: 'no-cache' });
       if (thisNav !== navCounter) return;
       if (!resp.ok) {
         renderEmpty('inbox', "This page isn't available yet", 'The receipt page could not be loaded.');
@@ -210,7 +210,7 @@ export function startRouter({ profile, getContext, setContext, onRouteChange }) 
   async function renderSchoolAdmissionReceipt(key) {
     const thisNav = ++navCounter;
     try {
-      const resp = await fetch('/pages/school-admission-receipt.html?v=1.8.169', { cache: 'no-cache' });
+      const resp = await fetch('/pages/school-admission-receipt.html?v=1.8.170', { cache: 'no-cache' });
       if (thisNav !== navCounter) return;
       if (!resp.ok) {
         renderEmpty('inbox', "This page isn't available yet", 'The receipt page could not be loaded.');
@@ -260,7 +260,7 @@ export function startRouter({ profile, getContext, setContext, onRouteChange }) 
   async function renderPaymentReceipt(key) {
     const thisNav = ++navCounter;
     try {
-      const resp = await fetch('/pages/payment-receipt.html?v=1.8.169', { cache: 'no-cache' });
+      const resp = await fetch('/pages/payment-receipt.html?v=1.8.170', { cache: 'no-cache' });
       if (thisNav !== navCounter) return;
       if (!resp.ok) {
         renderEmpty('inbox', "This page isn't available yet", 'The payment receipt page could not be loaded.');
@@ -309,7 +309,7 @@ export function startRouter({ profile, getContext, setContext, onRouteChange }) 
   async function renderSchoolTransfer(key) {
     const thisNav = ++navCounter;
     try {
-      const resp = await fetch('/pages/school-transfer.html?v=1.8.169', { cache: 'no-cache' });
+      const resp = await fetch('/pages/school-transfer.html?v=1.8.170', { cache: 'no-cache' });
       if (thisNav !== navCounter) return;
       if (!resp.ok) {
         renderEmpty('inbox', "This page isn't available yet", 'The transfer page could not be loaded.');
@@ -359,7 +359,7 @@ export function startRouter({ profile, getContext, setContext, onRouteChange }) 
   async function renderSchoolEnd(key) {
     const thisNav = ++navCounter;
     try {
-      const resp = await fetch('/pages/school-end.html?v=1.8.169', { cache: 'no-cache' });
+      const resp = await fetch('/pages/school-end.html?v=1.8.170', { cache: 'no-cache' });
       if (thisNav !== navCounter) return;
       if (!resp.ok) {
         renderEmpty('inbox', "This page isn't available yet", 'The end course page could not be loaded.');
@@ -409,7 +409,7 @@ export function startRouter({ profile, getContext, setContext, onRouteChange }) 
   async function renderSchoolDelete(key) {
     const thisNav = ++navCounter;
     try {
-      const resp = await fetch('/pages/school-delete.html?v=1.8.169', { cache: 'no-cache' });
+      const resp = await fetch('/pages/school-delete.html?v=1.8.170', { cache: 'no-cache' });
       if (thisNav !== navCounter) return;
       if (!resp.ok) {
         renderEmpty('inbox', "This page isn't available yet", 'The delete page could not be loaded.');
@@ -460,7 +460,7 @@ export function startRouter({ profile, getContext, setContext, onRouteChange }) 
     const thisNav = ++navCounter;
     const billId = key.slice('school-fees/pay/'.length);
     try {
-      const resp = await fetch('/pages/school-fee-payment.html?v=1.8.169', { cache: 'no-cache' });
+      const resp = await fetch('/pages/school-fee-payment.html?v=1.8.170', { cache: 'no-cache' });
       if (thisNav !== navCounter) return;
       if (!resp.ok) {
         renderEmpty('inbox', "This page isn't available yet", 'The fee payment page could not be loaded.');
@@ -627,7 +627,7 @@ export function startRouter({ profile, getContext, setContext, onRouteChange }) 
     let pageHtml;
     let html;
     try {
-      const resp = await fetch('/pages/' + route.page + '.html?v=1.8.169', { cache: 'no-cache' });
+      const resp = await fetch('/pages/' + route.page + '.html?v=1.8.170', { cache: 'no-cache' });
       pageHtml = resp;
       if (thisNav !== navCounter) return;
       if (!pageHtml.ok) {

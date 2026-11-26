@@ -1,5 +1,5 @@
-import { ARCHIVE_VIEWER_OVERRIDES_CSS } from './archive-viewer-styles.js?v=1.8.173';
-import { ARCHIVE_RECEIPTS_VIEWER_JS } from './archive-viewer-receipts.js?v=1.8.173';
+import { ARCHIVE_VIEWER_OVERRIDES_CSS } from './archive-viewer-styles.js?v=1.8.174';
+import { ARCHIVE_RECEIPTS_VIEWER_JS } from './archive-viewer-receipts.js?v=1.8.174';
 
 /**
  * Builds the static viewer files packed into each archive ZIP:
@@ -199,7 +199,8 @@ const ARCHIVE_APP_VIEWER_JS = `(function(){
     var k = String(rawKey || '').trim().toLowerCase();
     if (/^(photo|passportphoto|passport_photo|studentphoto|avatar|profilephoto|image|pic)$/.test(k)) return 'photo';
     if (/^(signature|studentsignature|student_signature|sign|sig)$/.test(k)) return 'signature';
-    if (/^(dobproof|dob_proof|dob|idproof|id_proof|aadhaar|aadhaarcard|aadhar|birthcertificate|ageproof)$/.test(k)) return 'dobProof';
+    if (/^(aadhaar|aadhar|aadhaarcard|aadhaar_card|idproof|id_proof)$/.test(k)) return 'aadhaar';
+    if (/^(dobproof|dob_proof|dob|birthcertificate|ageproof)$/.test(k)) return 'dobProof';
     if (/^(marksheet|lastmarksheet|last_marksheet|academicmarksheet|academic_marksheet|qualification)$/.test(k)) return 'marksheet';
     return String(rawKey || '').trim();
   }
@@ -210,6 +211,7 @@ const ARCHIVE_APP_VIEWER_JS = `(function(){
       photo: 'Passport Photo',
       signature: 'Student Signature',
       dobProof: 'Date of Birth Proof',
+      aadhaar: 'Aadhaar Card',
       marksheet: 'Academic Marksheet'
     };
     var trimRaw = String(rawLabel || '').trim();
@@ -272,7 +274,7 @@ const ARCHIVE_APP_VIEWER_JS = `(function(){
     return Math.max(0, Math.round((b - a) / 86400000));
   }
 
-  function triggerBlobDownload(url, filename) {
+  function triggerBlobDownload(url, filename, shouldRevoke) {
     if (!url) return;
     var a = document.createElement('a');
     a.href = url;
@@ -280,6 +282,88 @@ const ARCHIVE_APP_VIEWER_JS = `(function(){
     document.body.appendChild(a);
     a.click();
     a.remove();
+    if (shouldRevoke && /^blob:/i.test(url)) {
+      setTimeout(function(){ try { URL.revokeObjectURL(url); } catch (_) {} }, 10000);
+    }
+  }
+
+  function buildDocDownloadFilename(docData, fallbackBase) {
+    var mime = String((docData && docData.mime) || '').toLowerCase();
+    var pathStr = String((docData && docData.path) || '');
+    var rawName = String((docData && docData.name) || '').trim();
+    var pathExt = '';
+    var pm = pathStr.match(/\\.([a-z0-9]{2,5})$/i);
+    if (pm) pathExt = '.' + pm[1].toLowerCase();
+    var mimeExt = mime.indexOf('pdf') >= 0 ? '.pdf' : (mime.indexOf('png') >= 0 ? '.png' : (mime.indexOf('webp') >= 0 ? '.webp' : (mime.indexOf('gif') >= 0 ? '.gif' : '.jpg')));
+    var ext = pathExt || mimeExt;
+    var base = rawName || String(fallbackBase || 'document');
+    if (!/\\.[a-z0-9]{2,5}$/i.test(base)) base += ext;
+    return base.replace(/[<>:"\\\\/|?*]/g, '_');
+  }
+
+  var registeredRawMedia = Object.create(null);
+  window.__ARC_REGISTER_RAW_FILE = function(relPath, payload) {
+    registeredRawMedia[relPath] = payload;
+  };
+
+  function resolveRawDownloadBlobUrl(relPath, mimeHint) {
+    return new Promise(function(resolve){
+      function fromRecord(rec) {
+        if (!rec || !rec.dataB64) return '';
+        try {
+          var bytes = b64ToBytes(rec.dataB64);
+          return URL.createObjectURL(new Blob([bytes], { type: rec.mime || mimeHint || 'application/octet-stream' }));
+        } catch (_) { return ''; }
+      }
+      if (registeredRawMedia[relPath]) {
+        var u0 = fromRecord(registeredRawMedia[relPath]);
+        if (u0) { resolve({ url: u0, isBlob: true }); return; }
+      }
+      var s = document.createElement('script');
+      s.src = relPath + '.js';
+      s.onload = function(){
+        var u1 = fromRecord(registeredRawMedia[relPath]);
+        if (u1) resolve({ url: u1, isBlob: true });
+        else resolve({ url: '', isBlob: false });
+      };
+      s.onerror = function(){
+        if (typeof fetch === 'function' && location.protocol !== 'file:') {
+          fetch(relPath).then(function(r){ return r.blob(); }).then(function(b){
+            resolve({ url: URL.createObjectURL(b), isBlob: true });
+          }).catch(function(){ resolve({ url: relPath, isBlob: false }); });
+        } else {
+          resolve({ url: relPath, isBlob: false });
+        }
+      };
+      document.head.appendChild(s);
+    });
+  }
+
+  async function downloadArchiveDocAsset(docData, fallbackBase) {
+    if (!docData || !docData.path) return;
+    var outName = buildDocDownloadFilename(docData, fallbackBase);
+    var relPath = docData.path;
+    if (unlockKey) {
+      var cachedOrFreshUrl = await resolveMediaUrl(relPath);
+      if (!cachedOrFreshUrl) {
+        showToastNotice('File could not be decrypted offline.', 'error');
+        return;
+      }
+      try {
+        var blob = await fetch(cachedOrFreshUrl).then(function(r){ return r.blob(); });
+        var freshUrl = URL.createObjectURL(blob);
+        triggerBlobDownload(freshUrl, outName, true);
+      } catch (_) {
+        triggerBlobDownload(cachedOrFreshUrl, outName, false);
+      }
+      return;
+    }
+    var rawRes = await resolveRawDownloadBlobUrl(relPath, docData.mime);
+    if (rawRes && rawRes.url) {
+      triggerBlobDownload(rawRes.url, outName, rawRes.isBlob);
+    } else {
+      showToastNotice('File could not be loaded offline.', 'error');
+    }
   }
 
   function paintIcons(scope) {
@@ -775,7 +859,8 @@ const ARCHIVE_APP_VIEWER_JS = `(function(){
       return '#/admissions/' + encodeURIComponent(NAV.studentDocId) + '/receipt';
     }
     if (NAV.page === 'payment-receipt' && NAV.studentDocId) {
-      return '#/payments/' + encodeURIComponent(NAV.studentDocId) + '/receipt';
+      var eid = (NAV.receiptEntry && (NAV.receiptEntry.id || NAV.receiptEntry.rowKey)) || '';
+      return '#/payments/' + encodeURIComponent(NAV.studentDocId) + (eid ? ('/' + encodeURIComponent(eid)) : '') + '/receipt';
     }
     return '#/' + (NAV.page || 'dashboard');
   }
@@ -792,6 +877,39 @@ const ARCHIVE_APP_VIEWER_JS = `(function(){
         location.hash = target;
       }
     } catch (_) {}
+  }
+
+  function findPaymentEntryForHash(arg1, arg2) {
+    var ledgerList = (DATA && DATA.ledger) || [];
+    var k1 = decodeURIComponent(String(arg1 || '')).trim();
+    var k2 = decodeURIComponent(String(arg2 || '')).trim();
+    if (k2) {
+      var stMatch = findStudent(k1);
+      var stId = stMatch ? stMatch.id : k1;
+      for (var i = 0; i < ledgerList.length; i++) {
+        var r = ledgerList[i];
+        if (!r || r.isPureWaiver) continue;
+        if ((r.id === k2 || r.rowKey === k2) && (r.studentDocId === stId || r.studentId === k1)) return r;
+      }
+      for (var j = 0; j < ledgerList.length; j++) {
+        var r2 = ledgerList[j];
+        if (r2 && !r2.isPureWaiver && (r2.id === k2 || r2.rowKey === k2)) return r2;
+      }
+    }
+    for (var m = 0; m < ledgerList.length; m++) {
+      var rm = ledgerList[m];
+      if (rm && !rm.isPureWaiver && (rm.id === k1 || rm.rowKey === k1)) return rm;
+    }
+    var stFallback = findStudent(k1);
+    if (stFallback) {
+      for (var n = 0; n < ledgerList.length; n++) {
+        var rn = ledgerList[n];
+        if (rn && !rn.isPureWaiver && rn.studentDocId === stFallback.id && !rn.isAdmissionGroup && rn.type !== 'AD' && rn.type !== 'FULL' && rn.type !== 'MAT') {
+          return rn;
+        }
+      }
+    }
+    return null;
   }
 
   function applyHashToNav(rawHash) {
@@ -828,6 +946,19 @@ const ARCHIVE_APP_VIEWER_JS = `(function(){
         NAV.studentDocId = stAdm.id;
         NAV.receiptMode = 'admission';
         NAV.receiptEntry = null;
+        return true;
+      }
+    }
+    if (top === 'payments' && ((segs[1] && segs[2] && segs[3] === 'receipt') || (segs[1] && segs[2] === 'receipt'))) {
+      var entry = (segs[3] === 'receipt')
+        ? findPaymentEntryForHash(segs[1], segs[2])
+        : findPaymentEntryForHash(segs[1], '');
+      if (entry) {
+        NAV.page = 'payment-receipt';
+        NAV.studentDocId = entry.studentDocId;
+        NAV.receiptMode = 'payment';
+        NAV.receiptEntry = entry;
+        NAV.receiptBackPage = NAV.receiptBackPage || 'payments';
         return true;
       }
     }
@@ -1269,7 +1400,7 @@ const ARCHIVE_APP_VIEWER_JS = `(function(){
             '<div class="sp-doc-meta">' + esc(metaTxt) + '</div>' +
             '<div class="sp-doc-actions">' +
               '<button type="button" class="ui-btn ghost sm" data-doc-view="' + esc(k) + '"><i data-lucide="eye"></i><span>View</span></button>' +
-              '<button type="button" class="ui-btn ghost sm" data-doc-dl="' + esc(k) + '"><i data-lucide="download"></i><span>Download</span></button>' +
+              '<button type="button" class="ui-btn ghost sm sp-doc-dl-icon-btn" data-doc-dl="' + esc(k) + '" title="Download" aria-label="Download"><i data-lucide="download"></i></button>' +
             '</div>' +
           '</div>' +
         '</div>';
@@ -1512,7 +1643,7 @@ const ARCHIVE_APP_VIEWER_JS = `(function(){
             '<div class="sp-hero-info">' +
               '<div class="sp-name-row"><h1 class="sp-student-name">' + esc(studentDisplayName) + '</h1><span class="sp-status-badge ' + esc(stStatus) + '"><span class="sp-status-dot"></span><span>' + esc(titleCase(stStatus)) + '</span></span></div>' +
               '<div class="sp-id-chip"><span>Student ID: <b>' + esc(s.studentId || '-') + '</b></span><button type="button" class="sp-id-copy-btn" id="av-sp-copy-id" title="Copy Student ID"><i data-lucide="copy"></i></button></div>' +
-              '<div class="sp-meta-inline-row"><span class="sp-meta-inline"><i data-lucide="layers"></i><span>' + esc(courseMetaLine) + '</span></span><span class="sp-meta-sep">|</span><span class="sp-meta-inline"><i data-lucide="layers"></i><span>' + esc(s.batchName || '-') + '</span></span><span class="sp-meta-sep">|</span><span class="sp-meta-inline"><i data-lucide="calendar"></i><span>' + esc(s.sessionName || '-') + '</span></span></div>' +
+              '<div class="sp-meta-inline-row"><span class="sp-meta-inline"><i data-lucide="layers"></i><span>' + esc(courseMetaLine) + '</span></span><span class="sp-meta-sep">|</span><span class="sp-meta-inline"><i data-lucide="users-round"></i><span>' + esc(s.batchName || '-') + '</span></span><span class="sp-meta-sep">|</span><span class="sp-meta-inline"><i data-lucide="calendar"></i><span>' + esc(s.sessionName || '-') + '</span></span></div>' +
               '<div class="sp-branch-row"><i data-lucide="building-2"></i><span>' + esc(branchDisplayName + (branchCodeDisp ? (' (' + branchCodeDisp + ')') : '')) + '</span></div>' +
             '</div>' +
           '</div>' +
@@ -1596,10 +1727,7 @@ const ARCHIVE_APP_VIEWER_JS = `(function(){
         var dk = btn.getAttribute('data-doc-dl');
         var item = docsMap[dk];
         if (!item || !item.docData || !item.docData.path) return;
-        resolveMediaUrl(item.docData.path).then(function(url){
-          if (url) triggerBlobDownload(url, item.docData.name || ((s.studentId || s.id) + '_' + dk));
-          else showToastNotice('File could not be loaded offline.', 'error');
-        });
+        downloadArchiveDocAsset(item.docData, (s.studentId || s.id) + '_' + dk);
       };
     });
     el.querySelectorAll('[data-doc-view]').forEach(function(node){
@@ -1610,12 +1738,13 @@ const ARCHIVE_APP_VIEWER_JS = `(function(){
         if (!item || !item.docData || !item.docData.path) return;
         var dlHeadBtn = document.createElement('button');
         dlHeadBtn.type = 'button';
-        dlHeadBtn.className = 'ui-btn ghost sm';
-        dlHeadBtn.innerHTML = '<i data-lucide="download"></i><span>Download</span>';
-        dlHeadBtn.onclick = function(){
-          resolveMediaUrl(item.docData.path).then(function(url){
-            if (url) triggerBlobDownload(url, item.docData.name || ((s.studentId || s.id) + '_' + dk));
-          });
+        dlHeadBtn.className = 'ui-btn ghost adm-view-close';
+        dlHeadBtn.setAttribute('aria-label', 'Download');
+        dlHeadBtn.title = 'Download';
+        dlHeadBtn.innerHTML = '<i data-lucide="download" width="18" height="18"></i>';
+        dlHeadBtn.onclick = function(e){
+          e.stopPropagation();
+          downloadArchiveDocAsset(item.docData, (s.studentId || s.id) + '_' + dk);
         };
         openPopup({
           title: item.label,
@@ -1625,7 +1754,7 @@ const ARCHIVE_APP_VIEWER_JS = `(function(){
           headActions: [dlHeadBtn],
           bodyHtml: item.isPdf
             ? '<div style="width:100%;"><iframe data-arc-pdf="' + esc(item.docData.path) + '" style="width:100%;height:72vh;border:1px solid var(--border);border-radius:8px;background:#fff;" title="' + esc(item.label) + '"></iframe></div>'
-            : '<div style="text-align:center;"><img data-arc-src="' + esc(item.docData.path) + '" style="max-width:100%;max-height:70vh;border-radius:8px;border:1px solid var(--border);" alt="' + esc(item.label) + '"></div>'
+            : '<div class="sp-doc-preview-modal-body"><img data-arc-src="' + esc(item.docData.path) + '" alt="' + esc(item.label) + '"></div>'
         });
       };
     });
@@ -1887,7 +2016,7 @@ const ARCHIVE_APP_VIEWER_JS = `(function(){
         '<td data-label="Receipt No"><b>' + esc(e.receiptNo) + '</b></td>' +
         '<td data-label="Date">' + esc(fmtDateIN(e.date)) + '</td>' +
         '<td data-label="Student" class="fr-col-student"><div class="fr-student-cell">' + avHtml + '<div class="fr-student-meta"><button type="button" class="av-row-link" data-open-st="' + esc(e.studentDocId) + '">' + esc(stName) + '</button><span class="lp-sub">' + esc(e.studentId || '-') + '</span></div></div></td>' +
-        '<td data-label="Template">' + (isAdm ? '<span class="pill neutral">Admission Receipt</span>' : '<span class="pill sky">Payment Receipt</span>') + '</td>' +
+        '<td data-label="Type">' + (isAdm ? '<span class="pill neutral">Admission Receipt</span>' : '<span class="pill sky">Payment Receipt</span>') + '</td>' +
         '<td data-label="Amount" class="num"><b>' + fmtINR(e.totalReceived || 0) + '</b></td>' +
         '<td data-label="Action" class="act"><button type="button" class="ui-btn primary sm" data-open-rcpt="' + esc(e.rowKey) + '"><i data-lucide="printer"></i><span>Open Receipt</span></button></td>' +
       '</tr>';
@@ -1900,12 +2029,12 @@ const ARCHIVE_APP_VIEWER_JS = `(function(){
           '<div class="lp-toolbar-row-filters">' +
             '<div class="lp-toolbar-row-search"><div class="lp-search"><i data-lucide="search"></i><input type="search" id="av-rc-q" value="' + esc(LIST_STATE.rcQ) + '" placeholder="Search receipt number, student name or ID"></div></div>' +
             '<div class="lp-filter"><span class="lp-filter-label">Branch</span><select id="av-rc-br" class="ui-select-native">' + branchOptionsHtml(LIST_STATE.rcBranch) + '</select></div>' +
-            '<div class="lp-filter"><span class="lp-filter-label">Receipt Type</span><select id="av-rc-tp" class="ui-select-native"><option value="all">All receipts</option><option value="ADM"' + (LIST_STATE.rcType==='ADM'?' selected':'') + '>Admission / Full</option><option value="INST"' + (LIST_STATE.rcType==='INST'?' selected':'') + '>Installments / Exam</option></select></div>' +
+            '<div class="lp-filter"><span class="lp-filter-label">Type</span><select id="av-rc-tp" class="ui-select-native"><option value="all">All receipts</option><option value="ADM"' + (LIST_STATE.rcType==='ADM'?' selected':'') + '>Admission / Full</option><option value="INST"' + (LIST_STATE.rcType==='INST'?' selected':'') + '>Installments / Exam</option></select></div>' +
           '</div>' +
         '</div>' +
         '<div class="lp-card">' +
           '<div class="lp-card-head"><div class="lp-card-title"><i data-lucide="receipt"></i><span>Receipts register</span></div><span class="lp-count">' + filtered.length + ' receipt(s)</span></div>' +
-          '<div class="lp-scroll"><table class="lp-table lp-mobile-cards"><thead><tr><th>Receipt No</th><th>Date</th><th>Student</th><th>Template</th><th class="num">Amount</th><th class="act">Action</th></tr></thead><tbody>' + rowsHtml + '</tbody></table></div>' +
+          '<div class="lp-scroll"><table class="lp-table lp-mobile-cards"><thead><tr><th>Receipt No</th><th>Date</th><th>Student</th><th>Type</th><th class="num">Amount</th><th class="act">Action</th></tr></thead><tbody>' + rowsHtml + '</tbody></table></div>' +
           renderPagerHtml('rc', filtered.length, LIST_STATE.rcPage) +
         '</div>' +
       '</div>';
@@ -2227,7 +2356,7 @@ const ARCHIVE_APP_VIEWER_JS = `(function(){
             '<h1 id="page-title">Dashboard</h1>' +
             '<div class="arx-tb-session-group">' +
               '<div class="arx-tb-chip"><i data-lucide="calendar"></i><span>' + esc(sessionName) + '</span></div>' +
-              '<span class="pill neutral arx-tb-badge">Archive</span>' +
+              '<div class="arx-tb-chip arx-tb-badge"><i data-lucide="archive"></i><span>Archive</span></div>' +
             '</div>' +
             '<div class="arx-tb-chip arx-tb-scope-chip"><i data-lucide="git-branch"></i><span>' + esc(titleCase(m.scopeLabel || 'All branches')) + '</span></div>' +
           '</header>' +

@@ -1,12 +1,13 @@
 // Shared student photo, document source, and display normalization helpers.
 // Used identically across live CMS pages, receipts, photo preloading, and offline Archives.
 
-import { formatPersonName, formatGenderDisplay } from './formatter.js?v=1.8.173';
+import { formatPersonName, formatGenderDisplay } from './formatter.js?v=1.8.174';
 
 const DOC_KEY_ALIASES = {
   photo: ['photo', 'passportPhoto', 'passport_photo', 'studentPhoto', 'avatar', 'profilePhoto', 'image', 'pic'],
   signature: ['signature', 'studentSignature', 'student_signature', 'sig', 'sign'],
-  dobProof: ['dobProof', 'dob_proof', 'dob', 'idProof', 'id_proof', 'aadhaar', 'aadhaarCard', 'aadhar', 'birthCertificate'],
+  dobProof: ['dobProof', 'dob_proof', 'dob', 'birthCertificate', 'ageProof'],
+  aadhaar: ['aadhaar', 'aadhaarCard', 'aadhar', 'aadhaar_card', 'idProof', 'id_proof'],
   marksheet: ['marksheet', 'mark_sheet', 'academicMarksheet', 'certificate', 'lastMarksheet']
 };
 

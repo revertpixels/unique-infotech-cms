@@ -1,5 +1,5 @@
 // archives.page.js — Youth Centre Archives UI (Phase 1: Download, Password Encryption, Verify & History)
-import { getContext } from '../core/app.js?v=1.8.173';
+import { getContext } from '../core/app.js?v=1.8.174';
 import {
   PAGE_SIZE,
   buildStats,
@@ -7,12 +7,12 @@ import {
   buildTableCard,
   renderPager,
   renderEmptyTableState
-} from '../components/list-page.js?v=1.8.173';
-import { openPopup } from '../components/modal.js?v=1.8.173';
-import { openMenu } from '../components/ui-menu.js?v=1.8.173';
-import { showToast } from '../components/toast.js?v=1.8.173';
-import { fmtDate } from '../utils/session-rules.js?v=1.8.173';
-import { formatINR } from '../utils/formatter.js?v=1.8.173';
+} from '../components/list-page.js?v=1.8.174';
+import { openPopup } from '../components/modal.js?v=1.8.174';
+import { openMenu } from '../components/ui-menu.js?v=1.8.174';
+import { showToast } from '../components/toast.js?v=1.8.174';
+import { fmtDate } from '../utils/session-rules.js?v=1.8.174';
+import { formatINR } from '../utils/formatter.js?v=1.8.174';
 import {
   ENABLE_ARCHIVE_SESSION_DELETE,
   computeArchiveSessionStatus,
@@ -21,7 +21,7 @@ import {
   scanSessionForExport,
   buildAndDownloadArchiveZip,
   verifyLocalArchiveZip
-} from '../services/archive.service.js?v=1.8.173';
+} from '../services/archive.service.js?v=1.8.174';
 
 let cleanups = [];
 
@@ -751,7 +751,7 @@ export async function mount({ container, profile, ctx }) {
       rPartial.value = 'branches';
       partialPill.append(rPartial, el('span', '', 'Specific Branches Only'));
 
-      const scopeHint = el('small', 'text-mute', 'Full superadmin export includes all branches and student Aadhaar / ID documents (password ON by default).');
+      const scopeHint = el('small', 'text-mute', 'Includes all branches, student records, photos, Aadhaar & documents.');
 
       allBranches.forEach((b) => {
         const lbl = el('label', 'arx-branch-check');
@@ -775,8 +775,8 @@ export async function mount({ container, profile, ctx }) {
         partialPill.classList.toggle('is-selected', scopeType === 'branches');
         branchCheckWrap.hidden = scopeType !== 'branches';
         scopeHint.textContent = scopeType === 'full'
-          ? 'Full superadmin export includes all branches and student Aadhaar / ID documents (password ON by default).'
-          : 'Partial branch export strictly excludes Aadhaar / ID documents.';
+          ? 'Includes all branches, student records, photos, Aadhaar & documents.'
+          : 'Includes selected branch(es) with all student records, photos, Aadhaar & documents.';
         snapshot = null;
         startScan();
       };
@@ -788,7 +788,7 @@ export async function mount({ container, profile, ctx }) {
       scopeBox.append(optsRow, branchCheckWrap, scopeHint);
     } else {
       const brName = allBranches.find((b) => b.id === profile?.branchId)?.name || profile?.branchId || 'Your branch';
-      scopeBox.appendChild(el('span', 'text-mute', `Locked to branch "${brName}". Aadhaar and ID documents are never included in branch-head exports.`));
+      scopeBox.appendChild(el('span', 'text-mute', `Locked to branch "${brName}". Includes only your branch's students, photos, Aadhaar & documents.`));
     }
 
     stack.appendChild(scopeBox);
@@ -873,9 +873,7 @@ export async function mount({ container, profile, ctx }) {
       }
 
       const grid = el('div', 'arx-sum-grid');
-      const idNote = snapshot.includeIdDocs
-        ? (snapshot.idDocCount > 0 ? `${snapshot.idDocCount} ID record${snapshot.idDocCount === 1 ? '' : 's'} included` : 'ID access enabled')
-        : 'ID docs excluded';
+      const idNote = snapshot.idDocCount > 0 ? `${snapshot.idDocCount} ID / Aadhaar record${snapshot.idDocCount === 1 ? '' : 's'} included` : 'All docs & Aadhaar included';
       const tiles = [
         ['Students', String(snapshot.counts.students), `${snapshot.scopeBranches.length} branch${snapshot.scopeBranches.length === 1 ? '' : 'es'}`],
         ['Payments & Waivers', String(snapshot.counts.payments), `${formatINR(snapshot.totals.collected)} collected`],
@@ -909,9 +907,9 @@ export async function mount({ container, profile, ctx }) {
         bodyHost.appendChild(wMiss);
       }
 
-      const hasIdDocsIncluded = Boolean(snapshot.includeIdDocs && snapshot.idDocCount > 0);
+      const hasAadhaarDocs = Boolean(snapshot.hasAadhaarDocs || snapshot.idDocCount > 0);
       if (!pwDefaultAppliedForScan) {
-        encryptChecked = hasIdDocsIncluded;
+        encryptChecked = false;
         pwDefaultAppliedForScan = true;
       }
 
@@ -922,14 +920,14 @@ export async function mount({ container, profile, ctx }) {
       chk.id = 'arx-encrypt-checkbox';
       chk.checked = encryptChecked;
       chk.disabled = scanning || building;
-      chkRow.append(chk, el('span', '', 'Protect archive with a password (AES-256 encryption)'));
+      chkRow.append(chk, el('span', '', 'Protect archive with a password (optional AES-256 encryption)'));
       pwPanel.appendChild(chkRow);
 
       const unencryptedWarn = el('div', 'arx-warn-box danger');
-      unencryptedWarn.hidden = encryptChecked || !hasIdDocsIncluded;
+      unencryptedWarn.hidden = encryptChecked || !hasAadhaarDocs;
       unencryptedWarn.append(
         ic('shield-alert'),
-        el('span', '', 'Warning: This full archive contains student Aadhaar / ID records. Leaving password protection unticked saves those records unencrypted inside the ZIP.')
+        el('span', '', 'Warning: Aadhaar records are included and will be saved unencrypted unless you set a password above.')
       );
       pwPanel.appendChild(unencryptedWarn);
 
@@ -984,7 +982,7 @@ export async function mount({ container, profile, ctx }) {
         encryptChecked = chk.checked;
         pwFieldsWrap.hidden = !encryptChecked;
         loseWarn.hidden = !encryptChecked;
-        unencryptedWarn.hidden = encryptChecked || !hasIdDocsIncluded;
+        unencryptedWarn.hidden = encryptChecked || !hasAadhaarDocs;
         if (errTextEl) errTextEl.hidden = true;
       });
 

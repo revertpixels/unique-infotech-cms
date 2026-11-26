@@ -4,10 +4,10 @@ import { createSelect } from '../components/ui-select.js';
 import { openMenu } from '../components/ui-menu.js';
 import { confirmDialog } from '../components/ui-confirm.js';
 import { showToast } from '../components/toast.js';
-import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.173';
-import { PAGE_SIZE, buildStats, buildToolbar, renderPager, renderEmptyTableState } from '../components/list-page.js?v=1.8.173';
-import { notifySessionsChanged, todayISO, expectedStatus, statusMismatch, daysLeft } from '../core/sessions.js?v=1.8.173';
-import { firstInstallmentOf, admissionState, installmentSchedule, sessionPattern, fmtDate } from '../utils/session-rules.js?v=1.8.173';
+import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.174';
+import { PAGE_SIZE, buildStats, buildToolbar, renderPager, renderEmptyTableState } from '../components/list-page.js?v=1.8.174';
+import { notifySessionsChanged, todayISO, expectedStatus, statusMismatch, daysLeft } from '../core/sessions.js?v=1.8.174';
+import { firstInstallmentOf, admissionState, installmentSchedule, sessionPattern, fmtDate } from '../utils/session-rules.js?v=1.8.174';
 
 const TEXT_KEYS = ['name', 'start', 'end'];
 const KEYS = ['name', 'start', 'end', 'status'];

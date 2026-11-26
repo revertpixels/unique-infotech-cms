@@ -39,6 +39,37 @@
 
 ---
 
+### [2026-11-26 23:32] Version 1.8.174 — Separate Aadhaar Doc Key, Optional Archive Password, Role Parity, Offline Downloads, Hash Reload & Live Metadata Fix
+
+**What was built:**
+- **Separate Aadhaar Key & Equal Role Archive Contents (`public/js/services/archive.service.js`, `public/js/utils/student-media.js`, `public/js/utils/archive-viewer-builder.js`, `public/js/pages/archives.page.js`, `firestore.rules`)**:
+  - Separated `aadhaar`/`aadhar`/`aadhaarCard`/`idProof` into canonical key `aadhaar` (`Aadhaar Card`) rather than merging with `dobProof` (`Date of Birth Proof`), so students with both files export and display both on dedicated cards.
+  - Set archive password checkbox unchecked by default (`optional`) for every role and scope while displaying a warning banner when Aadhaar records are unencrypted; still permits download without a password.
+  - Removed the `top-admin only` restriction (`includesIdDocs`) from both `archive.service.js` and `firestore.rules` (`archiveLogs`), keeping Branch Head strictly branch-isolated in Firestore queries and rules while generating archives identical in features and documents (including Aadhaar) to Super Admin.
+- **Offline Viewer UX, Downloads, Topbar, Receipt Reload & Icons (`public/js/utils/archive-viewer-builder.js`, `public/js/utils/archive-viewer-styles.js`)**:
+  - Renamed Receipts `Template` column and filter label to `Type`.
+  - Matched topbar `Archive` chip (`<div class="arx-tb-chip arx-tb-badge">`) with `archive` icon to Session and Branch buttons cleanly.
+  - Restored `users-round` icon on the batch line of Student Profile header.
+  - Centered document popup previews (`object-fit: contain` inside `.sp-doc-preview-modal-body`), replaced modal & card download labels with icon-only download buttons (`title="Download"`), and emitted lazy plain `.js` media sidecars alongside encrypted `.enc.js` so `blob:` downloads work offline on `file://` with extension preservation and `URL.revokeObjectURL` cleanup.
+  - Updated `hashForNav`/`applyHashToNav` to encode payment IDs (`#/payments/<studentDocId>/<paymentId>/receipt` and `#/payments/<paymentId>/receipt`) so reloads reopen exact receipts across all routes.
+- **Live Student Profile Cleanup (`public/js/pages/student-profile.page.js`, `public/pages/student-profile.html`)**:
+  - Resolved `Registered By` via `resolveUserDisplay` (`Name (Designation)` / `Authorised Staff` fallback, no raw email).
+  - Restricted `System & Audit Metadata` card (`#sp-audit-card`) strictly to `superadmin` role.
+
+**Why:**
+- Ensures identical archival exports across Super Admin & Branch Head roles with optional encryption, reliable offline downloads & deep receipt reloads on `file://`, and protects audit metadata on live Student Profiles.
+
+**Files touched (created / modified / deleted):**
+- MODIFIED: `firestore.rules`, `public/js/services/archive.service.js`, `public/js/utils/student-media.js`, `public/js/pages/archives.page.js`, `public/js/utils/archive-viewer-builder.js`, `public/js/utils/archive-viewer-styles.js`, `public/js/pages/student-profile.page.js`, `public/pages/student-profile.html`, `docs/02-PROGRESS-LOG.md`, plus `?v=1.8.174` cache-buster query bumps across `public/` via `tools/bump-version.js`.
+
+**Firestore changes:**
+- Updated `firestore.rules` `/archiveLogs/{logId}` rule for `branch_head` to allow `includesIdDocs is bool` while maintaining strict `branchId == myBranchId()` isolation across `students`, `docs`, `aadhaar`, `payment`, and `archiveLogs`.
+
+**Next task:**
+- None pending.
+
+---
+
 ### [2026-11-26 22:58] Version 1.8.173 — Archive Student Profile Parity, Media/Doc Alias Resolution & Image Hydration
 
 **What was built:**

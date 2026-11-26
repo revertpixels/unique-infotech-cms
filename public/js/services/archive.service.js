@@ -21,24 +21,24 @@ import {
   ref as storageRef,
   getDownloadURL
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-storage.js';
-import { APP_VERSION } from '../core/app.js?v=1.8.173';
-import { todayISO, installmentSchedule, getOrgTimezone } from '../utils/session-rules.js?v=1.8.173';
+import { APP_VERSION } from '../core/app.js?v=1.8.174';
+import { todayISO, installmentSchedule, getOrgTimezone } from '../utils/session-rules.js?v=1.8.174';
 import {
   calculateStudentFinancials,
   evaluateYouthStudentDues,
   normalizeYouthPaymentsLedger,
   installmentCourseFee,
   installmentBalanceDue
-} from './payment.service.js?v=1.8.173';
+} from './payment.service.js?v=1.8.174';
 import {
   loadUsersDirectory,
   resolveUserDisplay,
   getUserTitle
-} from './user-directory.service.js?v=1.8.173';
-import { formatPersonName, formatGenderDisplay } from '../utils/formatter.js?v=1.8.173';
-import { getStudentPhotoSrc, getStudentDocRecord, getStudentDocSrc, getStudentDocMime } from '../utils/student-media.js?v=1.8.173';
-import { buildOfflineViewerAssets } from '../utils/archive-viewer-builder.js?v=1.8.173';
-import { buildYouthReceiptData } from '../utils/admission-receipt.js?v=1.8.173';
+} from './user-directory.service.js?v=1.8.174';
+import { formatPersonName, formatGenderDisplay } from '../utils/formatter.js?v=1.8.174';
+import { getStudentPhotoSrc, getStudentDocRecord, getStudentDocSrc, getStudentDocMime } from '../utils/student-media.js?v=1.8.174';
+import { buildOfflineViewerAssets } from '../utils/archive-viewer-builder.js?v=1.8.174';
+import { buildYouthReceiptData } from '../utils/admission-receipt.js?v=1.8.174';
 
 /** Feature flag keeping Phase 2 session deletion OFF until Phase 1 is verified and approved. */
 export const ENABLE_ARCHIVE_SESSION_DELETE = false;
@@ -345,7 +345,8 @@ function canonicalDocKey(rawKey = '') {
   const low = k.toLowerCase();
   if (/^(photo|passportphoto|passport_photo|studentphoto|avatar|profilephoto|image|pic)$/.test(low)) return 'photo';
   if (/^(signature|studentsignature|student_signature|sign|sig)$/.test(low)) return 'signature';
-  if (/^(dobproof|dob_proof|dob|idproof|id_proof|aadhaar|aadhaarcard|aadhar|birthcertificate|ageproof)$/.test(low)) return 'dobProof';
+  if (/^(aadhaar|aadhar|aadhaarcard|aadhaar_card|idproof|id_proof)$/.test(low)) return 'aadhaar';
+  if (/^(dobproof|dob_proof|dob|birthcertificate|ageproof)$/.test(low)) return 'dobProof';
   if (/^(marksheet|lastmarksheet|last_marksheet|academicmarksheet|academic_marksheet|qualification)$/.test(low)) return 'marksheet';
   return k || 'doc';
 }
@@ -356,6 +357,7 @@ function friendlyDocLabel(key = '', rawLabel = '') {
     photo: 'Passport Photo',
     signature: 'Student Signature',
     dobProof: 'Date of Birth Proof',
+    aadhaar: 'Aadhaar Card',
     marksheet: 'Academic Marksheet'
   };
   const rawTrim = String(rawLabel || '').trim();
@@ -648,7 +650,7 @@ export async function scanSessionForExport({
   if (!isSuper && !isBranchHead) throw new Error('Only authorised Youth staff can archive sessions.');
 
   const effectiveScope = isBranchHead ? 'branch' : (scopeType === 'branches' ? 'branches' : 'full');
-  const includeIdDocs = Boolean(isSuper && effectiveScope === 'full');
+  const includeIdDocs = true;
 
   const branchSet = isBranchHead
     ? new Set([profile.branchId])
@@ -806,7 +808,7 @@ export async function scanSessionForExport({
 
     // Also inspect any inline student document objects/URLs when absent from docs subcollection
     const extraInlineDocs = [];
-    const checkInlineKeys = ['photo', 'signature', 'dobProof', 'marksheet'];
+    const checkInlineKeys = ['photo', 'signature', 'dobProof', 'aadhaar', 'marksheet'];
     checkInlineKeys.forEach((ck) => {
       const hasSub = stDocsList.some((dd) => canonicalDocKey(dd.id || dd.key) === ck);
       if (hasSub) return;
@@ -1130,6 +1132,7 @@ export async function scanSessionForExport({
     scopeBranches,
     includeIdDocs,
     idDocCount,
+    hasAadhaarDocs: Boolean(Object.keys(rawAadhaarByStudent).length > 0 || mediaFiles.some((f) => /aadhaar/i.test(f.path))),
     org,
     orgLogoPath,
     branches,
@@ -1291,8 +1294,9 @@ export async function buildAndDownloadArchiveZip({
     const bundledStaticAssets = await collectViewerStaticAssets();
     const jsonDataCount = 10;
     const csvDataCount = 3;
+    const mediaEntryCount = encrypt ? snapshot.mediaFiles.length : snapshot.mediaFiles.length * 2;
     // Viewer + static assets + archive-data.js + json + csv + media + manifest.json
-    const packedFileCount = bundledStaticAssets.length + viewerAssets.length + 1 + jsonDataCount + csvDataCount + snapshot.mediaFiles.length + 1;
+    const packedFileCount = bundledStaticAssets.length + viewerAssets.length + 1 + jsonDataCount + csvDataCount + mediaEntryCount + 1;
 
     const meta = {
       schemaVersion: 1,
@@ -1500,7 +1504,7 @@ export async function buildAndDownloadArchiveZip({
       }
     }
 
-    // 4. Media files in chunks (stored uncompressed as PassThrough when plain, encrypted script wrappers when encrypted)
+    // 4. Media files in chunks (stored uncompressed as PassThrough + lazy .js blob sidecar when plain, encrypted script wrappers when encrypted)
     const totalMedia = snapshot.mediaFiles.length;
     for (let i = 0; i < totalMedia; i++) {
       const mf = snapshot.mediaFiles[i];
@@ -1511,6 +1515,9 @@ export async function buildAndDownloadArchiveZip({
         await pushZipEntry(mf.path + '.enc.js', enc.encode(scriptTxt), { compress: false });
       } else {
         await pushZipEntry(mf.path, mf.bytes, { compress: false });
+        const rawPayload = { mime: mf.mime, byteLength: mf.bytes.byteLength, dataB64: bytesToBase64(mf.bytes) };
+        const rawScriptTxt = `window.__ARC_REGISTER_RAW_FILE&&window.__ARC_REGISTER_RAW_FILE(${JSON.stringify(mf.path)},${JSON.stringify(rawPayload)});\n`;
+        await pushZipEntry(mf.path + '.js', enc.encode(rawScriptTxt), { compress: true });
       }
       if (i % 6 === 0) {
         const pct = 45 + Math.round(((i + 1) / Math.max(1, totalMedia)) * 45);

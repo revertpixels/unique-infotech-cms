@@ -3,12 +3,12 @@
 // Scope: Super Admin.
 import { db } from '../config/firebase-config.js';
 import { doc, getDoc, getDocs, collection, query, where } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.173';
-import { createSelect } from '../components/ui-select.js?v=1.8.173';
-import { formatDateIN } from '../utils/formatter.js?v=1.8.173';
-import { buildSchoolReceiptData, fmtRs } from '../utils/school-receipt.js?v=1.8.173';
-import { downloadSchoolReceiptPdf } from '../utils/school-receipt-pdf.js?v=1.8.173';
-import { getStudentDocRecord } from '../utils/student-media.js?v=1.8.173';
+import { showToast } from '../components/toast.js?v=1.8.174';
+import { createSelect } from '../components/ui-select.js?v=1.8.174';
+import { formatDateIN } from '../utils/formatter.js?v=1.8.174';
+import { buildSchoolReceiptData, fmtRs } from '../utils/school-receipt.js?v=1.8.174';
+import { downloadSchoolReceiptPdf } from '../utils/school-receipt-pdf.js?v=1.8.174';
+import { getStudentDocRecord } from '../utils/student-media.js?v=1.8.174';
 
 const COL = 'students';
 let studentDocId = '';

@@ -2,7 +2,7 @@
 // Never duplicates CMS palette, buttons, tables, sidebar, topbar, or receipt CSS.
 export const ARCHIVE_VIEWER_OVERRIDES_CSS = `/* archive-overrides.css — Topbar Archive pill, unlock gate, native select parity, and clean print staging */
 
-/* Compact Archive badge paired with topbar session chip (exact .pill.neutral app style) */
+/* Topbar Archive chip matching Session and Branch controls */
 .arx-tb-session-group {
   display: inline-flex;
   align-items: center;
@@ -14,14 +14,44 @@ export const ARCHIVE_VIEWER_OVERRIDES_CSS = `/* archive-overrides.css — Topbar
   flex-shrink: 0;
 }
 
-/* Guarantee single active tab pane & 2-column read-only Document actions */
+/* Guarantee single active tab pane & compact icon-only Download beside View */
 .sp-pane:not(.active),
 .sp-pane[hidden] {
   display: none !important;
 }
 
 .sp-doc-actions {
-  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  grid-template-columns: minmax(0, 1fr) 38px !important;
+}
+
+.sp-doc-dl-icon-btn {
+  padding: 0 !important;
+  width: 38px !important;
+}
+
+.sp-doc-preview-modal-body {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 220px;
+  padding: 12px;
+  background: var(--bg);
+  border-radius: var(--r-card, 10px);
+  border: 1px solid var(--border);
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.sp-doc-preview-modal-body img {
+  max-width: 100%;
+  max-height: 72vh;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  display: block;
+  margin: 0 auto;
+  border-radius: 6px;
 }
 
 /* Native select styled cleanly to match live .lp-filter .ui-select-btn */
@@ -94,6 +124,13 @@ export const ARCHIVE_VIEWER_OVERRIDES_CSS = `/* archive-overrides.css — Topbar
   font-size: 12.5px;
   font-weight: 600;
   white-space: nowrap;
+}
+
+.arx-tb-chip svg.lucide {
+  width: 15px;
+  height: 15px;
+  color: var(--text-sec);
+  flex-shrink: 0;
 }
 
 /* Full-screen receipt container inside .view (removes padding so dark slate receipt stage matches live CMS edge-to-edge) */

@@ -11,20 +11,20 @@ import {
   serverTimestamp,
   runTransaction
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.173';
-import { openPopup } from '../components/modal.js?v=1.8.173';
-import { createSelect } from '../components/ui-select.js?v=1.8.173';
-import { confirmDialog } from '../components/ui-confirm.js?v=1.8.173';
-import { openMenu } from '../components/ui-menu.js?v=1.8.173';
-import { formatINR, formatDateIN, formatPersonName, formatGenderDisplay, initials } from '../utils/formatter.js?v=1.8.173';
-import { validatePhone, validateEmail, validateDOB, validateName } from '../utils/validator.js?v=1.8.173';
-import { registerDirty } from '../utils/unsaved-guard.js?v=1.8.173';
-import { resolveUserDisplay, getRoleTitle } from '../services/user-directory.service.js?v=1.8.173';
-import { compressTo100KB, blobToDataURL, isImageFile, formatBytes } from '../utils/image-compress.js?v=1.8.173';
-import { getStudentPhotoSrc, getStudentDocRecord, getStudentDocSrc, getStudentDocMime } from '../utils/student-media.js?v=1.8.173';
-import { todayISO } from '../utils/session-rules.js?v=1.8.173';
-import { getSelectedSessionId } from '../core/sessions.js?v=1.8.173';
-import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.173';
+import { showToast } from '../components/toast.js?v=1.8.174';
+import { openPopup } from '../components/modal.js?v=1.8.174';
+import { createSelect } from '../components/ui-select.js?v=1.8.174';
+import { confirmDialog } from '../components/ui-confirm.js?v=1.8.174';
+import { openMenu } from '../components/ui-menu.js?v=1.8.174';
+import { formatINR, formatDateIN, formatPersonName, formatGenderDisplay, initials } from '../utils/formatter.js?v=1.8.174';
+import { validatePhone, validateEmail, validateDOB, validateName } from '../utils/validator.js?v=1.8.174';
+import { registerDirty } from '../utils/unsaved-guard.js?v=1.8.174';
+import { resolveUserDisplay, getRoleTitle, loadUsersDirectory } from '../services/user-directory.service.js?v=1.8.174';
+import { compressTo100KB, blobToDataURL, isImageFile, formatBytes } from '../utils/image-compress.js?v=1.8.174';
+import { getStudentPhotoSrc, getStudentDocRecord, getStudentDocSrc, getStudentDocMime } from '../utils/student-media.js?v=1.8.174';
+import { todayISO } from '../utils/session-rules.js?v=1.8.174';
+import { getSelectedSessionId } from '../core/sessions.js?v=1.8.174';
+import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.174';
 import {
   fetchStudentPayments,
   recordPaymentTx,
@@ -35,8 +35,8 @@ import {
   calculateStudentFinancials,
   buildReceiptMenuItems,
   repairStudentAdmissionPayment
-} from '../services/payment.service.js?v=1.8.173';
-import { courseFeeOf, discountOf } from '../utils/fees.js?v=1.8.173';
+} from '../services/payment.service.js?v=1.8.174';
+import { courseFeeOf, discountOf } from '../utils/fees.js?v=1.8.174';
 
 const COL = 'students';
 const QUALIFICATIONS = ['VIII Pass', 'Secondary (X) Pass', 'Higher Secondary (XII) Pass', 'ITI', 'Diploma', 'Undergraduate (Graduate)', 'Postgraduate', 'Other'];
@@ -96,7 +96,8 @@ async function ensureMetadataCache() {
       usersCache ? null : getDocs(collection(db, 'users')).catch(() => null),
       coursesCache ? null : getDocs(collection(db, 'courses')).catch(() => null),
       sessionsCache ? null : getDocs(collection(db, 'sessions')).catch(() => null),
-      batchesCache ? null : getDocs(collection(db, 'batches')).catch(() => null)
+      batchesCache ? null : getDocs(collection(db, 'batches')).catch(() => null),
+      loadUsersDirectory({ forceRefresh: false }).catch(() => null)
     ]);
     if (!branchesCache) branchesCache = {};
     if (bSnap) {
@@ -735,9 +736,26 @@ function renderPersonalTab() {
   setTxt('sp-dt-session', s.sessionName || '-');
   setTxt('sp-dt-branch', formatPersonName(s.branchName || '') || '-');
 
+  const isSuper = currentUserProfile?.role === 'superadmin';
+  const auditCard = $('sp-audit-card');
+  if (auditCard) {
+    auditCard.hidden = !isSuper;
+    auditCard.style.display = isSuper ? '' : 'none';
+  }
+
   setTxt('sp-dt-docid', s.id || '-');
   setTxt('sp-dt-receiptno', s.receiptNo || '-');
-  setTxt('sp-dt-createdby', s.createdBy || '-');
+  let regByDisp = '-';
+  const rawCreator = String(s.createdBy || '').trim();
+  if (rawCreator) {
+    const u = resolveUserDisplay(rawCreator, s.createdByName, s.createdByDesignation);
+    const cleanName = u.name && u.name !== '-' && !u.name.includes('@') ? formatPersonName(u.name) : '';
+    const cleanDesig = u.designation && !u.designation.includes('@') ? formatPersonName(u.designation) : '';
+    if (cleanName) regByDisp = cleanDesig ? `${cleanName} (${cleanDesig})` : cleanName;
+    else if (!rawCreator.includes('@')) regByDisp = formatPersonName(rawCreator);
+    else regByDisp = cleanDesig ? `Authorised Staff (${cleanDesig})` : 'Authorised Staff';
+  }
+  setTxt('sp-dt-createdby', regByDisp);
   setTxt('sp-dt-createdat', s.createdAt && s.createdAt.seconds ? formatDateIN(new Date(s.createdAt.seconds * 1000).toISOString().slice(0, 10)) : '-');
 
   // Edit Handlers

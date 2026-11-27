@@ -12,9 +12,9 @@ import {
   ref as storageRef,
   uploadBytesResumable
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-storage.js';
-import { showToast } from '../components/toast.js?v=1.8.185';
-import { getDatasetGeneration, initDatasetSession } from './dataset-session.js?v=1.8.185';
-import { getRoleTitle, getRolePluralTitle } from '../services/user-directory.service.js?v=1.8.185';
+import { showToast } from '../components/toast.js?v=1.8.186';
+import { getDatasetGeneration, initDatasetSession } from './dataset-session.js?v=1.8.186';
+import { getRoleTitle, getRolePluralTitle } from '../services/user-directory.service.js?v=1.8.186';
 
 const MAX_BYTES = 95 * 1024 * 1024;
 const UNLOCK_IDLE_MS = 10 * 60 * 1000;

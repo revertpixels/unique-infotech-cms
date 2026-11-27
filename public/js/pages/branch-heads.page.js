@@ -1,13 +1,13 @@
 import { db } from '../config/firebase-config.js';
 import { collection, getDocs, doc, getDoc, setDoc, updateDoc, deleteDoc, query, where, serverTimestamp } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { createSelect } from '../components/ui-select.js?v=1.8.185';
-import { openMenu } from '../components/ui-menu.js?v=1.8.185';
-import { confirmDialog } from '../components/ui-confirm.js?v=1.8.185';
-import { showToast } from '../components/toast.js?v=1.8.185';
-import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.185';
-import { PAGE_SIZE, buildStats, buildToolbar, renderPager, renderEmptyTableState } from '../components/list-page.js?v=1.8.185';
-import { formatPersonName } from '../utils/formatter.js?v=1.8.185';
-import { loadUsersDirectory, getRoleTitle, getRolePluralTitle } from '../services/user-directory.service.js?v=1.8.185';
+import { createSelect } from '../components/ui-select.js?v=1.8.186';
+import { openMenu } from '../components/ui-menu.js?v=1.8.186';
+import { confirmDialog } from '../components/ui-confirm.js?v=1.8.186';
+import { showToast } from '../components/toast.js?v=1.8.186';
+import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.186';
+import { PAGE_SIZE, buildStats, buildToolbar, renderPager, renderEmptyTableState } from '../components/list-page.js?v=1.8.186';
+import { formatPersonName } from '../utils/formatter.js?v=1.8.186';
+import { loadUsersDirectory, getRoleTitle, getRolePluralTitle } from '../services/user-directory.service.js?v=1.8.186';
 
 const TEXT_KEYS = ['name', 'email', 'phone'];
 const KEYS = ['name', 'email', 'phone', 'branchId', 'status'];

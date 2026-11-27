@@ -39,6 +39,25 @@
 
 ---
 
+### [2026-11-27 12:56] Version 1.8.186 — Dashboard Stat Rows Gap Normalization
+
+**What was built:**
+- Removed the stacked `.rc-stat-strip + .rc-stat-strip { margin-top: 14px; }` rule inside `.dash-kpi-sec` (`public/css/pages/dashboard.css`) that was adding `14px` on top of flexbox `gap: 16px` (`30px` total) between the two KPI stat strip rows.
+- Set `.dash-kpi-sec { gap: 18px; }` so the vertical spacing between the two stat rows (`18px`) matches every other card/section gap across desktop and mobile without affecting `#/reports`.
+
+**Why:**
+- Fix excessive empty vertical space between the top and bottom dashboard KPI stat strips on desktop and mobile.
+
+**Files touched:**
+- MODIFIED: `public/css/pages/dashboard.css`, `docs/02-PROGRESS-LOG.md` (plus `tools/bump-version.js 1.8.186`).
+
+**Firestore changes:**
+- None.
+
+**Tested on:**
+- Chrome Desktop (`1440×900`) and Mobile (`390×844`): ✅ Verified `statRowsGap: 18px` across both viewports alongside zero regressions on Reports and Quick Actions.
+---
+
 ### [2026-11-27 12:50] Version 1.8.185 — Dashboard Quick Actions Full-Width Primary Pill Bar
 
 **What was built:**

@@ -1,20 +1,20 @@
 // dashboard.page.js — Read-only Youth Centre Dashboard (#/dashboard) + preserved Unique Kids placeholder.
 
-import { ROUTES } from '../core/router.js?v=1.8.185';
-import { createSelect } from '../components/ui-select.js?v=1.8.185';
+import { ROUTES } from '../core/router.js?v=1.8.186';
+import { createSelect } from '../components/ui-select.js?v=1.8.186';
 import {
   renderDonutChart,
   renderBarChart,
   renderStackedBarChart,
   renderLineChart
-} from '../components/charts.js?v=1.8.185';
-import { openPaymentDetailsModal } from '../components/payment-details-modal.js?v=1.8.185';
-import { loadDashboardArchiveReminder } from '../services/archive.service.js?v=1.8.185';
-import { resolveUserDisplay, getRoleTitle } from '../services/user-directory.service.js?v=1.8.185';
-import { getCachedSessions, loadSessions, getSelectedSession } from '../core/sessions.js?v=1.8.185';
-import { getOrgTimezone } from '../utils/session-rules.js?v=1.8.185';
-import { formatPersonName, initials } from '../utils/formatter.js?v=1.8.185';
-import { buildYouthDashboardData } from '../services/dashboard.service.js?v=1.8.185';
+} from '../components/charts.js?v=1.8.186';
+import { openPaymentDetailsModal } from '../components/payment-details-modal.js?v=1.8.186';
+import { loadDashboardArchiveReminder } from '../services/archive.service.js?v=1.8.186';
+import { resolveUserDisplay, getRoleTitle } from '../services/user-directory.service.js?v=1.8.186';
+import { getCachedSessions, loadSessions, getSelectedSession } from '../core/sessions.js?v=1.8.186';
+import { getOrgTimezone } from '../utils/session-rules.js?v=1.8.186';
+import { formatPersonName, initials } from '../utils/formatter.js?v=1.8.186';
+import { buildYouthDashboardData } from '../services/dashboard.service.js?v=1.8.186';
 import {
   ensureReferenceData,
   scopeReferenceDataByCtx,
@@ -26,7 +26,7 @@ import {
   modeDisplayMeta,
   formatINR,
   fmtDate
-} from '../services/report.service.js?v=1.8.185';
+} from '../services/report.service.js?v=1.8.186';
 
 let state = null;
 let profileListener = null;

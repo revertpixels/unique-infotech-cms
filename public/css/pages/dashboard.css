@@ -311,7 +311,11 @@
 .dash-kpi-sec {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 18px;
+}
+
+.dash-kpi-sec .rc-stat-strip + .rc-stat-strip {
+  margin-top: 0;
 }
 
 .dash-wrap .rc-stat-cell {

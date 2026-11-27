@@ -39,6 +39,33 @@
 
 ---
 
+### [2026-11-27 11:35] Version 1.8.179 — Phase 6 · Youth Centre Reports Reference UI Redesign Experiment (`ref-cards.css`)
+
+**What was built:**
+- **Reusable Calm Flat Card System (`public/css/components/ref-cards.css`, imported via `public/css/main.css`)**:
+  - Created standalone `.rc-*` CSS component modeled on `temp_ref_dashboard.html`: flat shadow-free white cards (`1px solid #EAEAEA`, `6px` radius), joined 4-cell `.rc-stat-strip` strips with `1px` dividers, outline grey KPI icons, quiet white/grey + brand purple palette (red reserved strictly for overdue amounts, green reserved strictly for `"up"` chips), `"Students by Centre"` thin square-bar list classes (`.rc-hb-*`), `"Students by Semester"` stacked horizontal bar classes (`.rc-seg-*`), flat `.rc-table` styles, and `2/3 + 1/3` (`.rc-row-2-1`) + `2`-column (`.rc-row-2`) responsive grids. Existing Dashboard and other pages are untouched.
+- **Reports Page Layout & Charts Refinement (`public/pages/reports.html`, `public/js/pages/reports.page.js`, `public/js/components/charts.js`, `public/css/pages/financial-reports.css`)**:
+  - Updated Reports header with outline `Print / Save as PDF` button + icon-only Refresh button; filter bar remains 1 desktop row.
+  - Replaced floating KPI cards with two 4-cell joined stat strips; hid empty `"— vs prev session"` chips when no comparison baseline exists; rendered Overdue Amount in red.
+  - Replaced heavy bar/donut charts where clearer: `Outstanding Dues`, `Overdue Ageing` (red bars), `Students by Course/Branch`, and `Batch Filling` now render as `"Students by Centre"` thin bar lists with grey total footer rows; `Student Status` & `Gender Split` render as thin stacked horizontal bars with square-dot legends; kept compact `150px` donuts exclusively for `Payment Mode` & `Fee Type`.
+  - Placed `Collection Trend` (`~2/3`, displaying big collected total + overdue summary + dashed `#EAEAEA` grid) beside `Outstanding Dues` (`~1/3`), followed by 2-column chart/list rows and flat tables; stacked purple+red bars on Branch & Session comparisons with `<= 48px` square bar widths.
+
+**Why:**
+- Visual redesign experiment matching `temp_ref_dashboard.html` on Reports `#/reports` ONLY without touching any fee maths, queries, or live Dashboard.
+
+**Files touched:**
+- CREATED: `public/css/components/ref-cards.css`
+- MODIFIED: `public/css/main.css`, `public/css/pages/financial-reports.css`, `public/js/components/charts.js`, `public/pages/reports.html`, `public/js/pages/reports.page.js`, `public/js/services/report.service.js`, `docs/02-PROGRESS-LOG.md`
+
+**Firestore changes:**
+- None (zero data, query, or fee-maths changes).
+
+**Tested on:**
+- Chrome Desktop (`1440x900` Super Admin & Branch Head vs `temp_ref_dashboard.html`) + Mobile (`390x844`): ✅
+- Node unit + reconciliation suite (`run-tests.mjs` & `verify-reports.mjs`): ✅
+
+---
+
 ### [2026-11-27 11:20] Version 1.8.178 — Phase 6 · Youth Centre Reports Review Fixes (Whole Session Bug, Header/Filter Redesign, Collection Rate & Sharp Compact Charts)
 
 **What was built:**

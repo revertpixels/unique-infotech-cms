@@ -22,21 +22,21 @@ import {
   fetchStudentPayments,
   calculateStudentFinancials,
   isStudentEligibleForDues
-} from './payment.service.js?v=1.8.178';
+} from './payment.service.js?v=1.8.179';
 import {
   evaluateKidsPendingBills,
   buildKidsPaymentLedger
-} from '../utils/school-billing.js?v=1.8.178';
-import { getStudentPhotoSrc } from '../utils/student-media.js?v=1.8.178';
+} from '../utils/school-billing.js?v=1.8.179';
+import { getStudentPhotoSrc } from '../utils/student-media.js?v=1.8.179';
 import {
   todayISO,
   fmtDate,
   getOrgTimezone
-} from '../utils/session-rules.js?v=1.8.178';
-import { formatINR } from '../utils/formatter.js?v=1.8.178';
-import { formatPersonName } from '../utils/formatter.js?v=1.8.178';
-import { resolveUserDisplay, loadUsersDirectory, getRoleTitle } from './user-directory.service.js?v=1.8.178';
-import { loadPdfMake, urlToDataUrl } from '../utils/admission-receipt-pdf.js?v=1.8.178';
+} from '../utils/session-rules.js?v=1.8.179';
+import { formatINR } from '../utils/formatter.js?v=1.8.179';
+import { formatPersonName } from '../utils/formatter.js?v=1.8.179';
+import { resolveUserDisplay, loadUsersDirectory, getRoleTitle } from './user-directory.service.js?v=1.8.179';
+import { loadPdfMake, urlToDataUrl } from '../utils/admission-receipt-pdf.js?v=1.8.179';
 
 const CACHE_KEY = 'financialReports';
 
@@ -1715,6 +1715,23 @@ export function openPrintSheet({
   .uich-leg-val { color: #171717; font-weight: 700; font-variant-numeric: tabular-nums; margin-left: 6px; }
   .uich-tooltip { display: none !important; }
   .uich-empty { padding: 10px 14px; display: flex; align-items: center; justify-content: center; gap: 6px; color: #6B7280; }
+  .rc-hb { margin-bottom: 10px; }
+  .rc-hb-top { display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 3px; color: #525252; }
+  .rc-hb-val { color: #171717; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .rc-hb-sub { font-size: 10px; color: #8A8A8A; margin-left: 4px; }
+  .rc-hb-sub.is-danger { color: #DC2626; }
+  .rc-hb-track { height: 7px; background: #F6F6F8; border-radius: 0; overflow: hidden; }
+  .rc-hb-track > i { display: block; height: 100%; background: #323A85; border-radius: 0; }
+  .rc-hb-track.is-danger > i { background: #DC2626; }
+  .rc-total-note { display: flex; justify-content: space-between; background: #F6F6F8; border-radius: 6px; padding: 7px 10px; margin-top: 10px; font-size: 10.5px; color: #525252; }
+  .rc-total-note b { color: #171717; }
+  .rc-seg-wrap + .rc-seg-wrap { margin-top: 12px; padding-top: 12px; border-top: 1px solid #EAEAEA; }
+  .rc-seg-title { font-size: 11px; font-weight: 700; margin-bottom: 6px; }
+  .rc-seg-bar { display: flex; height: 9px; border-radius: 0; overflow: hidden; gap: 2px; background: #F6F6F8; }
+  .rc-seg-bar > i { display: block; height: 100%; }
+  .rc-seg-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 7px; font-size: 10.5px; color: #525252; }
+  .rc-seg-legend i { display: inline-block; width: 8px; height: 8px; border-radius: 0; margin-right: 4px; }
+  .rc-seg-legend b { color: #171717; margin-left: 2px; }
   table { width: 100%; border-collapse: collapse; margin-top: 6px; }
   th, td { border: 1px solid #EAEAEA; padding: 6px 8px; text-align: left; vertical-align: top; }
   th { background: #EEF0FA; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; color: #323A85; }

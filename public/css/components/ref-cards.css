@@ -1,0 +1,669 @@
+/* ref-cards.css — Reusable flat, shadow-free calm UI system inspired by temp_ref_dashboard.html.
+ * Scoped on .rc-* classes so existing pages (including Dashboard) remain untouched until opted in.
+ * Calm palette: white/grey + brand purple (--primary); red ONLY for overdue money; green ONLY for small "up" chips.
+ */
+
+.rc-scope {
+  --rc-r-sm: 4px;
+  --rc-r: 6px;
+  --rc-r-lg: 8px;
+  --rc-bg: var(--bg, #F6F6F8);
+  --rc-surface: var(--surface, #FFFFFF);
+  --rc-border: var(--border, #EAEAEA);
+  --rc-border-strong: var(--border-strong, #D4D4D4);
+  --rc-text: var(--text, #171717);
+  --rc-text-sec: var(--text-sec, #525252);
+  --rc-text-mute: #8A8A8A;
+  --rc-primary: var(--primary, #4F2DA3);
+  --rc-primary-hover: var(--primary-hover, #3F2385);
+  --rc-primary-soft: var(--primary-soft, #F3EFFB);
+  --rc-danger: var(--danger, #DC2626);
+  --rc-danger-soft: var(--danger-soft, #FEF2F2);
+  --rc-success: var(--success, #16A34A);
+  --rc-success-soft: var(--success-soft, #F0FDF4);
+}
+
+/* ---------- Page Header ---------- */
+.rc-page-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 20px;
+  margin-bottom: 18px;
+}
+
+.rc-eyebrow {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--rc-text-mute);
+  margin-bottom: 4px;
+}
+
+.rc-page-title {
+  margin: 0;
+  font-family: var(--font-head, var(--font-main, sans-serif));
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.3;
+  color: var(--rc-text);
+}
+
+.rc-page-sub {
+  margin: 4px 0 0;
+  font-size: 13.5px;
+  color: var(--rc-text-mute);
+}
+
+.rc-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.rc-btn-outline {
+  height: 36px;
+  padding: 0 14px;
+  border-radius: var(--rc-r);
+  border: 1px solid var(--rc-border-strong);
+  background: var(--rc-surface);
+  color: var(--rc-text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background .15s, border-color .15s;
+}
+
+.rc-btn-outline:hover {
+  background: var(--rc-bg);
+}
+
+.rc-btn-outline svg.lucide {
+  width: 15px;
+  height: 15px;
+  color: var(--rc-text-sec);
+}
+
+.rc-icon-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--rc-r);
+  border: 1px solid var(--rc-border);
+  background: var(--rc-surface);
+  color: var(--rc-text-sec);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  cursor: pointer;
+  transition: background .15s, color .15s, border-color .15s;
+}
+
+.rc-icon-btn:hover:not(:disabled) {
+  background: var(--rc-bg);
+  color: var(--rc-text);
+  border-color: var(--rc-border-strong);
+}
+
+.rc-icon-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.rc-icon-btn svg.lucide {
+  width: 16px;
+  height: 16px;
+}
+
+/* ---------- Flat White Card Container ---------- */
+.rc-filter-card,
+.rc-card {
+  background: var(--rc-surface);
+  border: 1px solid var(--rc-border);
+  border-radius: var(--rc-r);
+  box-shadow: none;
+  min-width: 0;
+}
+
+.rc-filter-card {
+  padding: 14px 18px;
+}
+
+.rc-card {
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.rc-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 15px 20px;
+  border-bottom: 1px solid var(--rc-border);
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.rc-card-head-txt {
+  min-width: 0;
+}
+
+.rc-card-title {
+  margin: 0;
+  font-family: var(--font-head, var(--font-main, sans-serif));
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.35;
+  color: var(--rc-text);
+}
+
+.rc-card-sub {
+  margin: 2px 0 0;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.4;
+  color: var(--rc-text-mute);
+}
+
+.rc-card-body {
+  padding: 20px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+/* ---------- Joined Stat Strip (4 cells separated by 1px border dividers) ---------- */
+.rc-stat-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1px;
+  background: var(--rc-border);
+  border: 1px solid var(--rc-border);
+  border-radius: var(--rc-r);
+  overflow: hidden;
+}
+
+.rc-stat-strip + .rc-stat-strip {
+  margin-top: 14px;
+}
+
+.rc-stat-cell {
+  background: var(--rc-surface);
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 156px;
+}
+
+.rc-stat-ic {
+  display: flex;
+  align-items: center;
+  color: var(--rc-text-mute);
+  margin-bottom: 11px;
+}
+
+.rc-stat-ic svg.lucide {
+  width: 17px;
+  height: 17px;
+  stroke-width: 1.9;
+}
+
+.rc-stat-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--rc-text-sec);
+  margin-bottom: 6px;
+}
+
+.rc-stat-val {
+  font-size: clamp(22px, 1.95vw, 28px);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+  color: var(--rc-text);
+  font-variant-numeric: tabular-nums;
+  margin-bottom: 11px;
+}
+
+.rc-stat-val.is-danger {
+  color: var(--rc-danger);
+}
+
+.rc-stat-bar {
+  width: 100%;
+  height: 4px;
+  margin: -3px 0 10px;
+  background: var(--rc-bg);
+  border-radius: 0;
+  overflow: hidden;
+}
+
+.rc-stat-bar > i {
+  display: block;
+  height: 100%;
+  background: var(--rc-primary);
+  border-radius: 0;
+  transition: width .2s ease;
+}
+
+.rc-stat-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: auto;
+  font-size: 11.5px;
+  color: var(--rc-text-mute);
+  line-height: 1.35;
+}
+
+.rc-chip {
+  padding: 2px 7px;
+  border-radius: var(--rc-r-sm);
+  font-weight: 700;
+  font-size: 11px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: #F0EFF5;
+  color: var(--rc-text-sec);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.rc-chip svg.lucide {
+  width: 11px;
+  height: 11px;
+}
+
+.rc-chip.is-delta {
+  order: -1;
+}
+
+.rc-chip.is-up {
+  background: var(--rc-success-soft);
+  color: var(--rc-success);
+}
+
+.rc-chip.is-danger {
+  background: var(--rc-danger-soft);
+  color: var(--rc-danger);
+}
+
+.rc-meta-note {
+  color: var(--rc-text-mute);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Grid Layout Helpers ---------- */
+.rc-sec {
+  margin-top: 18px;
+}
+
+.rc-row-2-1 {
+  display: grid;
+  grid-template-columns: 1.55fr 1fr;
+  gap: 16px;
+  align-items: stretch;
+}
+
+.rc-row-2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  align-items: stretch;
+}
+
+.rc-stack-gap {
+  margin-top: 16px;
+}
+
+/* ---------- Collection Summary & Square Legend Row ---------- */
+.rc-trend-summary {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 6px;
+  flex-wrap: wrap;
+}
+
+.rc-trend-amt {
+  font-size: 25px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+  color: var(--rc-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.rc-trend-per {
+  font-size: 12.5px;
+  color: var(--rc-text-mute);
+}
+
+.rc-legend-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  font-size: 12px;
+  color: var(--rc-text-sec);
+  margin: 2px 0 10px;
+}
+
+.rc-legend-row span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.rc-legend-row i {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 0;
+  flex-shrink: 0;
+}
+
+/* ---------- "Students by Centre" Style Thin Bar List ---------- */
+.rc-hb {
+  margin-bottom: 13px;
+}
+
+.rc-hb:last-of-type {
+  margin-bottom: 0;
+}
+
+.rc-hb-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+  font-size: 13px;
+  margin-bottom: 5px;
+  color: var(--rc-text-sec);
+  font-weight: 500;
+}
+
+.rc-hb-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rc-hb-val {
+  color: var(--rc-text);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.rc-hb-sub {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--rc-text-mute);
+  margin-left: 6px;
+}
+
+.rc-hb-sub.is-danger {
+  color: var(--rc-danger);
+}
+
+.rc-hb-track {
+  height: 8px;
+  background: var(--rc-bg);
+  border-radius: 0;
+  overflow: hidden;
+}
+
+.rc-hb-track > i {
+  display: block;
+  height: 100%;
+  background: var(--rc-primary);
+  border-radius: 0;
+}
+
+.rc-hb-track.is-danger > i {
+  background: var(--rc-danger);
+}
+
+.rc-total-note {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  background: var(--rc-bg);
+  border-radius: var(--rc-r);
+  padding: 10px 14px;
+  margin-top: 14px;
+  font-size: 12.5px;
+  color: var(--rc-text-sec);
+}
+
+.rc-total-note b {
+  color: var(--rc-text);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* ---------- "Students by Semester" Thin Stacked Segment Bar ---------- */
+.rc-seg-wrap + .rc-seg-wrap {
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid var(--rc-border);
+}
+
+.rc-seg-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--rc-text);
+  margin-bottom: 10px;
+}
+
+.rc-seg-bar {
+  display: flex;
+  height: 10px;
+  border-radius: 0;
+  overflow: hidden;
+  gap: 2px;
+  background: var(--rc-bg);
+}
+
+.rc-seg-bar > i {
+  display: block;
+  height: 100%;
+}
+
+.rc-seg-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--rc-text-sec);
+}
+
+.rc-seg-legend > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.rc-seg-legend i {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 0;
+  flex-shrink: 0;
+}
+
+.rc-seg-legend b {
+  color: var(--rc-text);
+  font-weight: 700;
+  margin-left: 2px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Flat Segmented Switcher ---------- */
+.rc-seg-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border-radius: var(--rc-r);
+  border: 1px solid var(--rc-border);
+  background: var(--rc-bg);
+  flex-shrink: 0;
+}
+
+.rc-seg-tab {
+  border: 0;
+  background: transparent;
+  color: var(--rc-text-sec);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: var(--rc-r-sm);
+  cursor: pointer;
+  transition: background .12s, color .12s;
+}
+
+.rc-seg-tab:hover {
+  color: var(--rc-text);
+}
+
+.rc-seg-tab.is-active {
+  background: var(--rc-surface);
+  color: var(--rc-primary);
+  font-weight: 700;
+  border: 1px solid var(--rc-border);
+}
+
+/* ---------- Flat Reference Data Table ---------- */
+.rc-table-scroll {
+  overflow-x: auto;
+}
+
+.rc-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.rc-table th,
+.rc-table td {
+  font-variant-numeric: tabular-nums;
+}
+
+.rc-table thead th {
+  text-align: left;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--rc-text-sec);
+  padding: 10px 20px;
+  background: var(--rc-bg);
+  border-bottom: 1px solid var(--rc-border);
+  white-space: nowrap;
+}
+
+.rc-table thead th.num,
+.rc-table tbody td.num {
+  text-align: right;
+}
+
+.rc-table tbody td {
+  padding: 13px 20px;
+  font-size: 13px;
+  color: var(--rc-text-sec);
+  border-bottom: 1px solid var(--rc-border);
+  vertical-align: middle;
+}
+
+.rc-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.rc-table tbody tr:hover td {
+  background: #FAF9FD;
+}
+
+.rc-td-strong {
+  color: var(--rc-text);
+  font-weight: 600;
+}
+
+.rc-td-danger {
+  color: var(--rc-danger);
+  font-weight: 700;
+}
+
+.rc-td-mute {
+  color: var(--rc-text-mute);
+}
+
+.rc-rate-track {
+  height: 4px;
+  width: 96px;
+  margin: 0 0 3px auto;
+  background: var(--rc-border);
+  border-radius: 0;
+  overflow: hidden;
+}
+
+.rc-rate-track > i {
+  display: block;
+  height: 100%;
+  background: var(--rc-primary);
+  border-radius: 0;
+}
+
+.rc-rate-text {
+  font-size: 11px;
+  color: var(--rc-text-mute);
+}
+
+/* ---------- Responsive Breakpoints ---------- */
+@media (max-width: 1200px) {
+  .rc-stat-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .rc-row-2-1 {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 900px) {
+  .rc-row-2 {
+    grid-template-columns: 1fr;
+  }
+  .rc-page-head {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+}
+
+@media (max-width: 560px) {
+  .rc-stat-strip {
+    grid-template-columns: 1fr;
+  }
+  .rc-stat-cell {
+    padding: 15px 16px;
+  }
+  .rc-card-head {
+    padding: 14px 16px;
+  }
+  .rc-card-body {
+    padding: 16px;
+  }
+}

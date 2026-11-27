@@ -1,5 +1,5 @@
-import { ARCHIVE_VIEWER_OVERRIDES_CSS } from './archive-viewer-styles.js?v=1.8.178';
-import { ARCHIVE_RECEIPTS_VIEWER_JS } from './archive-viewer-receipts.js?v=1.8.178';
+import { ARCHIVE_VIEWER_OVERRIDES_CSS } from './archive-viewer-styles.js?v=1.8.179';
+import { ARCHIVE_RECEIPTS_VIEWER_JS } from './archive-viewer-receipts.js?v=1.8.179';
 
 /**
  * Builds the static viewer files packed into each archive ZIP:

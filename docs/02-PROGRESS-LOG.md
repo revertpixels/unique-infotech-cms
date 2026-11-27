@@ -39,6 +39,30 @@
 
 ---
 
+### [2026-11-27 19:40] Version 1.8.194 — Backfill `feeTotal` and `paidInstallments` / `installmentsPaid` Fix (Local Only)
+
+**What was built:**
+- **Extended Admin SDK backfill (`tools/backfill-v1.8.192.mjs`)**:
+  - Added Youth (`ctx !== 'school'`) recomputation and correction of `feeTotal` (matching `fees.js` / `courseFeeOf()` / `calculateStudentFinancials()`: `admission + installments`, or `fullPaymentAmount` on full plan — excluding Study Material & Exam Fee), `paidInstallments` (sorted unique installment numbers from `IN` / `INST` / `INSTALLMENT` payment docs; `[]` on full plan), and `installmentsPaid` (`paidInstallments.length`).
+  - Kids (`ctx === 'school'`) students retain their schema (`moneyCollected`, `paidAmount`, `totalPaid`, `balanceDue`, `updatedAt` only).
+  - Included `feeTotal`, `paidInstallments`, and `installmentsPaid` in `dryrun.csv`, `backfill-dryrun-attention.csv` (flagging `feeTotal`/`installmentsPaid` decreases and `paidInstallments` rebuilds/removals), `applied.csv`, branch diff summaries, and exact `--rollback` restoration.
+
+**Why:**
+- Fix stale `feeTotal: 3280` on early BZYCTC CDTA admissions (`27010001`–`27010004`) so Dashboard server `sum(feeTotal)` matches Reports `totalCourseFee`, prevent future `recordPaymentTx()` writes (`sData.feeTotal - newPaid`) from re-introducing ₹280 into `balanceDue`, and rebuild `27010001`'s incomplete `paidInstallments: [3] -> [1, 2, 3]` from `IN` receipts.
+
+**Files touched (committed locally only, NOT deployed or pushed):**
+- MODIFIED: `tools/backfill-v1.8.192.mjs`, `docs/02-PROGRESS-LOG.md` (+ `bump-version.js 1.8.194` across app assets).
+
+**Firestore changes:**
+- None on live Firestore (emulator + local backup copy verification only; NOT deployed).
+
+**Tested on (post-bump `1.8.194`):**
+- `backup-v1.8.193-2026-11-27T13-42-14.json` copy replay on Auth + Firestore Emulators (`21` students, `61` payments): ✅ `--dry-run` (`feeTotal: 4`, `moneyCollected: 21`, `paidAmount: 5`, `totalPaid: 5`, `balanceDue: 6`, `paidInstallments: 1`, `installmentsPaid: 1`, `updatedAt: 0`); `27010001`–`27010004` updated `3280 -> 3000` and `balanceDue: 500/1500/0/500`, `27010001` rebuilt `[3] -> [1,2,3]` / `1 -> 3`; idempotent re-run `0` changes; `--rollback` restored `21/21` docs byte-for-byte.
+- Post-backfill Installment #4 payment (`₹500`) + parity check in Chrome on Emulator: ✅ `27010001` settled to `feeTotal: 3000`, `paidAmount: 3000`, `balanceDue: 0` (not `280`), `paidInstallments: [1,2,3,4]`; Dashboard `sum(feeTotal)` (`20,500`) matched Reports `totalCourseFee` (`20,500`) cleanly.
+- Deployed: ❌ NO (local commit only; wait for green flag).
+
+---
+
 ### [2026-11-27 19:00] Version 1.8.193 — Deploy Safety Additions: JSON Backup Fallback, Backfill Rollback, Attention CSV Guard & STOP Runbook (Local Only)
 
 **What was built:**

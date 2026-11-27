@@ -21,25 +21,25 @@ import {
   ref as storageRef,
   getDownloadURL
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-storage.js';
-import { APP_VERSION } from '../core/app.js?v=1.8.193';
-import { loadAllSessions, getAllCachedSessions, hasFreshSessionsCache } from '../core/sessions.js?v=1.8.193';
-import { todayISO, installmentSchedule, getOrgTimezone } from '../utils/session-rules.js?v=1.8.193';
+import { APP_VERSION } from '../core/app.js?v=1.8.194';
+import { loadAllSessions, getAllCachedSessions, hasFreshSessionsCache } from '../core/sessions.js?v=1.8.194';
+import { todayISO, installmentSchedule, getOrgTimezone } from '../utils/session-rules.js?v=1.8.194';
 import {
   calculateStudentFinancials,
   evaluateYouthStudentDues,
   normalizeYouthPaymentsLedger,
   installmentCourseFee,
   installmentBalanceDue
-} from './payment.service.js?v=1.8.193';
+} from './payment.service.js?v=1.8.194';
 import {
   loadUsersDirectory,
   resolveUserDisplay,
   getUserTitle
-} from './user-directory.service.js?v=1.8.193';
-import { formatPersonName, formatGenderDisplay } from '../utils/formatter.js?v=1.8.193';
-import { getStudentPhotoSrc, getStudentDocRecord, getStudentDocSrc, getStudentDocMime } from '../utils/student-media.js?v=1.8.193';
-import { buildOfflineViewerAssets } from '../utils/archive-viewer-builder.js?v=1.8.193';
-import { buildYouthReceiptData } from '../utils/admission-receipt.js?v=1.8.193';
+} from './user-directory.service.js?v=1.8.194';
+import { formatPersonName, formatGenderDisplay } from '../utils/formatter.js?v=1.8.194';
+import { getStudentPhotoSrc, getStudentDocRecord, getStudentDocSrc, getStudentDocMime } from '../utils/student-media.js?v=1.8.194';
+import { buildOfflineViewerAssets } from '../utils/archive-viewer-builder.js?v=1.8.194';
+import { buildYouthReceiptData } from '../utils/admission-receipt.js?v=1.8.194';
 
 /** Feature flag keeping Phase 2 session deletion OFF until Phase 1 is verified and approved. */
 export const ENABLE_ARCHIVE_SESSION_DELETE = false;

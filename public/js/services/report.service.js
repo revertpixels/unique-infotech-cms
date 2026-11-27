@@ -27,22 +27,22 @@ import {
   fetchStudentPayments,
   calculateStudentFinancials,
   isStudentEligibleForDues
-} from './payment.service.js?v=1.8.193';
+} from './payment.service.js?v=1.8.194';
 import {
   evaluateKidsPendingBills,
   buildKidsPaymentLedger
-} from '../utils/school-billing.js?v=1.8.193';
-import { getStudentPhotoSrc } from '../utils/student-media.js?v=1.8.193';
+} from '../utils/school-billing.js?v=1.8.194';
+import { getStudentPhotoSrc } from '../utils/student-media.js?v=1.8.194';
 import {
   todayISO,
   fmtDate,
   getOrgTimezone
-} from '../utils/session-rules.js?v=1.8.193';
-import { formatINR } from '../utils/formatter.js?v=1.8.193';
-import { formatPersonName } from '../utils/formatter.js?v=1.8.193';
-import { resolveUserDisplay, loadUsersDirectory, getRoleTitle } from './user-directory.service.js?v=1.8.193';
-import { loadPdfMake, urlToDataUrl } from '../utils/admission-receipt-pdf.js?v=1.8.193';
-import { loadAllSessions, getAllCachedSessions, hasFreshSessionsCache } from '../core/sessions.js?v=1.8.193';
+} from '../utils/session-rules.js?v=1.8.194';
+import { formatINR } from '../utils/formatter.js?v=1.8.194';
+import { formatPersonName } from '../utils/formatter.js?v=1.8.194';
+import { resolveUserDisplay, loadUsersDirectory, getRoleTitle } from './user-directory.service.js?v=1.8.194';
+import { loadPdfMake, urlToDataUrl } from '../utils/admission-receipt-pdf.js?v=1.8.194';
+import { loadAllSessions, getAllCachedSessions, hasFreshSessionsCache } from '../core/sessions.js?v=1.8.194';
 
 const CACHE_KEY = 'financialReports';
 export const CACHE_STALE_MS = 30000;

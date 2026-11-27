@@ -1,17 +1,17 @@
 // reports.page.js — Read-only Youth Centre Reports page (#/reports)
 // Keeps v1.8.179 joined KPI stat strips, header, filter bar & compact card radius with restored v1.8.178 multi-colour charts.
 
-import { createSelect } from '../components/ui-select.js?v=1.8.193';
-import { createBranchBatchFilter, clearPersistedBranchBatchFilters } from '../components/branch-batch-filter.js?v=1.8.193';
-import { renderDonutChart, renderBarChart, renderStackedBarChart, renderLineChart } from '../components/charts.js?v=1.8.193';
-import { showToast } from '../components/toast.js?v=1.8.193';
-import { renderEmptyTableState } from '../components/list-page.js?v=1.8.193';
+import { createSelect } from '../components/ui-select.js?v=1.8.194';
+import { createBranchBatchFilter, clearPersistedBranchBatchFilters } from '../components/branch-batch-filter.js?v=1.8.194';
+import { renderDonutChart, renderBarChart, renderStackedBarChart, renderLineChart } from '../components/charts.js?v=1.8.194';
+import { showToast } from '../components/toast.js?v=1.8.194';
+import { renderEmptyTableState } from '../components/list-page.js?v=1.8.194';
 import {
   getCachedSessions,
   loadSessions,
   getSelectedSession,
   hasFreshSessionsCache
-} from '../core/sessions.js?v=1.8.193';
+} from '../core/sessions.js?v=1.8.194';
 import {
   ensureReferenceData,
   getCachedReferenceData,
@@ -34,8 +34,8 @@ import {
   formatINR,
   fmtDate,
   todayISO
-} from '../services/report.service.js?v=1.8.193';
-import { resolveUserDisplay, getRoleTitle } from '../services/user-directory.service.js?v=1.8.193';
+} from '../services/report.service.js?v=1.8.194';
+import { resolveUserDisplay, getRoleTitle } from '../services/user-directory.service.js?v=1.8.194';
 
 const FILTER_STORAGE_PREFIX = 'uicms.rep.v1.';
 

@@ -1,7 +1,11 @@
 #!/usr/bin/env node
 /**
  * backfill-v1.8.192.mjs — Recompute student denormalized financial fields & updatedAt
- * from each student's `payment` subcollection (Youth + Kids, all sessions).
+ * from each student's `payment` subcollection & course package rules (Youth + Kids, all sessions).
+ *
+ * Recomputes for Youth: `feeTotal`, `moneyCollected`, `paidAmount`, `totalPaid`, `balanceDue`,
+ * `paidInstallments`, `installmentsPaid`, and `updatedAt` (if missing).
+ * Recomputes for Kids (`ctx: 'school'`): `moneyCollected`, `paidAmount`, `totalPaid`, `balanceDue`, `updatedAt`.
  *
  * STRICT SAFETY:
  *   - Default mode is `--dry-run` (writes NOTHING to Firestore).
@@ -219,6 +223,7 @@ export function recomputeStudentFromPayments(student, payments = []) {
   let paidCourse = 0;
   let moneyCollected = 0;
 
+  const instSet = new Set();
   for (const p of list) {
     if (!p) continue;
     const t = String(p.type || '').toUpperCase().trim();
@@ -232,6 +237,11 @@ export function recomputeStudentFromPayments(student, payments = []) {
     }
     if (isWaiver) continue;
 
+    if (isInst) {
+      const no = Number(p.installmentNo ?? p.installment ?? p.no ?? p.instNo);
+      if (Number.isInteger(no) && no > 0) instSet.add(no);
+    }
+
     const amt = Number(p.amount || 0);
     if (isFullPay || isAd || isInst) {
       paidCourse = roundMoney(paidCourse + amt);
@@ -244,12 +254,18 @@ export function recomputeStudentFromPayments(student, payments = []) {
     moneyCollected = roundMoney(moneyCollected + recv);
   }
 
-  const balanceDue = Math.max(0, roundMoney(total - paidCourse));
+  const paidInstallments = isFull ? [] : Array.from(instSet).sort((a, b) => a - b);
+  const installmentsPaid = paidInstallments.length;
+  const feeTotal = roundMoney(total);
+  const balanceDue = Math.max(0, roundMoney(feeTotal - paidCourse));
   return {
+    feeTotal,
     paidAmount: paidCourse,
     totalPaid: paidCourse,
     balanceDue,
-    moneyCollected
+    moneyCollected,
+    paidInstallments,
+    installmentsPaid
   };
 }
 
@@ -517,10 +533,13 @@ export async function runBackfill(options = {}) {
   const attentionStudentIds = new Set();
   const updates = [];
   const fieldCounts = {
+    feeTotal: 0,
     moneyCollected: 0,
     paidAmount: 0,
     totalPaid: 0,
     balanceDue: 0,
+    paidInstallments: 0,
+    installmentsPaid: 0,
     updatedAt: 0
   };
   const branchDiffs = new Map();
@@ -532,10 +551,13 @@ export async function runBackfill(options = {}) {
     if (!branchDiffs.has(brLabel)) {
       branchDiffs.set(brLabel, {
         studentsChanged: 0,
+        feeTotalDiff: 0,
         moneyCollectedDiff: 0,
         paidAmountDiff: 0,
         totalPaidDiff: 0,
         balanceDueDiff: 0,
+        paidInstallmentsChanged: 0,
+        installmentsPaidDiff: 0,
         updatedAtSet: 0
       });
     }
@@ -559,7 +581,11 @@ export async function runBackfill(options = {}) {
     const brAgg = ensureBranchAgg(branchLabel);
     let docChanged = false;
 
-    for (const field of ['moneyCollected', 'paidAmount', 'totalPaid', 'balanceDue']) {
+    const numericFields = isKids
+      ? ['moneyCollected', 'paidAmount', 'totalPaid', 'balanceDue']
+      : ['feeTotal', 'moneyCollected', 'paidAmount', 'totalPaid', 'balanceDue', 'installmentsPaid'];
+
+    for (const field of numericFields) {
       const oldRaw = s[field];
       const hasOld = oldRaw !== undefined && oldRaw !== null && oldRaw !== '';
       const oldNum = hasOld ? roundMoney(oldRaw) : null;
@@ -568,7 +594,7 @@ export async function runBackfill(options = {}) {
         const diff = roundMoney(newNum - (oldNum ?? 0));
         patch[field] = newNum;
         fieldCounts[field] += 1;
-        brAgg[`${field}Diff`] = roundMoney(brAgg[`${field}Diff`] + diff);
+        brAgg[`${field}Diff`] = roundMoney((brAgg[`${field}Diff`] || 0) + diff);
         docChanged = true;
         const oldCsv = hasOld ? String(oldNum) : 'MISSING';
         const newCsv = String(newNum);
@@ -584,7 +610,7 @@ export async function runBackfill(options = {}) {
         ]);
 
         const reasons = [];
-        if ((field === 'paidAmount' || field === 'balanceDue') && diff < 0) {
+        if ((field === 'paidAmount' || field === 'balanceDue' || field === 'feeTotal' || field === 'installmentsPaid') && diff < 0) {
           reasons.push(`${field} decreased (${diff})`);
         }
         if (Math.abs(diff) > ATTENTION_DELTA_THRESHOLD) {
@@ -602,6 +628,57 @@ export async function runBackfill(options = {}) {
             newCsv,
             String(diff),
             reasons.join('; '),
+            paymentTypes
+          ]);
+        }
+      }
+    }
+
+    if (!isKids) {
+      const oldInstRaw = s.paidInstallments;
+      const hasOldInst = Array.isArray(oldInstRaw);
+      const newInstArr = recomputed.paidInstallments;
+      const sameInst = hasOldInst
+        && oldInstRaw.length === newInstArr.length
+        && oldInstRaw.every((v, idx) => typeof v === 'number' && v === newInstArr[idx]);
+      if (!sameInst) {
+        patch.paidInstallments = newInstArr;
+        fieldCounts.paidInstallments += 1;
+        brAgg.paidInstallmentsChanged += 1;
+        docChanged = true;
+        const oldCsv = oldInstRaw === undefined ? 'MISSING' : encodeFieldVal(oldInstRaw);
+        const newCsv = encodeFieldVal(newInstArr);
+        const oldCount = hasOldInst ? oldInstRaw.length : 0;
+        const instDiff = newInstArr.length - oldCount;
+        csvRows.push([
+          stuDoc.id,
+          studentCode,
+          branchLabel,
+          sessionLabel,
+          'paidInstallments',
+          oldCsv,
+          newCsv,
+          String(instDiff)
+        ]);
+
+        const instReasons = [];
+        if (hasOldInst && oldInstRaw.some((v) => !newInstArr.includes(Number(v)))) {
+          instReasons.push('installment(s) removed from paidInstallments');
+        } else if (hasOldInst) {
+          instReasons.push('paidInstallments rebuilt from IN payments');
+        }
+        if (instReasons.length) {
+          attentionStudentIds.add(stuDoc.id);
+          attentionRows.push([
+            stuDoc.id,
+            studentCode,
+            branchLabel,
+            sessionLabel,
+            'paidInstallments',
+            oldCsv,
+            newCsv,
+            String(instDiff),
+            instReasons.join('; '),
             paymentTypes
           ]);
         }
@@ -683,7 +760,15 @@ export async function runBackfill(options = {}) {
 
   const branchSummary = {};
   for (const [br, agg] of Array.from(branchDiffs.entries()).sort((a, b) => a[0].localeCompare(b[0]))) {
-    if (agg.studentsChanged > 0 || agg.moneyCollectedDiff !== 0 || agg.paidAmountDiff !== 0 || agg.balanceDueDiff !== 0) {
+    if (
+      agg.studentsChanged > 0
+      || agg.feeTotalDiff !== 0
+      || agg.moneyCollectedDiff !== 0
+      || agg.paidAmountDiff !== 0
+      || agg.balanceDueDiff !== 0
+      || agg.paidInstallmentsChanged > 0
+      || agg.installmentsPaidDiff !== 0
+    ) {
       branchSummary[br] = agg;
     }
   }

@@ -27,9 +27,9 @@ import {
   collection, getDocs, query, where, doc, getDoc, addDoc, updateDoc, deleteDoc,
   serverTimestamp, runTransaction, writeBatch
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.193';
-import { firstMonthlyMonth } from './school-receipt.js?v=1.8.193';
-import { isCourseActive, todayISO } from './session-rules.js?v=1.8.193';
+import { showToast } from '../components/toast.js?v=1.8.194';
+import { firstMonthlyMonth } from './school-receipt.js?v=1.8.194';
+import { isCourseActive, todayISO } from './session-rules.js?v=1.8.194';
 const ENROLMENTS_COL = 'enrolments';
 const BILLS_COL = 'bills';
 const PAYMENTS_COL = 'payments';

@@ -1,6 +1,6 @@
 import { db } from '../config/firebase-config.js';
 import { collection, getDocs, query, where } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { todayISO as istTodayISO } from '../utils/session-rules.js?v=1.8.186';
+import { todayISO as istTodayISO } from '../utils/session-rules.js?v=1.8.187';
 
 // Shared session state lives on window so every module copy sees the same data.
 function cache() {

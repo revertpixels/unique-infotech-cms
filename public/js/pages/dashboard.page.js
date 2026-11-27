@@ -1,20 +1,20 @@
 // dashboard.page.js — Read-only Youth Centre Dashboard (#/dashboard) + preserved Unique Kids placeholder.
 
-import { ROUTES } from '../core/router.js?v=1.8.186';
-import { createSelect } from '../components/ui-select.js?v=1.8.186';
+import { ROUTES } from '../core/router.js?v=1.8.187';
+import { createSelect } from '../components/ui-select.js?v=1.8.187';
 import {
   renderDonutChart,
   renderBarChart,
   renderStackedBarChart,
   renderLineChart
-} from '../components/charts.js?v=1.8.186';
-import { openPaymentDetailsModal } from '../components/payment-details-modal.js?v=1.8.186';
-import { loadDashboardArchiveReminder } from '../services/archive.service.js?v=1.8.186';
-import { resolveUserDisplay, getRoleTitle } from '../services/user-directory.service.js?v=1.8.186';
-import { getCachedSessions, loadSessions, getSelectedSession } from '../core/sessions.js?v=1.8.186';
-import { getOrgTimezone } from '../utils/session-rules.js?v=1.8.186';
-import { formatPersonName, initials } from '../utils/formatter.js?v=1.8.186';
-import { buildYouthDashboardData } from '../services/dashboard.service.js?v=1.8.186';
+} from '../components/charts.js?v=1.8.187';
+import { openPaymentDetailsModal } from '../components/payment-details-modal.js?v=1.8.187';
+import { loadDashboardArchiveReminder } from '../services/archive.service.js?v=1.8.187';
+import { resolveUserDisplay, getRoleTitle } from '../services/user-directory.service.js?v=1.8.187';
+import { getCachedSessions, loadSessions, getSelectedSession } from '../core/sessions.js?v=1.8.187';
+import { getOrgTimezone } from '../utils/session-rules.js?v=1.8.187';
+import { formatPersonName, initials } from '../utils/formatter.js?v=1.8.187';
+import { buildYouthDashboardData } from '../services/dashboard.service.js?v=1.8.187';
 import {
   ensureReferenceData,
   scopeReferenceDataByCtx,
@@ -26,7 +26,7 @@ import {
   modeDisplayMeta,
   formatINR,
   fmtDate
-} from '../services/report.service.js?v=1.8.186';
+} from '../services/report.service.js?v=1.8.187';
 
 let state = null;
 let profileListener = null;
@@ -34,7 +34,6 @@ let usersListener = null;
 let sessionSelListener = null;
 let sessionsLoadedListener = null;
 let sessionsChangedListener = null;
-let quickResizeListener = null;
 
 function $(id) {
   return document.getElementById(id);
@@ -268,6 +267,7 @@ function syncBranchFilterControl() {
   const host = $('dash-branch-host');
   const lockedEl = $('dash-branch-locked');
   const lockedNameEl = $('dash-branch-locked-name');
+  const sepBranch = $('dash-tb-sep-branch');
   if (!wrap || !host || !lockedEl) return;
 
   const scoped = scopeReferenceDataByCtx(state.meta || {}, 'youth');
@@ -275,11 +275,14 @@ function syncBranchFilterControl() {
 
   if (state.isBranchHead) {
     wrap.hidden = false;
+    if (sepBranch) sepBranch.hidden = false;
     host.hidden = true;
     host.innerHTML = '';
     state.branchSelect = null;
     const br = state.meta?.branchesById?.[state.profile.branchId] || branches.find((b) => b.id === state.profile.branchId) || {};
-    if (lockedNameEl) lockedNameEl.textContent = br.name || br.code || state.profile.branchId;
+    const brName = br.name || br.code || state.profile.branchId;
+    if (lockedNameEl) lockedNameEl.textContent = brName;
+    lockedEl.title = brName;
     lockedEl.hidden = false;
     paint();
     return;
@@ -287,10 +290,12 @@ function syncBranchFilterControl() {
 
   if (!state.isSuper) {
     wrap.hidden = true;
+    if (sepBranch) sepBranch.hidden = true;
     return;
   }
 
   wrap.hidden = false;
+  if (sepBranch) sepBranch.hidden = false;
   lockedEl.hidden = true;
   host.hidden = false;
 
@@ -308,6 +313,7 @@ function syncBranchFilterControl() {
     state.branchSelect = createSelect(host, {
       options,
       value: state.branchFilter,
+      ariaLabel: 'Filter by branch',
       searchable: branches.length > 6,
       searchPlaceholder: 'Filter branch...',
       onChange: (val) => {
@@ -322,95 +328,68 @@ function syncBranchFilterControl() {
   paint();
 }
 
-function fitQuickPillLabels() {
-  const host = $('dash-quick-links');
-  if (!host) return;
-  const btns = host.querySelectorAll('.dash-qbtn');
-  btns.forEach((btn) => {
-    const lbl = btn.querySelector('.dash-qbtn-lbl');
-    if (!lbl) return;
-    const ic = btn.querySelector('.dash-qbtn-ic');
-    const badge = btn.querySelector('.dash-qbtn-badge');
-    lbl.style.fontSize = '';
-    lbl.style.letterSpacing = '';
-    const cs = getComputedStyle(btn);
-    const padL = parseFloat(cs.paddingLeft) || 6;
-    const padR = parseFloat(cs.paddingRight) || 12;
-    const icRect = ic ? ic.getBoundingClientRect() : null;
-    const icGap = ic ? (parseFloat(getComputedStyle(ic).marginRight) || 0) : 0;
-    const lblCs = getComputedStyle(lbl);
-    const lblMr = parseFloat(lblCs.marginRight) || 0;
-    const lblMl = parseFloat(lblCs.marginLeft) || 0;
-    const badgeW = badge ? badge.getBoundingClientRect().width : 0;
-    const maxLblW = Math.max(40, btn.clientWidth - padL - (icRect ? icRect.width : 0) - icGap - lblMl - lblMr - badgeW - padR - 1);
-
-    let size = parseFloat(cs.fontSize) || 14;
-    while (size > 9 && (btn.scrollWidth > btn.clientWidth + 0.5 || lbl.getBoundingClientRect().width > maxLblW)) {
-      size -= 0.5;
-      lbl.style.fontSize = `${size}px`;
-      if (size <= 12) lbl.style.letterSpacing = '-0.02em';
-    }
-  });
-}
-
-function renderQuickActions(d = null) {
-  const host = $('dash-quick-links');
-  const sec = $('dash-quick-sec');
-  if (!host || !sec || !state) return;
+function renderHeaderToolbar(d = null) {
+  const host = $('dash-toolbar-actions');
+  const sepActions = $('dash-tb-sep-actions');
+  if (!host || !state) return;
 
   const pendingCnt = d ? Number(d.kpis?.overdueFees?.studentCount || 0) : 0;
-
-  const definitions = [
-    { key: 'students', label: 'Admissions', href: '#/students', icon: 'user-plus' },
-    { key: 'pay-fees', label: 'Pay Fees', href: '#/pay-fees', icon: 'wallet' },
-    {
-      key: 'pending',
-      label: 'Pending & Overdue',
-      href: '#/pending',
-      icon: 'alarm-clock',
-      badge: pendingCnt > 0 ? String(pendingCnt) : ''
-    },
-    { key: 'payments', label: 'Payment History', href: '#/payments', icon: 'history' },
-    { key: 'reports', label: 'Reports', href: '#/reports', icon: 'bar-chart-3' },
-    { key: 'archives', label: 'Archives', href: '#/archives', icon: 'archive' }
-  ];
-
   const role = state.profile?.role || '';
-  const visible = definitions.filter((item) => {
-    const r = ROUTES[item.key];
-    return r && (!Array.isArray(r.roles) || r.roles.includes(role));
-  });
 
-  if (!visible.length) {
-    sec.hidden = true;
+  if (host.dataset.renderedRole !== role) {
+    const definitions = [
+      { id: 'dash-tb-admission', key: 'admissions', label: 'New Admission', href: '#/admissions?new=1', icon: 'user-plus' },
+      { id: 'dash-tb-collect', key: 'pay-fees', label: 'Collect Fees', href: '#/pay-fees', icon: 'wallet' },
+      { id: 'dash-tb-pending', key: 'pending', label: 'Pending & Overdue', href: '#/pending', icon: 'alarm-clock', hasBadge: true },
+      { id: 'dash-tb-payments', key: 'payments', label: 'Payment History', href: '#/payments', icon: 'history' },
+      { id: 'dash-tb-reports', key: 'reports', label: 'Reports', href: '#/reports', icon: 'bar-chart-3' }
+    ];
+
+    const visible = definitions.filter((item) => {
+      const r = ROUTES[item.key];
+      return r && (!Array.isArray(r.roles) || r.roles.includes(role));
+    });
+
     host.innerHTML = '';
-    return;
+    visible.forEach((item) => {
+      const a = mk('a', 'dash-tb-btn');
+      a.id = item.id;
+      a.href = item.href;
+      a.setAttribute('aria-label', item.label);
+      a.setAttribute('data-tooltip', item.label);
+
+      const ic = document.createElement('i');
+      ic.setAttribute('data-lucide', item.icon);
+      ic.setAttribute('aria-hidden', 'true');
+      a.appendChild(ic);
+
+      if (item.hasBadge) {
+        const badge = mk('span', 'dash-tb-badge');
+        badge.id = 'dash-tb-pending-badge';
+        badge.hidden = true;
+        badge.setAttribute('aria-hidden', 'true');
+        a.appendChild(badge);
+      }
+
+      host.appendChild(a);
+    });
+
+    host.dataset.renderedRole = role;
+    host.hidden = visible.length === 0;
+    if (sepActions) sepActions.hidden = visible.length === 0;
+    paint();
   }
 
-  sec.hidden = false;
-  host.innerHTML = '';
-  visible.forEach((item) => {
-    const r = ROUTES[item.key];
-    const a = mk('a', item.badge ? 'dash-qbtn has-badge' : 'dash-qbtn');
-    a.href = item.href;
-
-    const icWrap = mk('span', 'dash-qbtn-ic');
-    const ic = document.createElement('i');
-    ic.setAttribute('data-lucide', item.icon || r?.icon || 'arrow-right');
-    ic.setAttribute('aria-hidden', 'true');
-    icWrap.appendChild(ic);
-
-    a.append(icWrap, mk('span', 'dash-qbtn-lbl', item.label));
-
-    if (item.badge) {
-      a.appendChild(mk('span', 'dash-qbtn-badge', item.badge));
+  const badgeEl = host.querySelector('.dash-tb-badge');
+  if (badgeEl) {
+    if (pendingCnt > 0) {
+      badgeEl.textContent = String(pendingCnt);
+      badgeEl.hidden = false;
+    } else {
+      badgeEl.textContent = '';
+      badgeEl.hidden = true;
     }
-    host.appendChild(a);
-  });
-
-  paint();
-  fitQuickPillLabels();
-  requestAnimationFrame(fitQuickPillLabels);
+  }
 }
 
 function resolveActiveSession() {
@@ -744,7 +723,7 @@ function computeAndRenderDashboard() {
   });
 
   updateHeaderUi();
-  renderQuickActions(state.analytics);
+  renderHeaderToolbar(state.analytics);
   renderKpis(state.analytics);
   renderFeeHeadsAndBranches(state.analytics);
   renderThreeDonuts(state.analytics);
@@ -841,7 +820,8 @@ export function mount({ profile, ctx } = {}) {
     destroyed: false
   };
 
-  renderQuickActions(null);
+  syncBranchFilterControl();
+  renderHeaderToolbar(null);
   updateHeaderUi();
   bindEvents();
   updateArchiveReminder();
@@ -872,16 +852,10 @@ export function mount({ profile, ctx } = {}) {
   window.addEventListener('uic:session-selected', sessionSelListener);
   window.addEventListener('uic:sessions-loaded', sessionsLoadedListener);
   window.addEventListener('uic:sessions-changed', sessionsChangedListener);
-  quickResizeListener = () => fitQuickPillLabels();
-  window.addEventListener('resize', quickResizeListener);
 }
 
 export function unmount() {
   if (state) state.destroyed = true;
-  if (quickResizeListener) {
-    window.removeEventListener('resize', quickResizeListener);
-    quickResizeListener = null;
-  }
   if (profileListener) {
     window.removeEventListener('uic:profile-updated', profileListener);
     profileListener = null;

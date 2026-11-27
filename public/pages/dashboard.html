@@ -17,32 +17,23 @@
         <p id="dash-subtitle" class="rc-page-sub">Loading session overview...</p>
       </div>
 
-      <div class="rc-head-actions dash-head-actions">
-        <div id="dash-branch-filter-wrap" class="dash-branch-filter" hidden>
+      <div id="dash-toolbar" class="dash-toolbar-pill" role="toolbar" aria-label="Dashboard toolbar">
+        <div id="dash-branch-filter-wrap" class="dash-toolbar-branch" hidden>
           <div id="dash-branch-host" class="dash-branch-host"></div>
           <span id="dash-branch-locked" class="dash-branch-locked" hidden>
             <i data-lucide="lock" aria-hidden="true"></i>
-            <span id="dash-branch-locked-name"></span>
+            <span id="dash-branch-locked-name" class="dash-branch-locked-name"></span>
           </span>
         </div>
-        <a id="dash-btn-admission" href="#/admissions?new=1" class="rc-btn-primary">
-          <i data-lucide="user-plus" aria-hidden="true"></i>
-          <span>New Admission</span>
-        </a>
-        <a id="dash-btn-collect" href="#/pay-fees" class="rc-btn-outline">
-          <i data-lucide="wallet" aria-hidden="true"></i>
-          <span>Collect Fees</span>
-        </a>
-        <button type="button" id="dash-refresh" class="rc-icon-btn" aria-label="Refresh dashboard" title="Refresh dashboard">
+        <span id="dash-tb-sep-branch" class="dash-tb-sep" aria-hidden="true" hidden></span>
+        <div id="dash-toolbar-actions" class="dash-tb-actions"></div>
+        <span id="dash-tb-sep-actions" class="dash-tb-sep" aria-hidden="true"></span>
+        <button type="button" id="dash-refresh" class="dash-tb-btn dash-tb-refresh" aria-label="Refresh"
+          data-tooltip="Refresh">
           <i data-lucide="refresh-cw" aria-hidden="true"></i>
         </button>
       </div>
     </header>
-
-    <!-- 3b. QUICK ACTIONS ROW (compact outline action buttons) -->
-    <section id="dash-quick-sec" class="dash-sec dash-quick-sec" aria-label="Quick Actions">
-      <div id="dash-quick-links" class="dash-quick-bar"></div>
-    </section>
 
     <div id="dash-no-session" class="adm-notice warn dash-sec" hidden>
       <i data-lucide="calendar-x" aria-hidden="true"></i>
@@ -95,7 +86,8 @@
             </div>
           </div>
 
-          <a id="dash-kpi-overdue-link" href="#/pending" class="rc-stat-cell dash-stat-link" title="View pending and overdue students">
+          <a id="dash-kpi-overdue-link" href="#/pending" class="rc-stat-cell dash-stat-link"
+            title="View pending and overdue students">
             <span class="rc-stat-ic"><i data-lucide="alert-triangle" aria-hidden="true"></i></span>
             <span class="rc-stat-label">Overdue Fees</span>
             <div id="dash-kpi-overdue" class="rc-stat-val is-danger">—</div>
@@ -182,7 +174,8 @@
       </section>
 
       <!-- 3e. ROW (3 equal cols): Payment Mode | Overdue Ageing | Students by Course -->
-      <section class="dash-row-3 dash-sec dash-eq-row" aria-label="Payment Modes, Overdue Ageing, and Course Distribution">
+      <section class="dash-row-3 dash-sec dash-eq-row"
+        aria-label="Payment Modes, Overdue Ageing, and Course Distribution">
         <div class="rc-card dash-card">
           <div class="rc-card-head">
             <div class="dash-card-title">
@@ -270,9 +263,12 @@
     <p class="text-mute">Your overview appears here.</p>
   </div>
   <div class="kpi-strip">
-    <div class="kpi"><span class="kpi-label">Students</span><span class="kpi-value" id="dash-kids-students">—</span></div>
-    <div class="kpi"><span class="kpi-label">Collected today</span><span class="kpi-value" id="dash-kids-collected">—</span></div>
-    <div class="kpi"><span class="kpi-label">Dues pending</span><span class="kpi-value" id="dash-kids-dues">—</span></div>
+    <div class="kpi"><span class="kpi-label">Students</span><span class="kpi-value" id="dash-kids-students">—</span>
+    </div>
+    <div class="kpi"><span class="kpi-label">Collected today</span><span class="kpi-value"
+        id="dash-kids-collected">—</span></div>
+    <div class="kpi"><span class="kpi-label">Dues pending</span><span class="kpi-value" id="dash-kids-dues">—</span>
+    </div>
     <div class="kpi"><span class="kpi-label">Overdue</span><span class="kpi-value" id="dash-kids-overdue">—</span></div>
   </div>
   <div class="card">

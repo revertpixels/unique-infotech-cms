@@ -39,6 +39,30 @@
 
 ---
 
+### [2026-11-27 13:05] Version 1.8.187 — Final Dashboard Unified Header Pill Toolbar
+
+**What was built:**
+- Replaced all separate header action controls and the quick actions row under the title (`public/pages/dashboard.html`, `public/css/pages/dashboard.css`, `public/js/pages/dashboard.page.js`):
+  - Removed `#dash-quick-sec` / `#dash-quick-links` completely so `#dash-main` KPI stat strips sit cleanly below the header (`18px` gap).
+  - Built ONE right-aligned header pill toolbar (`#dash-toolbar`, `height: 44px`, `padding: 3px 4px`, `border-radius: 999px`, white background, `1px` light border, soft shadow, `width: fit-content` on desktop) containing:
+    - Left: borderless compact Branch selector (or locked branch label for Branch Coordinators), truncating gracefully with ellipsis on narrow mobile screens (`< 768px`).
+    - Vertical divider, then 5 round `36×36px` icon-only primary-brand action buttons (`New Admission`, `Collect Fees`, `Pending & Overdue` with top-right red count badge hidden when `0`, `Payment History`, `Reports`) with matching `aria-label` + dark hover/focus tooltips and role-based filtering.
+    - Vertical divider, then `36×36px` Refresh button (`spin` animation + `"Refresh"` tooltip/aria-label).
+  - Below `< 768px`, the toolbar moves below the header title at full width with icons locked at `36×36px` on a single horizontal row.
+
+**Why:**
+- Consolidate dashboard actions into a compact, zero-clutter pill toolbar on the header row matching the final design specification.
+
+**Files touched:**
+- MODIFIED: `public/pages/dashboard.html`, `public/css/pages/dashboard.css`, `public/js/pages/dashboard.page.js`, `docs/02-PROGRESS-LOG.md` (plus `tools/bump-version.js 1.8.187`).
+
+**Firestore changes:**
+- None.
+
+**Tested on:**
+- Chrome Desktop (`1440×900`, including real mouse hover tooltip capture) and Mobile (`390×844` Super Admin + Branch Head): ✅ Verified `44px` pill toolbar, `0px` branch border, `36×36px` round buttons, tooltip visibility on hover/focus, `18px` stat rows gap across desktop & mobile, zero horizontal overflow, and New Admission / Collect Fees navigation + Back flows.
+---
+
 ### [2026-11-27 12:56] Version 1.8.186 — Dashboard Stat Rows Gap Normalization
 
 **What was built:**

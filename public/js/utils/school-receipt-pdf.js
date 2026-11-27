@@ -2,7 +2,7 @@
 // using pdfmake. Loaded dynamically on demand. Produces real, selectable,
 // searchable text with exact 2-page layout matching reference-templates/uk.html.
 
-import { fmtRs } from './school-receipt.js?v=1.8.186';
+import { fmtRs } from './school-receipt.js?v=1.8.187';
 
 const INK = '#1D1A3A';
 const MUTED = '#5B5F85';

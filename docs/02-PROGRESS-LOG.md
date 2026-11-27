@@ -39,6 +39,28 @@
 
 ---
 
+### [2026-11-27 13:12] Version 1.8.188 — Hotfix Dashboard Toolbar Spin Isolation & Short Branch Code Label
+
+**What was built:**
+- Fixed Refresh button spin animation rotating its tooltip (`public/pages/dashboard.html`, `public/css/pages/dashboard.css`, `public/js/pages/dashboard.page.js`):
+  - Replaced button `.spin` class toggling with `.is-refreshing` on `#dash-refresh` and `.spin` strictly on its internal `<svg>`/`<i>` icon (`transform-origin: center center`), bypassing the global `.spin` rule in `list-page.css`.
+  - Moved tooltips to sibling `<span class="dash-tb-tip">` elements outside the buttons/icons and hid `.dash-tb-tip` while `#dash-refresh.is-refreshing` is active (showing cleanly again on hover once refresh completes).
+- Updated closed branch dropdown label (`public/js/components/ui-select.js`, `public/js/pages/dashboard.page.js`):
+  - Added `shortLabel` + `title` support in `ui-select.js` so selecting a branch shows only the branch code in the header pill (e.g. `BZYCTC`), shows `All branches` when unselected, keeps `<CODE> - <Full Name>` in the open menu list, sets the full branch name on `title`, and automatically sizes the pill narrower to fit the code.
+
+**Why:**
+- Prevent the Refresh tooltip from rotating with the refresh icon during data reload and eliminate wide branch text truncation inside the compact header pill toolbar.
+
+**Files touched:**
+- MODIFIED: `public/js/components/ui-select.js`, `public/pages/dashboard.html`, `public/css/pages/dashboard.css`, `public/js/pages/dashboard.page.js`, `docs/02-PROGRESS-LOG.md` (plus `tools/bump-version.js 1.8.188`).
+
+**Firestore changes:**
+- None.
+
+**Tested on:**
+- Chrome Desktop (`1440×900`) & Mobile (`390×844`): ✅ Verified mid-refresh `<svg>` spin (`transform: none` on `<button>`, hidden tooltip during refresh, tooltip restores after), selected branch short code (`BZYCTC`) with auto-resized pill width and full branch `title`, and zero regressions across unit, Reports E2E, and Dashboard E2E tests.
+---
+
 ### [2026-11-27 13:05] Version 1.8.187 — Final Dashboard Unified Header Pill Toolbar
 
 **What was built:**

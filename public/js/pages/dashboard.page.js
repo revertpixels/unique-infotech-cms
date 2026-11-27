@@ -1,20 +1,20 @@
 // dashboard.page.js — Read-only Youth Centre Dashboard (#/dashboard) + preserved Unique Kids placeholder.
 
-import { ROUTES } from '../core/router.js?v=1.8.187';
-import { createSelect } from '../components/ui-select.js?v=1.8.187';
+import { ROUTES } from '../core/router.js?v=1.8.188';
+import { createSelect } from '../components/ui-select.js?v=1.8.188';
 import {
   renderDonutChart,
   renderBarChart,
   renderStackedBarChart,
   renderLineChart
-} from '../components/charts.js?v=1.8.187';
-import { openPaymentDetailsModal } from '../components/payment-details-modal.js?v=1.8.187';
-import { loadDashboardArchiveReminder } from '../services/archive.service.js?v=1.8.187';
-import { resolveUserDisplay, getRoleTitle } from '../services/user-directory.service.js?v=1.8.187';
-import { getCachedSessions, loadSessions, getSelectedSession } from '../core/sessions.js?v=1.8.187';
-import { getOrgTimezone } from '../utils/session-rules.js?v=1.8.187';
-import { formatPersonName, initials } from '../utils/formatter.js?v=1.8.187';
-import { buildYouthDashboardData } from '../services/dashboard.service.js?v=1.8.187';
+} from '../components/charts.js?v=1.8.188';
+import { openPaymentDetailsModal } from '../components/payment-details-modal.js?v=1.8.188';
+import { loadDashboardArchiveReminder } from '../services/archive.service.js?v=1.8.188';
+import { resolveUserDisplay, getRoleTitle } from '../services/user-directory.service.js?v=1.8.188';
+import { getCachedSessions, loadSessions, getSelectedSession } from '../core/sessions.js?v=1.8.188';
+import { getOrgTimezone } from '../utils/session-rules.js?v=1.8.188';
+import { formatPersonName, initials } from '../utils/formatter.js?v=1.8.188';
+import { buildYouthDashboardData } from '../services/dashboard.service.js?v=1.8.188';
 import {
   ensureReferenceData,
   scopeReferenceDataByCtx,
@@ -26,7 +26,7 @@ import {
   modeDisplayMeta,
   formatINR,
   fmtDate
-} from '../services/report.service.js?v=1.8.187';
+} from '../services/report.service.js?v=1.8.188';
 
 let state = null;
 let profileListener = null;
@@ -300,12 +300,24 @@ function syncBranchFilterControl() {
   host.hidden = false;
 
   const options = [
-    { value: 'all', label: 'All branches', icon: 'git-branch' },
-    ...branches.map((b) => ({
-      value: b.id,
-      label: b.code ? `${b.code} - ${b.name || b.id}` : (b.name || b.id),
-      icon: 'map-pin'
-    }))
+    {
+      value: 'all',
+      label: 'All branches',
+      shortLabel: 'All branches',
+      title: '',
+      icon: 'git-branch'
+    },
+    ...branches.map((b) => {
+      const code = String(b.code || '').trim();
+      const fullName = String(b.name || '').trim();
+      return {
+        value: b.id,
+        label: code && fullName ? `${code} - ${fullName}` : (fullName || code || b.id),
+        shortLabel: code || fullName || b.id,
+        title: fullName || code || b.id,
+        icon: 'map-pin'
+      };
+    })
   ];
 
   if (!state.branchSelect) {
@@ -352,11 +364,11 @@ function renderHeaderToolbar(d = null) {
 
     host.innerHTML = '';
     visible.forEach((item) => {
+      const wrap = mk('div', 'dash-tb-item');
       const a = mk('a', 'dash-tb-btn');
       a.id = item.id;
       a.href = item.href;
       a.setAttribute('aria-label', item.label);
-      a.setAttribute('data-tooltip', item.label);
 
       const ic = document.createElement('i');
       ic.setAttribute('data-lucide', item.icon);
@@ -371,7 +383,10 @@ function renderHeaderToolbar(d = null) {
         a.appendChild(badge);
       }
 
-      host.appendChild(a);
+      const tip = mk('span', 'dash-tb-tip', item.label);
+      tip.setAttribute('role', 'tooltip');
+      wrap.append(a, tip);
+      host.appendChild(wrap);
     });
 
     host.dataset.renderedRole = role;
@@ -406,7 +421,9 @@ async function loadDashboardSources({ forceRefresh = false } = {}) {
   const refreshBtn = $('dash-refresh');
   if (refreshBtn) {
     refreshBtn.disabled = true;
-    refreshBtn.classList.add('spin');
+    refreshBtn.classList.add('is-refreshing');
+    const ic = refreshBtn.querySelector('svg, i');
+    if (ic) ic.classList.add('spin');
   }
 
   const cacheRoot = window.APP_CACHE?.financialReports;
@@ -463,7 +480,8 @@ async function loadDashboardSources({ forceRefresh = false } = {}) {
   } finally {
     if (refreshBtn) {
       refreshBtn.disabled = false;
-      refreshBtn.classList.remove('spin');
+      refreshBtn.classList.remove('is-refreshing');
+      refreshBtn.querySelectorAll('.spin').forEach((el) => el.classList.remove('spin'));
     }
   }
 }

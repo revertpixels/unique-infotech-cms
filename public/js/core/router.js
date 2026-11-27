@@ -1,5 +1,96 @@
-import { confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.188';
-import { getRoleTitle } from '../services/user-directory.service.js?v=1.8.188';
+import { APP_VERSION } from './app.js?v=1.8.189';
+import { confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.189';
+import { getRoleTitle } from '../services/user-directory.service.js?v=1.8.189';
+
+const htmlCache = new Map();
+const htmlInflight = new Map();
+const moduleCache = new Map();
+const MAIN_PREFETCH_ROUTES = ['dashboard', 'students', 'pay-fees', 'pending', 'payments', 'reports', 'batches'];
+
+function getBuildVersion() {
+  return (typeof window !== 'undefined' && window.__BUILD__) ? String(window.__BUILD__) : APP_VERSION;
+}
+
+async function fetchPageHtml(pageName) {
+  const v = getBuildVersion();
+  const cacheKey = `${pageName}@${v}`;
+  if (htmlCache.has(cacheKey)) {
+    return { ok: true, html: htmlCache.get(cacheKey), empty: false };
+  }
+  if (htmlInflight.has(cacheKey)) {
+    return htmlInflight.get(cacheKey);
+  }
+  const task = (async () => {
+    const resp = await fetch(`/pages/${pageName}.html?v=${encodeURIComponent(v)}`);
+    if (!resp.ok) return { ok: false, html: '', empty: false };
+    const html = (await resp.text()).trim();
+    if (!html) return { ok: true, html: '', empty: true };
+    htmlCache.set(cacheKey, html);
+    return { ok: true, html, empty: false };
+  })().finally(() => {
+    htmlInflight.delete(cacheKey);
+  });
+  htmlInflight.set(cacheKey, task);
+  return task;
+}
+
+function importPageModule(pageName) {
+  const v = getBuildVersion();
+  const cacheKey = `${pageName}@${v}`;
+  if (moduleCache.has(cacheKey)) {
+    return Promise.resolve(moduleCache.get(cacheKey));
+  }
+  const url = `/js/pages/${pageName}.page.js?v=${encodeURIComponent(v)}`;
+  const promise = import(url).then((mod) => {
+    moduleCache.set(cacheKey, mod);
+    return mod;
+  }).catch((err) => {
+    moduleCache.delete(cacheKey);
+    throw err;
+  });
+  moduleCache.set(cacheKey, promise);
+  return promise;
+}
+
+async function loadPageAssets(pageName) {
+  const [htmlResult, modResult] = await Promise.allSettled([
+    fetchPageHtml(pageName),
+    importPageModule(pageName)
+  ]);
+  return { htmlResult, modResult };
+}
+
+export function prefetchMainPages(profile, ctx = 'youth') {
+  if (typeof window === 'undefined' || !profile) return;
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
+  const pages = [];
+  for (const routeKey of MAIN_PREFETCH_ROUTES) {
+    const r = ROUTES[routeKey];
+    if (!r || !r.page) continue;
+    if (!r.roles.includes(profile.role)) continue;
+    if (!r.ctx.includes(ctx) && profile.role !== 'superadmin') continue;
+    if (!pages.includes(r.page)) pages.push(r.page);
+  }
+  const v = getBuildVersion();
+  const queue = pages.filter((p) => {
+    const key = `${p}@${v}`;
+    return !htmlCache.has(key) || !moduleCache.has(key);
+  });
+  if (!queue.length) return;
+  const schedule = typeof window.requestIdleCallback === 'function'
+    ? (fn) => window.requestIdleCallback(fn, { timeout: 2000 })
+    : (fn) => setTimeout(fn, 150);
+
+  let idx = 0;
+  const pump = () => {
+    if (idx >= queue.length) return;
+    const pageName = queue[idx++];
+    Promise.allSettled([fetchPageHtml(pageName), importPageModule(pageName)]).finally(() => {
+      if (idx < queue.length) schedule(pump);
+    });
+  };
+  schedule(pump);
+}
 
 export const ROLE_LABELS = {
   get superadmin() { return getRoleTitle('superadmin'); },
@@ -107,404 +198,107 @@ export function startRouter({ profile, getContext, setContext, onRouteChange }) 
     }
   }
 
-  // Dynamic student profile loader for #/students/<studentId>
-  async function renderStudentProfile(studentId, routeKey) {
-    const thisNav = ++navCounter;
+  async function mountRoutePage({
+    thisNav,
+    pageName,
+    routeKey,
+    routeObj = null,
+    title,
+    missingMsg,
+    emptyMsg,
+    mountArgs = {},
+    throwOnModuleError = false,
+    retryOnNetworkError = false,
+    networkErrorHeading = "Couldn't load this page",
+    networkErrorLine = 'Check your internet connection and try again.'
+  }) {
+    let assets;
     try {
-      const resp = await fetch('/pages/student-profile.html?v=1.8.188', { cache: 'no-cache' });
-      if (thisNav !== navCounter) return;
-      if (!resp.ok) {
-        renderEmpty('inbox', "This page isn't available yet", 'The student profile page could not be loaded.');
-        setTitle('Student Profile');
-        if (typeof lucide !== 'undefined') lucide.createIcons();
-        if (onRouteChange) onRouteChange(routeKey, null);
-        return;
-      }
-      let html = await resp.text();
-      if (thisNav !== navCounter) return;
-      html = html.trim();
-      if (!html) {
-        renderEmpty('inbox', "This page isn't available yet", 'The student profile page has no content yet.');
-        setTitle('Student Profile');
-        if (typeof lucide !== 'undefined') lucide.createIcons();
-        if (onRouteChange) onRouteChange(routeKey, null);
-        return;
-      }
-      view.innerHTML = html;
-      if (thisNav !== navCounter) return;
-      try {
-        const mod = await import('/js/pages/student-profile.page.js?v=' + (window.__BUILD__ || Date.now()));
-        if (thisNav !== navCounter) return;
-        if (mod && typeof mod.mount === 'function') {
-          currentModule = mod;
-          await mod.mount({ container: document.getElementById('view'), profile, ctx: getContext() });
-        } else {
-          currentModule = null;
-        }
-      } catch (e) {
-        console.error(e);
-      }
-      if (thisNav !== navCounter) return;
-      resetScroll();
-      setTitle('Student Profile');
-      if (onRouteChange) onRouteChange(routeKey, null);
-      if (typeof lucide !== 'undefined') lucide.createIcons();
+      assets = await loadPageAssets(pageName);
     } catch (e) {
+      if (thisNav !== navCounter) return;
       console.error(e);
-      renderEmpty('alert-triangle', 'Failed to load Student Profile', e.message || String(e));
-      setTitle('Error loading Student Profile');
-      if (onRouteChange) onRouteChange(routeKey, null);
-    }
-  }
-
-  async function renderAdmissionReceipt(key) {
-    const thisNav = ++navCounter;
-    try {
-      const resp = await fetch('/pages/admission-receipt.html?v=1.8.188', { cache: 'no-cache' });
-      if (thisNav !== navCounter) return;
-      if (!resp.ok) {
-        renderEmpty('inbox', "This page isn't available yet", 'The receipt page could not be loaded.');
-        setTitle('Admission Receipt');
-        if (typeof lucide !== 'undefined') lucide.createIcons();
-        if (onRouteChange) onRouteChange(key, null);
-        return;
-      }
-      let html = await resp.text();
-      if (thisNav !== navCounter) return;
-      html = html.trim();
-      if (!html) {
-        renderEmpty('inbox', "This page isn't available yet", 'The receipt page has no content yet.');
-        setTitle('Admission Receipt');
-        if (typeof lucide !== 'undefined') lucide.createIcons();
-        if (onRouteChange) onRouteChange(key, null);
-        return;
-      }
-      view.innerHTML = html;
-      if (thisNav !== navCounter) return;
-      try {
-        const mod = await import('/js/pages/admission-receipt.page.js?v=' + (window.__BUILD__ || Date.now()));
-        if (thisNav !== navCounter) return;
-        if (mod && typeof mod.mount === 'function') {
-          currentModule = mod;
-          await mod.mount({ container: document.getElementById('view'), profile, ctx: getContext() });
-        } else {
-          currentModule = null;
-        }
-      } catch (e) {
-        console.error(e);
-      }
-      if (thisNav !== navCounter) return;
-      resetScroll();
-      setTitle('Admission Receipt');
-      if (onRouteChange) onRouteChange(key, null);
+      renderEmpty('inbox', networkErrorHeading, networkErrorLine);
+      setTitle(title);
       if (typeof lucide !== 'undefined') lucide.createIcons();
-    } catch (e) {
-      console.error(e);
-      renderEmpty('alert-triangle', 'Failed to load page: ' + (route.page || key) + '.page.js', e.message || String(e));
-      setTitle('Error loading ' + route.title);
-      if (onRouteChange) onRouteChange(key, route);
+      if (onRouteChange) onRouteChange(routeKey, routeObj);
       return;
     }
-  }
+    if (thisNav !== navCounter) return;
 
-  async function renderSchoolAdmissionReceipt(key) {
-    const thisNav = ++navCounter;
-    try {
-      const resp = await fetch('/pages/school-admission-receipt.html?v=1.8.188', { cache: 'no-cache' });
-      if (thisNav !== navCounter) return;
-      if (!resp.ok) {
-        renderEmpty('inbox', "This page isn't available yet", 'The receipt page could not be loaded.');
-        setTitle('Kids Admission Receipt');
-        if (typeof lucide !== 'undefined') lucide.createIcons();
-        if (onRouteChange) onRouteChange(key, null);
-        return;
+    const { htmlResult, modResult } = assets;
+    if (htmlResult.status === 'rejected') {
+      console.error(htmlResult.reason);
+      renderEmpty('inbox', networkErrorHeading, networkErrorLine);
+      if (retryOnNetworkError) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'btn pri';
+        btn.textContent = 'Try again';
+        btn.addEventListener('click', () => render(routeKey));
+        view.appendChild(btn);
       }
-      let html = await resp.text();
-      if (thisNav !== navCounter) return;
-      html = html.trim();
-      if (!html) {
-        renderEmpty('inbox', "This page isn't available yet", 'The receipt page has no content yet.');
-        setTitle('Kids Admission Receipt');
-        if (typeof lucide !== 'undefined') lucide.createIcons();
-        if (onRouteChange) onRouteChange(key, null);
-        return;
-      }
-      view.innerHTML = html;
-      if (thisNav !== navCounter) return;
-      try {
-        const mod = await import('/js/pages/school-admission-receipt.page.js?v=' + (window.__BUILD__ || Date.now()));
-        if (thisNav !== navCounter) return;
-        if (mod && typeof mod.mount === 'function') {
-          currentModule = mod;
-          await mod.mount({ container: document.getElementById('view'), profile, ctx: getContext() });
-        } else {
-          currentModule = null;
-        }
-      } catch (e) {
-        console.error(e);
-      }
-      if (thisNav !== navCounter) return;
-      resetScroll();
-      setTitle('Kids Admission Receipt');
-      if (onRouteChange) onRouteChange(key, null);
+      setTitle(title);
       if (typeof lucide !== 'undefined') lucide.createIcons();
-    } catch (e) {
-      console.error(e);
-      renderEmpty('alert-triangle', 'Failed to load page: ' + (route.page || key) + '.page.js', e.message || String(e));
-      setTitle('Error loading ' + route.title);
-      if (onRouteChange) onRouteChange(key, route);
+      if (onRouteChange) onRouteChange(routeKey, routeObj);
       return;
     }
-  }
 
-  async function renderPaymentReceipt(key) {
-    const thisNav = ++navCounter;
-    try {
-      const resp = await fetch('/pages/payment-receipt.html?v=1.8.188', { cache: 'no-cache' });
-      if (thisNav !== navCounter) return;
-      if (!resp.ok) {
-        renderEmpty('inbox', "This page isn't available yet", 'The payment receipt page could not be loaded.');
-        setTitle('Payment Receipt');
-        if (typeof lucide !== 'undefined') lucide.createIcons();
-        if (onRouteChange) onRouteChange(key, null);
-        return;
-      }
-      let html = await resp.text();
-      if (thisNav !== navCounter) return;
-      html = html.trim();
-      if (!html) {
-        renderEmpty('inbox', "This page isn't available yet", 'The payment receipt page has no content yet.');
-        setTitle('Payment Receipt');
-        if (typeof lucide !== 'undefined') lucide.createIcons();
-        if (onRouteChange) onRouteChange(key, null);
-        return;
-      }
-      view.innerHTML = html;
-      if (thisNav !== navCounter) return;
-      try {
-        const mod = await import('/js/pages/payment-receipt.page.js?v=' + (window.__BUILD__ || Date.now()));
-        if (thisNav !== navCounter) return;
-        if (mod && typeof mod.mount === 'function') {
-          currentModule = mod;
-          await mod.mount({ container: document.getElementById('view'), profile, ctx: getContext() });
-        } else {
-          currentModule = null;
-        }
-      } catch (e) {
-        console.error(e);
-      }
-      if (thisNav !== navCounter) return;
-      resetScroll();
-      setTitle('Payment Receipt');
-      if (onRouteChange) onRouteChange(key, null);
+    const htmlRes = htmlResult.value;
+    if (!htmlRes.ok || htmlRes.empty) {
+      renderEmpty('inbox', "This page isn't available yet", htmlRes.empty ? emptyMsg : missingMsg);
+      setTitle(title);
       if (typeof lucide !== 'undefined') lucide.createIcons();
-    } catch (e) {
-      console.error(e);
-      renderEmpty('alert-triangle', 'Failed to load Payment Receipt', e.message || String(e));
-      setTitle('Error loading Payment Receipt');
-      if (onRouteChange) onRouteChange(key, null);
-    }
-  }
-
-  async function renderSchoolTransfer(key) {
-    const thisNav = ++navCounter;
-    try {
-      const resp = await fetch('/pages/school-transfer.html?v=1.8.188', { cache: 'no-cache' });
-      if (thisNav !== navCounter) return;
-      if (!resp.ok) {
-        renderEmpty('inbox', "This page isn't available yet", 'The transfer page could not be loaded.');
-        setTitle('Change Batch');
-        if (typeof lucide !== 'undefined') lucide.createIcons();
-        if (onRouteChange) onRouteChange(key, null);
-        return;
-      }
-      let html = await resp.text();
-      if (thisNav !== navCounter) return;
-      html = html.trim();
-      if (!html) {
-        renderEmpty('inbox', "This page isn't available yet", 'The transfer page has no content yet.');
-        setTitle('Change Batch');
-        if (typeof lucide !== 'undefined') lucide.createIcons();
-        if (onRouteChange) onRouteChange(key, null);
-        return;
-      }
-      view.innerHTML = html;
-      if (thisNav !== navCounter) return;
-      try {
-        const mod = await import('/js/pages/school-transfer.page.js?v=' + (window.__BUILD__ || Date.now()));
-        if (thisNav !== navCounter) return;
-        if (mod && typeof mod.mount === 'function') {
-          currentModule = mod;
-          await mod.mount({ container: document.getElementById('view'), profile, ctx: getContext() });
-        } else {
-          currentModule = null;
-        }
-      } catch (e) {
-        console.error(e);
-      }
-      if (thisNav !== navCounter) return;
-      resetScroll();
-      setTitle('Change Batch');
-      if (onRouteChange) onRouteChange(key, null);
-      if (typeof lucide !== 'undefined') lucide.createIcons();
-    } catch (e) {
-      console.error(e);
-      renderEmpty('alert-triangle', 'Failed to load page: ' + (route.page || key) + '.page.js', e.message || String(e));
-      setTitle('Error loading ' + route.title);
-      if (onRouteChange) onRouteChange(key, route);
+      if (onRouteChange) onRouteChange(routeKey, routeObj);
       return;
     }
-  }
 
-  async function renderSchoolEnd(key) {
-    const thisNav = ++navCounter;
+    view.innerHTML = htmlRes.html;
+    if (thisNav !== navCounter) return;
+
     try {
-      const resp = await fetch('/pages/school-end.html?v=1.8.188', { cache: 'no-cache' });
+      if (modResult.status === 'rejected') throw modResult.reason;
+      const mod = modResult.value;
       if (thisNav !== navCounter) return;
-      if (!resp.ok) {
-        renderEmpty('inbox', "This page isn't available yet", 'The end course page could not be loaded.');
-        setTitle('End Course');
-        if (typeof lucide !== 'undefined') lucide.createIcons();
-        if (onRouteChange) onRouteChange(key, null);
-        return;
+      if (mod && typeof mod.mount === 'function') {
+        currentModule = mod;
+        await mod.mount({ container: document.getElementById('view'), profile, ctx: getContext(), ...mountArgs });
+      } else {
+        currentModule = null;
       }
-      let html = await resp.text();
-      if (thisNav !== navCounter) return;
-      html = html.trim();
-      if (!html) {
-        renderEmpty('inbox', "This page isn't available yet", 'The end course page has no content yet.');
-        setTitle('End Course');
-        if (typeof lucide !== 'undefined') lucide.createIcons();
-        if (onRouteChange) onRouteChange(key, null);
-        return;
-      }
-      view.innerHTML = html;
-      if (thisNav !== navCounter) return;
-      try {
-        const mod = await import('/js/pages/school-end.page.js?v=' + (window.__BUILD__ || Date.now()));
-        if (thisNav !== navCounter) return;
-        if (mod && typeof mod.mount === 'function') {
-          currentModule = mod;
-          await mod.mount({ container: document.getElementById('view'), profile, ctx: getContext() });
-        } else {
-          currentModule = null;
-        }
-      } catch (e) {
-        console.error(e);
-      }
-      if (thisNav !== navCounter) return;
-      resetScroll();
-      setTitle('End Course');
-      if (onRouteChange) onRouteChange(key, null);
-      if (typeof lucide !== 'undefined') lucide.createIcons();
     } catch (e) {
+      if (thisNav !== navCounter) return;
       console.error(e);
-      renderEmpty('alert-triangle', 'Failed to load page: ' + (route.page || key) + '.page.js', e.message || String(e));
-      setTitle('Error loading ' + route.title);
-      if (onRouteChange) onRouteChange(key, route);
-      return;
+      if (throwOnModuleError) {
+        renderEmpty('alert-triangle', 'Failed to load page: ' + pageName + '.page.js', e.message || String(e));
+        setTitle('Error loading ' + title);
+        if (onRouteChange) onRouteChange(routeKey, routeObj);
+        return;
+      }
+    }
+
+    if (thisNav !== navCounter) return;
+    resetScroll();
+    setTitle(title);
+    if (onRouteChange) onRouteChange(routeKey, routeObj);
+    if (typeof lucide !== 'undefined') {
+      lucide.createIcons();
     }
   }
 
-  async function renderSchoolDelete(key) {
+  function renderSubRoute(pageName, routeKey, title, subject, extraMountArgs = {}) {
     const thisNav = ++navCounter;
-    try {
-      const resp = await fetch('/pages/school-delete.html?v=1.8.188', { cache: 'no-cache' });
-      if (thisNav !== navCounter) return;
-      if (!resp.ok) {
-        renderEmpty('inbox', "This page isn't available yet", 'The delete page could not be loaded.');
-        setTitle('Permanent Delete');
-        if (typeof lucide !== 'undefined') lucide.createIcons();
-        if (onRouteChange) onRouteChange(key, null);
-        return;
-      }
-      let html = await resp.text();
-      if (thisNav !== navCounter) return;
-      html = html.trim();
-      if (!html) {
-        renderEmpty('inbox', "This page isn't available yet", 'The delete page has no content yet.');
-        setTitle('Permanent Delete');
-        if (typeof lucide !== 'undefined') lucide.createIcons();
-        if (onRouteChange) onRouteChange(key, null);
-        return;
-      }
-      view.innerHTML = html;
-      if (thisNav !== navCounter) return;
-      try {
-        const mod = await import('/js/pages/school-delete.page.js?v=' + (window.__BUILD__ || Date.now()));
-        if (thisNav !== navCounter) return;
-        if (mod && typeof mod.mount === 'function') {
-          currentModule = mod;
-          await mod.mount({ container: document.getElementById('view'), profile, ctx: getContext() });
-        } else {
-          currentModule = null;
-        }
-      } catch (e) {
-        console.error(e);
-      }
-      if (thisNav !== navCounter) return;
-      resetScroll();
-      setTitle('Permanent Delete');
-      if (onRouteChange) onRouteChange(key, null);
-      if (typeof lucide !== 'undefined') lucide.createIcons();
-    } catch (e) {
-      console.error(e);
-      renderEmpty('alert-triangle', 'Failed to load page: ' + (route.page || key) + '.page.js', e.message || String(e));
-      setTitle('Error loading ' + route.title);
-      if (onRouteChange) onRouteChange(key, route);
-      return;
-    }
-  }
-
-  async function renderSchoolFeePayment(key) {
-    const thisNav = ++navCounter;
-    const billId = key.slice('school-fees/pay/'.length);
-    try {
-      const resp = await fetch('/pages/school-fee-payment.html?v=1.8.188', { cache: 'no-cache' });
-      if (thisNav !== navCounter) return;
-      if (!resp.ok) {
-        renderEmpty('inbox', "This page isn't available yet", 'The fee payment page could not be loaded.');
-        setTitle('Record Payment');
-        if (typeof lucide !== 'undefined') lucide.createIcons();
-        if (onRouteChange) onRouteChange(key, null);
-        return;
-      }
-      let html = await resp.text();
-      if (thisNav !== navCounter) return;
-      html = html.trim();
-      if (!html) {
-        renderEmpty('inbox', "This page isn't available yet", 'The fee payment page has no content yet.');
-        setTitle('Record Payment');
-        if (typeof lucide !== 'undefined') lucide.createIcons();
-        if (onRouteChange) onRouteChange(key, null);
-        return;
-      }
-      view.innerHTML = html;
-      if (thisNav !== navCounter) return;
-      try {
-        const mod = await import('/js/pages/school-fee-payment.page.js?v=' + (window.__BUILD__ || Date.now()));
-        if (thisNav !== navCounter) return;
-        if (mod && typeof mod.mount === 'function') {
-          currentModule = mod;
-          await mod.mount({ container: document.getElementById('view'), profile, ctx: getContext(), billId: billId });
-        } else {
-          currentModule = null;
-        }
-      } catch (e) {
-        console.error(e);
-      }
-      if (thisNav !== navCounter) return;
-      resetScroll();
-      setTitle('Record Payment');
-      if (onRouteChange) onRouteChange(key, null);
-      if (typeof lucide !== 'undefined') lucide.createIcons();
-    } catch (e) {
-      console.error(e);
-      renderEmpty('alert-triangle', 'Failed to load page: ' + (route.page || key) + '.page.js', e.message || String(e));
-      setTitle('Error loading ' + route.title);
-      if (onRouteChange) onRouteChange(key, route);
-      return;
-    }
+    return mountRoutePage({
+      thisNav,
+      pageName,
+      routeKey,
+      routeObj: null,
+      title,
+      missingMsg: `The ${subject} page could not be loaded.`,
+      emptyMsg: `The ${subject} page has no content yet.`,
+      mountArgs: extraMountArgs,
+      throwOnModuleError: false
+    });
   }
 
   async function render(fullKey) {
@@ -527,49 +321,50 @@ export function startRouter({ profile, getContext, setContext, onRouteChange }) 
 
     // Dynamic student profile route #/students/<studentId>
     if (key.startsWith('students/') && key.length > 'students/'.length) {
-      renderStudentProfile(key.slice('students/'.length), fullKey);
+      renderSubRoute('student-profile', fullKey, 'Student Profile', 'student profile');
       return;
     }
 
     // T1: dynamic admission receipt route #/admissions/<admissionId>/receipt
     if (key.startsWith('admissions/') && key.endsWith('/receipt') && key.length > 'admissions/'.length + '/receipt'.length) {
-      renderAdmissionReceipt(fullKey);
+      renderSubRoute('admission-receipt', fullKey, 'Admission Receipt', 'receipt');
       return;
     }
 
     // Dynamic payment receipt route #/payments/<studentDocId>/<paymentId>/receipt
     if (key.startsWith('payments/') && key.endsWith('/receipt')) {
-      renderPaymentReceipt(fullKey);
+      renderSubRoute('payment-receipt', fullKey, 'Payment Receipt', 'payment receipt');
       return;
     }
 
     // Kids admission receipt route #/school-admissions/<studentId>/receipt
     if (key.startsWith('school-admissions/') && key.endsWith('/receipt') && key.length > 'school-admissions/'.length + '/receipt'.length) {
-      renderSchoolAdmissionReceipt(fullKey);
+      renderSubRoute('school-admission-receipt', fullKey, 'Kids Admission Receipt', 'receipt');
       return;
     }
 
     // Kids/Youth batch transfer route #/school-transfer/<studentId> or #/youth-transfer/<studentId>
     if ((key.startsWith('school-transfer/') || key.startsWith('youth-transfer/')) && key.length > 'school-transfer/'.length + 1) {
-      renderSchoolTransfer(fullKey);
+      renderSubRoute('school-transfer', fullKey, 'Change Batch', 'transfer');
       return;
     }
 
     // Kids/Youth end course route #/school-end/<studentId> or #/youth-end/<studentId>
     if ((key.startsWith('school-end/') || key.startsWith('youth-end/')) && key.length > 'school-end/'.length + 1) {
-      renderSchoolEnd(fullKey);
+      renderSubRoute('school-end', fullKey, 'End Course', 'end course');
       return;
     }
 
     // Kids/Youth permanent delete route #/school-delete/<studentId> or #/youth-delete/<studentId>
     if ((key.startsWith('school-delete/') || key.startsWith('youth-delete/')) && key.length > 'school-delete/'.length + 1) {
-      renderSchoolDelete(fullKey);
+      renderSubRoute('school-delete', fullKey, 'Permanent Delete', 'delete');
       return;
     }
 
     // Kids monthly fee payment route #/school-fees/pay/<billId>
     if (key.startsWith('school-fees/pay/') && key.length > 'school-fees/pay/'.length + 1) {
-      renderSchoolFeePayment(fullKey);
+      const billId = key.slice('school-fees/pay/'.length);
+      renderSubRoute('school-fee-payment', fullKey, 'Record Payment', 'fee payment', { billId });
       return;
     }
 
@@ -634,73 +429,17 @@ export function startRouter({ profile, getContext, setContext, onRouteChange }) 
       }
     }
 
-    let pageHtml;
-    let html;
-    try {
-      const resp = await fetch('/pages/' + route.page + '.html?v=1.8.188', { cache: 'no-cache' });
-      pageHtml = resp;
-      if (thisNav !== navCounter) return;
-      if (!pageHtml.ok) {
-        renderEmpty('inbox', "This page isn't available yet", 'The page "' + route.label + '" could not be loaded.');
-        setTitle(route.title);
-        if (typeof lucide !== 'undefined') {
-          lucide.createIcons();
-        }
-        if (onRouteChange) onRouteChange(key, route);
-        return;
-      }
-      html = await pageHtml.text();
-    if (thisNav !== navCounter) return;
-    html = html.trim();
-    if (!html) {
-      renderEmpty('inbox', "This page isn't available yet", 'The page "' + route.label + '" has no content yet.');
-      setTitle(route.title);
-      if (typeof lucide !== 'undefined') {
-        lucide.createIcons();
-      }
-      if (onRouteChange) onRouteChange(key, route);
-      return;
-    }
-    } catch (e) {
-      renderEmpty('inbox', "Couldn't load this page", 'Check your internet connection and try again.');
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'btn pri';
-      btn.textContent = 'Try again';
-      btn.addEventListener('click', () => render(key));
-      view.appendChild(btn);
-      setTitle(route.title);
-      if (typeof lucide !== 'undefined') {
-        lucide.createIcons();
-      }
-      if (onRouteChange) onRouteChange(key, route);
-      return;
-    }
-    view.innerHTML = html;
-    if (thisNav !== navCounter) return;
-    try {
-      const mod = await import('/js/pages/' + route.page + '.page.js?v=' + (window.__BUILD__ || Date.now()));
-      if (thisNav !== navCounter) return;
-      if (mod && typeof mod.mount === 'function') {
-        currentModule = mod;
-        await mod.mount({ container: document.getElementById('view'), profile, ctx: getContext() });
-      } else {
-        currentModule = null;
-      }
-    } catch (e) {
-      console.error(e);
-      renderEmpty('alert-triangle', 'Failed to load page: ' + (route.page || key) + '.page.js', e.message || String(e));
-      setTitle('Error loading ' + route.title);
-      if (onRouteChange) onRouteChange(key, route);
-      return;
-    }
-    if (thisNav !== navCounter) return;
-    resetScroll();
-    setTitle(route.title);
-    if (onRouteChange) onRouteChange(key, route);
-    if (typeof lucide !== 'undefined') {
-      lucide.createIcons();
-    }
+    await mountRoutePage({
+      thisNav,
+      pageName: route.page,
+      routeKey: key,
+      routeObj: route,
+      title: route.title,
+      missingMsg: 'The page "' + route.label + '" could not be loaded.',
+      emptyMsg: 'The page "' + route.label + '" has no content yet.',
+      throwOnModuleError: true,
+      retryOnNetworkError: true
+    });
   }
 
   let lastHash = '';

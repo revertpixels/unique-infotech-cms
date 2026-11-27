@@ -1,29 +1,34 @@
 // payments.page.js — Payment History page for Youth Centre (#/payments) & Unique Kids (#/school-payments).
 // Follows Rule 1 (global toolbar session only, plain-text subtitle) & Rule 2 (shared [ Branch -> Batch ] box).
 
-import { createSelect } from '../components/ui-select.js?v=1.8.188';
-import { createBranchBatchFilter, clearPersistedBranchBatchFilters } from '../components/branch-batch-filter.js?v=1.8.188';
-import { openPopup } from '../components/modal.js?v=1.8.188';
-import { showToast } from '../components/toast.js?v=1.8.188';
-import { renderPager, renderEmptyTableState, PAGE_SIZE } from '../components/list-page.js?v=1.8.188';
+import { createSelect } from '../components/ui-select.js?v=1.8.189';
+import { createBranchBatchFilter, clearPersistedBranchBatchFilters } from '../components/branch-batch-filter.js?v=1.8.189';
+import { openPopup } from '../components/modal.js?v=1.8.189';
+import { showToast } from '../components/toast.js?v=1.8.189';
+import { renderPager, renderEmptyTableState, PAGE_SIZE } from '../components/list-page.js?v=1.8.189';
 import {
   getCachedSessions,
   loadSessions,
-  getSelectedSession
-} from '../core/sessions.js?v=1.8.188';
+  getSelectedSession,
+  hasFreshSessionsCache
+} from '../core/sessions.js?v=1.8.189';
 import {
   ensureReferenceData,
+  getCachedReferenceData,
   scopeReferenceDataByCtx,
   getPaymentDatePresetOptions,
   getPaymentTypeFilterOptions,
   getPaymentModeFilterOptions,
   getPaymentChipOrder,
   loadYouthPaymentHistory,
+  getCachedYouthHistory,
   loadKidsPaymentHistory,
   loadStudentPhotos,
   getCachedStudentPhoto,
   getCachedBillForEntry,
   getDatePresetRange,
+  isCacheStale,
+  scheduleDelayedSkeleton,
   formatCourseBranchDisplay,
   formatCourseAndBranch,
   formatCollectorName,
@@ -37,9 +42,9 @@ import {
   formatINR,
   fmtDate,
   todayISO
-} from '../services/report.service.js?v=1.8.188';
-import { formatPersonName, initials } from '../utils/formatter.js?v=1.8.188';
-import { resolveUserDisplay } from '../services/user-directory.service.js?v=1.8.188';
+} from '../services/report.service.js?v=1.8.189';
+import { formatPersonName, initials } from '../utils/formatter.js?v=1.8.189';
+import { resolveUserDisplay } from '../services/user-directory.service.js?v=1.8.189';
 
 let state = null;
 let sessionListener = null;
@@ -173,7 +178,6 @@ export async function mount({ container, profile, ctx }) {
   initControls();
   bindEvents();
 
-  showSkeleton();
   await bootstrapData({ forceRefresh: false });
 }
 
@@ -427,12 +431,73 @@ function syncBranchBatchContext() {
   });
 }
 
-async function bootstrapData({ forceRefresh = false } = {}) {
+function historySignature(res) {
+  const entries = res?.entries || [];
+  const total = entries.reduce((acc, e) => acc + Number(e.totalPaid || e.amount || 0), 0);
+  return `${entries.length}|${total}|${entries[0]?.receiptNo || ''}`;
+}
+
+async function bootstrapData({ forceRefresh = false, background = false } = {}) {
+  if (!state || state.destroyed) return;
+
+  if (!forceRefresh && state.ctx === 'youth') {
+    const cachedMeta = getCachedReferenceData(state.profile);
+    const cachedSessions = getCachedSessions('youth');
+    if (cachedMeta && (cachedSessions.length || hasFreshSessionsCache('youth'))) {
+      state.meta = cachedMeta;
+      state.sessions = cachedSessions;
+      state.activeSession = resolveActiveYouthSession();
+      updateHeaderText();
+      populateCourseOptions();
+      syncBranchBatchContext();
+
+      if (!state.activeSession) {
+        hideSkeleton();
+        toggleNoSessionState(true);
+        if (isCacheStale(cachedMeta) || !hasFreshSessionsCache('youth')) {
+          bootstrapData({ forceRefresh: true, background: true }).catch(() => {});
+        }
+        return;
+      }
+
+      const { dateFrom, dateTo } = state.filters;
+      const cachedHist = getCachedYouthHistory({
+        profile: state.profile,
+        session: state.activeSession,
+        dateFrom,
+        dateTo
+      });
+      if (cachedHist) {
+        state.youthResult = cachedHist;
+        state.kidsResult = null;
+        state.totalReadCount = 0;
+        hideSkeleton();
+        toggleNoSessionState(false);
+        rebuildMergedAndCollectorOptions();
+        updateLoadMoreUi();
+        applyFiltersAndRender();
+
+        if (isCacheStale(cachedMeta) || !hasFreshSessionsCache('youth') || isCacheStale(cachedHist)) {
+          if (!background) bootstrapData({ forceRefresh: true, background: true }).catch(() => {});
+        }
+        return;
+      }
+    }
+  }
+
+  const skelTask = (!state.youthResult && !state.kidsResult && !background)
+    ? scheduleDelayedSkeleton(() => {
+      if (state && !state.destroyed && !state.youthResult && !state.kidsResult) showSkeleton();
+    }, 250)
+    : null;
+
   try {
     const [meta, sessions] = await Promise.all([
       ensureReferenceData({ forceRefresh, profile: state.profile }),
       state.ctx === 'youth'
-        ? (getCachedSessions('youth').length ? Promise.resolve(getCachedSessions('youth')) : loadSessions('youth'))
+        ? ((!forceRefresh && hasFreshSessionsCache('youth'))
+          ? Promise.resolve(getCachedSessions('youth'))
+          : loadSessions('youth', { forceRefresh }))
         : Promise.resolve([])
     ]);
     if (!state || state.destroyed) return;
@@ -441,20 +506,26 @@ async function bootstrapData({ forceRefresh = false } = {}) {
     state.sessions = sessions;
     state.activeSession = state.ctx === 'youth' ? resolveActiveYouthSession() : null;
 
-    updateHeaderText();
-    populateCourseOptions();
-    syncBranchBatchContext();
+    if (!background) {
+      updateHeaderText();
+      populateCourseOptions();
+      syncBranchBatchContext();
+    }
 
     if (state.ctx === 'youth' && !state.activeSession) {
+      if (skelTask) skelTask.cancel();
       hideSkeleton();
       toggleNoSessionState(true);
       return;
     }
     toggleNoSessionState(false);
-    await loadHistory({ forceRefresh });
+    await loadHistory({ forceRefresh, background, skelTask });
   } catch (err) {
-    console.error('[payments] bootstrap failed', err);
-    showLoadError(err);
+    if (skelTask) skelTask.cancel();
+    if (!background) {
+      console.error('[payments] bootstrap failed', err);
+      showLoadError(err);
+    }
   }
 }
 
@@ -471,61 +542,95 @@ function populateCourseOptions() {
   state.selects.course.setOptions(opts);
 }
 
-async function loadHistory({ forceRefresh = false } = {}) {
+async function loadHistory({ forceRefresh = false, background = false, skelTask = null } = {}) {
   if (!state || state.destroyed) return;
   const refreshBtn = $('payh-refresh');
   const errBox = $('payh-error');
   const scrollWrap = $('payh-scroll-wrap');
   const footBar = $('payh-foot');
-  if (errBox) errBox.hidden = true;
-  if (scrollWrap) scrollWrap.hidden = false;
-  if (footBar) footBar.hidden = false;
-
-  if (refreshBtn) {
-    refreshBtn.disabled = true;
-    refreshBtn.classList.add('spin');
+  if (!background) {
+    if (errBox) errBox.hidden = true;
+    if (scrollWrap) scrollWrap.hidden = false;
+    if (footBar) footBar.hidden = false;
+    if (refreshBtn) {
+      refreshBtn.disabled = true;
+      refreshBtn.classList.add('spin');
+    }
   }
-  showSkeleton();
+
+  const ownSkel = (!skelTask && !state.youthResult && !state.kidsResult && !background)
+    ? scheduleDelayedSkeleton(() => {
+      if (state && !state.destroyed && !state.youthResult && !state.kidsResult) showSkeleton();
+    }, 250)
+    : null;
+  const activeSkel = skelTask || ownSkel;
+  const prevSig = historySignature(state.ctx === 'school' ? state.kidsResult : state.youthResult);
 
   try {
     let totalReads = 0;
     const { dateFrom, dateTo } = state.filters;
 
     if (state.ctx === 'youth') {
-      state.youthResult = await loadYouthPaymentHistory({
+      const nextRes = await loadYouthPaymentHistory({
         profile: state.profile,
+        session: state.activeSession,
         dateFrom,
         dateTo,
-        loadAll: true,
+        loadAll: false,
         forceRefresh
       });
+      if (!state || state.destroyed) return;
+      if (activeSkel) activeSkel.cancel();
+      const nextSig = historySignature(nextRes);
+      state.youthResult = nextRes;
       state.kidsResult = null;
       totalReads += state.youthResult.readCount || 0;
+      if (!background || nextSig !== prevSig) {
+        updateHeaderText();
+        populateCourseOptions();
+        syncBranchBatchContext();
+        state.totalReadCount = totalReads;
+        rebuildMergedAndCollectorOptions();
+        updateLoadMoreUi();
+        applyFiltersAndRender();
+      }
     } else {
-      state.kidsResult = await loadKidsPaymentHistory({
+      const nextRes = await loadKidsPaymentHistory({
         profile: state.profile,
         dateFrom,
         dateTo,
         forceRefresh
       });
+      if (!state || state.destroyed) return;
+      if (activeSkel) activeSkel.cancel();
+      const nextSig = historySignature(nextRes);
+      state.kidsResult = nextRes;
       state.youthResult = null;
       totalReads += state.kidsResult.readCount || 0;
+      if (!background || nextSig !== prevSig) {
+        state.totalReadCount = totalReads;
+        rebuildMergedAndCollectorOptions();
+        updateLoadMoreUi();
+        applyFiltersAndRender();
+      }
     }
 
     if (!state || state.destroyed) return;
     hideSkeleton();
-    state.totalReadCount = totalReads;
-    rebuildMergedAndCollectorOptions();
-    updateLoadMoreUi();
-    applyFiltersAndRender();
   } catch (err) {
-    console.error('[payments] loadHistory failed', err);
-    showLoadError(err);
+    if (activeSkel) activeSkel.cancel();
+    if (!background) {
+      console.error('[payments] loadHistory failed', err);
+      showLoadError(err);
+    }
   } finally {
-    hideSkeleton();
-    if (refreshBtn) {
-      refreshBtn.disabled = false;
-      refreshBtn.classList.remove('spin');
+    if (activeSkel) activeSkel.cancel();
+    if (!background) {
+      hideSkeleton();
+      if (refreshBtn) {
+        refreshBtn.disabled = false;
+        refreshBtn.classList.remove('spin');
+      }
     }
   }
 }

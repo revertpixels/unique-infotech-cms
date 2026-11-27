@@ -1,13 +1,30 @@
 import { db } from '../config/firebase-config.js';
 import { collection, getDocs, query, where } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { todayISO as istTodayISO } from '../utils/session-rules.js?v=1.8.188';
+import { todayISO as istTodayISO } from '../utils/session-rules.js?v=1.8.189';
 
 // Shared session state lives on window so every module copy sees the same data.
+const SESSION_STALE_MS = 30000;
+const inflightSessions = new Map();
+
 function cache() {
   window.APP_CACHE = window.APP_CACHE || {};
   window.APP_CACHE.sessions = window.APP_CACHE.sessions || {};
+  window.APP_CACHE.allSessions = window.APP_CACHE.allSessions || {};
+  window.APP_CACHE.sessionsFetchedAt = window.APP_CACHE.sessionsFetchedAt || {};
   return window.APP_CACHE;
 }
+
+function clearSessionsFreshness() {
+  if (typeof window === 'undefined' || !window.APP_CACHE) return;
+  window.APP_CACHE.sessionsFetchedAt = {};
+}
+
+if (typeof window !== 'undefined' && typeof window.addEventListener === 'function' && !window.__uicSessionsListenersBound) {
+  window.__uicSessionsListenersBound = true;
+  window.addEventListener('uic:sessions-changed', clearSessionsFreshness);
+  window.addEventListener('uic:meta-mutated', clearSessionsFreshness);
+}
+
 function centreOf(ctx) { return ctx === 'school' ? 'school' : 'youth'; }
 function toDate(s) {
   if (!s) return null;
@@ -15,22 +32,64 @@ function toDate(s) {
   return new Date(p[0], p[1] - 1, p[2]);
 }
 
-// Loads non-archived sessions for a centre, newest first.
-export async function loadSessions(ctx) {
+export function hasFreshSessionsCache(ctx, maxAgeMs = SESSION_STALE_MS) {
   const centre = centreOf(ctx);
-  let list = [];
-  try {
-    const snap = await getDocs(query(collection(db, 'sessions'), where('ctx', '==', centre)));
-    list = snap.docs.map((d) => Object.assign({ id: d.id }, d.data()))
-      .filter((s) => s.status !== 'archived')
-      .sort((a, b) => (b.startDate || '').localeCompare(a.startDate || ''));
-  } catch (e) {
-    console.warn('[sessions] load failed', e && e.code ? e.code : e);
-  }
-  cache().sessions[centre] = list;
-  return list;
+  const c = cache();
+  const list = c.sessions[centre];
+  const at = Number(c.sessionsFetchedAt[centre] || 0);
+  return Array.isArray(list) && at > 0 && (Date.now() - at) < maxAgeMs;
 }
 
+async function fetchCentreSessions(centre, { forceRefresh = false } = {}) {
+  if (!forceRefresh && hasFreshSessionsCache(centre)) {
+    return {
+      active: cache().sessions[centre] || [],
+      all: cache().allSessions[centre] || [],
+      fromCache: true
+    };
+  }
+  if (!forceRefresh && inflightSessions.has(centre)) {
+    return inflightSessions.get(centre);
+  }
+  const task = (async () => {
+    let allList = cache().allSessions[centre] || [];
+    let activeList = cache().sessions[centre] || [];
+    let ok = false;
+    try {
+      const snap = await getDocs(query(collection(db, 'sessions'), where('ctx', '==', centre)));
+      const raw = snap.docs
+        .map((d) => Object.assign({ id: d.id }, d.data()))
+        .filter((s) => s.status !== 'deleted')
+        .sort((a, b) => (b.startDate || '').localeCompare(a.startDate || ''));
+      allList = raw;
+      activeList = raw.filter((s) => s.status !== 'archived');
+      ok = true;
+    } catch (e) {
+      console.warn('[sessions] load failed', e && e.code ? e.code : e);
+    }
+    cache().allSessions[centre] = allList;
+    cache().sessions[centre] = activeList;
+    if (ok) cache().sessionsFetchedAt[centre] = Date.now();
+    return { active: activeList, all: allList, fromCache: false };
+  })().finally(() => {
+    inflightSessions.delete(centre);
+  });
+  inflightSessions.set(centre, task);
+  return task;
+}
+
+// Loads non-archived sessions for a centre, newest first.
+export async function loadSessions(ctx, { forceRefresh = false } = {}) {
+  const res = await fetchCentreSessions(centreOf(ctx), { forceRefresh });
+  return res.active;
+}
+
+export async function loadAllSessions(ctx, { forceRefresh = false } = {}) {
+  const res = await fetchCentreSessions(centreOf(ctx), { forceRefresh });
+  return res.all;
+}
+
+export function getAllCachedSessions(ctx) { return cache().allSessions[centreOf(ctx)] || []; }
 export function getCachedSessions(ctx) { return cache().sessions[centreOf(ctx)] || []; }
 export function getRunningSession(ctx) { return getCachedSessions(ctx).find((s) => s.status === 'running') || null; }
 
@@ -73,7 +132,11 @@ export function toPeriod(s) {
 }
 
 export function notifySessionsChanged() {
-  window.dispatchEvent(new Event('uic:sessions-changed'));
+  clearSessionsFreshness();
+  if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+    window.dispatchEvent(new Event('uic:sessions-changed'));
+    window.dispatchEvent(new CustomEvent('uic:meta-mutated', { detail: { reason: 'sessions:changed' } }));
+  }
 }
 export function todayISO() {
   return istTodayISO();

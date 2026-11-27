@@ -1,13 +1,13 @@
 import { db } from '../config/firebase-config.js';
-import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.188';
+import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.189';
 import { collection, getDocs, query, where, doc, addDoc, updateDoc, deleteDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
 import { createSelect } from '../components/ui-select.js';
 import { openMenu } from '../components/ui-menu.js';
 import { confirmDialog } from '../components/ui-confirm.js';
 import { showToast } from '../components/toast.js';
-import { buildStats, buildToolbar, renderPager, renderEmptyTableState, PAGE_SIZE } from '../components/list-page.js?v=1.8.188';
-import { INST_PER_SEM, feeTotal, courseFeeOf, discountOf } from '../utils/fees.js?v=1.8.188';
-import { isCourseActive } from '../utils/session-rules.js?v=1.8.188';
+import { buildStats, buildToolbar, renderPager, renderEmptyTableState, PAGE_SIZE } from '../components/list-page.js?v=1.8.189';
+import { INST_PER_SEM, feeTotal, courseFeeOf, discountOf } from '../utils/fees.js?v=1.8.189';
+import { isCourseActive } from '../utils/session-rules.js?v=1.8.189';
 
 const ENDED = ['ended', 'closed', 'completed', 'archived', 'cancelled'];
 const LOCK_FIELDS = { admission: 'Admission fee', installment: 'Installment amount', material: 'Material fee' };
@@ -881,7 +881,7 @@ export async function mount({ ctx, profile }) {
     }
     async function toggle(r) {
       const next = (r.status || 'active') === 'active' ? 'inactive' : 'active';
-      try { await updateDoc(doc(db, 'courses', r.id), { status: next, updatedAt: serverTimestamp() }); showToast({ type: 'success', message: 'Status updated' }); await load(); }
+      try { await updateDoc(doc(db, 'courses', r.id), { status: next, updatedAt: serverTimestamp() }); window.dispatchEvent(new CustomEvent('uic:meta-mutated', { detail: { reason: 'course:toggle' } })); showToast({ type: 'success', message: 'Status updated' }); await load(); }
       catch (e) { showToast({ type: 'error', message: 'Status update failed (' + (e.code || 'error') + ')' }); }
     }
     async function del(r) {
@@ -897,7 +897,7 @@ export async function mount({ ctx, profile }) {
       const key = Y ? (r.code || 'DELETE') : 'DELETE';
       const ok = await confirmDialog({ title: 'Delete ' + T.one + '?', message: 'This permanently deletes "' + (r.name || '') + '". Students already admitted keep their saved fee details.', confirmText: 'Delete ' + T.one, danger: true, requireText: key });
       if (!ok) return;
-      try { await deleteDoc(doc(db, 'courses', r.id)); if (editId === r.id) closeForm(); showToast({ type: 'success', message: (Y ? 'Course' : 'Level') + ' deleted' }); await load(); }
+      try { await deleteDoc(doc(db, 'courses', r.id)); window.dispatchEvent(new CustomEvent('uic:meta-mutated', { detail: { reason: 'course:delete' } })); if (editId === r.id) closeForm(); showToast({ type: 'success', message: (Y ? 'Course' : 'Level') + ' deleted' }); await load(); }
       catch (e) { showToast({ type: 'error', message: 'Delete failed (' + (e.code || 'error') + ')' }); }
     }
     async function save() {
@@ -921,6 +921,7 @@ export async function mount({ ctx, profile }) {
           const deps = all.filter((c) => c.prerequisiteId === editId && c.prerequisiteCode !== v.code);
           await Promise.all(deps.map((c) => updateDoc(doc(db, 'courses', c.id), { prerequisiteCode: v.code, eligibility: 'Completed ' + v.code, updatedAt: serverTimestamp() })));
         }
+        window.dispatchEvent(new CustomEvent('uic:meta-mutated', { detail: { reason: 'course:save' } }));
         saving = false; closeForm(); await load();
         showToast({ type: 'success', message: (Y ? 'Course' : 'Level') + (wasEdit ? ' updated' : ' added') });
       } catch (e) {

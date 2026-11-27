@@ -1,15 +1,16 @@
 import { db } from '../config/firebase-config.js';
 import { collection, getDocs, getDoc, query, where, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, deleteField } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.188';
-import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.188';
-import { PAGE_SIZE, buildStats, buildToolbar, renderPager, renderEmptyTableState } from '../components/list-page.js?v=1.8.188';
-import { createSelect } from '../components/ui-select.js?v=1.8.188';
-import { createMultiSelect } from '../components/multi-select.js?v=1.8.188';
-import { openMenu } from '../components/ui-menu.js?v=1.8.188';
-import { confirmDialog } from '../components/ui-confirm.js?v=1.8.188';
-import { loadSessions, getSelectedSessionId, getSelectedSession, getCachedSessions } from '../core/sessions.js?v=1.8.188';
-import { batchAllowsCourse, batchCourseLabel, batchCourseTooltip, isCourseActive } from '../utils/session-rules.js?v=1.8.188';
-import { getRoleTitle } from '../services/user-directory.service.js?v=1.8.188';
+import { showToast } from '../components/toast.js?v=1.8.189';
+import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.189';
+import { PAGE_SIZE, buildStats, buildToolbar, renderPager, renderEmptyTableState } from '../components/list-page.js?v=1.8.189';
+import { createSelect } from '../components/ui-select.js?v=1.8.189';
+import { createMultiSelect } from '../components/multi-select.js?v=1.8.189';
+import { openMenu } from '../components/ui-menu.js?v=1.8.189';
+import { confirmDialog } from '../components/ui-confirm.js?v=1.8.189';
+import { loadSessions, getSelectedSessionId, getSelectedSession, getCachedSessions } from '../core/sessions.js?v=1.8.189';
+import { ensureReferenceData, loadAllYouthSessionsForCompare, getCachedReferenceData } from '../services/report.service.js?v=1.8.189';
+import { batchAllowsCourse, batchCourseLabel, batchCourseTooltip, isCourseActive } from '../utils/session-rules.js?v=1.8.189';
+import { getRoleTitle } from '../services/user-directory.service.js?v=1.8.189';
 // Batches Part 2A/2B: add/edit form, delete, student capacity
 
 const TEXT_KEYS = ['name', 'code', 'capacity'];
@@ -305,38 +306,35 @@ export async function mount({ profile, ctx }) {
     }
   }
 
-  async function load() {
+  async function load({ forceRefresh = false } = {}) {
     try {
-      const bSnap = await getDocs(query(collection(db, 'batches'), where('ctx', '==', ctx)));
-      batches = bSnap.docs.map(d => Object.assign({ id: d.id }, d.data()));
-      if (isBranchHead && myBranchId) {
-        batches = batches.filter(b => b.branchId === myBranchId);
-      }
       if (youth) {
-        // T2: load ALL sessions of this ctx (incl. closed/archived) for batchStatus lookups.
-        const sessSnap = await getDocs(query(collection(db, 'sessions'), where('ctx', '==', ctx)));
-        sessions = sessSnap.docs.map(d => Object.assign({ id: d.id }, d.data()));
-      }
-      if (youth && isSuper) {
-        const brSnap = await getDocs(collection(db, 'branches'));
-        branches = brSnap.docs.map(d => Object.assign({ id: d.id }, d.data()))
-          .filter(b => (!b.ctx || b.ctx === 'youth') && (b.status || 'active') === 'active');
-      } else if (youth && isBranchHead && myBranchId) {
-        try {
-          const brSnap = await getDoc(doc(db, 'branches', myBranchId));
-          if (brSnap.exists()) {
-            branches = [Object.assign({ id: brSnap.id }, brSnap.data())];
-          } else {
-            console.warn('[batches] Branch doc does not exist for myBranchId:', myBranchId);
-          }
-        } catch (err) {
-          console.warn('[batches] Failed to load own branch:', err);
+        const [meta, allSess] = await Promise.all([
+          ensureReferenceData({ forceRefresh, profile }),
+          loadAllYouthSessionsForCompare({ forceRefresh })
+        ]);
+        batches = (meta.batchesList || []).filter(b => !b.ctx || b.ctx === ctx);
+        if (isBranchHead && myBranchId) {
+          batches = batches.filter(b => b.branchId === myBranchId);
         }
+        sessions = allSess?.sessions || [];
+        branches = (meta.branchesList || []).filter(b => (!b.ctx || b.ctx === 'youth') && (b.status || 'active') === 'active');
+        courses = (meta.coursesList || []).filter(c => !c.ctx || c.ctx === 'youth');
+        coursesById = {};
+        courses.forEach(c => { coursesById[c.id] = c; });
+      } else {
+        const [bSnap, cSnap] = await Promise.all([
+          getDocs(query(collection(db, 'batches'), where('ctx', '==', ctx))),
+          getDocs(query(collection(db, 'courses'), where('ctx', '==', ctx)))
+        ]);
+        batches = bSnap.docs.map(d => Object.assign({ id: d.id }, d.data()));
+        if (isBranchHead && myBranchId) {
+          batches = batches.filter(b => b.branchId === myBranchId);
+        }
+        courses = cSnap.docs.map(d => Object.assign({ id: d.id }, d.data()));
+        coursesById = {};
+        courses.forEach(c => { coursesById[c.id] = c; });
       }
-      const cSnap = await getDocs(query(collection(db, 'courses'), where('ctx', '==', ctx)));
-      courses = cSnap.docs.map(d => Object.assign({ id: d.id }, d.data()));
-      coursesById = {};
-      courses.forEach(c => { coursesById[c.id] = c; });
     } catch (e) {
       console.error('[batches] load failed', e);
       showToast('Could not load batches (' + (e.code || 'error') + ').', 'error');
@@ -675,8 +673,9 @@ export async function mount({ profile, ctx }) {
       const wasEdit = !!editId;
       if (editId) await updateDoc(doc(db, 'batches', editId), data);
       else await addDoc(collection(db, 'batches'), data);
+      window.dispatchEvent(new CustomEvent('uic:meta-mutated', { detail: { reason: 'batch:save' } }));
       closeForm();
-      await load();
+      await load({ forceRefresh: true });
       showToast(wasEdit ? 'Batch updated.' : 'Batch added.', 'success');
     } catch (e) {
       console.error('[batches] save failed', e);
@@ -713,8 +712,9 @@ export async function mount({ profile, ctx }) {
     if (!ok) return;
     try {
       await deleteDoc(doc(db, 'batches', b.id));
+      window.dispatchEvent(new CustomEvent('uic:meta-mutated', { detail: { reason: 'batch:delete' } }));
       if (editId === b.id) closeForm();
-      await load();
+      await load({ forceRefresh: true });
       showToast('Batch deleted.', 'success');
     } catch (e) {
       console.error('[batches] delete failed', e);

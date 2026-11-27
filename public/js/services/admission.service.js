@@ -92,22 +92,31 @@ export function writeCounter(tx, ref, next, extra) {
 
 // ---------- writes ----------
 
+function emitDataMutated(reason) {
+  if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+    window.dispatchEvent(new CustomEvent('uic:data-mutated', { detail: { reason } }));
+  }
+}
+
 export async function createStudent(data) {
   const payload = Object.assign({}, data, {
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp()
   });
   const ref = await addDoc(collection(db, COL), payload);
+  emitDataMutated('student:create');
   return ref.id;
 }
 
 export async function updateStudent(id, data) {
   const payload = Object.assign({}, data, { updatedAt: serverTimestamp() });
   await updateDoc(doc(db, COL, id), payload);
+  emitDataMutated('student:update');
 }
 
 export async function deleteStudent(id) {
   await deleteDoc(doc(db, COL, id));
+  emitDataMutated('student:delete');
 }
 
 // ---------- student + docs (single writeBatch) ----------
@@ -130,6 +139,7 @@ export async function createStudentWithDocs(data, docs, studentRef) {
     });
   }
   await batch.commit();
+  emitDataMutated('student:create-with-docs');
   return ref.id;
 }
 
@@ -151,4 +161,5 @@ export async function updateStudentWithDocs(id, data, docs) {
     });
   }
   await batch.commit();
+  emitDataMutated('student:update-with-docs');
 }

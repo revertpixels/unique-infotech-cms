@@ -1,30 +1,35 @@
 // pending.page.js — Shared Overdue Payments view for Youth Centre (#/pending) & Unique Kids (#/school-pending).
 // Matches payments.page.js layout (no inner scroll, shared 10-row pager, short codes, icon actions, details popup).
 
-import { createSelect } from '../components/ui-select.js?v=1.8.188';
-import { createBranchBatchFilter, clearPersistedBranchBatchFilters } from '../components/branch-batch-filter.js?v=1.8.188';
-import { openPopup } from '../components/modal.js?v=1.8.188';
-import { showToast } from '../components/toast.js?v=1.8.188';
-import { renderPager, renderEmptyTableState, PAGE_SIZE } from '../components/list-page.js?v=1.8.188';
-import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.188';
+import { createSelect } from '../components/ui-select.js?v=1.8.189';
+import { createBranchBatchFilter, clearPersistedBranchBatchFilters } from '../components/branch-batch-filter.js?v=1.8.189';
+import { openPopup } from '../components/modal.js?v=1.8.189';
+import { showToast } from '../components/toast.js?v=1.8.189';
+import { renderPager, renderEmptyTableState, PAGE_SIZE } from '../components/list-page.js?v=1.8.189';
+import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.189';
 import {
   getCachedSessions,
   loadSessions,
-  getSelectedSession
-} from '../core/sessions.js?v=1.8.188';
+  getSelectedSession,
+  hasFreshSessionsCache
+} from '../core/sessions.js?v=1.8.189';
 import {
   ensureReferenceData,
+  getCachedReferenceData,
   scopeReferenceDataByCtx,
   filterOverdueItems,
   getDaysLateFilterOptions,
   matchesDaysLateFilter,
   buildOverdueDetailsModel,
   loadYouthPendingReport,
+  getCachedYouthPending,
   loadKidsPendingReport,
   refreshSingleYouthPendingStudent,
   loadStudentPhotos,
   getCachedStudentPhoto,
   summarizePendingItems,
+  isCacheStale,
+  scheduleDelayedSkeleton,
   formatCourseBranchDisplay,
   formatCourseAndBranch,
   toTitleCaseIfCaps,
@@ -33,8 +38,8 @@ import {
   formatINR,
   fmtDate,
   todayISO
-} from '../services/report.service.js?v=1.8.188';
-import { initials } from '../utils/formatter.js?v=1.8.188';
+} from '../services/report.service.js?v=1.8.189';
+import { initials } from '../utils/formatter.js?v=1.8.189';
 
 let state = null;
 let sessionListener = null;
@@ -208,7 +213,6 @@ export async function mount({ container, profile, ctx }) {
   initControls();
   bindEvents();
 
-  showSkeleton();
   await bootstrapData({ forceRefresh: false });
 }
 
@@ -416,12 +420,60 @@ function syncBranchBatchContext() {
   });
 }
 
-async function bootstrapData({ forceRefresh = false } = {}) {
+function pendingSignature(rep) {
+  return `${rep?.items?.length || 0}|${rep?.summary?.overdueAmount || 0}`;
+}
+
+async function bootstrapData({ forceRefresh = false, background = false } = {}) {
+  if (!state || state.destroyed) return;
+
+  if (!forceRefresh && state.ctx === 'youth') {
+    const cachedMeta = getCachedReferenceData(state.profile);
+    const cachedSessions = getCachedSessions('youth');
+    if (cachedMeta && (cachedSessions.length || hasFreshSessionsCache('youth'))) {
+      state.meta = cachedMeta;
+      state.sessions = cachedSessions;
+      state.activeSession = resolveActiveYouthSession();
+      updateSubtitle(state.activeSession);
+      populateCourseOptions();
+      syncBranchBatchContext();
+
+      if (!state.activeSession) {
+        hideSkeleton();
+        toggleNoSessionState(true);
+        if (isCacheStale(cachedMeta) || !hasFreshSessionsCache('youth')) {
+          bootstrapData({ forceRefresh: true, background: true }).catch(() => {});
+        }
+        return;
+      }
+
+      const cachedReport = getCachedYouthPending({ profile: state.profile, session: state.activeSession });
+      if (cachedReport) {
+        state.report = cachedReport;
+        hideSkeleton();
+        toggleNoSessionState(false);
+        applyFiltersAndRender();
+        if (isCacheStale(cachedMeta) || !hasFreshSessionsCache('youth') || isCacheStale(cachedReport)) {
+          if (!background) bootstrapData({ forceRefresh: true, background: true }).catch(() => {});
+        }
+        return;
+      }
+    }
+  }
+
+  const skelTask = (!state.report && !background)
+    ? scheduleDelayedSkeleton(() => {
+      if (state && !state.destroyed && !state.report) showSkeleton();
+    }, 250)
+    : null;
+
   try {
     const [meta, sessions] = await Promise.all([
       ensureReferenceData({ forceRefresh, profile: state.profile }),
       state.ctx === 'youth'
-        ? (getCachedSessions('youth').length ? Promise.resolve(getCachedSessions('youth')) : loadSessions('youth'))
+        ? ((!forceRefresh && hasFreshSessionsCache('youth'))
+          ? Promise.resolve(getCachedSessions('youth'))
+          : loadSessions('youth', { forceRefresh }))
         : Promise.resolve([])
     ]);
     if (!state || state.destroyed) return;
@@ -429,20 +481,26 @@ async function bootstrapData({ forceRefresh = false } = {}) {
     state.sessions = sessions;
     state.activeSession = state.ctx === 'youth' ? resolveActiveYouthSession() : null;
 
-    updateSubtitle(state.activeSession);
-    populateCourseOptions();
-    syncBranchBatchContext();
+    if (!background) {
+      updateSubtitle(state.activeSession);
+      populateCourseOptions();
+      syncBranchBatchContext();
+    }
 
     if (state.ctx === 'youth' && !state.activeSession) {
+      if (skelTask) skelTask.cancel();
       hideSkeleton();
       toggleNoSessionState(true);
       return;
     }
     toggleNoSessionState(false);
-    await loadActiveReport({ forceRefresh });
+    await loadActiveReport({ forceRefresh, background, skelTask });
   } catch (err) {
-    console.error('[pending] bootstrap error', err);
-    showLoadError(err);
+    if (skelTask) skelTask.cancel();
+    if (!background) {
+      console.error('[pending] bootstrap error', err);
+      showLoadError(err);
+    }
   }
 }
 
@@ -458,7 +516,7 @@ function populateCourseOptions() {
   state.selects.course.setOptions(courseOpts);
 }
 
-async function loadActiveReport({ forceRefresh = false } = {}) {
+async function loadActiveReport({ forceRefresh = false, background = false, skelTask = null } = {}) {
   if (!state || state.destroyed) return;
   if (state.ctx === 'youth' && !state.activeSession) {
     toggleNoSessionState(true);
@@ -469,28 +527,37 @@ async function loadActiveReport({ forceRefresh = false } = {}) {
   const errBox = $('pend-error');
   const scrollWrap = $('pend-scroll-wrap');
   const footBar = $('pend-foot');
-  if (errBox) errBox.hidden = true;
-  if (scrollWrap) scrollWrap.hidden = false;
-  if (footBar) footBar.hidden = false;
-
-  state.loading = true;
-  if (refreshBtn) {
-    refreshBtn.disabled = true;
-    refreshBtn.classList.add('spin');
+  if (!background) {
+    if (errBox) errBox.hidden = true;
+    if (scrollWrap) scrollWrap.hidden = false;
+    if (footBar) footBar.hidden = false;
+    state.loading = true;
+    if (refreshBtn) {
+      refreshBtn.disabled = true;
+      refreshBtn.classList.add('spin');
+    }
   }
-  showSkeleton();
+
+  const ownSkel = (!skelTask && !state.report && !background)
+    ? scheduleDelayedSkeleton(() => {
+      if (state && !state.destroyed && !state.report) showSkeleton();
+    }, 250)
+    : null;
+  const activeSkel = skelTask || ownSkel;
+  const prevSig = pendingSignature(state.report);
 
   try {
-    if (state.ctx === 'school') {
-      state.report = await loadKidsPendingReport({ profile: state.profile, forceRefresh });
-    } else {
-      state.report = await loadYouthPendingReport({
+    const nextReport = state.ctx === 'school'
+      ? await loadKidsPendingReport({ profile: state.profile, forceRefresh })
+      : await loadYouthPendingReport({
         profile: state.profile,
         session: state.activeSession,
         forceRefresh
       });
-    }
     if (!state || state.destroyed) return;
+    if (activeSkel) activeSkel.cancel();
+    const nextSig = pendingSignature(nextReport);
+    state.report = nextReport;
     hideSkeleton();
     console.debug('[pending] loaded', {
       ctx: state.ctx,
@@ -498,16 +565,27 @@ async function loadActiveReport({ forceRefresh = false } = {}) {
       fromCache: Boolean(state.report.fromCache),
       overdueItems: state.report.items?.length || 0
     });
-    applyFiltersAndRender();
+    if (!background || nextSig !== prevSig) {
+      updateSubtitle(state.activeSession);
+      populateCourseOptions();
+      syncBranchBatchContext();
+      applyFiltersAndRender();
+    }
   } catch (err) {
-    console.error('[pending] load failed', err);
-    showLoadError(err);
+    if (activeSkel) activeSkel.cancel();
+    if (!background) {
+      console.error('[pending] load failed', err);
+      showLoadError(err);
+    }
   } finally {
-    state.loading = false;
-    hideSkeleton();
-    if (refreshBtn) {
-      refreshBtn.disabled = false;
-      refreshBtn.classList.remove('spin');
+    if (activeSkel) activeSkel.cancel();
+    if (!background) {
+      state.loading = false;
+      hideSkeleton();
+      if (refreshBtn) {
+        refreshBtn.disabled = false;
+        refreshBtn.classList.remove('spin');
+      }
     }
   }
 }

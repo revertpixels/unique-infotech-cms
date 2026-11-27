@@ -11,14 +11,21 @@ import {
   runTransaction,
   serverTimestamp
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { createSelect } from '../components/ui-select.js?v=1.8.188';
-import { openPopup } from '../components/modal.js?v=1.8.188';
-import { confirmDialog } from '../components/ui-confirm.js?v=1.8.188';
-import { showToast } from '../components/toast.js?v=1.8.188';
-import { getSelectedSessionId, getCachedSessions } from '../core/sessions.js?v=1.8.188';
-import { todayISO, fmtDate, examWindowOf, installmentSchedule } from '../utils/session-rules.js?v=1.8.188';
-import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.188';
-import { getRoleTitle, resolveUserDisplay } from '../services/user-directory.service.js?v=1.8.188';
+import { createSelect } from '../components/ui-select.js?v=1.8.189';
+import { openPopup } from '../components/modal.js?v=1.8.189';
+import { confirmDialog } from '../components/ui-confirm.js?v=1.8.189';
+import { showToast } from '../components/toast.js?v=1.8.189';
+import { getSelectedSessionId, getCachedSessions, loadSessions, hasFreshSessionsCache } from '../core/sessions.js?v=1.8.189';
+import { todayISO, fmtDate, examWindowOf, installmentSchedule } from '../utils/session-rules.js?v=1.8.189';
+import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.189';
+import { getRoleTitle, resolveUserDisplay } from '../services/user-directory.service.js?v=1.8.189';
+import {
+  ensureReferenceData,
+  getCachedReferenceData,
+  ensureYouthStudents,
+  getCachedYouthStudents,
+  isCacheStale
+} from '../services/report.service.js?v=1.8.189';
 import {
   calculateLateFee,
   fetchStudentPayments,
@@ -28,7 +35,7 @@ import {
   courseBalanceWithoutExam,
   calculateStudentFinancials,
   repairStudentAdmissionPayment
-} from '../services/payment.service.js?v=1.8.188';
+} from '../services/payment.service.js?v=1.8.189';
 
 let currentUserProfile = null;
 let currentCtx = 'youth';
@@ -190,24 +197,10 @@ export function unmount() {
   }
 }
 
-/**
- * Loads session info, active courses and initial students cache
- */
-async function initData() {
+function applyPayFeesSessionUi(cachedSessions) {
   const selectedSessionId = getSelectedSessionId('youth');
-  const cachedSessions = getCachedSessions('youth');
-  activeSession = cachedSessions.find(s => s.id === selectedSessionId) || null;
-
-  if (!activeSession && selectedSessionId) {
-    try {
-      const sSnap = await getDoc(doc(db, 'sessions', selectedSessionId));
-      if (sSnap.exists()) {
-        activeSession = Object.assign({ id: sSnap.id }, sSnap.data());
-      }
-    } catch (e) {
-      console.warn('[pay-fees] failed to load session doc', e);
-    }
-  }
+  const list = cachedSessions || [];
+  activeSession = list.find(s => s.id === selectedSessionId) || null;
 
   const sessionBadge = $('pf-session-badge');
   if (sessionBadge) {
@@ -221,46 +214,78 @@ async function initData() {
   }
   const noSess = $('pf-no-session');
   const payWrap = $('pf-payments-container');
-  const hasAnySessions = cachedSessions.length > 0 || Boolean(activeSession);
+  const hasAnySessions = list.length > 0 || Boolean(activeSession);
   if (noSess && payWrap) {
     noSess.hidden = hasAnySessions;
     payWrap.hidden = !hasAnySessions;
   }
-
-  // Load Youth courses
-  try {
-    const cSnap = await getDocs(query(collection(db, 'courses'), where('ctx', '==', 'youth')));
-    youthCourses = cSnap.docs.map(d => Object.assign({ id: d.id }, d.data()));
-  } catch (e) {
-    console.warn('[pay-fees] failed to load courses', e);
-  }
-
-  // Load students for active session
-  await loadStudents();
-  updateExamFeeButtonDot();
+  return selectedSessionId;
 }
 
 /**
- * Loads students from Firestore scoped to youth and branch if branch head
+ * Loads session info, active courses and initial students cache (instant from shared APP_CACHE if warm)
  */
-async function loadStudents() {
-  try {
-    const isBranchHead = currentUserProfile && currentUserProfile.role === 'branch_head';
-    const myBranchId = currentUserProfile?.branchId;
+async function initData({ forceRefresh = false, background = false } = {}) {
+  const cachedMeta = !forceRefresh ? getCachedReferenceData(currentUserProfile) : null;
+  const cachedSessions = !forceRefresh ? getCachedSessions('youth') : [];
+  const cachedStudents = !forceRefresh ? getCachedYouthStudents({ profile: currentUserProfile, includeAllSessions: true }) : null;
 
-    let q;
-    if (isBranchHead && myBranchId) {
-      q = query(
-        collection(db, 'students'),
-        where('ctx', '==', 'youth'),
-        where('branchId', '==', myBranchId)
-      );
-    } else {
-      q = query(collection(db, 'students'), where('ctx', '==', 'youth'));
+  if (cachedMeta && cachedStudents && (cachedSessions.length || hasFreshSessionsCache('youth'))) {
+    applyPayFeesSessionUi(cachedSessions);
+    youthCourses = (cachedMeta.coursesList || []).filter(c => !c.ctx || c.ctx === 'youth');
+    allStudentsCache = cachedStudents.list || [];
+    updateExamFeeButtonDot();
+
+    const stale = isCacheStale(cachedMeta) || isCacheStale(cachedStudents) || !hasFreshSessionsCache('youth');
+    if (stale && !background) {
+      initData({ forceRefresh: true, background: true }).catch(() => {});
     }
+    return;
+  }
 
-    const snap = await getDocs(q);
-    allStudentsCache = snap.docs.map(d => Object.assign({ id: d.id }, d.data()));
+  const prevCount = allStudentsCache.length;
+  try {
+    const [meta, sessions, stRes] = await Promise.all([
+      ensureReferenceData({ forceRefresh, profile: currentUserProfile }),
+      loadSessions('youth', { forceRefresh }),
+      ensureYouthStudents({ profile: currentUserProfile, includeAllSessions: true, forceRefresh })
+    ]);
+    const list = sessions || getCachedSessions('youth') || [];
+    const selectedSessionId = applyPayFeesSessionUi(list);
+    if (!activeSession && selectedSessionId) {
+      try {
+        const sSnap = await getDoc(doc(db, 'sessions', selectedSessionId));
+        if (sSnap.exists()) {
+          activeSession = Object.assign({ id: sSnap.id }, sSnap.data());
+        }
+      } catch (e) {
+        console.warn('[pay-fees] failed to load session doc', e);
+      }
+    }
+    youthCourses = (meta?.coursesList || []).filter(c => !c.ctx || c.ctx === 'youth');
+    allStudentsCache = stRes?.list || [];
+    if (!background || allStudentsCache.length !== prevCount) {
+      updateExamFeeButtonDot();
+    }
+  } catch (e) {
+    console.error('[pay-fees] initData error', e);
+    if (!background) {
+      showToast({ type: 'error', message: 'Failed to load students list.' });
+    }
+  }
+}
+
+/**
+ * Reloads students from shared cache or Firestore scoped to youth and branch if branch head
+ */
+async function loadStudents({ forceRefresh = true } = {}) {
+  try {
+    const stRes = await ensureYouthStudents({
+      profile: currentUserProfile,
+      includeAllSessions: true,
+      forceRefresh
+    });
+    allStudentsCache = stRes?.list || [];
   } catch (e) {
     console.error('[pay-fees] loadStudents error', e);
     showToast({ type: 'error', message: 'Failed to load students list.' });
@@ -1154,6 +1179,7 @@ async function handleStartExamFeeCollection() {
       startedBy: authEmail,
       fees: feesMap
     };
+    window.dispatchEvent(new CustomEvent('uic:meta-mutated', { detail: { reason: 'session:examFee' } }));
 
     showToast({ type: 'success', message: 'Exam fee collection started and fees locked for this session.' });
     updateExamFeeButtonDot();
@@ -1345,6 +1371,7 @@ function renderExamFeeManagementView() {
               });
               c.fees = c.fees || {};
               c.fees.exam = newFee;
+              window.dispatchEvent(new CustomEvent('uic:meta-mutated', { detail: { reason: 'course:examFee' } }));
               showToast({ type: 'success', message: `Exam fee updated for ${c.code || c.name}` });
               renderExamFeeManagementView();
             } catch (err) {

@@ -22,30 +22,60 @@ import {
   fetchStudentPayments,
   calculateStudentFinancials,
   isStudentEligibleForDues
-} from './payment.service.js?v=1.8.188';
+} from './payment.service.js?v=1.8.189';
 import {
   evaluateKidsPendingBills,
   buildKidsPaymentLedger
-} from '../utils/school-billing.js?v=1.8.188';
-import { getStudentPhotoSrc } from '../utils/student-media.js?v=1.8.188';
+} from '../utils/school-billing.js?v=1.8.189';
+import { getStudentPhotoSrc } from '../utils/student-media.js?v=1.8.189';
 import {
   todayISO,
   fmtDate,
   getOrgTimezone
-} from '../utils/session-rules.js?v=1.8.188';
-import { formatINR } from '../utils/formatter.js?v=1.8.188';
-import { formatPersonName } from '../utils/formatter.js?v=1.8.188';
-import { resolveUserDisplay, loadUsersDirectory, getRoleTitle } from './user-directory.service.js?v=1.8.188';
-import { loadPdfMake, urlToDataUrl } from '../utils/admission-receipt-pdf.js?v=1.8.188';
+} from '../utils/session-rules.js?v=1.8.189';
+import { formatINR } from '../utils/formatter.js?v=1.8.189';
+import { formatPersonName } from '../utils/formatter.js?v=1.8.189';
+import { resolveUserDisplay, loadUsersDirectory, getRoleTitle } from './user-directory.service.js?v=1.8.189';
+import { loadPdfMake, urlToDataUrl } from '../utils/admission-receipt-pdf.js?v=1.8.189';
+import { loadAllSessions, getAllCachedSessions, hasFreshSessionsCache } from '../core/sessions.js?v=1.8.189';
 
 const CACHE_KEY = 'financialReports';
+export const CACHE_STALE_MS = 30000;
+const DEFAULT_YOUTH_STUDENTS_LIMIT = 500;
+
+const inflightMeta = new Map();
+const inflightStudents = new Map();
+const inflightSessionDatasets = new Map();
+const inflightPending = new Map();
+const inflightHistory = new Map();
 
 function ensureCacheRoot() {
+  if (typeof window === 'undefined') {
+    if (!globalThis.__UIC_APP_CACHE__) globalThis.__UIC_APP_CACHE__ = {};
+    if (!globalThis.__UIC_APP_CACHE__[CACHE_KEY]) {
+      globalThis.__UIC_APP_CACHE__[CACHE_KEY] = {
+        meta: null,
+        studentsById: new Map(),
+        studentsLists: new Map(),
+        youthSessionDatasets: new Map(),
+        photos: new Map(),
+        youthPending: new Map(),
+        kidsPending: null,
+        youthHistory: new Map(),
+        kidsHistory: null,
+        billsById: new Map(),
+        allYouthSessions: null
+      };
+    }
+    return globalThis.__UIC_APP_CACHE__[CACHE_KEY];
+  }
   window.APP_CACHE = window.APP_CACHE || {};
   if (!window.APP_CACHE[CACHE_KEY]) {
     window.APP_CACHE[CACHE_KEY] = {
       meta: null,
       studentsById: new Map(),
+      studentsLists: new Map(),
+      youthSessionDatasets: new Map(),
       photos: new Map(),
       youthPending: new Map(),
       kidsPending: null,
@@ -55,18 +85,61 @@ function ensureCacheRoot() {
       allYouthSessions: null
     };
   }
-  return window.APP_CACHE[CACHE_KEY];
+  const root = window.APP_CACHE[CACHE_KEY];
+  if (!root.studentsLists) root.studentsLists = new Map();
+  if (!root.youthSessionDatasets) root.youthSessionDatasets = new Map();
+  return root;
+}
+
+export function isCacheStale(entry, maxAgeMs = CACHE_STALE_MS) {
+  if (!entry || !entry.fetchedAt) return true;
+  return (Date.now() - Number(entry.fetchedAt)) >= maxAgeMs;
+}
+
+/**
+ * Delays showing a skeleton loader until delayMs passes without data settling,
+ * preventing flicker when cached or fast queries complete under 250ms.
+ */
+export function scheduleDelayedSkeleton(showFn, delayMs = 250) {
+  let active = true;
+  const timer = setTimeout(() => {
+    if (active && typeof showFn === 'function') showFn();
+  }, delayMs);
+  return {
+    cancel() {
+      active = false;
+      clearTimeout(timer);
+    }
+  };
 }
 
 export function invalidateFinancialCache({ clearMeta = false } = {}) {
   const root = ensureCacheRoot();
-  if (clearMeta) root.meta = null;
+  if (clearMeta) {
+    root.meta = null;
+    root.allYouthSessions = null;
+  }
+  root.studentsLists.clear();
+  root.youthSessionDatasets.clear();
   root.youthPending.clear();
   root.kidsPending = null;
   root.youthHistory.clear();
   root.kidsHistory = null;
   root.billsById.clear();
-  root.allYouthSessions = null;
+}
+
+if (typeof window !== 'undefined' && typeof window.addEventListener === 'function' && !window.__uicReportListenersBound) {
+  window.__uicReportListenersBound = true;
+  window.addEventListener('uic:data-mutated', () => {
+    invalidateFinancialCache({ clearMeta: false });
+    ensureCacheRoot().studentsById.clear();
+  });
+  window.addEventListener('uic:meta-mutated', () => {
+    invalidateFinancialCache({ clearMeta: true });
+  });
+  window.addEventListener('uic:sessions-changed', () => {
+    ensureCacheRoot().allYouthSessions = null;
+  });
 }
 
 export async function getCachedBillForEntry(billId) {
@@ -105,6 +178,12 @@ async function runInChunks(items, chunkSize, worker) {
   return results;
 }
 
+export function getCachedReferenceData(profile = null) {
+  const root = ensureCacheRoot();
+  const roleKey = `${profile?.role || 'anon'}::${profile?.branchId || ''}`;
+  return (root.meta && root.meta._roleKey === roleKey) ? root.meta : null;
+}
+
 /**
  * Loads session-cached reference metadata (branches, courses, batches, and user display names).
  * Avoids repeated Firestore reads when switching filters or navigating between financial pages.
@@ -113,97 +192,277 @@ export async function ensureReferenceData({ forceRefresh = false, profile = null
   const root = ensureCacheRoot();
   const roleKey = `${profile?.role || 'anon'}::${profile?.branchId || ''}`;
   if (root.meta && root.meta._roleKey === roleKey && !forceRefresh) {
-    return { ...root.meta, readCount: 0 };
+    return { ...root.meta, readCount: 0, fromCache: true };
+  }
+  if (!forceRefresh && inflightMeta.has(roleKey)) {
+    return inflightMeta.get(roleKey);
   }
 
-  let readCount = 0;
-  const isBranchHead = profile?.role === 'branch_head';
-  const isSchoolHead = profile?.role === 'school_head';
-  const isSuper = !isBranchHead && !isSchoolHead;
+  const task = (async () => {
+    let readCount = 0;
+    const isBranchHead = profile?.role === 'branch_head';
+    const isSchoolHead = profile?.role === 'school_head';
+    const isSuper = !isBranchHead && !isSchoolHead;
 
-  const branchPromise = isBranchHead
-    ? (profile?.branchId ? getDoc(doc(db, 'branches', profile.branchId)) : Promise.resolve(null))
-    : (isSuper ? getDocs(collection(db, 'branches')) : Promise.resolve(null));
+    const branchPromise = isBranchHead
+      ? (profile?.branchId ? getDoc(doc(db, 'branches', profile.branchId)) : Promise.resolve(null))
+      : (isSuper ? getDocs(collection(db, 'branches')) : Promise.resolve(null));
 
-  const courseQuery = isBranchHead
-    ? query(collection(db, 'courses'), where('ctx', '==', 'youth'))
-    : (isSchoolHead ? query(collection(db, 'courses'), where('ctx', '==', 'school')) : collection(db, 'courses'));
+    const courseQuery = isBranchHead
+      ? query(collection(db, 'courses'), where('ctx', '==', 'youth'))
+      : (isSchoolHead ? query(collection(db, 'courses'), where('ctx', '==', 'school')) : collection(db, 'courses'));
 
-  const batchQuery = isBranchHead
-    ? query(collection(db, 'batches'), where('ctx', '==', 'youth'))
-    : (isSchoolHead ? query(collection(db, 'batches'), where('ctx', '==', 'school')) : collection(db, 'batches'));
+    const batchQuery = isBranchHead
+      ? query(collection(db, 'batches'), where('ctx', '==', 'youth'))
+      : (isSchoolHead ? query(collection(db, 'batches'), where('ctx', '==', 'school')) : collection(db, 'batches'));
 
-  const usersPromise = getDocs(collection(db, 'users')).catch(() => null);
+    const usersPromise = getDocs(collection(db, 'users')).catch(() => null);
 
-  const [brRes, crRes, btRes, usrRes] = await Promise.allSettled([
-    branchPromise,
-    getDocs(courseQuery),
-    getDocs(batchQuery),
-    usersPromise
-  ]);
+    const [brRes, crRes, btRes, usrRes] = await Promise.allSettled([
+      branchPromise,
+      getDocs(courseQuery),
+      getDocs(batchQuery),
+      usersPromise
+    ]);
 
-  const toMapAndList = (settled) => {
-    if (settled.status !== 'fulfilled' || !settled.value) return { list: [], byId: {} };
-    const val = settled.value;
-    if (typeof val.exists === 'function') {
-      if (!val.exists()) return { list: [], byId: {} };
-      readCount += 1;
-      const item = { id: val.id, ...val.data() };
-      return { list: [item], byId: { [item.id]: item } };
-    }
-    readCount += val.size;
-    const list = val.docs.map((d) => ({ id: d.id, ...d.data() }));
-    const byId = {};
-    list.forEach((item) => { byId[item.id] = item; });
-    return { list, byId };
-  };
-
-  const branches = toMapAndList(brRes);
-  const courses = toMapAndList(crRes);
-  const batches = toMapAndList(btRes);
-
-  const usersByEmail = {};
-  if (usrRes.status === 'fulfilled' && usrRes.value) {
-    readCount += usrRes.value.size;
-    usrRes.value.docs.forEach((d) => {
-      const data = d.data() || {};
-      const key = String(data.email || d.id || '').trim().toLowerCase();
-      if (key) {
-        usersByEmail[key] = {
-          email: key,
-          name: data.name || key,
-          designation: data.designation || '',
-          role: data.role || ''
-        };
+    const toMapAndList = (settled) => {
+      if (settled.status !== 'fulfilled' || !settled.value) return { list: [], byId: {} };
+      const val = settled.value;
+      if (typeof val.exists === 'function') {
+        if (!val.exists()) return { list: [], byId: {} };
+        readCount += 1;
+        const item = { id: val.id, ...val.data() };
+        return { list: [item], byId: { [item.id]: item } };
       }
+      readCount += val.size;
+      const list = val.docs.map((d) => ({ id: d.id, ...d.data() }));
+      const byId = {};
+      list.forEach((item) => { byId[item.id] = item; });
+      return { list, byId };
+    };
+
+    const branches = toMapAndList(brRes);
+    const courses = toMapAndList(crRes);
+    const batches = toMapAndList(btRes);
+
+    const usersByEmail = {};
+    if (usrRes.status === 'fulfilled' && usrRes.value) {
+      readCount += usrRes.value.size;
+      usrRes.value.docs.forEach((d) => {
+        const data = d.data() || {};
+        const key = String(data.email || d.id || '').trim().toLowerCase();
+        if (key) {
+          usersByEmail[key] = {
+            email: key,
+            name: data.name || key,
+            designation: data.designation || '',
+            role: data.role || ''
+          };
+        }
+      });
+    }
+    const dirUsers = (typeof window !== 'undefined' && window.APP_CACHE && window.APP_CACHE.usersByEmail) ? window.APP_CACHE.usersByEmail : {};
+    Object.keys(dirUsers).forEach((k) => {
+      if (dirUsers[k]) usersByEmail[k] = { ...usersByEmail[k], ...dirUsers[k] };
     });
-  }
-  const dirUsers = (typeof window !== 'undefined' && window.APP_CACHE && window.APP_CACHE.usersByEmail) ? window.APP_CACHE.usersByEmail : {};
-  Object.keys(dirUsers).forEach((k) => {
-    if (dirUsers[k]) usersByEmail[k] = { ...usersByEmail[k], ...dirUsers[k] };
+    if (profile?.email) {
+      const key = String(profile.email).trim().toLowerCase();
+      usersByEmail[key] = {
+        email: key,
+        name: profile.name || usersByEmail[key]?.name || key,
+        designation: profile.designation || usersByEmail[key]?.designation || '',
+        role: profile.role || usersByEmail[key]?.role || ''
+      };
+    }
+
+    const meta = {
+      _roleKey: roleKey,
+      fetchedAt: Date.now(),
+      branchesList: branches.list,
+      branchesById: branches.byId,
+      coursesList: courses.list,
+      coursesById: courses.byId,
+      batchesList: batches.list,
+      batchesById: batches.byId,
+      usersByEmail
+    };
+    root.meta = meta;
+    return { ...meta, readCount, fromCache: false };
+  })().finally(() => {
+    inflightMeta.delete(roleKey);
   });
-  if (profile?.email) {
-    const key = String(profile.email).trim().toLowerCase();
-    usersByEmail[key] = {
-      email: key,
-      name: profile.name || usersByEmail[key]?.name || key,
-      designation: profile.designation || usersByEmail[key]?.designation || '',
-      role: profile.role || usersByEmail[key]?.role || ''
+
+  inflightMeta.set(roleKey, task);
+  return task;
+}
+
+function getYouthStudentsCacheKey({ profile = null, sessionId = '', includeAllSessions = false, maxLimit = DEFAULT_YOUTH_STUDENTS_LIMIT } = {}) {
+  const isBranchHead = profile?.role === 'branch_head' && !!profile?.branchId;
+  const branchScope = isBranchHead ? profile.branchId : 'ALL';
+  const sid = String(sessionId || '').trim();
+  const scope = sid ? `S:${sid}` : (includeAllSessions ? 'ALL_SESSIONS' : 'UNSCOPED');
+  return `${scope}::${branchScope}::${maxLimit}`;
+}
+
+export function getCachedYouthStudents({ profile = null, sessionId = '', includeAllSessions = false, maxLimit = DEFAULT_YOUTH_STUDENTS_LIMIT } = {}) {
+  const root = ensureCacheRoot();
+  const key = getYouthStudentsCacheKey({ profile, sessionId, includeAllSessions, maxLimit });
+  if (root.studentsLists.has(key)) return root.studentsLists.get(key);
+  const sid = String(sessionId || '').trim();
+  if (sid) {
+    const allKey = getYouthStudentsCacheKey({ profile, sessionId: '', includeAllSessions: true, maxLimit });
+    const allEntry = root.studentsLists.get(allKey);
+    if (allEntry && !isCacheStale(allEntry)) {
+      const list = allEntry.list.filter((s) => s.sessionId === sid);
+      const byId = {};
+      list.forEach((s) => { byId[s.id] = s; });
+      return { list, byId, fetchedAt: allEntry.fetchedAt, readCount: 0, fromCache: true };
+    }
+  }
+  return null;
+}
+
+/**
+ * Loads Youth Centre student list once per login/session with bounded limit() and in-flight deduplication.
+ */
+export async function ensureYouthStudents({
+  profile = null,
+  sessionId = '',
+  includeAllSessions = false,
+  forceRefresh = false,
+  maxLimit = DEFAULT_YOUTH_STUDENTS_LIMIT
+} = {}) {
+  const root = ensureCacheRoot();
+  const isBranchHead = profile?.role === 'branch_head' && !!profile?.branchId;
+  const sid = String(sessionId || '').trim();
+  const key = getYouthStudentsCacheKey({ profile, sessionId: sid, includeAllSessions, maxLimit });
+
+  if (!forceRefresh) {
+    const hit = getCachedYouthStudents({ profile, sessionId: sid, includeAllSessions, maxLimit });
+    if (hit) return { ...hit, readCount: 0, fromCache: true };
+    if (inflightStudents.has(key)) return inflightStudents.get(key);
+  }
+
+  const task = (async () => {
+    const constraints = [where('ctx', '==', 'youth')];
+    if (sid) constraints.push(where('sessionId', '==', sid));
+    if (isBranchHead) constraints.push(where('branchId', '==', profile.branchId));
+    if (maxLimit > 0) constraints.push(limit(maxLimit));
+
+    const snap = await getDocs(query(collection(db, 'students'), ...constraints));
+    const list = snap.docs.map((d) => {
+      const s = { id: d.id, ...d.data() };
+      root.studentsById.set(s.id, s);
+      return s;
+    });
+    const byId = {};
+    list.forEach((s) => { byId[s.id] = s; });
+    const entry = {
+      list,
+      byId,
+      fetchedAt: Date.now(),
+      readCount: snap.size,
+      fromCache: false
+    };
+    root.studentsLists.set(key, entry);
+    return entry;
+  })().finally(() => {
+    inflightStudents.delete(key);
+  });
+
+  inflightStudents.set(key, task);
+  return task;
+}
+
+export function getCachedYouthSessionDataset({ profile = null, session = null, sessionId = '' } = {}) {
+  const sid = String(sessionId || session?.id || '').trim();
+  if (!sid) return null;
+  const isBranchHead = profile?.role === 'branch_head' && !!profile?.branchId;
+  const key = `${sid}::${isBranchHead ? profile.branchId : 'ALL'}`;
+  return ensureCacheRoot().youthSessionDatasets.get(key) || null;
+}
+
+/**
+ * Shared single-session Youth dataset loader (students + payment subcollections).
+ * Deduplicates concurrent callers (Dashboard, Pending, Payments, Reports) so each session
+ * reads students and their payment subcollections at most once.
+ */
+export async function ensureYouthSessionDataset({
+  profile = null,
+  session = null,
+  sessionId = '',
+  forceRefresh = false
+} = {}) {
+  const sid = String(sessionId || session?.id || '').trim();
+  if (!sid) {
+    return {
+      sessionId: '',
+      studentsList: [],
+      studentsById: {},
+      paymentsByStudentId: {},
+      rawPayments: [],
+      fetchedAt: Date.now(),
+      readCount: 0,
+      fromCache: false
     };
   }
 
-  const meta = {
-    _roleKey: roleKey,
-    branchesList: branches.list,
-    branchesById: branches.byId,
-    coursesList: courses.list,
-    coursesById: courses.byId,
-    batchesList: batches.list,
-    batchesById: batches.byId,
-    usersByEmail
-  };
-  root.meta = meta;
-  return { ...meta, readCount };
+  const root = ensureCacheRoot();
+  const isBranchHead = profile?.role === 'branch_head' && !!profile?.branchId;
+  const branchScope = isBranchHead ? profile.branchId : 'ALL';
+  const key = `${sid}::${branchScope}`;
+
+  if (!forceRefresh && root.youthSessionDatasets.has(key)) {
+    return { ...root.youthSessionDatasets.get(key), readCount: 0, fromCache: true };
+  }
+  if (!forceRefresh && inflightSessionDatasets.has(key)) {
+    return inflightSessionDatasets.get(key);
+  }
+
+  const task = (async () => {
+    const [metaRes, stRes] = await Promise.all([
+      ensureReferenceData({ forceRefresh, profile }),
+      ensureYouthStudents({ profile, sessionId: sid, forceRefresh })
+    ]);
+    let readCount = (stRes.fromCache ? 0 : (stRes.readCount || 0));
+    const studentsList = stRes.list || [];
+    const studentsById = stRes.byId || {};
+    const paymentsByStudentId = {};
+    const rawPayments = [];
+
+    const activeTargets = studentsList.filter((s) => s && s.status !== 'deleted');
+    await runInChunks(activeTargets, 15, async (s) => {
+      const payments = await fetchStudentPayments(s.id);
+      readCount += Math.max(1, payments.length);
+      paymentsByStudentId[s.id] = payments;
+      payments.forEach((p) => {
+        rawPayments.push({
+          ...p,
+          studentDocId: p.studentDocId || s.id
+        });
+      });
+    });
+
+    const entry = {
+      sessionId: sid,
+      branchScope,
+      meta: metaRes,
+      studentsList,
+      studentsById,
+      paymentsByStudentId,
+      rawPayments,
+      fetchedAt: Date.now(),
+      readCount,
+      fromCache: false
+    };
+    root.youthSessionDatasets.set(key, entry);
+    return entry;
+  })().finally(() => {
+    inflightSessionDatasets.delete(key);
+  });
+
+  inflightSessionDatasets.set(key, task);
+  return task;
 }
 
 /**
@@ -423,67 +682,13 @@ function markYouthSequentialEligibility(studentItems) {
   });
 }
 
-/**
- * Loads Pending & Overdue dues for Youth Centre (session + role branch scoped).
- */
-export async function loadYouthPendingReport({
-  profile,
-  session,
-  forceRefresh = false,
-  asOfDate = todayISO()
-} = {}) {
-  const meta = await ensureReferenceData({ forceRefresh, profile });
-  let readCount = meta.readCount || 0;
-
-  if (!session || !session.id) {
-    return {
-      ctx: 'youth',
-      items: [],
-      studentsById: {},
-      paymentsByStudentId: {},
-      summary: summarizePendingItems([], asOfDate),
-      readCount,
-      asOfDate,
-      fromCache: false
-    };
-  }
-
-  const isBranchHead = profile?.role === 'branch_head' && !!profile?.branchId;
-  const cacheKey = `${session.id}::${isBranchHead ? profile.branchId : 'ALL'}::${asOfDate}`;
-  const root = ensureCacheRoot();
-  if (!forceRefresh && root.youthPending.has(cacheKey)) {
-    const cached = root.youthPending.get(cacheKey);
-    return { ...cached, readCount, fromCache: true };
-  }
-
-  const constraints = [
-    where('ctx', '==', 'youth'),
-    where('sessionId', '==', session.id)
-  ];
-  if (isBranchHead) {
-    constraints.push(where('branchId', '==', profile.branchId));
-  }
-
-  const stSnap = await getDocs(query(collection(db, 'students'), ...constraints));
-  readCount += stSnap.size;
-
-  const studentsById = {};
-  const activeStudents = [];
-  stSnap.docs.forEach((d) => {
-    const s = { id: d.id, ...d.data() };
-    root.studentsById.set(s.id, s);
-    studentsById[s.id] = s;
-    if (s.status === 'active') activeStudents.push(s);
-  });
-
-  const paymentsByStudentId = {};
+function buildYouthPendingItemsFromDataset(dataset, session, meta, asOfDate) {
+  const activeStudents = (dataset.studentsList || []).filter((s) => s && s.status === 'active');
+  const paymentsByStudentId = dataset.paymentsByStudentId || {};
   const allItems = [];
 
-  await runInChunks(activeStudents, 10, async (s) => {
-    const payments = await fetchStudentPayments(s.id);
-    readCount += Math.max(1, payments.length);
-    paymentsByStudentId[s.id] = payments;
-
+  activeStudents.forEach((s) => {
+    const payments = paymentsByStudentId[s.id] || [];
     const evaluated = evaluateYouthStudentDues(s, payments, session, {
       asOfDate,
       coursesById: meta.coursesById,
@@ -524,18 +729,95 @@ export async function loadYouthPendingReport({
     });
   });
 
-  const payload = {
-    ctx: 'youth',
-    items: allItems,
-    studentsById,
+  return {
+    studentsById: dataset.studentsById || {},
     paymentsByStudentId,
-    summary: summarizePendingItems(allItems, asOfDate),
-    readCount,
-    asOfDate,
-    fromCache: false
+    allItems
   };
-  root.youthPending.set(cacheKey, payload);
-  return payload;
+}
+
+export function getCachedYouthPending({
+  profile = null,
+  session = null,
+  asOfDate = todayISO()
+} = {}) {
+  if (!session || !session.id) return null;
+  const isBranchHead = profile?.role === 'branch_head' && !!profile?.branchId;
+  const cacheKey = `${session.id}::${isBranchHead ? profile.branchId : 'ALL'}::${asOfDate}`;
+  return ensureCacheRoot().youthPending.get(cacheKey) || null;
+}
+
+/**
+ * Loads Pending & Overdue dues for Youth Centre (session + role branch scoped).
+ * Reuses the shared single-session dataset so Dashboard, Pending, Payments, and Reports
+ * never duplicate student or payment subcollection reads.
+ */
+export async function loadYouthPendingReport({
+  profile,
+  session,
+  forceRefresh = false,
+  asOfDate = todayISO()
+} = {}) {
+  if (!session || !session.id) {
+    const meta = await ensureReferenceData({ forceRefresh, profile });
+    return {
+      ctx: 'youth',
+      items: [],
+      studentsById: {},
+      paymentsByStudentId: {},
+      summary: summarizePendingItems([], asOfDate),
+      readCount: meta.fromCache ? 0 : (meta.readCount || 0),
+      asOfDate,
+      fetchedAt: Date.now(),
+      fromCache: false
+    };
+  }
+
+  const isBranchHead = profile?.role === 'branch_head' && !!profile?.branchId;
+  const cacheKey = `${session.id}::${isBranchHead ? profile.branchId : 'ALL'}::${asOfDate}`;
+  const root = ensureCacheRoot();
+  if (!forceRefresh && root.youthPending.has(cacheKey)) {
+    const cached = root.youthPending.get(cacheKey);
+    return { ...cached, readCount: 0, fromCache: true };
+  }
+  if (!forceRefresh && inflightPending.has(cacheKey)) {
+    return inflightPending.get(cacheKey);
+  }
+
+  const task = (async () => {
+    const [meta, dataset] = await Promise.all([
+      ensureReferenceData({ forceRefresh, profile }),
+      ensureYouthSessionDataset({ profile, session, forceRefresh })
+    ]);
+    const readCount = (meta.fromCache ? 0 : (meta.readCount || 0))
+      + (dataset.fromCache ? 0 : (dataset.readCount || 0));
+
+    const { studentsById, paymentsByStudentId, allItems } = buildYouthPendingItemsFromDataset(
+      dataset,
+      session,
+      meta,
+      asOfDate
+    );
+
+    const payload = {
+      ctx: 'youth',
+      items: allItems,
+      studentsById,
+      paymentsByStudentId,
+      summary: summarizePendingItems(allItems, asOfDate),
+      readCount,
+      asOfDate,
+      fetchedAt: dataset.fetchedAt || Date.now(),
+      fromCache: false
+    };
+    root.youthPending.set(cacheKey, payload);
+    return payload;
+  })().finally(() => {
+    inflightPending.delete(cacheKey);
+  });
+
+  inflightPending.set(cacheKey, task);
+  return task;
 }
 
 /**
@@ -612,8 +894,24 @@ export async function refreshSingleYouthPendingStudent({
 
   existing.items = filteredOut;
   existing.summary = summarizePendingItems(filteredOut, asOfDate);
-  // Also invalidate Youth Payment History cache so switching tabs shows the newly recorded receipt.
+  existing.fetchedAt = Date.now();
+  if (existing.paymentsByStudentId) {
+    existing.paymentsByStudentId[studentDocId] = payments;
+  }
+  const dsKey = `${session.id}::${isBranchHead ? profile.branchId : 'ALL'}`;
+  const cachedDs = root.youthSessionDatasets.get(dsKey);
+  if (cachedDs) {
+    if (student) cachedDs.studentsById[student.id] = student;
+    cachedDs.paymentsByStudentId[studentDocId] = payments;
+    cachedDs.rawPayments = [
+      ...(cachedDs.rawPayments || []).filter((p) => p.studentDocId !== studentDocId),
+      ...payments.map((p) => ({ ...p, studentDocId }))
+    ];
+    cachedDs.fetchedAt = Date.now();
+  }
+  // Also invalidate Youth Payment History & unscoped student lists so switching tabs shows the newly recorded receipt.
   root.youthHistory.clear();
+  root.studentsLists.clear();
   return existing;
 }
 
@@ -724,180 +1022,272 @@ export async function loadKidsPendingReport({
  * - Super Admin: paginated collectionGroup('payment') ordered by date desc + admission sibling safeguard
  * - Branch Head: branch-scoped students + subcollections (avoids Firestore collectionGroup get() limitation)
  */
-export async function loadYouthPaymentHistory({
-  profile,
+function filterRawPaymentByDate(p, dateFrom = '', dateTo = '') {
+  if (!p) return false;
+  if (!dateFrom && !dateTo) return true;
+  const dStr = String(p.date || p.paidOn || '').slice(0, 10);
+  if (dateFrom && dStr < dateFrom) return false;
+  if (dateTo && dStr > dateTo) return false;
+  return true;
+}
+
+function getYouthHistoryCacheKey({
+  profile = null,
+  session = null,
+  sessionId = '',
+  extraSession = null,
+  extraSessionId = '',
   dateFrom = '',
-  dateTo = '',
-  cursor = null,
-  pageSize = 60,
-  loadAll = !cursor,
-  maxBatches = 50,
-  forceRefresh = false,
-  existingState = null
+  dateTo = ''
 } = {}) {
-  const meta = await ensureReferenceData({ forceRefresh, profile });
-  let readCount = meta.readCount || 0;
-  const root = ensureCacheRoot();
   const isBranchHead = profile?.role === 'branch_head' && !!profile?.branchId;
-  const cacheKey = `${isBranchHead ? profile.branchId : 'SUPER'}::${dateFrom || ''}::${dateTo || ''}`;
+  const branchScope = isBranchHead ? profile.branchId : 'SUPER';
+  const sid = String(sessionId || session?.id || '').trim();
+  const esid = String(extraSessionId || extraSession?.id || '').trim();
+  return `${branchScope}::S:${sid || 'ALL'}::E:${esid || ''}::${dateFrom || ''}::${dateTo || ''}`;
+}
 
-  if (!cursor && !forceRefresh && root.youthHistory.has(cacheKey)) {
-    const cached = root.youthHistory.get(cacheKey);
-    return { ...cached, readCount, fromCache: true };
-  }
+export function getCachedYouthHistory(opts = {}) {
+  const key = getYouthHistoryCacheKey(opts);
+  return ensureCacheRoot().youthHistory.get(key) || null;
+}
 
-  // Branch Head flow (cannot run collectionGroup query due to parent-get security rule)
-  if (isBranchHead) {
-    const stSnap = await getDocs(query(
-      collection(db, 'students'),
-      where('ctx', '==', 'youth'),
-      where('branchId', '==', profile.branchId)
-    ));
-    readCount += stSnap.size;
-    const studentsById = {};
-    const studentsList = stSnap.docs.map((d) => {
-      const s = { id: d.id, ...d.data() };
-      root.studentsById.set(s.id, s);
-      studentsById[s.id] = s;
-      return s;
-    });
-
-    const rawPayments = [];
-    await runInChunks(studentsList, 10, async (s) => {
-      const pSnap = await getDocs(collection(db, 'students', s.id, 'payment'));
-      readCount += Math.max(1, pSnap.size);
-      pSnap.docs.forEach((pd) => {
-        const data = pd.data() || {};
-        const dStr = String(data.date || data.paidOn || '').slice(0, 10);
-        if (dateFrom && dStr < dateFrom) return;
-        if (dateTo && dStr > dateTo) return;
-        rawPayments.push({
-          id: pd.id,
-          studentDocId: s.id,
-          ...data
-        });
-      });
-    });
-
-    const entries = normalizeYouthPaymentsLedger(rawPayments, studentsById, {
-      branchesById: meta.branchesById,
-      coursesById: meta.coursesById,
-      requireParentStudent: true
-    }).map((entry) => enrichLedgerEntry(entry, meta, studentsById[entry.studentDocId]));
-
-    const payload = {
-      org: 'youth',
-      entries,
-      rawByPath: {},
-      lastCursor: null,
-      hasMore: false,
-      readCount,
-      fromCache: false
-    };
-    root.youthHistory.set(cacheKey, payload);
-    return payload;
-  }
-
-  // Super Admin paginated collectionGroup('payment') ordered by date desc in batches of 60.
-  // When loadAll is true (default), fetch all batches of 60 before summarizing & paging so
-  // summary cards, older sessions, total counts, and last page numbers are always exact.
-  const rawByPath = existingState?.rawByPath ? { ...existingState.rawByPath } : {};
-  const touchedStudentIds = new Set(Object.values(rawByPath).map((p) => p.studentDocId).filter(Boolean));
-  const fetchedBoundaryStudents = new Set();
-
-  let cur = cursor;
-  let hasMore = false;
-  let batches = 0;
-
-  do {
-    const batchConstraints = [];
-    if (dateFrom) batchConstraints.push(where('date', '>=', dateFrom));
-    if (dateTo) batchConstraints.push(where('date', '<=', dateTo));
-    batchConstraints.push(orderBy('date', 'desc'));
-    if (cur) batchConstraints.push(startAfter(cur));
-    batchConstraints.push(limit(pageSize));
-
-    const cgSnap = await getDocs(query(collectionGroup(db, 'payment'), ...batchConstraints));
-    readCount += cgSnap.size;
-    batches += 1;
-
-    cgSnap.docs.forEach((d) => {
-      const parentStudentId = d.ref.parent?.parent?.id || '';
-      const data = d.data() || {};
-      rawByPath[`${parentStudentId}/${d.id}`] = {
-        id: d.id,
-        studentDocId: data.studentDocId || parentStudentId,
-        ...data
-      };
-      if (parentStudentId) touchedStudentIds.add(parentStudentId);
-    });
-
-    hasMore = cgSnap.docs.length === pageSize;
-    if (cgSnap.docs.length) cur = cgSnap.docs[cgSnap.docs.length - 1];
-
-    // Safeguard: if pagination ends mid-group on AD/FULL/MAT, fetch that student's sibling payments.
-    if (hasMore && (!loadAll || batches >= maxBatches)) {
-      const tailDoc = cgSnap.docs[cgSnap.docs.length - 1];
-      const tailType = String(tailDoc.data()?.type || '').toUpperCase();
-      const tailSid = tailDoc.ref.parent?.parent?.id || '';
-      if (tailSid && (tailType === 'AD' || tailType === 'FULL' || tailType === 'MAT') && !fetchedBoundaryStudents.has(tailSid)) {
-        fetchedBoundaryStudents.add(tailSid);
-        const sibSnap = await getDocs(collection(db, 'students', tailSid, 'payment'));
-        readCount += Math.max(1, sibSnap.size);
-        sibSnap.docs.forEach((pd) => {
-          const dStr = String(pd.data()?.date || pd.data()?.paidOn || '').slice(0, 10);
-          if (dateFrom && dStr < dateFrom) return;
-          if (dateTo && dStr > dateTo) return;
-          rawByPath[`${tailSid}/${pd.id}`] = {
-            id: pd.id,
-            studentDocId: tailSid,
-            ...pd.data()
-          };
-        });
-      }
-    }
-  } while (loadAll && hasMore && batches < maxBatches);
-
-  // Fetch any missing parent students (and cache them for subsequent views).
-  const missingStudentIds = Array.from(touchedStudentIds).filter((sid) => !root.studentsById.has(sid));
-  if (missingStudentIds.length) {
-    await runInChunks(missingStudentIds, 10, async (sid) => {
-      try {
-        const snap = await getDoc(doc(db, 'students', sid));
-        readCount += 1;
-        root.studentsById.set(sid, snap.exists() ? { id: snap.id, ...snap.data() } : null);
-      } catch (_) {
-        root.studentsById.set(sid, null);
-      }
-    });
-  }
-
-  const studentsById = {};
-  Object.values(rawByPath).forEach((p) => {
-    const st = root.studentsById.get(p.studentDocId);
-    if (st && st.ctx === 'youth') studentsById[p.studentDocId] = st;
-  });
-
-  const validRawList = Object.values(rawByPath).filter((p) => Boolean(studentsById[p.studentDocId]));
-  const entries = normalizeYouthPaymentsLedger(validRawList, studentsById, {
+function normalizeYouthHistoryResult({
+  rawList,
+  studentsById,
+  meta,
+  readCount = 0,
+  rawByPath = {},
+  lastCursor = null,
+  hasMore = false
+}) {
+  const entries = normalizeYouthPaymentsLedger(rawList, studentsById, {
     branchesById: meta.branchesById,
     coursesById: meta.coursesById,
     requireParentStudent: true
   }).map((entry) => enrichLedgerEntry(entry, meta, studentsById[entry.studentDocId]));
 
-  const payload = {
+  return {
     org: 'youth',
     entries,
     rawByPath,
-    lastCursor: cur,
+    lastCursor,
     hasMore,
     readCount,
+    fetchedAt: Date.now(),
     fromCache: false
   };
-  if (!cursor) {
-    root.youthHistory.set(cacheKey, payload);
+}
+
+/**
+ * Loads Youth Payment History entries scoped by active session (preferred) or paginated fallback:
+ * - When `session` / `sessionId` is supplied, reuses `ensureYouthSessionDataset` (0 duplicate reads across
+ *   Dashboard, Pending, Payments, and Reports; optional `extraSession` / `extraSessionId` runs in parallel).
+ * - Otherwise Super Admin uses paginated `collectionGroup('payment')` (`loadAll = false` default, batch size 60)
+ *   and Branch Head uses branch-scoped bounded `ensureYouthStudents`.
+ */
+export async function loadYouthPaymentHistory({
+  profile,
+  session = null,
+  sessionId = '',
+  extraSession = null,
+  extraSessionId = '',
+  dateFrom = '',
+  dateTo = '',
+  cursor = null,
+  pageSize = 60,
+  loadAll = false,
+  maxBatches = 50,
+  forceRefresh = false,
+  existingState = null
+} = {}) {
+  const root = ensureCacheRoot();
+  const isBranchHead = profile?.role === 'branch_head' && !!profile?.branchId;
+  const sid = String(sessionId || session?.id || '').trim();
+  const esid = String(extraSessionId || extraSession?.id || '').trim();
+  const cacheKey = getYouthHistoryCacheKey({ profile, sessionId: sid, extraSessionId: esid, dateFrom, dateTo });
+
+  if (!cursor && !forceRefresh && root.youthHistory.has(cacheKey)) {
+    const cached = root.youthHistory.get(cacheKey);
+    return { ...cached, readCount: 0, fromCache: true };
   }
-  return payload;
+  if (!cursor && !forceRefresh && inflightHistory.has(cacheKey)) {
+    return inflightHistory.get(cacheKey);
+  }
+
+  const runTask = async () => {
+    // Fast bounded session-dataset path (reuses students & payments with Dashboard/Pending/Reports)
+    if (sid && !cursor) {
+      const targetSessions = [sid];
+      if (esid && esid !== sid) targetSessions.push(esid);
+
+      const [meta, ...datasets] = await Promise.all([
+        ensureReferenceData({ forceRefresh, profile }),
+        ...targetSessions.map((id) => ensureYouthSessionDataset({ profile, sessionId: id, forceRefresh }))
+      ]);
+
+      let readCount = meta.fromCache ? 0 : (meta.readCount || 0);
+      const studentsById = {};
+      const rawList = [];
+      datasets.forEach((ds) => {
+        if (!ds) return;
+        if (!ds.fromCache) readCount += (ds.readCount || 0);
+        Object.assign(studentsById, ds.studentsById || {});
+        (ds.rawPayments || []).forEach((p) => {
+          if (filterRawPaymentByDate(p, dateFrom, dateTo)) rawList.push(p);
+        });
+      });
+
+      const payload = normalizeYouthHistoryResult({
+        rawList,
+        studentsById,
+        meta,
+        readCount,
+        rawByPath: {},
+        lastCursor: null,
+        hasMore: false
+      });
+      root.youthHistory.set(cacheKey, payload);
+      return payload;
+    }
+
+    const meta = await ensureReferenceData({ forceRefresh, profile });
+    let readCount = meta.fromCache ? 0 : (meta.readCount || 0);
+
+    // Branch Head fallback when loading across all sessions (cannot run collectionGroup query)
+    if (isBranchHead) {
+      const stRes = await ensureYouthStudents({
+        profile,
+        includeAllSessions: true,
+        forceRefresh,
+        maxLimit: DEFAULT_YOUTH_STUDENTS_LIMIT
+      });
+      if (!stRes.fromCache) readCount += (stRes.readCount || 0);
+      const studentsById = stRes.byId || {};
+      const studentsList = (stRes.list || []).filter((s) => s && s.status !== 'deleted');
+
+      const rawPayments = [];
+      await runInChunks(studentsList, 15, async (s) => {
+        const pSnap = await getDocs(collection(db, 'students', s.id, 'payment'));
+        readCount += Math.max(1, pSnap.size);
+        pSnap.docs.forEach((pd) => {
+          const data = pd.data() || {};
+          const item = { id: pd.id, studentDocId: s.id, ...data };
+          if (filterRawPaymentByDate(item, dateFrom, dateTo)) rawPayments.push(item);
+        });
+      });
+
+      const payload = normalizeYouthHistoryResult({
+        rawList: rawPayments,
+        studentsById,
+        meta,
+        readCount,
+        rawByPath: {},
+        lastCursor: null,
+        hasMore: false
+      });
+      root.youthHistory.set(cacheKey, payload);
+      return payload;
+    }
+
+    // Super Admin paginated collectionGroup('payment') ordered by date desc in bounded pages.
+    const rawByPath = existingState?.rawByPath ? { ...existingState.rawByPath } : {};
+    const touchedStudentIds = new Set(Object.values(rawByPath).map((p) => p.studentDocId).filter(Boolean));
+    const fetchedBoundaryStudents = new Set();
+
+    let cur = cursor;
+    let hasMore = false;
+    let batches = 0;
+
+    do {
+      const batchConstraints = [];
+      if (dateFrom) batchConstraints.push(where('date', '>=', dateFrom));
+      if (dateTo) batchConstraints.push(where('date', '<=', dateTo));
+      batchConstraints.push(orderBy('date', 'desc'));
+      if (cur) batchConstraints.push(startAfter(cur));
+      batchConstraints.push(limit(pageSize));
+
+      const cgSnap = await getDocs(query(collectionGroup(db, 'payment'), ...batchConstraints));
+      readCount += cgSnap.size;
+      batches += 1;
+
+      cgSnap.docs.forEach((d) => {
+        const parentStudentId = d.ref.parent?.parent?.id || '';
+        const data = d.data() || {};
+        rawByPath[`${parentStudentId}/${d.id}`] = {
+          id: d.id,
+          studentDocId: data.studentDocId || parentStudentId,
+          ...data
+        };
+        if (parentStudentId) touchedStudentIds.add(parentStudentId);
+      });
+
+      hasMore = cgSnap.docs.length === pageSize;
+      if (cgSnap.docs.length) cur = cgSnap.docs[cgSnap.docs.length - 1];
+
+      // Safeguard: if pagination ends mid-group on AD/FULL/MAT, fetch that student's sibling payments.
+      if (hasMore && (!loadAll || batches >= maxBatches)) {
+        const tailDoc = cgSnap.docs[cgSnap.docs.length - 1];
+        const tailType = String(tailDoc.data()?.type || '').toUpperCase();
+        const tailSid = tailDoc.ref.parent?.parent?.id || '';
+        if (tailSid && (tailType === 'AD' || tailType === 'FULL' || tailType === 'MAT') && !fetchedBoundaryStudents.has(tailSid)) {
+          fetchedBoundaryStudents.add(tailSid);
+          const sibSnap = await getDocs(collection(db, 'students', tailSid, 'payment'));
+          readCount += Math.max(1, sibSnap.size);
+          sibSnap.docs.forEach((pd) => {
+            const item = { id: pd.id, studentDocId: tailSid, ...pd.data() };
+            if (filterRawPaymentByDate(item, dateFrom, dateTo)) {
+              rawByPath[`${tailSid}/${pd.id}`] = item;
+            }
+          });
+        }
+      }
+    } while (loadAll && hasMore && batches < maxBatches);
+
+    // Fetch any missing parent students (and cache them for subsequent views).
+    const missingStudentIds = Array.from(touchedStudentIds).filter((id) => !root.studentsById.has(id));
+    if (missingStudentIds.length) {
+      await runInChunks(missingStudentIds, 15, async (id) => {
+        try {
+          const snap = await getDoc(doc(db, 'students', id));
+          readCount += 1;
+          root.studentsById.set(id, snap.exists() ? { id: snap.id, ...snap.data() } : null);
+        } catch (_) {
+          root.studentsById.set(id, null);
+        }
+      });
+    }
+
+    const studentsById = {};
+    Object.values(rawByPath).forEach((p) => {
+      const st = root.studentsById.get(p.studentDocId);
+      if (st && st.ctx === 'youth') studentsById[p.studentDocId] = st;
+    });
+
+    const validRawList = Object.values(rawByPath).filter((p) => Boolean(studentsById[p.studentDocId]));
+    const payload = normalizeYouthHistoryResult({
+      rawList: validRawList,
+      studentsById,
+      meta,
+      readCount,
+      rawByPath,
+      lastCursor: cur,
+      hasMore
+    });
+    if (!cursor) {
+      root.youthHistory.set(cacheKey, payload);
+    }
+    return payload;
+  };
+
+  if (cursor) {
+    return runTask();
+  }
+  const task = runTask().finally(() => {
+    inflightHistory.delete(cacheKey);
+  });
+  inflightHistory.set(cacheKey, task);
+  return task;
 }
 
 /**
@@ -1601,7 +1991,7 @@ export function downloadCsv(filename, headers = [], rows = []) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-function escHtml(v) {
+export function escHtml(v) {
   return String(v === null || v === undefined ? '' : v)
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
@@ -2527,18 +2917,24 @@ function sanitizeStaffName(email, recordedByName, recordedByDesignation) {
   return { name, desig, fullLabel };
 }
 
-export async function loadAllYouthSessionsForCompare() {
+export async function loadAllYouthSessionsForCompare({ forceRefresh = false } = {}) {
   const root = ensureCacheRoot();
-  if (Array.isArray(root.allYouthSessions)) {
-    return { sessions: root.allYouthSessions, readCount: 0 };
+  if (!forceRefresh && Array.isArray(root.allYouthSessions) && hasFreshSessionsCache('youth', CACHE_STALE_MS)) {
+    return { sessions: root.allYouthSessions, readCount: 0, fromCache: true };
   }
-  const snap = await getDocs(query(collection(db, 'sessions'), where('ctx', '==', 'youth')));
-  const list = snap.docs
-    .map((d) => ({ id: d.id, ...d.data() }))
+  const hadFreshSessions = !forceRefresh && hasFreshSessionsCache('youth', CACHE_STALE_MS);
+  const allList = hadFreshSessions
+    ? getAllCachedSessions('youth')
+    : await loadAllSessions('youth', { forceRefresh });
+  const list = (allList || [])
     .filter((s) => s.status !== 'deleted')
     .sort((a, b) => (b.startDate || '').localeCompare(a.startDate || ''));
   root.allYouthSessions = list;
-  return { sessions: list, readCount: snap.size };
+  return {
+    sessions: list,
+    readCount: hadFreshSessions ? 0 : list.length,
+    fromCache: hadFreshSessions
+  };
 }
 
 export function computePreviousPeriodRange(preset, dateFrom, dateTo, asOfIso = todayISO()) {

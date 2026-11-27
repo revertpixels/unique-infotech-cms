@@ -4,11 +4,11 @@
 // Youth: youth context, same authorised branch/session/course.
 import { db } from '../config/firebase-config.js';
 import { doc, getDoc, getDocs, query, where, updateDoc, runTransaction, serverTimestamp, collection } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.188';
-import { formatINR, formatDateIN } from '../utils/formatter.js?v=1.8.188';
-import { isCourseActive, batchAllowsCourse } from '../utils/session-rules.js?v=1.8.188';
-import { localToday } from '../utils/school-lifecycle.js?v=1.8.188';
-import { getRoleTitle } from '../services/user-directory.service.js?v=1.8.188';
+import { showToast } from '../components/toast.js?v=1.8.165';
+import { formatINR, formatDateIN } from '../utils/formatter.js?v=1.8.165';
+import { isCourseActive, batchAllowsCourse } from '../utils/session-rules.js?v=1.8.165';
+import { localToday } from '../utils/school-lifecycle.js?v=1.8.165';
+import { getRoleTitle } from '../services/user-directory.service.js?v=1.8.165';
 
 const COL = 'students';
 const ENROLMENTS_COL = 'enrolments';
@@ -151,8 +151,8 @@ export async function mount({ container, profile, ctx }) {
         if (currentCourse) {
           batches.filter(b => batchAllowsCourse(b, currentCourse.id, courses) &&
             b.branchId === myBranch && b.sessionId === mySession && b.id !== currentBatch.id).forEach(b => {
-            opts.push({ value: b.id, label: b.name || b.id, icon: 'layers' });
-          });
+              opts.push({ value: b.id, label: b.name || b.id, icon: 'layers' });
+            });
         }
       }
       destHost.innerHTML = '';
@@ -256,6 +256,7 @@ export async function mount({ container, profile, ctx }) {
           note: noteInput.value.trim() || ''
         });
       });
+      window.dispatchEvent(new CustomEvent('uic:data-mutated', { detail: { reason: 'student:transfer' } }));
       showToast({ type: 'success', message: 'Batch transferred.' });
       setState(STATE_COMPLETED);
       setTimeout(() => { location.hash = school ? '#/school-students' : '#/students'; }, 800);

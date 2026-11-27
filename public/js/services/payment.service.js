@@ -8,11 +8,11 @@ import {
   runTransaction,
   serverTimestamp
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { readStudentId, readReceiptNo, writeCounter } from './admission.service.js?v=1.8.188';
-import { fineFor, todayISO, installmentSchedule, examWindowOf } from '../utils/session-rules.js?v=1.8.188';
-import { courseFeeOf } from '../utils/fees.js?v=1.8.188';
-import { formatPersonName } from '../utils/formatter.js?v=1.8.188';
-import { resolveUserDisplay } from './user-directory.service.js?v=1.8.188';
+import { readStudentId, readReceiptNo, writeCounter } from './admission.service.js?v=1.8.189';
+import { fineFor, todayISO, installmentSchedule, examWindowOf } from '../utils/session-rules.js?v=1.8.189';
+import { courseFeeOf } from '../utils/fees.js?v=1.8.189';
+import { formatPersonName } from '../utils/formatter.js?v=1.8.189';
+import { resolveUserDisplay } from './user-directory.service.js?v=1.8.189';
 
 const COL = 'students';
 
@@ -744,7 +744,11 @@ export async function recordPaymentTx(tx, {
  * Convenience wrapper to execute recordPaymentTx within a Firestore transaction.
  */
 export async function recordPayment(params) {
-  return await runTransaction(db, (tx) => recordPaymentTx(tx, params));
+  const result = await runTransaction(db, (tx) => recordPaymentTx(tx, params));
+  if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+    window.dispatchEvent(new CustomEvent('uic:data-mutated', { detail: { reason: 'payment:record' } }));
+  }
+  return result;
 }
 
 /**
@@ -764,7 +768,7 @@ export async function recordAdmissionWithPayment({
   const pp = paymentParams || {};
   const pDate = todayISO();
 
-  return await runTransaction(db, async (tx) => {
+  const res = await runTransaction(db, async (tx) => {
     // 1. Transaction Reads: Counters first
     const sid = await readStudentId(tx, {
       org: 'youth',
@@ -1027,6 +1031,10 @@ export async function recordAdmissionWithPayment({
       totalPaid: payAmt
     };
   });
+  if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+    window.dispatchEvent(new CustomEvent('uic:data-mutated', { detail: { reason: 'admission:payment' } }));
+  }
+  return res;
 }
 
 // ---------- Shared Dues & Payment History Evaluators (Single Source of Truth) ----------

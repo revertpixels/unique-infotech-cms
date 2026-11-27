@@ -4,10 +4,10 @@
 // are preserved. Idempotent (repeated clicks do not duplicate end events).
 import { db } from '../config/firebase-config.js';
 import { doc, getDoc, getDocs, query, where, updateDoc, runTransaction, serverTimestamp, collection } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.188';
-import { localToday, nextMonth } from '../utils/school-lifecycle.js?v=1.8.188';
-import { formatINR, formatDateIN } from '../utils/formatter.js?v=1.8.188';
-import { getRoleTitle } from '../services/user-directory.service.js?v=1.8.188';
+import { showToast } from '../components/toast.js?v=1.8.189';
+import { localToday, nextMonth } from '../utils/school-lifecycle.js?v=1.8.189';
+import { formatINR, formatDateIN } from '../utils/formatter.js?v=1.8.189';
+import { getRoleTitle } from '../services/user-directory.service.js?v=1.8.189';
 
 const COL = 'students';
 const ENROLMENTS_COL = 'enrolments';
@@ -184,6 +184,7 @@ export async function mount({ container, profile, ctx }) {
         }));
         tx.update(doc(db, COL, studentId), { status: 'ended', updatedAt: serverTimestamp(), updatedBy: who });
       });
+      window.dispatchEvent(new CustomEvent('uic:data-mutated', { detail: { reason: 'student:end' } }));
       showToast({ type: 'success', message: 'Course ended. Existing bills remain payable; no future bills will be generated.' });
       setState(STATE_COMPLETED);
       setTimeout(() => { location.hash = school ? '#/school-students' : '#/students'; }, 800);

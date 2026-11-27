@@ -4,10 +4,10 @@ import { createSelect } from '../components/ui-select.js';
 import { openMenu } from '../components/ui-menu.js';
 import { confirmDialog } from '../components/ui-confirm.js';
 import { showToast } from '../components/toast.js';
-import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.188';
-import { PAGE_SIZE, buildStats, buildToolbar, renderPager, renderEmptyTableState } from '../components/list-page.js?v=1.8.188';
-import { formatPersonName } from '../utils/formatter.js?v=1.8.188';
-import { getRoleTitle, getRolePluralTitle } from '../services/user-directory.service.js?v=1.8.188';
+import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.189';
+import { PAGE_SIZE, buildStats, buildToolbar, renderPager, renderEmptyTableState } from '../components/list-page.js?v=1.8.189';
+import { formatPersonName } from '../utils/formatter.js?v=1.8.189';
+import { getRoleTitle, getRolePluralTitle } from '../services/user-directory.service.js?v=1.8.189';
 
 let unbindBranchesBranding = null;
 
@@ -441,6 +441,7 @@ export async function mount({ profile }) {
     if (!ok) return;
     try {
       await deleteDoc(doc(db, 'branches', r.id));
+      window.dispatchEvent(new CustomEvent('uic:meta-mutated', { detail: { reason: 'branch:delete' } }));
       if (editId === r.id) closeForm();
       await load();
       note('Branch "' + r.name + '" deleted.', false);
@@ -494,6 +495,7 @@ export async function mount({ profile }) {
         data.createdBy = who;
         await addDoc(collection(db, 'branches'), data);
       }
+      window.dispatchEvent(new CustomEvent('uic:meta-mutated', { detail: { reason: 'branch:save' } }));
       saving = false;
       closeForm();
       await load();

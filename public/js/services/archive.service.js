@@ -21,24 +21,25 @@ import {
   ref as storageRef,
   getDownloadURL
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-storage.js';
-import { APP_VERSION } from '../core/app.js?v=1.8.188';
-import { todayISO, installmentSchedule, getOrgTimezone } from '../utils/session-rules.js?v=1.8.188';
+import { APP_VERSION } from '../core/app.js?v=1.8.189';
+import { loadAllSessions, getAllCachedSessions, hasFreshSessionsCache } from '../core/sessions.js?v=1.8.189';
+import { todayISO, installmentSchedule, getOrgTimezone } from '../utils/session-rules.js?v=1.8.189';
 import {
   calculateStudentFinancials,
   evaluateYouthStudentDues,
   normalizeYouthPaymentsLedger,
   installmentCourseFee,
   installmentBalanceDue
-} from './payment.service.js?v=1.8.188';
+} from './payment.service.js?v=1.8.189';
 import {
   loadUsersDirectory,
   resolveUserDisplay,
   getUserTitle
-} from './user-directory.service.js?v=1.8.188';
-import { formatPersonName, formatGenderDisplay } from '../utils/formatter.js?v=1.8.188';
-import { getStudentPhotoSrc, getStudentDocRecord, getStudentDocSrc, getStudentDocMime } from '../utils/student-media.js?v=1.8.188';
-import { buildOfflineViewerAssets } from '../utils/archive-viewer-builder.js?v=1.8.188';
-import { buildYouthReceiptData } from '../utils/admission-receipt.js?v=1.8.188';
+} from './user-directory.service.js?v=1.8.189';
+import { formatPersonName, formatGenderDisplay } from '../utils/formatter.js?v=1.8.189';
+import { getStudentPhotoSrc, getStudentDocRecord, getStudentDocSrc, getStudentDocMime } from '../utils/student-media.js?v=1.8.189';
+import { buildOfflineViewerAssets } from '../utils/archive-viewer-builder.js?v=1.8.189';
+import { buildYouthReceiptData } from '../utils/admission-receipt.js?v=1.8.189';
 
 /** Feature flag keeping Phase 2 session deletion OFF until Phase 1 is verified and approved. */
 export const ENABLE_ARCHIVE_SESSION_DELETE = false;
@@ -59,6 +60,7 @@ const VIEWER_CSS_PATHS = [
   'css/components/list-page.css',
   'css/components/course-view.css',
   'css/components/doc-card.css',
+  'css/components/ref-cards.css',
   'css/components/badges.css',
   'css/components/buttons.css',
   'css/components/forms.css',
@@ -604,27 +606,81 @@ export async function loadArchiveOverviewData({ profile } = {}) {
   };
 }
 
+const REMINDER_STALE_MS = 30000;
+const inflightReminder = new Map();
+
+function getReminderStore() {
+  if (typeof window === 'undefined') return null;
+  window.APP_CACHE = window.APP_CACHE || {};
+  if (!window.APP_CACHE.dashboardArchiveReminder) {
+    window.APP_CACHE.dashboardArchiveReminder = new Map();
+  }
+  return window.APP_CACHE.dashboardArchiveReminder;
+}
+
+export function invalidateArchiveReminderCache() {
+  const store = getReminderStore();
+  if (store) store.clear();
+}
+
+if (typeof window !== 'undefined' && typeof window.addEventListener === 'function' && !window.__uicArchiveReminderListenersBound) {
+  window.__uicArchiveReminderListenersBound = true;
+  window.addEventListener('uic:sessions-changed', invalidateArchiveReminderCache);
+  window.addEventListener('uic:meta-mutated', invalidateArchiveReminderCache);
+}
+
+/**
+ * Synchronous read of cached dashboard archive reminder for instant SWR render.
+ */
+export function getCachedDashboardArchiveReminder(profile) {
+  const store = getReminderStore();
+  if (!store || !profile) return null;
+  const key = `${profile.role || ''}::${profile.branchId || 'ALL'}`;
+  return store.get(key) || null;
+}
+
 /**
  * Lightweight dashboard reminder loader (0 student reads — only Youth sessions & archiveLogs).
+ * Reuses cached sessions and caches result per role+branch to prevent redundant reads across navigations.
  */
-export async function loadDashboardArchiveReminder({ profile } = {}) {
+export async function loadDashboardArchiveReminder({ profile, forceRefresh = false } = {}) {
   const isSuper = profile?.role === 'superadmin';
   const isBranchHead = profile?.role === 'branch_head' && Boolean(profile?.branchId);
   if (!isSuper && !isBranchHead) return null;
-  try {
-    const [sessSnap, logSnap] = await Promise.all([
-      getDocs(query(collection(db, 'sessions'), where('ctx', '==', 'youth'))),
-      isBranchHead
-        ? getDocs(query(collection(db, 'archiveLogs'), where('branchId', '==', profile.branchId)))
-        : getDocs(query(collection(db, 'archiveLogs'), orderBy('createdAt', 'desc'), limit(120)))
-    ]);
-    const sessions = sessSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
-    const logs = logSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
-    return computeArchiveReminders(sessions, logs);
-  } catch (err) {
-    console.warn('[archives] dashboard reminder skipped:', err && err.code ? err.code : err);
-    return null;
+
+  const key = `${profile.role}::${isBranchHead ? profile.branchId : 'ALL'}`;
+  const store = getReminderStore();
+  const cached = store ? store.get(key) : null;
+  if (!forceRefresh && cached && (Date.now() - cached.fetchedAt) < REMINDER_STALE_MS && hasFreshSessionsCache('youth', REMINDER_STALE_MS)) {
+    return cached.data;
   }
+  if (!forceRefresh && inflightReminder.has(key)) {
+    return inflightReminder.get(key);
+  }
+
+  const task = (async () => {
+    try {
+      const sessionsPromise = (!forceRefresh && hasFreshSessionsCache('youth', REMINDER_STALE_MS))
+        ? Promise.resolve(getAllCachedSessions('youth'))
+        : loadAllSessions('youth', { forceRefresh });
+      const logsPromise = isBranchHead
+        ? getDocs(query(collection(db, 'archiveLogs'), where('branchId', '==', profile.branchId)))
+        : getDocs(query(collection(db, 'archiveLogs'), orderBy('createdAt', 'desc'), limit(120)));
+
+      const [sessions, logSnap] = await Promise.all([sessionsPromise, logsPromise]);
+      const logs = logSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      const data = computeArchiveReminders(sessions || [], logs);
+      if (store) store.set(key, { data, fetchedAt: Date.now() });
+      return data;
+    } catch (err) {
+      console.warn('[archives] dashboard reminder skipped:', err && err.code ? err.code : err);
+      return cached ? cached.data : null;
+    }
+  })().finally(() => {
+    inflightReminder.delete(key);
+  });
+  inflightReminder.set(key, task);
+  return task;
 }
 
 /**
@@ -1255,6 +1311,7 @@ export async function appendArchiveLog({
     createdAtISO: `${todayISO()}T${new Date().toISOString().slice(11)}`
   };
   const ref = await addDoc(collection(db, 'archiveLogs'), payload);
+  invalidateArchiveReminderCache();
   return { id: ref.id, ...payload };
 }
 

@@ -1,34 +1,41 @@
 // reports.page.js — Read-only Youth Centre Reports page (#/reports)
 // Keeps v1.8.179 joined KPI stat strips, header, filter bar & compact card radius with restored v1.8.178 multi-colour charts.
 
-import { createSelect } from '../components/ui-select.js?v=1.8.188';
-import { createBranchBatchFilter, clearPersistedBranchBatchFilters } from '../components/branch-batch-filter.js?v=1.8.188';
-import { renderDonutChart, renderBarChart, renderStackedBarChart, renderLineChart } from '../components/charts.js?v=1.8.188';
-import { showToast } from '../components/toast.js?v=1.8.188';
-import { renderEmptyTableState } from '../components/list-page.js?v=1.8.188';
+import { createSelect } from '../components/ui-select.js?v=1.8.189';
+import { createBranchBatchFilter, clearPersistedBranchBatchFilters } from '../components/branch-batch-filter.js?v=1.8.189';
+import { renderDonutChart, renderBarChart, renderStackedBarChart, renderLineChart } from '../components/charts.js?v=1.8.189';
+import { showToast } from '../components/toast.js?v=1.8.189';
+import { renderEmptyTableState } from '../components/list-page.js?v=1.8.189';
 import {
   getCachedSessions,
   loadSessions,
-  getSelectedSession
-} from '../core/sessions.js?v=1.8.188';
+  getSelectedSession,
+  hasFreshSessionsCache
+} from '../core/sessions.js?v=1.8.189';
 import {
   ensureReferenceData,
+  getCachedReferenceData,
   scopeReferenceDataByCtx,
   invalidateFinancialCache,
   getReportDatePresetOptions,
   getDatePresetRange,
   loadYouthPaymentHistory,
+  getCachedYouthHistory,
   loadYouthPendingReport,
+  getCachedYouthPending,
   loadAllYouthSessionsForCompare,
   buildYouthReportsData,
+  isCacheStale,
+  scheduleDelayedSkeleton,
   downloadCsv,
   openPrintSheet,
+  escHtml,
   toTitleCaseIfCaps,
   formatINR,
   fmtDate,
   todayISO
-} from '../services/report.service.js?v=1.8.188';
-import { resolveUserDisplay, getRoleTitle } from '../services/user-directory.service.js?v=1.8.188';
+} from '../services/report.service.js?v=1.8.189';
+import { resolveUserDisplay, getRoleTitle } from '../services/user-directory.service.js?v=1.8.189';
 
 const FILTER_STORAGE_PREFIX = 'uicms.rep.v1.';
 
@@ -204,7 +211,6 @@ export async function mount({ profile, ctx }) {
   updateHeaderUi();
   initControls();
   bindEvents();
-  showSkeletons();
   await bootstrapData({ forceRefresh: false });
 }
 
@@ -413,14 +419,88 @@ function syncBranchBatchFilter() {
   });
 }
 
-async function bootstrapData({ forceRefresh = false } = {}) {
-  $('rep-error').hidden = true;
-  showSkeletons();
+function reportsSignature(histRes, pendRes, prevPendRes) {
+  return [
+    histRes?.entries?.length || 0,
+    pendRes?.items?.length || 0,
+    pendRes?.summary?.overdueAmount || 0,
+    prevPendRes?.items?.length || 0,
+    prevPendRes?.summary?.overdueAmount || 0
+  ].join('|');
+}
+
+async function bootstrapData({ forceRefresh = false, background = false } = {}) {
+  if (!state || state.destroyed) return;
+  if (!background) $('rep-error').hidden = true;
+
+  if (!forceRefresh) {
+    const cachedMeta = getCachedReferenceData(state.profile);
+    const cachedSessions = getCachedSessions('youth');
+    const cachedCompare = window.APP_CACHE?.financialReports?.allYouthSessions;
+    if (cachedMeta && (cachedSessions.length || hasFreshSessionsCache('youth')) && Array.isArray(cachedCompare)) {
+      state.meta = cachedMeta;
+      state.sessions = cachedSessions;
+      state.allSessions = cachedCompare.length ? cachedCompare : cachedSessions;
+      state.activeSession = resolveActiveSession();
+      state.prevSession = resolvePreviousSession(state.allSessions, state.activeSession);
+      updateHeaderUi();
+      populateCourseOptions();
+      syncBranchBatchFilter();
+
+      if (!state.activeSession) {
+        hideSkeletons();
+        toggleNoSessionState(true);
+        if (isCacheStale(cachedMeta) || !hasFreshSessionsCache('youth')) {
+          bootstrapData({ forceRefresh: true, background: true }).catch(() => {});
+        }
+        return;
+      }
+
+      const cachedHist = getCachedYouthHistory({
+        profile: state.profile,
+        session: state.activeSession,
+        extraSession: state.prevSession
+      });
+      const cachedPend = getCachedYouthPending({ profile: state.profile, session: state.activeSession });
+      const cachedPrevPend = state.prevSession
+        ? getCachedYouthPending({ profile: state.profile, session: state.prevSession })
+        : null;
+
+      if (cachedHist && cachedPend && (!state.prevSession || cachedPrevPend)) {
+        state.historyResult = cachedHist;
+        state.pendingResult = cachedPend;
+        state.prevPendingResult = cachedPrevPend;
+        state.totalReads = 0;
+        hideSkeletons();
+        toggleNoSessionState(false);
+        computeAndRenderAnalytics();
+
+        const isStale = isCacheStale(cachedMeta)
+          || !hasFreshSessionsCache('youth')
+          || isCacheStale(cachedHist)
+          || isCacheStale(cachedPend)
+          || (state.prevSession && isCacheStale(cachedPrevPend));
+        if (isStale && !background) {
+          bootstrapData({ forceRefresh: true, background: true }).catch(() => {});
+        }
+        return;
+      }
+    }
+  }
+
+  const skelTask = (!state.analytics && !background)
+    ? scheduleDelayedSkeleton(() => {
+      if (state && !state.destroyed && !state.analytics) showSkeletons();
+    }, 250)
+    : null;
+
   try {
     const [meta, activeSessions, compareInfo] = await Promise.all([
       ensureReferenceData({ forceRefresh, profile: state.profile }),
-      getCachedSessions('youth').length ? Promise.resolve(getCachedSessions('youth')) : loadSessions('youth'),
-      loadAllYouthSessionsForCompare()
+      (!forceRefresh && hasFreshSessionsCache('youth'))
+        ? Promise.resolve(getCachedSessions('youth'))
+        : loadSessions('youth', { forceRefresh }),
+      loadAllYouthSessionsForCompare({ forceRefresh })
     ]);
     if (!state || state.destroyed) return;
 
@@ -431,42 +511,57 @@ async function bootstrapData({ forceRefresh = false } = {}) {
     state.prevSession = resolvePreviousSession(state.allSessions, state.activeSession);
     state.totalReads = (meta.readCount || 0) + (compareInfo?.readCount || 0);
 
-    updateHeaderUi();
-    populateCourseOptions();
-    syncBranchBatchFilter();
+    if (!background) {
+      updateHeaderUi();
+      populateCourseOptions();
+      syncBranchBatchFilter();
+    }
 
     if (!state.activeSession) {
+      if (skelTask) skelTask.cancel();
       hideSkeletons();
       toggleNoSessionState(true);
       return;
     }
 
     toggleNoSessionState(false);
-    await loadAllReportSources({ forceRefresh });
+    await loadAllReportSources({ forceRefresh, background, skelTask });
   } catch (err) {
+    if (skelTask) skelTask.cancel();
     if (!state || state.destroyed) return;
-    console.error('[reports] bootstrap failed', err);
-    showError(err);
+    if (!background) {
+      console.error('[reports] bootstrap failed', err);
+      showError(err);
+    }
   }
 }
 
-async function loadAllReportSources({ forceRefresh = false } = {}) {
+async function loadAllReportSources({ forceRefresh = false, background = false, skelTask = null } = {}) {
   if (!state || state.destroyed || !state.activeSession) return;
-  $('rep-error').hidden = true;
-  showSkeletons();
+  if (!background) $('rep-error').hidden = true;
+  const ownSkel = (!skelTask && !state.analytics && !background)
+    ? scheduleDelayedSkeleton(() => {
+      if (state && !state.destroyed && !state.analytics) showSkeletons();
+    }, 250)
+    : null;
+  const activeSkel = skelTask || ownSkel;
+
   const refreshBtn = $('rep-refresh');
-  if (refreshBtn) {
+  if (refreshBtn && !background) {
     refreshBtn.disabled = true;
     refreshBtn.classList.add('spin');
   }
 
+  const prevSig = reportsSignature(state.historyResult, state.pendingResult, state.prevPendingResult);
   try {
     const tasks = [
       loadYouthPaymentHistory({
         profile: state.profile,
+        session: state.activeSession,
+        extraSession: state.prevSession,
         dateFrom: '',
         dateTo: '',
-        loadAll: true,
+        loadAll: false,
         forceRefresh
       }),
       loadYouthPendingReport({
@@ -486,18 +581,29 @@ async function loadAllReportSources({ forceRefresh = false } = {}) {
     const [histRes, pendRes, prevPendRes] = await Promise.all(tasks);
     if (!state || state.destroyed) return;
 
+    const nextSig = reportsSignature(histRes, pendRes, prevPendRes);
     state.historyResult = histRes;
     state.pendingResult = pendRes;
     state.prevPendingResult = prevPendRes;
     state.totalReads += (histRes?.readCount || 0) + (pendRes?.readCount || 0) + (prevPendRes?.readCount || 0);
 
-    computeAndRenderAnalytics();
+    if (activeSkel) activeSkel.cancel();
+    if (!background || nextSig !== prevSig || !state.analytics) {
+      updateHeaderUi();
+      populateCourseOptions();
+      syncBranchBatchFilter();
+      computeAndRenderAnalytics();
+    }
   } catch (err) {
+    if (activeSkel) activeSkel.cancel();
     if (!state || state.destroyed) return;
-    console.error('[reports] load failed', err);
-    showError(err);
+    if (!background) {
+      console.error('[reports] load failed', err);
+      showError(err);
+    }
   } finally {
-    if (refreshBtn) {
+    if (activeSkel) activeSkel.cancel();
+    if (refreshBtn && !background) {
       refreshBtn.disabled = false;
       refreshBtn.classList.remove('spin');
     }
@@ -939,7 +1045,7 @@ function exportTableCsv(kind) {
 function chartHtmlWithTitle(title, hostId) {
   const el = $(hostId);
   if (!el) return '';
-  return `<div class="pr-chart-title">${title}</div>${el.innerHTML}`;
+  return `<div class="pr-chart-title">${escHtml(title)}</div>${el.innerHTML}`;
 }
 
 function activeFiltersText() {

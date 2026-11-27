@@ -2,18 +2,18 @@
 // Matches reference-templates/monthly-payment-receipt (2).html and monthly-payment-receipt-late-fine (1).html
 import { db } from '../config/firebase-config.js';
 import { doc, getDoc, getDocs, collection } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { inWords } from '../utils/admission-receipt.js?v=1.8.188';
-import { showToast } from '../components/toast.js?v=1.8.188';
-import { fmtDate, todayISO } from '../utils/session-rules.js?v=1.8.188';
-import { formatPersonName } from '../utils/formatter.js?v=1.8.188';
-import { getStudentPhotoSrc } from '../utils/student-media.js?v=1.8.188';
-import { getRoleTitle } from '../services/user-directory.service.js?v=1.8.188';
+import { inWords } from '../utils/admission-receipt.js?v=1.8.189';
+import { showToast } from '../components/toast.js?v=1.8.189';
+import { fmtDate, todayISO } from '../utils/session-rules.js?v=1.8.189';
+import { formatPersonName } from '../utils/formatter.js?v=1.8.189';
+import { getStudentPhotoSrc } from '../utils/student-media.js?v=1.8.189';
+import { getRoleTitle } from '../services/user-directory.service.js?v=1.8.189';
 import {
   fetchStudentPayments,
   isInstallmentPaid,
   installmentCourseFee,
   installmentBalanceDue
-} from '../services/payment.service.js?v=1.8.188';
+} from '../services/payment.service.js?v=1.8.189';
 
 function $(id) {
   return document.getElementById(id);
@@ -39,6 +39,25 @@ let paymentId = '';
 let isDownloadingPdf = false;
 let fromParam = '';
 let autoPrint = false;
+
+async function waitForReceiptAssets(root) {
+  try {
+    if (document.fonts && document.fonts.ready) {
+      await document.fonts.ready;
+    }
+  } catch (_) { /* non-fatal */ }
+  if (!root) return;
+  const imgs = Array.from(root.querySelectorAll('img'));
+  await Promise.all(imgs.map((img) => {
+    if (img.complete) {
+      return typeof img.decode === 'function' ? img.decode().catch(() => {}) : Promise.resolve();
+    }
+    return new Promise((resolve) => {
+      img.addEventListener('load', resolve, { once: true });
+      img.addEventListener('error', resolve, { once: true });
+    });
+  }));
+}
 
 export async function mount({ container, profile, ctx }) {
   const isSuper = profile && profile.role === 'superadmin';
@@ -215,7 +234,9 @@ async function loadAndRenderReceipt() {
     if (typeof lucide !== 'undefined') lucide.createIcons();
 
     if (autoPrint) {
-      setTimeout(() => window.print(), 600);
+      await waitForReceiptAssets($('mpr-sheet'));
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      window.print();
     }
   } catch (err) {
     console.error('[payment-receipt] load error', err);
@@ -461,21 +482,9 @@ async function downloadReceiptPdf() {
       await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
     }
 
-    if (document.fonts && document.fonts.ready) {
-      await document.fonts.ready;
-    }
-
     const page = $('mpr-sheet');
-    // Ensure all images are fully loaded before rendering canvas
-    const imgs = Array.from(page.querySelectorAll('img'));
-    await Promise.all(imgs.map(img => {
-      if (img.complete && img.naturalWidth > 0) return Promise.resolve();
-      return new Promise(resolve => {
-        img.addEventListener('load', resolve, { once: true });
-        img.addEventListener('error', resolve, { once: true });
-        setTimeout(resolve, 2500);
-      });
-    }));
+    // Ensure fonts and all images are settled before rendering canvas
+    await waitForReceiptAssets(page);
 
     const canvas = await window.html2canvas(page, {
       scale: 3,

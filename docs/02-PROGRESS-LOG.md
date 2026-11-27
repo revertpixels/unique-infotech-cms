@@ -39,6 +39,38 @@
 
 ---
 
+### [2026-11-27 14:32] Version 1.8.189 — App-Wide Navigation Performance, Persistent Cache & Final QA (Local Only)
+
+**What was built:**
+- **Router caching, parallel asset load & post-login prefetch (`public/js/core/router.js`, `public/index.html`)**:
+  - Removed `{ cache: 'no-cache' }` page HTML fetches and `|| Date.now()` dynamic module fallback; introduced in-memory per-build `htmlCache`, `htmlInflight`, and `moduleCache` Maps keyed by `window.__BUILD__ || APP_VERSION`.
+  - Refactored dynamic and standard route mounting into shared `loadPageAssets` (`Promise.allSettled([fetchPageHtml, importPageModule])`) + `mountRoutePage` so HTML and page JS load in parallel cleanly.
+  - Added idle `prefetchMainPages(profile, ctx)` (`requestIdleCallback` with `150ms` fallback) invoked after boot in `public/index.html` to warm Dashboard, Students/Admissions, Pay Fees, Pending, Payment History, Reports, and Batches.
+- **Persistent Firestore cache & shared session/student caching (`public/js/config/firebase-config.js`, `public/js/core/sessions.js`, `public/js/services/report.service.js`, `public/js/services/archive.service.js`)**:
+  - Enabled Firestore `initializeFirestore(app, { localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }) })` with safe fallback to `getFirestore(app)`.
+  - Deduplicated in-flight queries and shared cached reference data (`ensureReferenceData`), sessions (`loadSessions`/`loadAllSessions`), bounded student lists (`ensureYouthStudents`, `limit(500)`), single-session student+payment datasets (`ensureYouthSessionDataset`), and Dashboard archive reminders (`loadDashboardArchiveReminder`, plus added missing `'css/components/ref-cards.css'` to offline viewer bundle in `archive.service.js`).
+  - Changed `loadYouthPaymentHistory` default from `loadAll = !cursor` to `loadAll = false` and routed single-session/comparison callers (`Dashboard`, `Reports`, `Payment History`) through the shared session dataset so Dashboard, Pending, Payments, and Reports never duplicate active-session student or payment reads or scan full payment history unnecessarily.
+  - Added mutation event invalidation (`uic:data-mutated`, `uic:meta-mutated`) across admission, payment, student action, transfer/end, branch, course, batch, and session write paths.
+- **Stale-While-Revalidate (SWR), delayed skeletons, timer cleanup & QA fixes (`public/js/pages/*.js`)**:
+  - Updated `dashboard.page.js`, `reports.page.js`, `pending.page.js`, `payments.page.js`, `admissions.page.js`, `pay-fees.page.js`, and `batches.page.js` to render cached `APP_CACHE` data immediately without skeleton flicker, run quiet background revalidation only when stale (`>= 30s`) updating DOM only when data changes, use `250ms` delayed skeletons (`scheduleDelayedSkeleton`) on cold loads, parallelize initial fetches via `Promise.all`, and reserve `forceRefresh: true` for explicit Refresh/Retry clicks.
+  - Removed fixed `setTimeout(..., 2000)` / `setTimeout(0)` in `admissions.page.js` and `setTimeout(..., 2500)` / `setTimeout(..., 600)` in `payment-receipt.page.js`, replacing image/font gating with `waitForReceiptAssets` (`decode()`/`load`/`error` + `requestAnimationFrame`).
+  - Escaped `title` via `escHtml(title)` in `reports.page.js` (`chartHtmlWithTitle`).
+
+**Why:**
+- Cut initial and repeat Youth Centre page loads to sub-second first loads and `< 300 ms` cached switches, eliminate redundant Firestore reads across financial views, avoid skeleton flashing on warm navigation, and close final pre-release QA items on localhost without deploying live hosting.
+
+**Files touched:**
+- MODIFIED: `public/js/config/firebase-config.js`, `public/index.html`, `public/js/core/app.js`, `public/js/core/router.js`, `public/js/core/sessions.js`, `public/js/services/admission.service.js`, `public/js/services/archive.service.js`, `public/js/services/payment.service.js`, `public/js/services/report.service.js`, `public/js/pages/dashboard.page.js`, `public/js/pages/reports.page.js`, `public/js/pages/pending.page.js`, `public/js/pages/payments.page.js`, `public/js/pages/admissions.page.js`, `public/js/pages/pay-fees.page.js`, `public/js/pages/batches.page.js`, `public/js/pages/branches.page.js`, `public/js/pages/courses.page.js`, `public/js/pages/payment-receipt.page.js`, `public/js/pages/school-end.page.js`, `public/js/pages/school-transfer.page.js`, `docs/02-PROGRESS-LOG.md` (+ `?v=1.8.189` version bump across assets via `tools/bump-version.js`).
+
+**Firestore changes:**
+- None (no rule, index, schema, or fee-math changes; reuses existing composite indexes).
+
+**Tested on:**
+- Chrome Desktop (`1440×900`) & Mobile (`375×812` & `390×844`) on localhost (`No throttling` & `Fast 4G`): ✅ Before/After benchmark (`No throttling`: Dashboard `2189ms -> 139ms`, 2nd open `42ms / 0 reads`; Students `397ms -> 86ms`, 2nd open `97ms / 0 reads`; Pay Fees `116ms -> 35ms`, 2nd open `31ms / 0 reads`; Pending `157ms -> 72ms`, 2nd open `45ms / 0 reads`; Payment History `187ms -> 89ms`, 2nd open `62ms / 0 reads`; Reports `348ms -> 149ms`, 2nd open `77ms / 0 reads`. `Fast 4G`: Dashboard `4962ms -> 3109ms`, 2nd open `52ms / 0 reads`; Students `2729ms -> 1242ms`, 2nd open `101ms / 0 reads`; Pay Fees `981ms -> 287ms`, 2nd open `37ms / 0 reads`; Pending `764ms -> 511ms`, 2nd open `69ms / 0 reads`; Payment History `718ms -> 557ms`, 2nd open `69ms / 0 reads`; Reports `1100ms -> 761ms`, 2nd open `97ms / 0 reads`).
+- Edge cases checked: ✅ Branch-level lock (`branch_head`), no active session, empty branch (`EMPTYBR`), simulated network error + Retry recovery, `375px` mobile Dashboard & Reports (0 overflow), Reports Print/PDF export + escaped title, offline archive viewer (`file://`), clean console (`0` unexpected errors). **NOT deployed or pushed (pending user green flag).**
+
+---
+
 ### [2026-11-27 13:12] Version 1.8.188 — Hotfix Dashboard Toolbar Spin Isolation & Short Branch Code Label
 
 **What was built:**

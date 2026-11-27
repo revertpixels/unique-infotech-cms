@@ -15,28 +15,37 @@ import {
   arrayUnion,
   addDoc
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.188';
-import { registerDirty, confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.188';
-import { buildStats, buildToolbar, renderPager, renderEmptyTableState, PAGE_SIZE } from '../components/list-page.js?v=1.8.188';
-import { createSelect } from '../components/ui-select.js?v=1.8.188';
-import { createBranchBatchFilter } from '../components/branch-batch-filter.js?v=1.8.188';
-import { openMenu } from '../components/ui-menu.js?v=1.8.188';
-import { confirmDialog } from '../components/ui-confirm.js?v=1.8.188';
-import { openPopup } from '../components/modal.js?v=1.8.188';
-import { createDatePicker } from '../components/ui-datepicker.js?v=1.8.188';
-import { getSelectedSessionId, getSelectedSession, getCachedSessions, loadSessions, todayISO } from '../core/sessions.js?v=1.8.188';
-import { firstInstallmentOf, admissionState, sessionLabel, installmentSchedule, batchAllowsCourse, batchCourseLabel, isCourseActive } from '../utils/session-rules.js?v=1.8.188';
-import { formatINR, formatDateIN, formatPersonName, formatGenderDisplay, initials } from '../utils/formatter.js?v=1.8.188';
-import { validatePhone, validateEmail, validateDOB, validateName, validateRequired } from '../utils/validator.js?v=1.8.188';
-import { listStudentsRaw, checkDuplicatePhone, readStudentId, readReceiptNo, writeCounter, createStudentWithDocs, updateStudentWithDocs, updateStudent, deleteStudent } from '../services/admission.service.js?v=1.8.188';
-import { feeTotal, courseFeeOf, discountOf } from '../utils/fees.js?v=1.8.188';
-import { compressTo100KB, readAsDataURL, blobToDataURL, isImageFile, formatBytes } from '../utils/image-compress.js?v=1.8.188';
-import { fetchStudentPayments, calculateStudentFinancials, buildReceiptMenuItems } from '../services/payment.service.js?v=1.8.188';
-import { loadStudentPhotos, getCachedStudentPhoto } from '../services/report.service.js?v=1.8.188';
-import { getStudentPhotoSrc, getStudentDocSrc, getStudentDocMime } from '../utils/student-media.js?v=1.8.188';
-import { playPaymentSuccessSound } from '../utils/sound.js?v=1.8.188';
-import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.188';
-import { APP_CACHE } from '../core/app.js?v=1.8.188';
+import { showToast } from '../components/toast.js?v=1.8.189';
+import { registerDirty, confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.189';
+import { buildStats, buildToolbar, renderPager, renderEmptyTableState, PAGE_SIZE } from '../components/list-page.js?v=1.8.189';
+import { createSelect } from '../components/ui-select.js?v=1.8.189';
+import { createBranchBatchFilter } from '../components/branch-batch-filter.js?v=1.8.189';
+import { openMenu } from '../components/ui-menu.js?v=1.8.189';
+import { confirmDialog } from '../components/ui-confirm.js?v=1.8.189';
+import { openPopup } from '../components/modal.js?v=1.8.189';
+import { createDatePicker } from '../components/ui-datepicker.js?v=1.8.189';
+import { getSelectedSessionId, getSelectedSession, getCachedSessions, loadSessions, hasFreshSessionsCache, todayISO } from '../core/sessions.js?v=1.8.189';
+import { firstInstallmentOf, admissionState, sessionLabel, installmentSchedule, batchAllowsCourse, batchCourseLabel, isCourseActive } from '../utils/session-rules.js?v=1.8.189';
+import { formatINR, formatDateIN, formatPersonName, formatGenderDisplay, initials } from '../utils/formatter.js?v=1.8.189';
+import { validatePhone, validateEmail, validateDOB, validateName, validateRequired } from '../utils/validator.js?v=1.8.189';
+import { listStudentsRaw, checkDuplicatePhone, readStudentId, readReceiptNo, writeCounter, createStudentWithDocs, updateStudentWithDocs, updateStudent, deleteStudent } from '../services/admission.service.js?v=1.8.189';
+import { feeTotal, courseFeeOf, discountOf } from '../utils/fees.js?v=1.8.189';
+import { compressTo100KB, readAsDataURL, blobToDataURL, isImageFile, formatBytes } from '../utils/image-compress.js?v=1.8.189';
+import { fetchStudentPayments, calculateStudentFinancials, buildReceiptMenuItems } from '../services/payment.service.js?v=1.8.189';
+import {
+  ensureReferenceData,
+  getCachedReferenceData,
+  ensureYouthStudents,
+  getCachedYouthStudents,
+  isCacheStale,
+  scheduleDelayedSkeleton,
+  loadStudentPhotos,
+  getCachedStudentPhoto
+} from '../services/report.service.js?v=1.8.189';
+import { getStudentPhotoSrc, getStudentDocSrc, getStudentDocMime } from '../utils/student-media.js?v=1.8.189';
+import { playPaymentSuccessSound } from '../utils/sound.js?v=1.8.189';
+import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.189';
+import { APP_CACHE } from '../core/app.js?v=1.8.189';
 
 const COL = 'students';
 
@@ -190,7 +199,7 @@ export async function mount({ container, profile, ctx }) {
     placeholder: 'Search name, student ID, phone or guardian',
     filters: tbFilters,
     onChange: () => { page = 1; render(); },
-    onRefresh: () => load(),
+    onRefresh: () => load({ forceRefresh: true }),
     rowLayout: true
   });
   let bbFilter = null;
@@ -286,19 +295,17 @@ export async function mount({ container, profile, ctx }) {
   const statsHost = $('adm-stats');
   if (statsHost) statsHost.appendChild(stats.el);
   // Clicking "Admitted this month" card (index 3) sets the date filter to This month.
-  setTimeout(() => {
-    const cards = statsHost.querySelectorAll('.lp-stat');
-    if (cards[3]) {
-      cards[3].style.cursor = 'pointer';
-      cards[3].addEventListener('click', () => {
-        admDateFilter = 'thismonth';
-        admDateFrom = ''; admDateTo = '';
-        dateSel.value = 'thismonth';
-        dateCustomWrap.hidden = true;
-        page = 1; render();
-      });
-    }
-  }, 0);
+  const monthCard = stats.el.querySelectorAll('.lp-stat')[3];
+  if (monthCard) {
+    monthCard.style.cursor = 'pointer';
+    monthCard.addEventListener('click', () => {
+      admDateFilter = 'thismonth';
+      admDateFrom = ''; admDateTo = '';
+      dateSel.value = 'thismonth';
+      dateCustomWrap.hidden = true;
+      page = 1; render();
+    });
+  }
 
   function showRealStats() {
     statsHost.innerHTML = '';
@@ -435,123 +442,130 @@ export async function mount({ container, profile, ctx }) {
     return d.getDate() + ' ' + d.toLocaleDateString('en-IN', { month: 'short' });
   }
 
-  // ---------- data load ----------
-  async function load() {
-    showSkeleton();
-    try {
-      const ctxConstraint = where('ctx', '==', 'youth');
-      const branchConstraint = isHead ? where('branchId', '==', fixedBranch) : null;
-      const q = branchConstraint ? query(collection(db, 'students'), ctxConstraint, branchConstraint) : query(collection(db, 'students'), ctxConstraint);
-      const sSnap = await getDocs(q);
-      students = sSnap.docs.map((d) => Object.assign({ id: d.id }, d.data()));
+  function applyLoadedAdmissionsData({ meta, sessList, stRes }) {
+    students = (stRes?.list || []).slice();
+    courses = (meta?.coursesList || []).filter(c => (!c.ctx || c.ctx === 'youth') && (c.status || 'active') === 'active');
+    batches = (meta?.batchesList || []).filter(b => !b.ctx || b.ctx === 'youth');
+    branches = (meta?.branchesList || []).filter(b => (!b.ctx || b.ctx === 'youth') && (b.status || 'active') === 'active');
+    sessions = (sessList || []).slice();
 
-      const cSnap = await getDocs(query(collection(db, 'courses'), where('ctx', '==', 'youth')));
-      courses = cSnap.docs.map((d) => Object.assign({ id: d.id }, d.data())).filter(c => (c.status || 'active') === 'active');
+    tb.setFilterOptions('course', [{ value: 'all', label: 'All courses', icon: 'book-open' }].concat(courses.map(c => ({ value: c.id, label: (c.courseCode || c.code || c.id), icon: 'book-open' }))));
+    const activeSess = getSelectedSession('youth') || sessions.find(s => s.id === getSelectedSessionId('youth')) || sessions.find(s => s.status === 'running') || sessions[0] || null;
+    if (bbFilter) {
+      bbFilter.updateData({
+        ctx: 'youth',
+        sessionId: activeSess ? activeSess.id : '',
+        branches,
+        batches,
+        courses
+      });
+    }
 
-      const bSnap = await getDocs(query(collection(db, 'batches'), where('ctx', '==', 'youth')));
-      batches = bSnap.docs.map((d) => Object.assign({ id: d.id }, d.data()));
-
+    if (branchSel) {
       if (isSuper) {
-        const brSnap = await getDocs(collection(db, 'branches'));
-        branches = brSnap.docs.map((d) => Object.assign({ id: d.id }, d.data()))
-          .filter(b => (!b.ctx || b.ctx === 'youth') && (b.status || 'active') === 'active');
-      } else if (isHead && fixedBranch) {
-        try {
-          const brSnap = await getDoc(doc(db, 'branches', fixedBranch));
-          if (brSnap.exists()) {
-            branches = [Object.assign({ id: brSnap.id }, brSnap.data())];
-          } else {
-            console.warn('[admissions] Branch doc does not exist for fixedBranch:', fixedBranch);
-          }
-        } catch (err) {
-          console.warn('[admissions] Failed to load own branch:', err);
+        branchSel.setOptions([{ value: '', label: 'Select a branch', icon: 'git-branch' }].concat(branches.map(b => ({ value: b.id, label: b.name || 'Unknown branch', icon: 'git-branch' }))));
+      } else {
+        const myBr = branches.find(b => b.id === fixedBranch);
+        const brLabel = (myBr && myBr.name) ? myBr.name : 'Unknown branch';
+        if (!myBr || !myBr.name) {
+          console.warn('[admissions] Could not resolve branch name for fixedBranch:', fixedBranch);
         }
+        branchSel.setOptions([{ value: fixedBranch, label: brLabel, icon: 'git-branch' }]);
+        branchSel.value = fixedBranch;
+        branchSel.disabled = true;
       }
+    }
+    updateLookupPlaceholder();
 
-      const sessSnap = await getDocs(query(collection(db, 'sessions'), where('ctx', '==', 'youth')));
-      sessions = sessSnap.docs.map((d) => Object.assign({ id: d.id }, d.data()));
+    courseSel.setOptions([{ value: '', label: 'Select a course', icon: 'book-open' }].concat(courses.filter(isCourseActive).map(c => ({ value: c.id, label: (c.courseCode || c.code || c.id) + ' - ' + (c.name || ''), icon: 'book-open' }))));
 
-      tb.setFilterOptions('course', [{ value: 'all', label: 'All courses', icon: 'book-open' }].concat(courses.map(c => ({ value: c.id, label: (c.courseCode || c.code || c.id), icon: 'book-open' }))));
-      const activeSess = getSelectedSession('youth') || sessions.find(s => s.id === getSelectedSessionId('youth')) || sessions.find(s => s.status === 'running') || sessions[0] || null;
-      if (bbFilter) {
-        bbFilter.updateData({
-          ctx: 'youth',
-          sessionId: activeSess ? activeSess.id : '',
-          branches,
-          batches,
-          courses
-        });
+    const today = todayISO();
+    const sessOpts = [];
+    sessions.filter(s => admissionState(s, today).open)
+      .sort((a, b) => (a.startDate || '').localeCompare(b.startDate || ''))
+      .forEach((s) => {
+        const label = sessionLabel(s);
+        sessOpts.push({ value: s.id, label: label, icon: 'calendar-clock' });
+      });
+    sessionSel.setOptions([{ value: '', label: 'Select a session', icon: 'calendar-clock' }].concat(sessOpts));
+
+    const topSelId = getSelectedSessionId();
+    if (topSelId) {
+      const topS = sessions.find(s => s.id === topSelId);
+      const st0 = admissionState(topS, today);
+      if (st0.open) {
+        sessionSel.value = topSelId;
+        onSessionChange();
       }
+    }
 
-      if (branchSel) {
-        if (isSuper) {
-          branchSel.setOptions([{ value: '', label: 'Select a branch', icon: 'git-branch' }].concat(branches.map(b => ({ value: b.id, label: b.name || 'Unknown branch', icon: 'git-branch' }))));
-        } else {
-          const myBr = branches.find(b => b.id === fixedBranch);
-          const brLabel = (myBr && myBr.name) ? myBr.name : 'Unknown branch';
-          if (!myBr || !myBr.name) {
-            console.warn('[admissions] Could not resolve branch name for fixedBranch:', fixedBranch);
-          }
-          branchSel.setOptions([{ value: fixedBranch, label: brLabel, icon: 'git-branch' }]);
-          branchSel.value = fixedBranch;
-          branchSel.disabled = true;
-        }
+    hideSkeleton();
+    page = 1;
+    showRealStats();
+    render();
+    if (courseSel && courseSel.value) {
+      onCourseChange();
+    }
+  }
+
+  // ---------- data load ----------
+  async function load({ forceRefresh = false, background = false } = {}) {
+    const cachedMeta = !forceRefresh ? getCachedReferenceData(profile) : null;
+    const cachedSess = !forceRefresh ? getCachedSessions('youth') : [];
+    const cachedStudents = !forceRefresh ? getCachedYouthStudents({ profile, includeAllSessions: true }) : null;
+
+    if (cachedMeta && cachedStudents && (cachedSess.length || hasFreshSessionsCache('youth'))) {
+      applyLoadedAdmissionsData({ meta: cachedMeta, sessList: cachedSess, stRes: cachedStudents });
+      const stale = isCacheStale(cachedMeta) || !hasFreshSessionsCache('youth') || isCacheStale(cachedStudents);
+      if (stale && !background) {
+        load({ forceRefresh: true, background: true }).catch(() => {});
       }
-      updateLookupPlaceholder();
+      return;
+    }
 
-      courseSel.setOptions([{ value: '', label: 'Select a course', icon: 'book-open' }].concat(courses.filter(isCourseActive).map(c => ({ value: c.id, label: (c.courseCode || c.code || c.id) + ' - ' + (c.name || ''), icon: 'book-open' }))));
+    const prevSig = `${students.length}|${courses.length}|${batches.length}`;
+    const skelTask = (!students.length && !background)
+      ? scheduleDelayedSkeleton(() => {
+        if (!students.length) showSkeleton();
+      }, 250)
+      : null;
 
-      // ---------- session options ----------
-      const today = todayISO();
-      const sessOpts = [];
-      // T1: list only sessions that are open for admission (reuse admissionState helper;
-      // closed/ended/archived sessions are not listed at all).
-      sessions.filter(s => admissionState(s, today).open)
-        .sort((a, b) => (a.startDate || '').localeCompare(b.startDate || ''))
-        .forEach((s) => {
-          const label = sessionLabel(s);
-          sessOpts.push({ value: s.id, label: label, icon: 'calendar-clock' });
-        });
-      sessionSel.setOptions([{ value: '', label: 'Select a session', icon: 'calendar-clock' }].concat(sessOpts));
-
-      // Default: preselect topbar session if it is open for admission.
-      const topSelId = getSelectedSessionId();
-      if (topSelId) {
-        const topS = sessions.find(s => s.id === topSelId);
-        const st0 = admissionState(topS, today);
-        if (st0.open) {
-          sessionSel.value = topSelId;
-          onSessionChange();
-        }
-      }
-
-      hideSkeleton();
-      page = 1;
-      showRealStats();
-      render();
-      // Reload batch options whenever data finishes loading to prevent race condition
-      if (courseSel && courseSel.value) {
-        onCourseChange();
+    try {
+      const [meta, sessList, stRes] = await Promise.all([
+        ensureReferenceData({ forceRefresh, profile }),
+        (!forceRefresh && hasFreshSessionsCache('youth'))
+          ? Promise.resolve(getCachedSessions('youth'))
+          : loadSessions('youth', { forceRefresh }),
+        ensureYouthStudents({ profile, includeAllSessions: true, forceRefresh })
+      ]);
+      if (skelTask) skelTask.cancel();
+      const nextSig = `${stRes?.list?.length || 0}|${(meta?.coursesList || []).length}|${(meta?.batchesList || []).length}`;
+      if (!background || nextSig !== prevSig) {
+        applyLoadedAdmissionsData({ meta, sessList, stRes });
       }
     } catch (e) {
-      console.error('[admissions] load failed', e);
-      showRealStats();
-      stats.update(0, '-', 'All records');
-      stats.update(1, '-', 'Currently enrolled');
-      stats.update(2, '-', 'Currently on break');
-      stats.update(3, '-', 'This calendar month');
-      rowsHost.innerHTML = '';
-      const tr = mk('tr');
-      const td = mk('td', 'adm-empty');
-      td.colSpan = 7;
-      td.innerHTML = 'Could not load admissions (' + (e.code || 'error') + '). <button type="button" id="adm-retry" class="ui-btn primary" style="margin-top:8px;display:inline-flex;align-items:center;gap:6px;"><i data-lucide="rotate-ccw"></i>Retry</button>';
-      tr.appendChild(td);
-      rowsHost.appendChild(tr);
-      if (footEl) footEl.hidden = true;
-      const retryBtn = $('adm-retry');
-      if (retryBtn) retryBtn.addEventListener('click', () => load());
-      return;
+      if (skelTask) skelTask.cancel();
+      if (!background) {
+        console.error('[admissions] load failed', e);
+        showRealStats();
+        stats.update(0, '-', 'All records');
+        stats.update(1, '-', 'Currently enrolled');
+        stats.update(2, '-', 'Currently on break');
+        stats.update(3, '-', 'This calendar month');
+        rowsHost.innerHTML = '';
+        const tr = mk('tr');
+        const td = mk('td', 'adm-empty');
+        td.colSpan = 7;
+        td.innerHTML = 'Could not load admissions (' + (e.code || 'error') + '). <button type="button" id="adm-retry" class="ui-btn primary" style="margin-top:8px;display:inline-flex;align-items:center;gap:6px;"><i data-lucide="rotate-ccw"></i>Retry</button>';
+        tr.appendChild(td);
+        rowsHost.appendChild(tr);
+        if (footEl) footEl.hidden = true;
+        const retryBtn = $('adm-retry');
+        if (retryBtn) retryBtn.addEventListener('click', () => load({ forceRefresh: true }));
+        return;
+      }
     } finally {
+      if (skelTask) skelTask.cancel();
       hideSkeleton();
     }
   }
@@ -1797,7 +1811,7 @@ export async function mount({ container, profile, ctx }) {
       tr.appendChild(td);
       rowsHost.appendChild(tr);
       const retryBtn = $('adm-retry');
-      if (retryBtn) retryBtn.addEventListener('click', () => { load(); render(); });
+      if (retryBtn) retryBtn.addEventListener('click', () => { load({ forceRefresh: true }); render(); });
     }
   }
 
@@ -2247,10 +2261,11 @@ export async function mount({ container, profile, ctx }) {
       const stateEl = $('adm-state');
       if (stateEl) stateEl.className = 'save-state saved';
 
+      window.dispatchEvent(new CustomEvent('uic:data-mutated', { detail: { reason: 'student:edit-save' } }));
       saved = snapshot();
       clearDirty();
       closeForm();
-      await load();
+      await load({ forceRefresh: true });
       showToast('Admission updated - ' + studentId, 'success');
     } catch (e) {
       console.error('[admissions] save failed', e);
@@ -2509,7 +2524,7 @@ export async function mount({ container, profile, ctx }) {
     if (!ok) return;
     try {
       await updateStudent(s.id, { status: next });
-      await load();
+      await load({ forceRefresh: true });
       showToast('Status changed to ' + next + '.', 'success');
     } catch (e) {
       showToast('Status change failed (' + (e.code || 'error') + ').', 'error');
@@ -2528,7 +2543,7 @@ export async function mount({ container, profile, ctx }) {
     try {
       await deleteStudent(s.id);
       if (editId === s.id) closeForm();
-      await load();
+      await load({ forceRefresh: true });
       showToast('Admission deleted.', 'success');
     } catch (e) {
       showToast('Delete failed (' + (e.code || 'error') + ').', 'error');
@@ -2551,6 +2566,7 @@ export async function mount({ container, profile, ctx }) {
         details: details || ''
       });
       await updateDoc(doc(db, COL, studentId), { statusHistory: hist, updatedAt: serverTimestamp() });
+      window.dispatchEvent(new CustomEvent('uic:data-mutated', { detail: { reason: 'student:status-history' } }));
     } catch (e) {
       console.error('[statusHistory] failed', e);
     }
@@ -2819,11 +2835,12 @@ export async function mount({ container, profile, ctx }) {
           updatedAt: serverTimestamp()
         });
 
+        window.dispatchEvent(new CustomEvent('uic:data-mutated', { detail: { reason: 'student:batch-change' } }));
         showToast({ type: 'success', message: `Batch changed to ${destBatch.name || destBatch.id}` });
         saving = false;
         setSaving(false);
         popup.close(true);
-        await load();
+        await load({ forceRefresh: true });
         render();
       } catch (err) {
         console.error('[admissions] change batch failed', err);
@@ -2863,11 +2880,7 @@ export async function mount({ container, profile, ctx }) {
         }
       }
     });
-    // Never block popup on Storage: Promise.allSettled with timeout
-    await Promise.race([
-      Promise.allSettled(deletes),
-      new Promise(resolve => setTimeout(resolve, 2000))
-    ]);
+    await Promise.allSettled(deletes);
   }
 
   // ---------- Session-Scoped Youth Drop & Delete ----------
@@ -3055,12 +3068,13 @@ export async function mount({ container, profile, ctx }) {
           showToast({ type: 'success', message: 'Admission deleted permanently' });
         }
 
+        window.dispatchEvent(new CustomEvent('uic:data-mutated', { detail: { reason: isDrop ? 'student:drop' : 'student:purge' } }));
         // Close popup as soon as Firestore delete/drop succeeds
         saving = false;
         setSaving(false);
         popup.close(true);
         if (editId === s.id) closeForm();
-        await load();
+        await load({ forceRefresh: true });
         render();
       } catch (err) {
         console.error('[admissions] student action failed', err);

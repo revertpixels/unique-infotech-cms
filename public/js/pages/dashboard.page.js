@@ -1,32 +1,37 @@
 // dashboard.page.js — Read-only Youth Centre Dashboard (#/dashboard) + preserved Unique Kids placeholder.
 
-import { ROUTES } from '../core/router.js?v=1.8.188';
-import { createSelect } from '../components/ui-select.js?v=1.8.188';
+import { ROUTES } from '../core/router.js?v=1.8.189';
+import { createSelect } from '../components/ui-select.js?v=1.8.189';
 import {
   renderDonutChart,
   renderBarChart,
   renderStackedBarChart,
   renderLineChart
-} from '../components/charts.js?v=1.8.188';
-import { openPaymentDetailsModal } from '../components/payment-details-modal.js?v=1.8.188';
-import { loadDashboardArchiveReminder } from '../services/archive.service.js?v=1.8.188';
-import { resolveUserDisplay, getRoleTitle } from '../services/user-directory.service.js?v=1.8.188';
-import { getCachedSessions, loadSessions, getSelectedSession } from '../core/sessions.js?v=1.8.188';
-import { getOrgTimezone } from '../utils/session-rules.js?v=1.8.188';
-import { formatPersonName, initials } from '../utils/formatter.js?v=1.8.188';
-import { buildYouthDashboardData } from '../services/dashboard.service.js?v=1.8.188';
+} from '../components/charts.js?v=1.8.189';
+import { openPaymentDetailsModal } from '../components/payment-details-modal.js?v=1.8.189';
+import { loadDashboardArchiveReminder, getCachedDashboardArchiveReminder } from '../services/archive.service.js?v=1.8.189';
+import { resolveUserDisplay, getRoleTitle } from '../services/user-directory.service.js?v=1.8.189';
+import { getCachedSessions, loadSessions, getSelectedSession, hasFreshSessionsCache } from '../core/sessions.js?v=1.8.189';
+import { getOrgTimezone } from '../utils/session-rules.js?v=1.8.189';
+import { formatPersonName, initials } from '../utils/formatter.js?v=1.8.189';
+import { buildYouthDashboardData } from '../services/dashboard.service.js?v=1.8.189';
 import {
   ensureReferenceData,
+  getCachedReferenceData,
   scopeReferenceDataByCtx,
   loadYouthPaymentHistory,
+  getCachedYouthHistory,
   loadYouthPendingReport,
+  getCachedYouthPending,
   loadStudentPhotos,
   getCachedStudentPhoto,
+  isCacheStale,
+  scheduleDelayedSkeleton,
   formatShortReceipt,
   modeDisplayMeta,
   formatINR,
   fmtDate
-} from '../services/report.service.js?v=1.8.188';
+} from '../services/report.service.js?v=1.8.189';
 
 let state = null;
 let profileListener = null;
@@ -179,6 +184,45 @@ function showYouthError(err) {
   paint();
 }
 
+function applyArchiveReminderDom(remHost, rem) {
+  if (!remHost) return;
+  if (!rem || (rem.unarchivedCount === 0 && !rem.staleArchive)) {
+    remHost.hidden = true;
+    remHost.innerHTML = '';
+    return;
+  }
+  const parts = [];
+  if (rem.unarchivedCount > 0) {
+    const names = rem.unarchivedNames.slice(0, 2).join(', ');
+    const extra = rem.unarchivedNames.length > 2 ? ` +${rem.unarchivedNames.length - 2} more` : '';
+    parts.push(`${rem.unarchivedCount} completed session${rem.unarchivedCount === 1 ? '' : 's'} not downloaded yet (${names}${extra}).`);
+  }
+  if (rem.staleArchive) {
+    if (rem.daysSinceLast === null) {
+      parts.push('No Youth archive downloaded yet.');
+    } else {
+      parts.push(`Last archive download was ${rem.daysSinceLast} days ago.`);
+    }
+  }
+
+  remHost.innerHTML = '';
+  const box = mk('div', 'arx-reminder' + (rem.unarchivedCount > 0 ? '' : ' is-info'));
+  const main = mk('div', 'arx-reminder-main');
+  const icBox = mk('div', 'arx-reminder-ic');
+  icBox.innerHTML = `<i data-lucide="${rem.unarchivedCount > 0 ? 'archive' : 'clock'}" aria-hidden="true"></i>`;
+  const txt = mk('div', 'arx-reminder-txt');
+  const b = mk('strong', '', 'Archive reminder: ');
+  txt.append(b, document.createTextNode(parts.join(' ')));
+  main.append(icBox, txt);
+
+  const link = mk('a', 'ui-btn ghost sm', 'Open Archives');
+  link.href = '#/archives';
+  box.append(main, link);
+  remHost.appendChild(box);
+  remHost.hidden = false;
+  paint();
+}
+
 async function updateArchiveReminder() {
   if (!state || state.destroyed) return;
   const remHost = $('dash-archive-reminder');
@@ -189,44 +233,14 @@ async function updateArchiveReminder() {
     remHost.innerHTML = '';
     return;
   }
+  const cachedRem = getCachedDashboardArchiveReminder(state.profile);
+  if (cachedRem && 'data' in cachedRem) {
+    applyArchiveReminderDom(remHost, cachedRem.data);
+  }
   try {
     const rem = await loadDashboardArchiveReminder({ profile: state.profile });
     if (!state || state.destroyed || !remHost) return;
-    if (!rem || (rem.unarchivedCount === 0 && !rem.staleArchive)) {
-      remHost.hidden = true;
-      remHost.innerHTML = '';
-      return;
-    }
-    const parts = [];
-    if (rem.unarchivedCount > 0) {
-      const names = rem.unarchivedNames.slice(0, 2).join(', ');
-      const extra = rem.unarchivedNames.length > 2 ? ` +${rem.unarchivedNames.length - 2} more` : '';
-      parts.push(`${rem.unarchivedCount} completed session${rem.unarchivedCount === 1 ? '' : 's'} not downloaded yet (${names}${extra}).`);
-    }
-    if (rem.staleArchive) {
-      if (rem.daysSinceLast === null) {
-        parts.push('No Youth archive downloaded yet.');
-      } else {
-        parts.push(`Last archive download was ${rem.daysSinceLast} days ago.`);
-      }
-    }
-
-    remHost.innerHTML = '';
-    const box = mk('div', 'arx-reminder' + (rem.unarchivedCount > 0 ? '' : ' is-info'));
-    const main = mk('div', 'arx-reminder-main');
-    const icBox = mk('div', 'arx-reminder-ic');
-    icBox.innerHTML = `<i data-lucide="${rem.unarchivedCount > 0 ? 'archive' : 'clock'}" aria-hidden="true"></i>`;
-    const txt = mk('div', 'arx-reminder-txt');
-    const b = mk('strong', '', 'Archive reminder: ');
-    txt.append(b, document.createTextNode(parts.join(' ')));
-    main.append(icBox, txt);
-
-    const link = mk('a', 'ui-btn ghost sm', 'Open Archives');
-    link.href = '#/archives';
-    box.append(main, link);
-    remHost.appendChild(box);
-    remHost.hidden = false;
-    paint();
+    applyArchiveReminderDom(remHost, rem);
   } catch (_) {
     /* optional notice */
   }
@@ -407,35 +421,93 @@ function renderHeaderToolbar(d = null) {
   }
 }
 
-function resolveActiveSession() {
+function resolveSessionFromList(sessionsList = []) {
   const cached = getSelectedSession('youth');
-  if (cached && state.sessions.some((s) => s.id === cached.id)) return cached;
-  return state.sessions.find((s) => s.isCurrent) || state.sessions[0] || null;
+  if (cached && sessionsList.some((s) => s.id === cached.id)) return cached;
+  return sessionsList.find((s) => s.isCurrent) || sessionsList.find((s) => s.status === 'running') || sessionsList[0] || null;
 }
 
-async function loadDashboardSources({ forceRefresh = false } = {}) {
+function resolveActiveSession() {
+  return resolveSessionFromList(state?.sessions || []);
+}
+
+function dashboardSignature(histRes, pendRes) {
+  const hLen = histRes?.entries?.length || 0;
+  const pLen = pendRes?.items?.length || 0;
+  const latestRec = hLen ? (histRes.entries[0]?.receiptNo || histRes.entries[0]?.id || '') : '';
+  const dueSum = pendRes?.summary?.overdueAmount || 0;
+  const colSum = (histRes?.entries || []).reduce((acc, e) => acc + Number(e.totalPaid || e.amount || 0), 0);
+  return `${hLen}|${pLen}|${latestRec}|${dueSum}|${colSum}`;
+}
+
+async function loadDashboardSources({ forceRefresh = false, background = false } = {}) {
   if (!state || state.destroyed) return;
   const errBox = $('dash-error');
-  if (errBox) errBox.hidden = true;
+  if (errBox && !background) errBox.hidden = true;
+
+  if (!forceRefresh) {
+    const cachedMeta = getCachedReferenceData(state.profile);
+    const cachedSessions = getCachedSessions('youth');
+    const cachedSess = cachedSessions.length ? resolveSessionFromList(cachedSessions) : null;
+    if (cachedMeta && cachedSessions.length && !cachedSess) {
+      state.meta = cachedMeta;
+      state.sessions = cachedSessions;
+      state.activeSession = null;
+      updateHeaderUi();
+      syncBranchFilterControl();
+      toggleNoSessionState(true);
+      if (isCacheStale(cachedMeta) || !hasFreshSessionsCache('youth')) {
+        loadDashboardSources({ forceRefresh: true, background: true }).catch(() => {});
+      }
+      return;
+    }
+    if (cachedMeta && cachedSess) {
+      const cachedHist = getCachedYouthHistory({ profile: state.profile, session: cachedSess });
+      const cachedPend = getCachedYouthPending({ profile: state.profile, session: cachedSess });
+      if (cachedHist && cachedPend) {
+        state.meta = cachedMeta;
+        state.sessions = cachedSessions;
+        state.activeSession = cachedSess;
+        state.historyResult = cachedHist;
+        state.pendingResult = cachedPend;
+        updateHeaderUi();
+        syncBranchFilterControl();
+        toggleNoSessionState(false);
+        computeAndRenderDashboard();
+
+        const isStale = isCacheStale(cachedMeta)
+          || !hasFreshSessionsCache('youth')
+          || isCacheStale(cachedHist)
+          || isCacheStale(cachedPend);
+        if (isStale && !background) {
+          loadDashboardSources({ forceRefresh: true, background: true }).catch(() => {});
+        }
+        return;
+      }
+    }
+  }
 
   const refreshBtn = $('dash-refresh');
-  if (refreshBtn) {
+  if (refreshBtn && !background) {
     refreshBtn.disabled = true;
     refreshBtn.classList.add('is-refreshing');
     const ic = refreshBtn.querySelector('svg, i');
     if (ic) ic.classList.add('spin');
   }
 
-  const cacheRoot = window.APP_CACHE?.financialReports;
-  const hasWarmCache = !forceRefresh && Boolean(cacheRoot?.meta && cacheRoot?.youthHistory?.size && cacheRoot?.youthPending?.size);
-  if (!hasWarmCache) showYouthSkeletons();
+  const prevSig = dashboardSignature(state.historyResult, state.pendingResult);
+  const skelTask = (!state.analytics && !background)
+    ? scheduleDelayedSkeleton(() => {
+      if (state && !state.destroyed && !state.analytics) showYouthSkeletons();
+    }, 250)
+    : null;
 
   try {
     const [meta, sessions] = await Promise.all([
       ensureReferenceData({ forceRefresh, profile: state.profile }),
-      (!forceRefresh && getCachedSessions('youth').length)
+      (!forceRefresh && hasFreshSessionsCache('youth'))
         ? Promise.resolve(getCachedSessions('youth'))
-        : loadSessions('youth')
+        : loadSessions('youth', { forceRefresh })
     ]);
     if (!state || state.destroyed) return;
 
@@ -443,8 +515,10 @@ async function loadDashboardSources({ forceRefresh = false } = {}) {
     state.sessions = sessions || [];
     state.activeSession = resolveActiveSession();
 
-    updateHeaderUi();
-    syncBranchFilterControl();
+    if (!background) {
+      updateHeaderUi();
+      syncBranchFilterControl();
+    }
 
     if (!state.activeSession) {
       toggleNoSessionState(true);
@@ -456,9 +530,10 @@ async function loadDashboardSources({ forceRefresh = false } = {}) {
     const [histRes, pendRes] = await Promise.all([
       loadYouthPaymentHistory({
         profile: state.profile,
+        session: state.activeSession,
         dateFrom: '',
         dateTo: '',
-        loadAll: true,
+        loadAll: false,
         forceRefresh
       }),
       loadYouthPendingReport({
@@ -469,16 +544,24 @@ async function loadDashboardSources({ forceRefresh = false } = {}) {
     ]);
     if (!state || state.destroyed) return;
 
+    const nextSig = dashboardSignature(histRes, pendRes);
     state.historyResult = histRes;
     state.pendingResult = pendRes;
 
-    computeAndRenderDashboard();
+    if (!background || nextSig !== prevSig || !state.analytics) {
+      updateHeaderUi();
+      syncBranchFilterControl();
+      computeAndRenderDashboard();
+    }
   } catch (err) {
     if (!state || state.destroyed) return;
-    console.error('[dashboard] load failed', err);
-    showYouthError(err);
+    if (!background) {
+      console.error('[dashboard] load failed', err);
+      showYouthError(err);
+    }
   } finally {
-    if (refreshBtn) {
+    if (skelTask) skelTask.cancel();
+    if (refreshBtn && !background) {
       refreshBtn.disabled = false;
       refreshBtn.classList.remove('is-refreshing');
       refreshBtn.querySelectorAll('.spin').forEach((el) => el.classList.remove('spin'));

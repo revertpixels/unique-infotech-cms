@@ -2,18 +2,18 @@
 // Matches reference-templates/monthly-payment-receipt (2).html and monthly-payment-receipt-late-fine (1).html
 import { db } from '../config/firebase-config.js';
 import { doc, getDoc, getDocs, collection } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { inWords } from '../utils/admission-receipt.js?v=1.8.192';
-import { showToast } from '../components/toast.js?v=1.8.192';
-import { fmtDate, todayISO } from '../utils/session-rules.js?v=1.8.192';
-import { formatPersonName } from '../utils/formatter.js?v=1.8.192';
-import { getStudentPhotoSrc } from '../utils/student-media.js?v=1.8.192';
-import { getRoleTitle } from '../services/user-directory.service.js?v=1.8.192';
+import { inWords } from '../utils/admission-receipt.js?v=1.8.193';
+import { showToast } from '../components/toast.js?v=1.8.193';
+import { fmtDate, todayISO } from '../utils/session-rules.js?v=1.8.193';
+import { formatPersonName } from '../utils/formatter.js?v=1.8.193';
+import { getStudentPhotoSrc } from '../utils/student-media.js?v=1.8.193';
+import { getRoleTitle } from '../services/user-directory.service.js?v=1.8.193';
 import {
   fetchStudentPayments,
   isInstallmentPaid,
   installmentCourseFee,
   installmentBalanceDue
-} from '../services/payment.service.js?v=1.8.192';
+} from '../services/payment.service.js?v=1.8.193';
 
 function $(id) {
   return document.getElementById(id);

@@ -39,6 +39,35 @@
 
 ---
 
+### [2026-11-27 19:00] Version 1.8.193 — Deploy Safety Additions: JSON Backup Fallback, Backfill Rollback, Attention CSV Guard & STOP Runbook (Local Only)
+
+**What was built:**
+- **Read-only Admin SDK JSON backup fallback (`tools/export-json-v1.8.193.mjs`)**:
+  - Exports all `students` and `students/*/payment` subcollections (preserving Firestore `Timestamp` fidelity) into gitignored `review/backup-v1.8.193-*.json` as a fallback when `gcloud firestore export` (Blaze/gcloud CLI/bucket) is unavailable, and enforces strict document-count parity against server `.count()` (`students` + `collectionGroup('payment')`).
+- **Backfill attention gate & exact rollback (`tools/backfill-v1.8.192.mjs`)**:
+  - Added `review/backfill-dryrun-attention.csv` flagging every student where `paidAmount` or `balanceDue` decreases or any numeric field changes by `> ₹500`, including the payment types involved; `--apply` now refuses to write any docs when attention rows exist unless `--confirm-decreases` is passed.
+  - Added exact old + new value logging (including `updatedAt` with deterministic `Timestamp` + `MISSING` markers and `docId`) to `review/backfill-applied.csv`, and implemented `--rollback <csv>` to restore original values (deleting previously `MISSING` fields) only when current live values still match `"new value"` (skipping and reporting any document modified since).
+- **Updated deploy & rollback runbook (`review/v1.8.193-deploy-plan.md`, gitignored)**:
+  - Added backup prechecks (Blaze plan, `gcloud` auth/project, backup bucket) + PowerShell credentials setup (`gcloud auth application-default login`), JSON backup fallback steps, post-hosting second-pass backfill check (expected `0` changes), zero-pollution smoke test (dedicated test student/branch or natural payment audit — removed live ₹1 payment), explicit STOP conditions, and per-step rollback instructions.
+
+**Why:**
+- Guarantee full backup verification before touching production, catch unexpected `paidAmount`/`balanceDue` drops or large deltas before writes occur, provide a safe per-document backfill rollback that respects post-backfill live edits, and eliminate synthetic ledger writes on live client accounts.
+
+**Files touched (committed locally only, NOT deployed or pushed):**
+- CREATED: `tools/export-json-v1.8.193.mjs` (plus gitignored `review/v1.8.193-deploy-plan.md`).
+- MODIFIED: `tools/backfill-v1.8.192.mjs`, `docs/02-PROGRESS-LOG.md` (+ `bump-version.js 1.8.193` across 54 files).
+
+**Firestore changes:**
+- None beyond un-deployed `v1.8.191`/`v1.8.192` rules & indexes (NOT deployed or executed against live Firestore).
+
+**Tested on (all 11 suites run after final `1.8.193` bump):**
+- `check-imports.js` & `node --check`: ✅ `114` files, `424` imports, `369` exports, `0` errors.
+- Emulator Export / Attention / Rollback (`scratch/verify-backfill-emulator.mjs`): ✅ Read-only JSON export (`425` students, `435` payments, `countCheckPassed: true`); `--dry-run` generated `428` attention rows across `424` students (`AD, EX, IN, MAT`); `--apply` without `--confirm-decreases` refused with `0` writes; `--apply --confirm-decreases` wrote in `2` batches; `--rollback` restored all `424` changed docs to byte-for-byte pre-apply equality across all `425` docs; second apply + 1-doc post-backfill mutation verified `--rollback` skipped `leg-b-1` (`docsSkippedChangedSince: 1`) while restoring all `423` unmodified docs.
+- Emulator Queries & Security (`verify-emulator-runner.mjs`), Multi-Tab Logout (`verify-multitab-logout.mjs`), Unit/1200-Parity (`run-tests.mjs`), Scale Benchmark (`bench-perf.mjs` — `0–5` second-open reads, Fast 4G KPIs `1,070 ms`), Router/Dashboard/Reports/Archives/Auth/QA Chrome Suites: ✅ ALL 11 SUITES PASSED cleanly.
+- Deployed: ❌ NO (local commit only; do NOT deploy/push until green flag).
+
+---
+
 ### [2026-11-27 18:50] Version 1.8.192 — Live Data Backfill CLI, Pre-Backfill Safety Nets & Production Deploy Plan (Local Only)
 
 **What was built:**

@@ -1,20 +1,20 @@
 // dashboard.page.js — Read-only Youth Centre Dashboard (#/dashboard) + preserved Unique Kids placeholder.
 
-import { ROUTES } from '../core/router.js?v=1.8.192';
-import { createSelect } from '../components/ui-select.js?v=1.8.192';
+import { ROUTES } from '../core/router.js?v=1.8.193';
+import { createSelect } from '../components/ui-select.js?v=1.8.193';
 import {
   renderDonutChart,
   renderBarChart,
   renderStackedBarChart,
   renderLineChart
-} from '../components/charts.js?v=1.8.192';
-import { openPaymentDetailsModal } from '../components/payment-details-modal.js?v=1.8.192';
-import { loadDashboardArchiveReminder, getCachedDashboardArchiveReminder } from '../services/archive.service.js?v=1.8.192';
-import { resolveUserDisplay, getRoleTitle } from '../services/user-directory.service.js?v=1.8.192';
-import { getCachedSessions, loadSessions, getSelectedSession, getSelectedSessionId, hasFreshSessionsCache } from '../core/sessions.js?v=1.8.192';
-import { getOrgTimezone } from '../utils/session-rules.js?v=1.8.192';
-import { formatPersonName, initials } from '../utils/formatter.js?v=1.8.192';
-import { buildYouthDashboardData } from '../services/dashboard.service.js?v=1.8.192';
+} from '../components/charts.js?v=1.8.193';
+import { openPaymentDetailsModal } from '../components/payment-details-modal.js?v=1.8.193';
+import { loadDashboardArchiveReminder, getCachedDashboardArchiveReminder } from '../services/archive.service.js?v=1.8.193';
+import { resolveUserDisplay, getRoleTitle } from '../services/user-directory.service.js?v=1.8.193';
+import { getCachedSessions, loadSessions, getSelectedSession, getSelectedSessionId, hasFreshSessionsCache } from '../core/sessions.js?v=1.8.193';
+import { getOrgTimezone } from '../utils/session-rules.js?v=1.8.193';
+import { formatPersonName, initials } from '../utils/formatter.js?v=1.8.193';
+import { buildYouthDashboardData } from '../services/dashboard.service.js?v=1.8.193';
 import {
   ensureReferenceData,
   getCachedReferenceData,
@@ -33,7 +33,7 @@ import {
   modeDisplayMeta,
   formatINR,
   fmtDate
-} from '../services/report.service.js?v=1.8.192';
+} from '../services/report.service.js?v=1.8.193';
 
 let state = null;
 let profileListener = null;

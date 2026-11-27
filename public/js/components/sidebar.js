@@ -1,8 +1,8 @@
-import { ROUTES } from '../core/router.js?v=1.8.181';
-import { APP_VERSION } from '../core/app.js?v=1.8.181';
-import { getRunningPeriod, getNextDueDate, formatDayMonth } from '../utils/date.utils.js?v=1.8.181';
-import { getRunningSession, toPeriod, daysLeft, expectedStatus } from '../core/sessions.js?v=1.8.181';
-import { getUserTitle, resolveUserDisplay } from '../services/user-directory.service.js?v=1.8.181';
+import { ROUTES } from '../core/router.js?v=1.8.182';
+import { APP_VERSION } from '../core/app.js?v=1.8.182';
+import { getRunningPeriod, getNextDueDate, formatDayMonth } from '../utils/date.utils.js?v=1.8.182';
+import { getRunningSession, toPeriod, daysLeft, expectedStatus } from '../core/sessions.js?v=1.8.182';
+import { getUserTitle, resolveUserDisplay } from '../services/user-directory.service.js?v=1.8.182';
 
 let removeSidebarProfileListener = null;
 

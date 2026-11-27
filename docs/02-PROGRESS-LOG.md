@@ -39,6 +39,27 @@
 
 ---
 
+### [2026-11-27 12:18] Version 1.8.182 — Hotfix: Remove Duplicate `buildYouthDashboardData` Export & Add Duplicate-Export Guard
+
+**What was built:**
+- Restored `public/js/services/report.service.js` to the clean `v1.8.180` codebase (removing the duplicate `buildYouthDashboardData` export that caused a browser ESM `SyntaxError` on load) and extracted `buildYouthDashboardData()` into its own clean module `public/js/services/dashboard.service.js`.
+- Updated `tools/check-imports.js` to validate exported symbols across every `.js` file under `public/js/` and fail immediately on duplicate exports.
+- Bumped asset query versions to `1.8.182` via `tools/bump-version.js 1.8.182` to invalidate any cached `v1.8.181` copies.
+
+**Why:**
+- Fix blank screen reported on `localhost:5000` (`SyntaxError: Identifier 'buildYouthDashboardData' has already been declared`), isolate Dashboard aggregation cleanly from `report.service.js`, and prevent duplicate export regressions statically.
+
+**Files touched:**
+- CREATED: `public/js/services/dashboard.service.js`
+- MODIFIED: `public/js/pages/dashboard.page.js`, `tools/check-imports.js`, `docs/02-PROGRESS-LOG.md`, and versioned `?v=1.8.182` references via `tools/bump-version.js`.
+
+**Firestore changes:**
+- None.
+
+**Tested on:**
+- Chrome Desktop (`1440×900`) & Mobile (`390×844`): ✅ Re-verified `verify-dashboard.mjs`, `verify-reports.mjs`, `run-tests.mjs`, and `tools/check-imports.js` after clean deduplication & version bump.
+---
+
 ### [2026-11-27 12:15] Version 1.8.181 — Phase 6 · Youth Centre Dashboard Rebuild (`#/dashboard`) Matching Approved Reports Style
 
 **What was built:**

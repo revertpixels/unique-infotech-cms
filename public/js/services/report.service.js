@@ -20,20 +20,21 @@ import {
   evaluateYouthStudentDues,
   normalizeYouthPaymentsLedger,
   fetchStudentPayments
-} from './payment.service.js?v=1.8.175';
+} from './payment.service.js?v=1.8.176';
 import {
   evaluateKidsPendingBills,
   buildKidsPaymentLedger
-} from '../utils/school-billing.js?v=1.8.175';
-import { getStudentPhotoSrc } from '../utils/student-media.js?v=1.8.175';
+} from '../utils/school-billing.js?v=1.8.176';
+import { getStudentPhotoSrc } from '../utils/student-media.js?v=1.8.176';
 import {
   todayISO,
   fmtDate,
   getOrgTimezone
-} from '../utils/session-rules.js?v=1.8.175';
-import { formatINR } from '../utils/formatter.js?v=1.8.175';
-import { formatPersonName } from '../utils/formatter.js?v=1.8.175';
-import { resolveUserDisplay, loadUsersDirectory } from './user-directory.service.js?v=1.8.175';
+} from '../utils/session-rules.js?v=1.8.176';
+import { formatINR } from '../utils/formatter.js?v=1.8.176';
+import { formatPersonName } from '../utils/formatter.js?v=1.8.176';
+import { resolveUserDisplay, loadUsersDirectory, getRoleTitle } from './user-directory.service.js?v=1.8.176';
+import { loadPdfMake, urlToDataUrl } from '../utils/admission-receipt-pdf.js?v=1.8.176';
 
 const CACHE_KEY = 'financialReports';
 
@@ -1392,6 +1393,32 @@ function enrichLedgerEntry(entry, meta, student = {}) {
   const branchCode = String(br.code || br.branchCode || br.shortCode || entry.branchCode || student?.branchCode || (ctxVal === 'school' ? 'HO' : '')).trim();
   const branchName = entry.branchName || student?.branchName || br.name || (ctxVal === 'school' ? 'Head Office' : '');
 
+  const collectedByRole = String(entry.collectedByRole || entry.recordedByRole || (usr && usr.role) || '').toLowerCase().trim();
+  const homeBr = meta.branchesById[entry.homeBranchId || student?.branchId] || br;
+  const homeBranchId = entry.homeBranchId || student?.branchId || (ctxVal === 'school' ? 'HO' : '');
+  const homeBranchCode = String(entry.homeBranchCode || homeBr.code || homeBr.branchCode || student?.branchCode || (ctxVal === 'school' ? 'HO' : '')).trim();
+  const homeBranchName = toTitleCaseIfCaps(entry.homeBranchName || student?.branchName || homeBr.name || (ctxVal === 'school' ? 'Head Office' : '')) || '';
+
+  const isHoCollection = ctxVal === 'school'
+    || entry.collectedAtType === 'head_office'
+    || String(entry.collectedAtBranchId || '').toUpperCase() === 'HO'
+    || (!entry.collectedAtType && !entry.recordedAtBranchId && !entry.paidAt && collectedByRole === 'superadmin');
+  const collectedAtType = isHoCollection ? 'head_office' : 'branch';
+  const collectedAtBranchId = isHoCollection ? 'HO' : (entry.collectedAtBranchId || entry.branchId || student?.branchId || '');
+  const colBr = isHoCollection ? {} : (meta.branchesById[collectedAtBranchId] || br);
+  const collectedAtBranchCode = isHoCollection
+    ? 'HO'
+    : String(entry.collectedAtBranchCode || colBr.code || colBr.branchCode || branchCode || '').trim();
+  const collectedAtBranchName = isHoCollection
+    ? 'Head Office'
+    : (toTitleCaseIfCaps(entry.collectedAtBranchName || colBr.name || branchName || '') || collectedAtBranchId || 'Branch');
+  const collectedAtKey = isHoCollection ? 'HO' : (collectedAtBranchId || 'UNKNOWN');
+  const collectedAtShort = isHoCollection ? 'HO' : (collectedAtBranchCode || collectedAtBranchName);
+  const collectedAtLabel = isHoCollection
+    ? 'Head Office (HO)'
+    : [collectedAtBranchCode, collectedAtBranchName].filter(Boolean).join(' - ');
+  const isCrossBranch = Boolean(homeBranchId && collectedAtBranchId && !isHoCollection && homeBranchId !== collectedAtBranchId);
+
   return {
     ...entry,
     rowKey,
@@ -1402,6 +1429,18 @@ function enrichLedgerEntry(entry, meta, student = {}) {
     branchId: entry.branchId || student?.branchId || '',
     branchCode,
     branchName,
+    homeBranchId,
+    homeBranchCode,
+    homeBranchName,
+    collectedByRole,
+    collectedAtType,
+    collectedAtBranchId,
+    collectedAtBranchCode,
+    collectedAtBranchName,
+    collectedAtKey,
+    collectedAtShort,
+    collectedAtLabel,
+    isCrossBranch,
     courseId: entry.courseId || student?.courseId || '',
     courseCode,
     courseName,
@@ -1420,8 +1459,11 @@ function enrichLedgerEntry(entry, meta, student = {}) {
       entry.txnId,
       entry.typeLabel,
       entry.remarks,
+      entry.waiverReason,
       email,
       collectorName,
+      collectedAtLabel,
+      collectedAtBranchCode,
       courseCode,
       courseName,
       branchCode,
@@ -1675,7 +1717,7 @@ export function scopeReferenceDataByCtx(meta = {}, ctx = 'youth') {
   };
 }
 
-export function getPaymentDatePresetOptions(ctx = 'youth') {
+export function getPaymentDatePresetOptions(ctx = 'youth', { includeSingle = false } = {}) {
   const isSchool = ctx === 'school';
   const opts = [
     { value: 'all', label: 'All dates (recent)', icon: 'calendar' },
@@ -1683,6 +1725,9 @@ export function getPaymentDatePresetOptions(ctx = 'youth') {
     { value: 'week', label: 'This week', icon: 'calendar-days' },
     { value: 'month', label: 'This month', icon: 'calendar-range' }
   ];
+  if (includeSingle) {
+    opts.push({ value: 'single', label: 'Single date', icon: 'calendar-search' });
+  }
   if (!isSchool) {
     opts.push({ value: 'session', label: 'Active session window', icon: 'calendar-clock' });
   }
@@ -1731,6 +1776,626 @@ export function getPaymentChipOrder(ctx = 'youth') {
   return ctx === 'school'
     ? ['ADMISSION', 'KIDS_MONTHLY']
     : ['ADMISSION', 'FULL', 'MAT', 'IN', 'EX'];
+}
+
+/**
+ * Computes grouped financial report aggregates (Collected At, Collected By, Payment Mode,
+ * Branch Settlement separating physical branch-head cash from Super Admin/HO collections,
+ * Course/Level totals + overdue, Fine Waivers audit, and Daily Collection trend).
+ */
+export function buildFinancialReportAggregates(
+  entries = [],
+  { branchesList = [], coursesList = [], pendingItems = [], usersByEmail = {}, ctx = 'youth' } = {}
+) {
+  const summary = summarizePaymentLedger(entries);
+  let fineReceiptCount = 0;
+  let totalFeesBase = 0;
+
+  const uniquePayers = new Set();
+  const locMap = new Map();
+  const collectorMap = new Map();
+  const modeMap = new Map();
+  const courseMap = new Map();
+  const dailyMap = new Map();
+  const settlementMap = new Map();
+  const waivers = [];
+
+  const ensureSettlementRow = (bId, code = '', name = '') => {
+    const key = bId || 'UNKNOWN';
+    if (!settlementMap.has(key)) {
+      settlementMap.set(key, {
+        branchId: key,
+        branchCode: code,
+        branchName: toTitleCaseIfCaps(name || code || key),
+        homeReceipts: 0,
+        homeCollected: 0,
+        bhCash: 0,
+        bhCashCount: 0,
+        bhDigital: 0,
+        bhDigitalCount: 0,
+        bhTotal: 0,
+        bhCount: 0,
+        superAdminCash: 0,
+        superAdminDigital: 0,
+        superAdminTotal: 0,
+        superAdminCount: 0,
+        crossBranchCashHere: 0,
+        crossBranchHereCount: 0,
+        cashHandoverDue: 0,
+        pendingStudents: new Set(),
+        pendingAmount: 0,
+        pendingLateFee: 0,
+        entries: []
+      });
+    }
+    return settlementMap.get(key);
+  };
+
+  for (const br of (branchesList || [])) {
+    if (!br || !br.id || (ctx === 'youth' && br.ctx && br.ctx !== 'youth')) continue;
+    ensureSettlementRow(br.id, br.code || br.branchCode || '', br.name || br.id);
+  }
+
+  for (const cs of (coursesList || [])) {
+    if (!cs || !cs.id) continue;
+    courseMap.set(cs.id, {
+      courseId: cs.id,
+      courseCode: String(cs.courseCode || cs.code || '').trim(),
+      courseName: cs.name || cs.id,
+      payers: new Set(),
+      receipts: 0,
+      baseCollected: 0,
+      lateCollected: 0,
+      waivedAmount: 0,
+      totalCollected: 0,
+      overdueStudents: new Set(),
+      overdueDue: 0
+    });
+  }
+
+  for (const e of (entries || [])) {
+    if (!e) continue;
+    const isWaiverOnly = Boolean(e.isPureWaiver || e.type === 'WA');
+    const amt = isWaiverOnly ? 0 : Number(e.totalReceived || 0);
+    const lfPaid = isWaiverOnly ? 0 : Number(e.lateFeePaid || 0);
+    const lfWaived = Number(e.lateFeeWaived || 0);
+    const baseAmt = isWaiverOnly ? 0 : Math.max(0, amt - lfPaid);
+    const mMeta = modeDisplayMeta(e);
+    const modeLower = String(e.mode || 'cash').toLowerCase().trim();
+    const isCash = !isWaiverOnly && (modeLower === 'cash' || !modeLower);
+
+    if (!isWaiverOnly) {
+      totalFeesBase += baseAmt;
+      if (lfPaid > 0) fineReceiptCount += 1;
+      if (e.studentDocId) uniquePayers.add(e.studentDocId);
+    }
+
+    // 1. Waivers Audit log (every pure waiver OR fine waiver on a receipt)
+    if (isWaiverOnly || lfWaived > 0) {
+      const wBy = formatCollectorWithDesignation(e)
+        || formatCollectorName(e.recordedByName, e.recordedBy, e.recordedByDesignation)
+        || 'Authorised Staff';
+      waivers.push({
+        date: e.date || '',
+        receiptNo: e.receiptNo || (isWaiverOnly ? 'Waiver Log' : '-'),
+        studentDocId: e.studentDocId || '',
+        studentId: e.studentId || '',
+        studentName: formatPersonName(e.studentName || '') || e.studentName || '-',
+        branchLabel: [e.homeBranchCode || e.branchCode, toTitleCaseIfCaps(e.homeBranchName || e.branchName)].filter(Boolean).join(' - ') || '-',
+        courseLabel: [e.courseCode, e.courseName].filter(Boolean).join(' - ') || '-',
+        feeLabel: e.typeLabel || e.type || 'Fee waiver',
+        waivedAmount: lfWaived,
+        reason: String(e.waiverReason || e.remarks || 'Waiver granted').trim(),
+        waivedByLabel: wBy,
+        entry: e
+      });
+    }
+
+    // 2. Group by Collected At
+    const locKey = e.collectedAtKey || (e.collectedAtType === 'head_office' ? 'HO' : (e.collectedAtBranchId || e.branchId || 'UNKNOWN'));
+    const locLabel = e.collectedAtLabel
+      || (locKey === 'HO'
+        ? 'Head Office (HO)'
+        : ([e.collectedAtBranchCode || e.branchCode, toTitleCaseIfCaps(e.collectedAtBranchName || e.branchName || '')].filter(Boolean).join(' - ') || locKey));
+    if (!locMap.has(locKey)) {
+      locMap.set(locKey, {
+        key: locKey,
+        type: e.collectedAtType || (locKey === 'HO' ? 'head_office' : 'branch'),
+        label: locLabel,
+        receipts: 0,
+        fineReceipts: 0,
+        cashAmount: 0,
+        digitalAmount: 0,
+        lateFees: 0,
+        waiverCount: 0,
+        waivedAmount: 0,
+        totalCollected: 0
+      });
+    }
+    const locBucket = locMap.get(locKey);
+    if (lfWaived > 0 || isWaiverOnly) {
+      locBucket.waiverCount += 1;
+      locBucket.waivedAmount += lfWaived;
+    }
+    if (!isWaiverOnly) {
+      locBucket.receipts += 1;
+      if (lfPaid > 0) locBucket.fineReceipts += 1;
+      if (isCash) locBucket.cashAmount += amt;
+      else locBucket.digitalAmount += amt;
+      locBucket.lateFees += lfPaid;
+      locBucket.totalCollected += amt;
+    }
+
+    // 3. Group by Collected By
+    const colEmail = String(e.recordedBy || '').trim().toLowerCase();
+    const usr = colEmail ? usersByEmail[colEmail] : null;
+    const roleKey = String(e.collectedByRole || e.recordedByRole || usr?.role || '').toLowerCase().trim();
+    const dispLabel = formatCollectorWithDesignation(e)
+      || formatCollectorName(e.recordedByName, colEmail, e.recordedByDesignation)
+      || 'Authorised Staff';
+    const colKey = colEmail || `name:${dispLabel.toLowerCase()}`;
+    const roleLabel = roleKey ? getRoleTitle(roleKey) : 'Staff';
+    if (!collectorMap.has(colKey)) {
+      collectorMap.set(colKey, {
+        key: colKey,
+        email: colEmail,
+        label: dispLabel,
+        role: roleKey,
+        roleLabel,
+        receipts: 0,
+        fineReceipts: 0,
+        cashAmount: 0,
+        digitalAmount: 0,
+        lateFees: 0,
+        waiverCount: 0,
+        waivedAmount: 0,
+        totalCollected: 0
+      });
+    }
+    const colBucket = collectorMap.get(colKey);
+    if (lfWaived > 0 || isWaiverOnly) {
+      colBucket.waiverCount += 1;
+      colBucket.waivedAmount += lfWaived;
+    }
+    if (!isWaiverOnly) {
+      colBucket.receipts += 1;
+      if (lfPaid > 0) colBucket.fineReceipts += 1;
+      if (isCash) colBucket.cashAmount += amt;
+      else colBucket.digitalAmount += amt;
+      colBucket.lateFees += lfPaid;
+      colBucket.totalCollected += amt;
+    }
+
+    // 4. Group by Payment Mode (money receipts)
+    if (!isWaiverOnly) {
+      const mKey = mMeta.cls || 'cash';
+      if (!modeMap.has(mKey)) {
+        modeMap.set(mKey, {
+          key: mKey,
+          label: mMeta.label,
+          cls: mMeta.cls,
+          icon: mMeta.icon,
+          receipts: 0,
+          amount: 0,
+          sharePct: 0
+        });
+      }
+      const mB = modeMap.get(mKey);
+      mB.receipts += 1;
+      mB.amount += amt;
+
+      // 5. Daily Trend
+      const dIso = String(e.date || '').slice(0, 10);
+      if (dIso) {
+        if (!dailyMap.has(dIso)) {
+          dailyMap.set(dIso, { date: dIso, label: fmtDate(dIso), receipts: 0, amount: 0 });
+        }
+        const dB = dailyMap.get(dIso);
+        dB.receipts += 1;
+        dB.amount += amt;
+      }
+    }
+
+    // 6. Course / Level aggregation
+    const cId = e.courseId || e.courseCode || e.courseName || 'OTHER';
+    if (!courseMap.has(cId)) {
+      courseMap.set(cId, {
+        courseId: cId,
+        courseCode: e.courseCode || '',
+        courseName: e.courseName || cId,
+        payers: new Set(),
+        receipts: 0,
+        baseCollected: 0,
+        lateCollected: 0,
+        waivedAmount: 0,
+        totalCollected: 0,
+        overdueStudents: new Set(),
+        overdueDue: 0
+      });
+    }
+    const cBucket = courseMap.get(cId);
+    if (lfWaived > 0 || isWaiverOnly) cBucket.waivedAmount += lfWaived;
+    if (!isWaiverOnly) {
+      cBucket.receipts += 1;
+      if (e.studentDocId) cBucket.payers.add(e.studentDocId);
+      cBucket.baseCollected += baseAmt;
+      cBucket.lateCollected += lfPaid;
+      cBucket.totalCollected += amt;
+    }
+
+    // 7. Youth Branch Settlement
+    if (ctx === 'youth' && !isWaiverOnly) {
+      const homeId = e.homeBranchId || e.branchId || '';
+      const colAtId = e.collectedAtBranchId || '';
+      const colAtType = e.collectedAtType || 'branch';
+      const isCollectedBySuperOrHO = roleKey === 'superadmin'
+        || colAtType === 'head_office'
+        || (homeId && colAtId && colAtId !== homeId);
+
+      if (homeId) {
+        const sRow = ensureSettlementRow(homeId, e.homeBranchCode || e.branchCode || '', e.homeBranchName || e.branchName || '');
+        sRow.homeReceipts += 1;
+        sRow.homeCollected += amt;
+        sRow.entries.push(e);
+
+        if (isCollectedBySuperOrHO) {
+          sRow.superAdminCount += 1;
+          sRow.superAdminTotal += amt;
+          if (isCash) sRow.superAdminCash += amt;
+          else sRow.superAdminDigital += amt;
+        } else {
+          sRow.bhCount += 1;
+          sRow.bhTotal += amt;
+          if (isCash) {
+            sRow.bhCash += amt;
+            sRow.bhCashCount += 1;
+          } else {
+            sRow.bhDigital += amt;
+            sRow.bhDigitalCount += 1;
+          }
+        }
+      }
+
+      // Track cash physically taken at a branch on behalf of ANOTHER branch's student
+      if (colAtType === 'branch' && colAtId && homeId && colAtId !== homeId && roleKey !== 'superadmin') {
+        const colRow = ensureSettlementRow(colAtId, e.collectedAtBranchCode || '', e.collectedAtBranchName || '');
+        colRow.crossBranchHereCount += 1;
+        if (isCash) colRow.crossBranchCashHere += amt;
+        if (!colRow.entries.includes(e)) colRow.entries.push(e);
+      }
+    }
+  }
+
+  // Fold overdue items into Settlement & Course tables
+  for (const p of (pendingItems || [])) {
+    if (!p) continue;
+    const dueTot = Number(p.totalPayable != null ? p.totalPayable : (Number(p.amount || 0) + Number(p.lateFee || 0)));
+    const pCId = p.courseId || p.courseCode || p.courseName || 'OTHER';
+    if (courseMap.has(pCId)) {
+      const cb = courseMap.get(pCId);
+      if (p.studentDocId) cb.overdueStudents.add(p.studentDocId);
+      cb.overdueDue += dueTot;
+    }
+    if (ctx === 'youth' && p.branchId && settlementMap.has(p.branchId)) {
+      const sb = settlementMap.get(p.branchId);
+      if (p.studentDocId) sb.pendingStudents.add(p.studentDocId);
+      sb.pendingAmount += Number(p.amount || 0);
+      sb.pendingLateFee += Number(p.lateFee || 0);
+    }
+  }
+
+  const byCollectedAt = Array.from(locMap.values()).sort((a, b) => b.totalCollected - a.totalCollected || b.waiverCount - a.waiverCount);
+  const byCollectedBy = Array.from(collectorMap.values()).sort((a, b) => b.totalCollected - a.totalCollected || b.waiverCount - a.waiverCount);
+  const byMode = Array.from(modeMap.values())
+    .map((m) => ({
+      ...m,
+      sharePct: summary.totalCollected > 0 ? Math.round((m.amount / summary.totalCollected) * 100) : 0
+    }))
+    .sort((a, b) => b.amount - a.amount);
+
+  const byBranchSettlement = Array.from(settlementMap.values())
+    .map((row) => ({
+      ...row,
+      cashHandoverDue: row.bhCash + row.crossBranchCashHere,
+      pendingStudentCount: row.pendingStudents.size,
+      overdueTotal: row.pendingAmount + row.pendingLateFee
+    }))
+    .filter((r) => r.homeReceipts > 0 || r.crossBranchHereCount > 0 || r.overdueTotal > 0 || (branchesList || []).some((b) => b.id === r.branchId))
+    .sort((a, b) => b.homeCollected - a.homeCollected || (a.branchName || '').localeCompare(b.branchName || ''));
+
+  const byCourse = Array.from(courseMap.values())
+    .map((c) => ({
+      ...c,
+      studentsCount: c.payers.size,
+      overdueStudentCount: c.overdueStudents.size
+    }))
+    .filter((c) => c.receipts > 0 || c.overdueDue > 0)
+    .sort((a, b) => b.totalCollected - a.totalCollected || (a.courseName || '').localeCompare(b.courseName || ''));
+
+  const dailySeries = Array.from(dailyMap.values()).sort((a, b) => a.date.localeCompare(b.date));
+  waivers.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+
+  return {
+    summary: {
+      ...summary,
+      fineReceiptCount,
+      baseCollected: totalFeesBase,
+      uniqueStudents: uniquePayers.size,
+      waiverCount: waivers.length
+    },
+    byCollectedAt,
+    byCollectedBy,
+    byMode,
+    byBranchSettlement,
+    byCourse,
+    waivers,
+    dailySeries
+  };
+}
+
+/**
+ * Generates and downloads a structured multi-section vector PDF Financial Report using vendored pdfMake.
+ */
+export async function exportFinancialReportPdf({
+  title = 'Financial Report',
+  subtitle = '',
+  filename = 'financial-report.pdf',
+  org = null,
+  summary = {},
+  aggs = {},
+  entries = [],
+  ctx = 'youth',
+  printedBy = ''
+} = {}) {
+  const pdfMake = await loadPdfMake();
+  const logoData = await urlToDataUrl('/assets/images/logo-512.jpg').catch(() => null);
+  const accent = ctx === 'school' ? '#0F766E' : '#323A85';
+  const softFill = ctx === 'school' ? '#E6F6F4' : '#EEF0FA';
+  const fmtPlain = (n) => 'Rs ' + Math.round(Number(n || 0)).toLocaleString('en-IN');
+
+  const tz = getOrgTimezone();
+  const genTime = new Intl.DateTimeFormat('en-IN', {
+    timeZone: tz,
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  }).format(new Date());
+
+  const makeTableSection = (heading, headers, rows, widths = null) => {
+    const body = [
+      headers.map((h) => ({
+        text: h.text || h,
+        bold: true,
+        fontSize: 8.5,
+        color: accent,
+        fillColor: softFill,
+        alignment: h.num ? 'right' : 'left'
+      })),
+      ...(rows.length
+        ? rows.map((r) => r.map((cell, idx) => ({
+          text: String(cell ?? '-'),
+          fontSize: 8.2,
+          alignment: headers[idx]?.num ? 'right' : 'left'
+        })))
+        : [[{ text: 'No records in this view', colSpan: headers.length, alignment: 'center', color: '#6B6B6B', fontSize: 8.5 }, ...Array(Math.max(0, headers.length - 1)).fill({})]])
+    ];
+    return [
+      { text: heading, bold: true, fontSize: 10.5, color: accent, margin: [0, 10, 0, 4] },
+      {
+        table: {
+          headerRows: 1,
+          ...(widths ? { widths } : { widths: Array(headers.length).fill('*') }),
+          body
+        },
+        layout: {
+          hLineColor: () => '#E2E4EA',
+          vLineColor: () => '#E2E4EA',
+          paddingTop: () => 4,
+          paddingBottom: () => 4,
+          paddingLeft: () => 5,
+          paddingRight: () => 5
+        }
+      }
+    ];
+  };
+
+  const content = [];
+  content.push({
+    columns: [
+      ...(logoData ? [{ image: logoData, width: 38, margin: [0, 0, 10, 0] }] : []),
+      {
+        width: '*',
+        stack: [
+          { text: (org && org.orgName) || 'Unique Infotech', bold: true, fontSize: 14, color: accent },
+          { text: title, bold: true, fontSize: 11, color: '#171717', margin: [0, 1, 0, 0] },
+          { text: subtitle || '', fontSize: 8.5, color: '#525252', margin: [0, 2, 0, 0] }
+        ]
+      },
+      {
+        width: 170,
+        alignment: 'right',
+        stack: [
+          { text: `Generated: ${genTime}`, fontSize: 8, color: '#525252' },
+          ...(printedBy ? [{ text: `Prepared by: ${printedBy}`, fontSize: 8, color: '#525252', margin: [0, 2, 0, 0] }] : [])
+        ]
+      }
+    ],
+    margin: [0, 0, 0, 8]
+  });
+
+  content.push({
+    table: {
+      widths: ['*', '*', '*', '*', '*'],
+      body: [[
+        { stack: [{ text: 'TOTAL COLLECTED', fontSize: 7.5, color: '#6B6B6B', bold: true }, { text: fmtPlain(summary.totalCollected), fontSize: 11, bold: true, color: '#16A34A' }, { text: `${summary.moneyReceipts || 0} receipts`, fontSize: 7.5, color: '#525252' }], fillColor: '#F6F6F8' },
+        { stack: [{ text: 'CASH COLLECTED', fontSize: 7.5, color: '#6B6B6B', bold: true }, { text: fmtPlain(summary.cashTotal), fontSize: 11, bold: true }, { text: `${summary.cashCount || 0} receipts`, fontSize: 7.5, color: '#525252' }], fillColor: '#F6F6F8' },
+        { stack: [{ text: 'UPI / BANK', fontSize: 7.5, color: '#6B6B6B', bold: true }, { text: fmtPlain((summary.upiTotal || 0) + (summary.bankTotal || 0)), fontSize: 11, bold: true }, { text: `${(summary.upiCount || 0) + (summary.bankCount || 0)} digital`, fontSize: 7.5, color: '#525252' }], fillColor: '#F6F6F8' },
+        { stack: [{ text: 'LATE FEES PAID', fontSize: 7.5, color: '#6B6B6B', bold: true }, { text: fmtPlain(summary.lateFeesCollected), fontSize: 11, bold: true }, { text: `${summary.fineReceiptCount || 0} receipts`, fontSize: 7.5, color: '#525252' }], fillColor: '#F6F6F8' },
+        { stack: [{ text: 'WAIVED FEES', fontSize: 7.5, color: '#6B6B6B', bold: true }, { text: fmtPlain(summary.lateFeesWaived), fontSize: 11, bold: true }, { text: `${summary.waiverCount || 0} waivers`, fontSize: 7.5, color: '#525252' }], fillColor: '#F6F6F8' }
+      ]]
+    },
+    layout: { hLineColor: () => '#EAEAEA', vLineColor: () => '#EAEAEA', paddingTop: () => 5, paddingBottom: () => 5 }
+  });
+
+  // Transactions table (cap at 500 rows for instant vector PDF assembly)
+  const limitedRows = (entries || []).slice(0, 500);
+  content.push(...makeTableSection(
+    `Receipt & Collection Details (${entries.length}${entries.length > 500 ? ', showing latest 500' : ''})`,
+    [
+      { text: 'Date' },
+      { text: 'Student' },
+      { text: 'Payment For' },
+      { text: 'Mode' },
+      { text: 'Collected By' },
+      { text: 'Collected At' },
+      { text: 'Received', num: true },
+      { text: 'Receipt' }
+    ],
+    limitedRows.map((e) => [
+      e.date ? fmtDate(e.date) : '-',
+      `${formatPersonName(e.studentName || '')} (${e.studentId || '-'})`,
+      e.typeLabel || e.type || '-',
+      modeDisplayMeta(e).label,
+      formatCollectorWithDesignation(e) || formatCollectorName(e.recordedByName, e.recordedBy, e.recordedByDesignation) || '-',
+      e.collectedAtLabel || '-',
+      e.isPureWaiver ? 'Rs 0 (Waiver)' : fmtPlain(e.totalReceived),
+      e.receiptNo || (e.isPureWaiver ? 'Waiver Log' : '-')
+    ]),
+    ['auto', '*', 'auto', 'auto', '*', 'auto', 'auto', 'auto']
+  ));
+
+  // Report Footer Groupings: Collected At + Collected By + Mode
+  content.push(...makeTableSection(
+    'Summary Grouped by Collected At',
+    [
+      { text: 'Collected At' },
+      { text: 'Receipts', num: true },
+      { text: 'Cash', num: true },
+      { text: 'UPI / Bank', num: true },
+      { text: 'Fines', num: true },
+      { text: 'Waivers', num: true },
+      { text: 'Total Collected', num: true }
+    ],
+    (aggs.byCollectedAt || []).map((r) => [
+      r.label,
+      r.receipts,
+      fmtPlain(r.cashAmount),
+      fmtPlain(r.digitalAmount),
+      fmtPlain(r.lateFees),
+      r.waiverCount ? `${r.waiverCount} (${fmtPlain(r.waivedAmount)})` : '0',
+      fmtPlain(r.totalCollected)
+    ])
+  ));
+
+  content.push(...makeTableSection(
+    'Summary Grouped by Collected By',
+    [
+      { text: 'Collected By' },
+      { text: 'Role' },
+      { text: 'Receipts', num: true },
+      { text: 'Cash', num: true },
+      { text: 'UPI / Bank', num: true },
+      { text: 'Waivers', num: true },
+      { text: 'Total Collected', num: true }
+    ],
+    (aggs.byCollectedBy || []).map((r) => [
+      r.label,
+      r.roleLabel || '-',
+      r.receipts,
+      fmtPlain(r.cashAmount),
+      fmtPlain(r.digitalAmount),
+      r.waiverCount ? `${r.waiverCount} (${fmtPlain(r.waivedAmount)})` : '0',
+      fmtPlain(r.totalCollected)
+    ])
+  ));
+
+  content.push(...makeTableSection(
+    'Summary Grouped by Payment Mode',
+    [
+      { text: 'Mode' },
+      { text: 'Receipts', num: true },
+      { text: 'Amount', num: true },
+      { text: 'Share', num: true }
+    ],
+    (aggs.byMode || []).map((m) => [m.label, m.receipts, fmtPlain(m.amount), `${m.sharePct}%`])
+  ));
+
+  if (ctx === 'youth' && (aggs.byBranchSettlement || []).length) {
+    content.push(...makeTableSection(
+      'Branch Settlement Reconciliation',
+      [
+        { text: 'Branch' },
+        { text: 'Branch Cash Held', num: true },
+        { text: 'Branch UPI/Bank', num: true },
+        { text: 'Top Admin / HO', num: true },
+        { text: 'Branch Students Total', num: true },
+        { text: 'Cash Handover Due', num: true }
+      ],
+      aggs.byBranchSettlement.map((b) => [
+        b.branchCode ? `${b.branchCode} - ${b.branchName}` : b.branchName,
+        fmtPlain(b.bhCash),
+        fmtPlain(b.bhDigital),
+        fmtPlain(b.superAdminTotal),
+        fmtPlain(b.homeCollected),
+        fmtPlain(b.cashHandoverDue)
+      ])
+    ));
+  }
+
+  if ((aggs.waivers || []).length) {
+    content.push(...makeTableSection(
+      `Fine & Fee Waivers Audit (${aggs.waivers.length})`,
+      [
+        { text: 'Date' },
+        { text: 'Student' },
+        { text: 'Fee Item' },
+        { text: 'Waived', num: true },
+        { text: 'Reason' },
+        { text: 'Waived By' }
+      ],
+      aggs.waivers.map((w) => [
+        w.date ? fmtDate(w.date) : '-',
+        `${w.studentName} (${w.studentId || '-'})`,
+        w.feeLabel,
+        fmtPlain(w.waivedAmount),
+        w.reason,
+        w.waivedByLabel
+      ])
+    ));
+  }
+
+  const docDef = {
+    pageSize: 'A4',
+    pageOrientation: 'landscape',
+    pageMargins: [24, 24, 24, 28],
+    footer: (cur, count) => ({
+      columns: [
+        { text: `${(org && org.orgName) || 'Unique Infotech'} · ${title}`, fontSize: 7.5, color: '#6B6B6B', margin: [24, 0, 0, 0] },
+        { text: `Page ${cur} of ${count}`, fontSize: 7.5, color: '#6B6B6B', alignment: 'right', margin: [0, 0, 24, 0] }
+      ]
+    }),
+    content
+  };
+
+  return new Promise((resolve, reject) => {
+    try {
+      pdfMake.createPdf(docDef).getBlob((blob) => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1500);
+        resolve(true);
+      });
+    } catch (err) {
+      reject(err);
+    }
+  });
 }
 
 export { formatINR, fmtDate, todayISO };

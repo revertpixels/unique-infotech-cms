@@ -11,14 +11,14 @@ import {
   runTransaction,
   serverTimestamp
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { createSelect } from '../components/ui-select.js?v=1.8.175';
-import { openPopup } from '../components/modal.js?v=1.8.175';
-import { confirmDialog } from '../components/ui-confirm.js?v=1.8.175';
-import { showToast } from '../components/toast.js?v=1.8.175';
-import { getSelectedSessionId, getCachedSessions } from '../core/sessions.js?v=1.8.175';
-import { todayISO, fmtDate, examWindowOf, installmentSchedule } from '../utils/session-rules.js?v=1.8.175';
-import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.175';
-import { getRoleTitle, resolveUserDisplay } from '../services/user-directory.service.js?v=1.8.175';
+import { createSelect } from '../components/ui-select.js?v=1.8.176';
+import { openPopup } from '../components/modal.js?v=1.8.176';
+import { confirmDialog } from '../components/ui-confirm.js?v=1.8.176';
+import { showToast } from '../components/toast.js?v=1.8.176';
+import { getSelectedSessionId, getCachedSessions } from '../core/sessions.js?v=1.8.176';
+import { todayISO, fmtDate, examWindowOf, installmentSchedule } from '../utils/session-rules.js?v=1.8.176';
+import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.176';
+import { getRoleTitle, resolveUserDisplay } from '../services/user-directory.service.js?v=1.8.176';
 import {
   calculateLateFee,
   fetchStudentPayments,
@@ -28,7 +28,7 @@ import {
   courseBalanceWithoutExam,
   calculateStudentFinancials,
   repairStudentAdmissionPayment
-} from '../services/payment.service.js?v=1.8.175';
+} from '../services/payment.service.js?v=1.8.176';
 
 let currentUserProfile = null;
 let currentCtx = 'youth';

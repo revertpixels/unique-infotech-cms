@@ -39,6 +39,48 @@
 
 ---
 
+### [2026-11-27 10:25] Version 1.8.176 — Phase 6 · Financial Reports Page, Branch Cash Settlement, Fine Waivers Audit & Vector PDF Export
+
+**What was built:**
+- **Financial Reports UI (`public/pages/reports.html`, `public/js/pages/reports.page.js`, `public/css/pages/financial-reports.css`)**:
+  - Super Admin–only (`profile.role === 'superadmin'`, dynamic labels via `getRoleTitle`) unified Reports view across both **Youth Centre** and **Unique Kids**.
+  - **5 KPI Cards & Fee Breakdown Bar**: Total Collected, Cash, UPI/Bank, Late Fees Paid, and Fees Waived with fee-type breakdown chips.
+  - **Flexible Filtering Toolbar**: Search, Date presets (`All dates`, `Today`, `This week`, `This month`, `Single date` with Today/Yesterday quick pills, `Active session window` [Youth], `Custom range`), shared `[ Branch -> Batch ]` box, **Collected At** location filter, **Collected By** staff filter, plus secondary Course/Level, Payment Type, and Mode filters.
+  - **4 Report Tabs**:
+    1. **Collection Report**: Paginated ledger with **Collected By** (name + designation + role) & **Collected At** (`HO` vs branch, plus cross-branch home tag), sortable Date/Received, receipt details modal, and **Grouped Footer Totals** (By Collected At, By Collected By, By Payment Mode, plus receipts/fines/waivers counts).
+    2. **Branch Settlement** (Youth Centre): Separates physical cash collected by branch heads (`Branch Cash Held` + cross-branch cash taken at counter -> `Cash Handover Due`) from `Branch UPI/Bank` and `HO / Top Admin` receipts, plus current overdue pending and a per-branch Receipt Breakdown modal.
+    3. **Fine Waivers**: Complete audit log of fine and fee waivers with date, student, item, amount waived, granted by, and reason.
+    4. **Overview & Courses**: Payment mode share bars, daily collection trend bars, and course/level breakdown tied to current overdue dues.
+  - **Exports**: Tab-aware BOM UTF-8 CSV (`downloadCsv`), structured Print view (`openPrintSheet`), and multi-section landscape vector PDF (`exportFinancialReportPdf` via restored `/vendor/pdfmake.min.js` v0.2.10 + `vfs_fonts.js`).
+- **Location & Aggregate Helpers (`public/js/services/payment.service.js`, `public/js/utils/school-billing.js`, `public/js/services/report.service.js`)**:
+  - Added additive location metadata (`homeBranch*`, `collectedAtType`, `collectedAtBranch*`, `collectedByRole`, `isCrossBranch`) across Youth and Unique Kids ledgers without altering fee maths or receipt numbers.
+  - Fixed `buildKidsPaymentLedger` summary role copy (`p.receivedByRole || p.recordedByRole`), preserved numeric fallback on Youth `lateFeeWaived`, and aligned `buildFinancialReportAggregates` waiver counts with waiver audit rows.
+- **Offline Vendor Repair (`public/vendor/pdfmake.min.js`)**:
+  - Restored the previously 0-byte `public/vendor/pdfmake.min.js` from `public/vendor/archive/pdfmake.min.js` (`v0.2.10`, 1.38 MB) so vector PDF generation works reliably.
+
+**Files touched (created / modified):**
+- MODIFIED: `public/pages/reports.html`
+- MODIFIED: `public/js/pages/reports.page.js`
+- MODIFIED: `public/css/pages/financial-reports.css`
+- MODIFIED: `public/js/services/report.service.js`
+- MODIFIED: `public/js/services/payment.service.js`
+- MODIFIED: `public/js/utils/school-billing.js`
+- MODIFIED: `public/vendor/pdfmake.min.js`
+- MODIFIED: `docs/02-PROGRESS-LOG.md`
+
+**Firestore changes:**
+- None (read-only across existing `students`, `payment`, `payments`, `bills`, `waivers`, `breaks`, `branches`, `courses`, `batches`, `sessions`, `users`).
+
+**Tested on:**
+- Chrome Desktop (`1440x900` CDP): ✅ Role guard (`branch_head` blocked), Youth Centre & Unique Kids modes, Single date, Custom range, Collected At (`HO`/Branch), Collected By, Branch Settlement & Breakdown popup, Fine Waivers, Overview & Courses, CSV + Vector PDF (`%PDF-`), zero table overflow (`1128px`), zero console/network errors.
+- Mobile (`390x844` CDP): ✅ Zero horizontal overflow (`390px`), mobile drawer filters, stacked card layout across Collection & Branch Settlement.
+- Offline Archives Regression Check: ✅ Re-verified `verify-archives.mjs` and `verify-archive-parity.mjs`.
+
+**Next task:**
+- Review live Reports with real Firestore records across Youth Centre & Unique Kids.
+
+---
+
 ### [2026-11-27 00:01] Version 1.8.175 — Auto Re-scan Export Modal, Unique Student File Paths, DOB Proof Rule Cleanup & Offline Viewer Polish
 
 **What was built:**

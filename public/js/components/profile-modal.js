@@ -1,17 +1,17 @@
 import { auth } from '../config/firebase-config.js';
-import { openPopup } from './modal.js?v=1.8.175';
-import { showToast } from './toast.js?v=1.8.175';
-import { confirmDialog } from './ui-confirm.js?v=1.8.175';
-import { cropSquareAvatarToBlob, isImageFile, formatBytes } from '../utils/image-compress.js?v=1.8.175';
-import { formatPersonName, initials } from '../utils/formatter.js?v=1.8.175';
+import { openPopup } from './modal.js?v=1.8.176';
+import { showToast } from './toast.js?v=1.8.176';
+import { confirmDialog } from './ui-confirm.js?v=1.8.176';
+import { cropSquareAvatarToBlob, isImageFile, formatBytes } from '../utils/image-compress.js?v=1.8.176';
+import { formatPersonName, initials } from '../utils/formatter.js?v=1.8.176';
 import {
   getRoleTitle,
   getUserTitle,
   resolveUserDisplay,
   saveOwnPhoto,
   saveUserFields
-} from '../services/user-directory.service.js?v=1.8.175';
-import { changeSuperAdminPassword, mapAuthError } from '../core/auth.js?v=1.8.175';
+} from '../services/user-directory.service.js?v=1.8.176';
+import { changeSuperAdminPassword, mapAuthError } from '../core/auth.js?v=1.8.176';
 
 function el(tag, cls, text) {
   const node = document.createElement(tag);

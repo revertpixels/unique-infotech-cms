@@ -8,11 +8,11 @@ import {
   runTransaction,
   serverTimestamp
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { readStudentId, readReceiptNo, writeCounter } from './admission.service.js?v=1.8.175';
-import { fineFor, todayISO, installmentSchedule, examWindowOf } from '../utils/session-rules.js?v=1.8.175';
-import { courseFeeOf } from '../utils/fees.js?v=1.8.175';
-import { formatPersonName } from '../utils/formatter.js?v=1.8.175';
-import { resolveUserDisplay } from './user-directory.service.js?v=1.8.175';
+import { readStudentId, readReceiptNo, writeCounter } from './admission.service.js?v=1.8.176';
+import { fineFor, todayISO, installmentSchedule, examWindowOf } from '../utils/session-rules.js?v=1.8.176';
+import { courseFeeOf } from '../utils/fees.js?v=1.8.176';
+import { formatPersonName } from '../utils/formatter.js?v=1.8.176';
+import { resolveUserDisplay } from './user-directory.service.js?v=1.8.176';
 
 const COL = 'students';
 
@@ -1191,6 +1191,48 @@ export function normalizeYouthPaymentsLedger(paymentsList = [], studentsById = n
     }
   }
 
+  const resolveLocationMeta = (p, s) => {
+    const homeBranchId = s?.branchId || '';
+    const homeBr = branchesById[homeBranchId] || {};
+    const homeBranchCode = homeBr.code || homeBr.branchCode || s?.branchCode || '';
+    const homeBranchName = s?.branchName || homeBr.name || '';
+    const collectedByRole = String(p?.collectedBy?.role || p?.recordedByRole || '').toLowerCase().trim();
+    const explicitPaidAtType = String(p?.paidAt?.type || '').toLowerCase().trim();
+
+    let collectedAtType = 'branch';
+    let collectedAtBranchId = p?.paidAt?.branchId || p?.recordedAtBranchId || homeBranchId || '';
+    if (explicitPaidAtType === 'head_office' || String(collectedAtBranchId).toUpperCase() === 'HO') {
+      collectedAtType = 'head_office';
+      collectedAtBranchId = 'HO';
+    } else if (explicitPaidAtType === 'branch' && p?.paidAt?.branchId) {
+      collectedAtType = 'branch';
+      collectedAtBranchId = p.paidAt.branchId;
+    } else if (!p?.recordedAtBranchId && collectedByRole === 'superadmin') {
+      collectedAtType = 'head_office';
+      collectedAtBranchId = 'HO';
+    }
+
+    const colBr = collectedAtType === 'head_office' ? {} : (branchesById[collectedAtBranchId] || {});
+    const collectedAtBranchCode = collectedAtType === 'head_office'
+      ? 'HO'
+      : (colBr.code || colBr.branchCode || p?.paidAt?.branchCode || p?.recordedAtBranchCode || (collectedAtBranchId === homeBranchId ? homeBranchCode : '') || '');
+    const collectedAtBranchName = collectedAtType === 'head_office'
+      ? (p?.paidAt?.branchName || 'Head Office')
+      : (p?.paidAt?.branchName || colBr.name || p?.recordedAtBranchName || (collectedAtBranchId === homeBranchId ? homeBranchName : '') || collectedAtBranchId || 'Branch');
+    const isCrossBranch = Boolean(homeBranchId && collectedAtBranchId && collectedAtType === 'branch' && homeBranchId !== collectedAtBranchId);
+    return {
+      homeBranchId,
+      homeBranchCode,
+      homeBranchName,
+      collectedByRole,
+      collectedAtType,
+      collectedAtBranchId,
+      collectedAtBranchCode,
+      collectedAtBranchName,
+      isCrossBranch
+    };
+  };
+
   const labelForType = (t, p) => {
     if (t === 'FULL') return 'Full course fee';
     if (t === 'AD' || t === 'ADM' || t === 'ADMISSION') return 'Admission fee';
@@ -1223,14 +1265,15 @@ export function normalizeYouthPaymentsLedger(paymentsList = [], studentsById = n
       continue;
     }
 
+    const loc = resolveLocationMeta(p, s);
     const branchId = p.recordedAtBranchId || s?.branchId || '';
     const brObj = branchesById[branchId] || {};
     const cObj = (s && coursesById[s.courseId]) || {};
     const date = p.paidOn || p.date || (p.createdAt?.seconds ? new Date(p.createdAt.seconds * 1000).toISOString().slice(0, 10) : '');
     const mode = (p.mode || 'cash').toLowerCase();
     const txnId = p.txnId || '';
-    const recordedBy = (p.recordedBy || s?.createdBy || '').toLowerCase();
-    const recordedByName = p.recordedByName || '';
+    const recordedBy = (p.collectedBy?.email || p.recordedBy || s?.createdBy || '').toLowerCase();
+    const recordedByName = p.collectedBy?.name || p.recordedByName || '';
     const recordedByDesignation = p.recordedByDesignation || '';
 
     if (isAd || isFull || isMat) {
@@ -1239,8 +1282,9 @@ export function normalizeYouthPaymentsLedger(paymentsList = [], studentsById = n
       const amt = Number(p.amount || 0);
       const lfVal = Number(p.lateFee ?? p.lateFeeAmount ?? 0);
       const waived = !!(p.waived || p.lateFeeWaived);
+      const lfNumFallback = typeof p.lateFeeWaived === 'number' && p.lateFeeWaived > 0 ? p.lateFeeWaived : 0;
       const lfPaid = waived ? 0 : lfVal;
-      const lfWaived = waived ? lfVal : 0;
+      const lfWaived = waived ? (lfVal || lfNumFallback) : 0;
 
       if (!groupedAdmissions.has(rcptKey)) {
         groupedAdmissions.set(rcptKey, {
@@ -1256,6 +1300,7 @@ export function normalizeYouthPaymentsLedger(paymentsList = [], studentsById = n
           branchId,
           branchCode: brObj.code || brObj.branchCode || p.recordedAtBranchCode || s?.branchCode || '',
           branchName: p.recordedAtBranchName || s?.branchName || brObj.name || '',
+          ...loc,
           courseId: s?.courseId || '',
           courseCode: cObj.courseCode || cObj.code || s?.courseCode || '',
           courseName: s?.courseName || cObj.name || '',
@@ -1311,10 +1356,11 @@ export function normalizeYouthPaymentsLedger(paymentsList = [], studentsById = n
     const amt = isWaiver ? 0 : Number(p.amount || 0);
     const lfVal = Number(p.lateFee ?? p.lateFeeAmount ?? 0);
     const isLateWaived = !!(p.waived || p.lateFeeWaived);
+    const lfNumFallback = typeof p.lateFeeWaived === 'number' && p.lateFeeWaived > 0 ? p.lateFeeWaived : 0;
     const lfPaid = (!isWaiver && !isLateWaived) ? lfVal : 0;
     const lfWaived = isWaiver
-      ? (Number(p.amount || 0) || lfVal || 0)
-      : (isLateWaived ? lfVal : 0);
+      ? (Number(p.amount || 0) || lfVal || lfNumFallback || 0)
+      : (isLateWaived ? (lfVal || lfNumFallback) : 0);
     const totalRecv = isWaiver
       ? 0
       : (p.total != null ? Number(p.total) : (amt + lfPaid));
@@ -1339,6 +1385,7 @@ export function normalizeYouthPaymentsLedger(paymentsList = [], studentsById = n
       branchId,
       branchCode: brObj.code || brObj.branchCode || p.recordedAtBranchCode || s?.branchCode || '',
       branchName: p.recordedAtBranchName || s?.branchName || brObj.name || '',
+      ...loc,
       courseId: s?.courseId || '',
       courseCode: cObj.courseCode || cObj.code || s?.courseCode || '',
       courseName: s?.courseName || cObj.name || '',

@@ -4,18 +4,18 @@
 // 10th, late fine Rs 1/day from the 11th.
 import { db } from '../config/firebase-config.js';
 import { collection, getDocs, query, where, doc, getDoc, updateDoc, runTransaction, serverTimestamp } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.175';
-import { registerDirty, confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.175';
-import { PAGE_SIZE, buildStats, buildToolbar, renderPager } from '../components/list-page.js?v=1.8.175';
-import { createSelect } from '../components/ui-select.js?v=1.8.175';
-import { openMenu } from '../components/ui-menu.js?v=1.8.175';
-import { confirmDialog } from '../components/ui-confirm.js?v=1.8.175';
-import { formatINR, formatDateIN, formatPersonName } from '../utils/formatter.js?v=1.8.175';
-import { resolveUserDisplay, getRoleTitle } from '../services/user-directory.service.js?v=1.8.175';
-import { isCourseActive } from '../utils/session-rules.js?v=1.8.175';
-import { localToday, monthSeq, nextMonth } from '../utils/school-lifecycle.js?v=1.8.175';
-import { playPaymentSuccessSound } from '../utils/sound.js?v=1.8.175';
-import { daysLate, computeLateFee } from '../utils/school-billing.js?v=1.8.175';
+import { showToast } from '../components/toast.js?v=1.8.176';
+import { registerDirty, confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.176';
+import { PAGE_SIZE, buildStats, buildToolbar, renderPager } from '../components/list-page.js?v=1.8.176';
+import { createSelect } from '../components/ui-select.js?v=1.8.176';
+import { openMenu } from '../components/ui-menu.js?v=1.8.176';
+import { confirmDialog } from '../components/ui-confirm.js?v=1.8.176';
+import { formatINR, formatDateIN, formatPersonName } from '../utils/formatter.js?v=1.8.176';
+import { resolveUserDisplay, getRoleTitle } from '../services/user-directory.service.js?v=1.8.176';
+import { isCourseActive } from '../utils/session-rules.js?v=1.8.176';
+import { localToday, monthSeq, nextMonth } from '../utils/school-lifecycle.js?v=1.8.176';
+import { playPaymentSuccessSound } from '../utils/sound.js?v=1.8.176';
+import { daysLate, computeLateFee } from '../utils/school-billing.js?v=1.8.176';
 
 const COL = 'students';
 const BILLS_COL = 'bills';

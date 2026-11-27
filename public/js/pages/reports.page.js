@@ -1,16 +1,16 @@
 // reports.page.js — Read-only Youth Centre Reports page (#/reports)
 // Accessible to Super Admin (all branches + Section 5 Comparison) and Branch Head (own branch locked, Sections 1-4).
 
-import { createSelect } from '../components/ui-select.js?v=1.8.177';
-import { createBranchBatchFilter, clearPersistedBranchBatchFilters } from '../components/branch-batch-filter.js?v=1.8.177';
-import { renderDonutChart, renderBarChart, renderStackedBarChart, renderLineChart } from '../components/charts.js?v=1.8.177';
-import { showToast } from '../components/toast.js?v=1.8.177';
-import { renderEmptyTableState } from '../components/list-page.js?v=1.8.177';
+import { createSelect } from '../components/ui-select.js?v=1.8.178';
+import { createBranchBatchFilter, clearPersistedBranchBatchFilters } from '../components/branch-batch-filter.js?v=1.8.178';
+import { renderDonutChart, renderBarChart, renderStackedBarChart, renderLineChart } from '../components/charts.js?v=1.8.178';
+import { showToast } from '../components/toast.js?v=1.8.178';
+import { renderEmptyTableState } from '../components/list-page.js?v=1.8.178';
 import {
   getCachedSessions,
   loadSessions,
   getSelectedSession
-} from '../core/sessions.js?v=1.8.177';
+} from '../core/sessions.js?v=1.8.178';
 import {
   ensureReferenceData,
   scopeReferenceDataByCtx,
@@ -27,8 +27,8 @@ import {
   formatINR,
   fmtDate,
   todayISO
-} from '../services/report.service.js?v=1.8.177';
-import { resolveUserDisplay, getRoleTitle } from '../services/user-directory.service.js?v=1.8.177';
+} from '../services/report.service.js?v=1.8.178';
+import { resolveUserDisplay, getRoleTitle } from '../services/user-directory.service.js?v=1.8.178';
 
 const FILTER_STORAGE_PREFIX = 'uicms.rep.v1.';
 
@@ -214,18 +214,6 @@ function updateHeaderUi() {
   $('rep-subtitle').textContent = sessName
     ? `Read-only analytics for ${sessName} across collections, dues, and students.`
     : 'Read-only analytics across collections, dues, students, and performance.';
-
-  const badge = $('rep-scope-badge');
-  if (badge) {
-    badge.hidden = false;
-    if (state.isBranchHead) {
-      const br = state.meta?.branchesById?.[state.profile.branchId];
-      const brLbl = br?.code || state.profile.branchName || state.profile.branchId;
-      badge.textContent = `${getRoleTitle('branch_head')} · ${brLbl}`;
-    } else {
-      badge.textContent = `${getRoleTitle('superadmin')} · All Branches`;
-    }
-  }
 }
 
 function initControls() {
@@ -293,12 +281,6 @@ function syncSegmentButtons() {
 }
 
 function bindEvents() {
-  $('rep-mobile-filters-btn')?.addEventListener('click', () => {
-    const tb = $('rep-toolbar');
-    const open = tb.classList.toggle('is-filters-open');
-    $('rep-mobile-filters-btn')?.setAttribute('aria-expanded', String(open));
-  });
-
   const onCustomDateInput = () => {
     if (!state || state.filters.datePreset !== 'custom') return;
     state.filters.dateFrom = $('rep-date-from').value || '';
@@ -339,8 +321,6 @@ function bindEvents() {
 
   $('rep-csv-staff')?.addEventListener('click', () => exportTableCsv('staff'));
   $('rep-csv-dues-group')?.addEventListener('click', () => exportTableCsv('duesGroup'));
-  $('rep-csv-upcoming')?.addEventListener('click', () => exportTableCsv('upcoming'));
-  $('rep-csv-top-dues')?.addEventListener('click', () => exportTableCsv('topDues'));
   $('rep-csv-batches')?.addEventListener('click', () => exportTableCsv('batches'));
   $('rep-csv-branch-comp')?.addEventListener('click', () => exportTableCsv('branchComp'));
   $('rep-csv-session-comp')?.addEventListener('click', () => exportTableCsv('sessionComp'));
@@ -534,6 +514,8 @@ function showError(err) {
 function resolveEffectiveDateWindow() {
   if (!state) return { dateFrom: '', dateTo: '' };
   const p = state.filters.datePreset || 'session';
+  // "Whole session" filters strictly by sessionId (no date window cutoff) so advance session receipts count.
+  if (p === 'session') return { dateFrom: '', dateTo: '' };
   if (p === 'custom') {
     return { dateFrom: state.filters.dateFrom || '', dateTo: state.filters.dateTo || '' };
   }
@@ -543,7 +525,6 @@ function resolveEffectiveDateWindow() {
 function updateFilterStatusAndResetBtn() {
   if (!state) return;
   const bb = state.bbFilter ? state.bbFilter.getValue() : { branchId: 'all', batchId: 'all' };
-  const { dateFrom, dateTo } = resolveEffectiveDateWindow();
 
   let activeCount = 0;
   if (!state.isBranchHead && bb.branchId !== 'all') activeCount++;
@@ -551,17 +532,10 @@ function updateFilterStatusAndResetBtn() {
   if (state.filters.courseId !== 'all') activeCount++;
   if (state.filters.datePreset !== 'session') activeCount++;
 
-  $('rep-reset-filters').hidden = activeCount === 0;
-  const mobBadge = $('rep-mobile-filters-count');
-  if (mobBadge) {
-    mobBadge.textContent = String(activeCount);
-    mobBadge.hidden = activeCount === 0;
+  const resetBtn = $('rep-reset-filters');
+  if (resetBtn) {
+    resetBtn.disabled = activeCount === 0;
   }
-
-  const rangeLabel = dateFrom || dateTo
-    ? (dateFrom === dateTo ? fmtDate(dateFrom) : `${dateFrom ? fmtDate(dateFrom) : 'Start'} – ${dateTo ? fmtDate(dateTo) : 'Today'}`)
-    : (state.activeSession?.name || 'All session');
-  $('rep-filter-meta').textContent = `${rangeLabel} · ${state.totalReads} cached/db reads`;
 }
 
 function computeAndRenderAnalytics() {
@@ -628,6 +602,11 @@ function renderKpisSection() {
   setKpi('late-waived', formatINR(k.lateFeesWaived.value), k.lateFeesWaived);
   setKpi('admissions', String(k.newAdmissions.value), k.newAdmissions);
   setKpi('active', String(k.activeStudents.value), k.activeStudents);
+
+  const rateVal = `${k.collectionRate.value}%`;
+  setKpi('rate', rateVal, k.collectionRate);
+  const rateBar = $('rep-kpi-rate-bar');
+  if (rateBar) rateBar.style.width = `${k.collectionRate.barPct || 0}%`;
 }
 
 function renderMoneySection() {
@@ -640,6 +619,8 @@ function renderMoneySection() {
     renderBarChart(trendHost, {
       items: m.trendPoints,
       valueFormatter: formatINR,
+      viewWidth: 960,
+      height: 195,
       color: '#323A85',
       emptyText: 'No collections in selected period'
     });
@@ -647,6 +628,8 @@ function renderMoneySection() {
     renderLineChart(trendHost, {
       points: m.trendPoints,
       valueFormatter: formatINR,
+      viewWidth: 960,
+      height: 195,
       color: '#323A85',
       emptyText: 'No collections in selected period'
     });
@@ -737,61 +720,6 @@ function renderDuesSection() {
       tdOv.appendChild(mk('span', `fr-money ${r.overdue > 0 ? 'danger' : 'muted'}`, formatINR(r.overdue)));
       tr.append(tdN, tdSt, tdOut, tdOv);
       grpTbody.appendChild(tr);
-    });
-  }
-
-  // 3c Upcoming 30 days
-  $('rep-upcoming-total').textContent = `${d.upcoming30Days.length} items · ${formatINR(d.upcoming30Total)}`;
-  const upTbody = $('rep-upcoming-tbody');
-  upTbody.innerHTML = '';
-  if (!d.upcoming30Days.length) {
-    renderEmptyTableState(upTbody, { colSpan: 4, title: 'No dues in next 30 days', desc: 'No scheduled unpaid installments fall within the next 30 days.' });
-  } else {
-    d.upcoming30Days.slice(0, 25).forEach((u) => {
-      const tr = mk('tr');
-      const tdSt = mk('td', 'lp-td-primary');
-      const link = mk('a', 'fr-student-link', u.studentName);
-      link.href = `#/students/${encodeURIComponent(u.studentDocId)}`;
-      tdSt.append(link, mk('span', 'fr-sub-ellipsis', `${u.studentId} · ${u.courseLabel}`));
-
-      const tdFee = mk('td', '', u.whatIsDue); tdFee.dataset.label = 'Fee Item';
-      const tdDt = mk('td', '', fmtDate(u.dueDate)); tdDt.dataset.label = 'Due Date';
-      const tdAmt = mk('td', 'num', formatINR(u.amount)); tdAmt.dataset.label = 'Amount';
-      tr.append(tdSt, tdFee, tdDt, tdAmt);
-      upTbody.appendChild(tr);
-    });
-  }
-
-  // 3d Top 10 highest dues (click opens Student Profile)
-  const topList = d.top10Students || [];
-  $('rep-top-dues-count').textContent = `Top ${topList.length}`;
-  const topTbody = $('rep-top-dues-tbody');
-  topTbody.innerHTML = '';
-  if (!topList.length) {
-    renderEmptyTableState(topTbody, { colSpan: 4, title: 'Zero student dues', desc: 'No students have outstanding balances in this scope.' });
-  } else {
-    topList.forEach((s) => {
-      const tr = mk('tr', 'rep-click-row');
-      tr.addEventListener('click', () => {
-        location.hash = `#/students/${encodeURIComponent(s.studentDocId)}`;
-      });
-
-      const tdSt = mk('td', 'lp-td-primary');
-      const link = mk('a', 'fr-student-link', s.studentName);
-      link.href = `#/students/${encodeURIComponent(s.studentDocId)}`;
-      tdSt.append(link, mk('span', 'fr-sub-ellipsis', s.studentId));
-
-      const tdCr = mk('td'); tdCr.dataset.label = 'Course & Branch';
-      tdCr.append(mk('div', '', s.courseLabel), mk('span', 'fr-sub-ellipsis', s.branchShort));
-
-      const tdOv = mk('td', 'num'); tdOv.dataset.label = 'Overdue';
-      tdOv.appendChild(mk('span', `fr-money ${s.overduePrincipal > 0 ? 'danger' : 'muted'}`, formatINR(s.overduePrincipal)));
-
-      const tdOut = mk('td', 'num'); tdOut.dataset.label = 'Outstanding';
-      tdOut.appendChild(mk('span', 'fr-money', formatINR(s.outstanding)));
-
-      tr.append(tdSt, tdCr, tdOv, tdOut);
-      topTbody.appendChild(tr);
     });
   }
 }
@@ -966,16 +894,6 @@ function exportTableCsv(kind) {
       [lbl, 'Active Students', 'Outstanding Dues', 'Overdue Principal'],
       getSelectedDuesRows().map((r) => [r.label, r.students, r.outstanding, r.overdue])
     );
-  } else if (kind === 'upcoming') {
-    downloadCsv(`youth-upcoming-30d-dues-${stamp}.csv`,
-      ['Student ID', 'Student Name', 'Course', 'Branch', 'Installment', 'Due Date', 'Amount'],
-      (a.dues.upcoming30Days || []).map((u) => [u.studentId, u.studentName, u.courseLabel, u.branchShort, u.whatIsDue, u.dueDate, u.amount])
-    );
-  } else if (kind === 'topDues') {
-    downloadCsv(`youth-top-student-dues-${stamp}.csv`,
-      ['Student ID', 'Student Name', 'Course', 'Branch', 'Total Course Fee', 'Paid', 'Overdue Principal', 'Outstanding'],
-      (a.dues.top10Students || []).map((s) => [s.studentId, s.studentName, s.courseLabel, s.branchLabel, s.totalFee, s.paidFee, s.overduePrincipal, s.outstanding])
-    );
   } else if (kind === 'batches') {
     downloadCsv(`youth-batch-filling-${stamp}.csv`,
       ['Batch', 'Branch', 'Enrolled Active', 'Capacity', 'Fill %', 'Full'],
@@ -1035,8 +953,12 @@ function handlePrintWholePage() {
     { label: 'Late fees collected', value: formatINR(k.lateFeesCollected.value), sub: k.lateFeesCollected.delta.text },
     { label: 'Late fees waived', value: formatINR(k.lateFeesWaived.value), sub: k.lateFeesWaived.delta.text },
     { label: 'New admissions', value: String(k.newAdmissions.value), sub: k.newAdmissions.delta.text },
-    { label: 'Active students', value: String(k.activeStudents.value), sub: k.activeStudents.delta.text }
+    { label: 'Active students', value: String(k.activeStudents.value), sub: k.activeStudents.delta.text },
+    { label: 'Collection rate', value: `${k.collectionRate.value}%`, sub: k.collectionRate.sub }
   ];
+
+  const grpRows = getSelectedDuesRows();
+  const grpColLabel = state.duesGroupBy === 'batch' ? 'Batch' : (state.duesGroupBy === 'course' ? 'Course' : 'Branch');
 
   const sections = [
     {
@@ -1061,18 +983,13 @@ function handlePrintWholePage() {
         chartHtmlWithTitle(`Outstanding Dues by ${toTitleCaseIfCaps(state.duesGroupBy)}`, 'rep-chart-dues-group'),
         chartHtmlWithTitle('Overdue Ageing', 'rep-chart-ageing')
       ],
-      tables: [
-        {
-          title: `Upcoming Dues (Next 30 Days) — Total: ${formatINR(a.dues.upcoming30Total)}`,
-          columns: [{ label: 'Student' }, { label: 'Course' }, { label: 'Fee Item' }, { label: 'Due Date' }, { label: 'Amount', num: true }],
-          rows: (a.dues.upcoming30Days || []).slice(0, 30).map((u) => [`${u.studentName} (${u.studentId})`, u.courseLabel, u.whatIsDue, fmtDate(u.dueDate), formatINR(u.amount)])
-        },
-        {
-          title: 'Top 10 Students With Highest Dues',
-          columns: [{ label: 'Student' }, { label: 'Course & Branch' }, { label: 'Overdue', num: true }, { label: 'Outstanding', num: true }],
-          rows: (a.dues.top10Students || []).map((s) => [`${s.studentName} (${s.studentId})`, `${s.courseLabel} · ${s.branchShort}`, formatINR(s.overduePrincipal), formatINR(s.outstanding)])
-        }
-      ]
+      columns: [
+        { label: grpColLabel },
+        { label: 'Active Students', num: true },
+        { label: 'Outstanding Dues', num: true },
+        { label: 'Overdue Principal', num: true }
+      ],
+      rows: grpRows.map((r) => [r.label, r.students, formatINR(r.outstanding), formatINR(r.overdue)])
     },
     {
       title: 'Students & Batch Capacity',

@@ -13,7 +13,6 @@
         <p id="rep-subtitle">Read-only analytics across collections, dues, students, and performance.</p>
       </div>
       <div class="lp-head-actions">
-        <span id="rep-scope-badge" class="pill indigo" hidden></span>
         <button type="button" id="rep-print" class="ui-btn primary sm">
           <i data-lucide="printer"></i>
           <span>Print / Save as PDF</span>
@@ -41,46 +40,32 @@
       </button>
     </div>
 
-    <!-- Global Filters (apply to every section, persisted across navigation) -->
-    <section id="rep-toolbar" class="lp-toolbar lp-toolbar-oneline" aria-label="Report filters">
-      <div class="lp-toolbar-row-filters">
-        <div class="lp-toolbar-row-search rep-filter-head-mob">
-          <div class="rep-filter-status-inline">
-            <i data-lucide="filter"></i>
-            <span id="rep-filter-meta">Loading session data...</span>
-          </div>
-          <button type="button" id="rep-mobile-filters-btn" class="ui-btn ghost lp-mobile-filter-btn" aria-expanded="false">
-            <i data-lucide="sliders-horizontal"></i>
-            <span>Filters</span>
-            <span id="rep-mobile-filters-count" class="lp-filter-badge" hidden>0</span>
-          </button>
+    <!-- Global Filters: single row on desktop (Branch | Batch | Course | Date range | Reset | Refresh) -->
+    <section id="rep-toolbar" class="lp-toolbar rep-toolbar" aria-label="Report filters">
+      <div class="rep-filters-row">
+        <div id="rep-bb-host" class="rep-bb-host"></div>
+
+        <div class="lp-filter">
+          <span class="lp-filter-label">Course</span>
+          <div id="rep-course-host" class="lp-filter-select"></div>
         </div>
 
-        <div class="lp-toolbar-drawer">
-          <div id="rep-bb-host" class="lp-bb-host"></div>
+        <div class="lp-filter">
+          <span class="lp-filter-label">Date Range</span>
+          <div id="rep-date-host" class="lp-filter-select"></div>
+        </div>
 
-          <div class="lp-filter">
-            <span class="lp-filter-label">Course</span>
-            <div id="rep-course-host" class="lp-filter-select"></div>
-          </div>
-
-          <div class="lp-filter">
-            <span class="lp-filter-label">Date Range</span>
-            <div id="rep-date-host" class="lp-filter-select"></div>
-          </div>
-
-          <button type="button" id="rep-reset-filters" class="ui-btn ghost sm" hidden>
+        <div class="rep-filter-actions">
+          <button type="button" id="rep-reset-filters" class="lp-refresh rep-icon-btn" aria-label="Reset filters" title="Reset filters" disabled>
             <i data-lucide="rotate-ccw"></i>
-            <span>Reset filters</span>
           </button>
-
-          <button type="button" id="rep-refresh" class="lp-refresh" aria-label="Refresh reports" title="Refresh reports">
+          <button type="button" id="rep-refresh" class="lp-refresh rep-icon-btn" aria-label="Refresh reports" title="Refresh reports">
             <i data-lucide="refresh-cw"></i>
           </button>
         </div>
       </div>
 
-      <div id="rep-date-custom" class="lp-toolbar-row-custom rep-date-subbar" hidden>
+      <div id="rep-date-custom" class="rep-date-subbar" hidden>
         <div class="rep-date-inline">
           <div class="rep-date-pair">
             <label for="rep-date-from" class="lp-filter-label">From</label>
@@ -94,7 +79,7 @@
       </div>
     </section>
 
-    <!-- ================= SECTION 1: KPI CARDS ================= -->
+    <!-- ================= SECTION 1: KPI CARDS (4 + 4 GRID) ================= -->
     <section id="rep-sec-kpis" class="rep-sec" aria-label="Key Performance Indicators">
       <div id="rep-kpis" class="rep-kpi-grid">
         <div class="lp-stat green">
@@ -166,6 +151,19 @@
             <span id="rep-kpi-active-delta" class="rep-delta neutral">—</span>
           </div>
         </div>
+
+        <div class="lp-stat emerald">
+          <div class="lp-stat-ic"><i data-lucide="percent"></i></div>
+          <div class="lp-stat-txt">
+            <span class="lp-stat-label">Collection rate</span>
+            <span id="rep-kpi-rate" class="lp-stat-value">—</span>
+            <div class="rep-rate-track" aria-hidden="true">
+              <div id="rep-kpi-rate-bar" class="rep-rate-fill" style="width:0%"></div>
+            </div>
+            <span id="rep-kpi-rate-sub" class="lp-stat-sub">Loading...</span>
+            <span id="rep-kpi-rate-delta" class="rep-delta neutral">—</span>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -179,7 +177,7 @@
       </div>
 
       <div class="rep-grid-2">
-        <div class="lp-card rep-chart-card rep-span-2">
+        <div class="lp-card rep-chart-card rep-trend-card rep-span-2">
           <div class="lp-card-head">
             <div class="lp-card-title">
               <i data-lucide="trending-up"></i>
@@ -243,7 +241,7 @@
       <div class="rep-sec-head">
         <div>
           <h3><i data-lucide="alarm-clock"></i><span>Dues &amp; Ageing</span></h3>
-          <p>Outstanding balances, overdue ageing buckets, upcoming 30-day installments, and top debtors.</p>
+          <p>Outstanding balances and overdue ageing buckets across the selected scope.</p>
         </div>
       </div>
 
@@ -293,62 +291,6 @@
           </table>
         </div>
       </div>
-
-      <div class="rep-grid-2 rep-mt">
-        <div class="lp-card adm-table-card">
-          <div class="lp-card-head">
-            <div class="lp-card-title">
-              <i data-lucide="calendar-clock"></i>
-              <span>Upcoming Dues (Next 30 Days)</span>
-              <span id="rep-upcoming-total" class="pill sky">₹0</span>
-            </div>
-            <button type="button" id="rep-csv-upcoming" class="ui-btn ghost sm">
-              <i data-lucide="download"></i>
-              <span>Download CSV</span>
-            </button>
-          </div>
-          <div class="lp-scroll">
-            <table id="rep-upcoming-table" class="lp-table lp-mobile-cards">
-              <thead>
-                <tr>
-                  <th>Student</th>
-                  <th>Installment / Fee</th>
-                  <th>Due Date</th>
-                  <th class="num">Amount</th>
-                </tr>
-              </thead>
-              <tbody id="rep-upcoming-tbody"></tbody>
-            </table>
-          </div>
-        </div>
-
-        <div class="lp-card adm-table-card">
-          <div class="lp-card-head">
-            <div class="lp-card-title">
-              <i data-lucide="alert-triangle"></i>
-              <span>Top 10 Students With Highest Dues</span>
-              <span id="rep-top-dues-count" class="lp-count">0 students</span>
-            </div>
-            <button type="button" id="rep-csv-top-dues" class="ui-btn ghost sm">
-              <i data-lucide="download"></i>
-              <span>Download CSV</span>
-            </button>
-          </div>
-          <div class="lp-scroll">
-            <table id="rep-top-dues-table" class="lp-table lp-mobile-cards">
-              <thead>
-                <tr>
-                  <th>Student</th>
-                  <th>Course &amp; Branch</th>
-                  <th class="num">Overdue</th>
-                  <th class="num">Outstanding</th>
-                </tr>
-              </thead>
-              <tbody id="rep-top-dues-tbody"></tbody>
-            </table>
-          </div>
-        </div>
-      </div>
     </section>
 
     <!-- ================= SECTION 4: STUDENTS ================= -->
@@ -356,7 +298,7 @@
       <div class="rep-sec-head">
         <div>
           <h3><i data-lucide="users"></i><span>Students &amp; Capacity</span></h3>
-          <p>Monthly admissions, course distribution, status breakdown, batch capacity, and gender split.</p>
+          <p>Monthly admissions, course distribution, status breakdown, gender split, and batch capacity.</p>
         </div>
       </div>
 

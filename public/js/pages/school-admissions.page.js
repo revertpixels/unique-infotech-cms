@@ -9,23 +9,23 @@ import {
   collection, getDocs, query, where, doc, getDoc, addDoc, updateDoc, serverTimestamp,
   runTransaction, deleteField, writeBatch, deleteDoc
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.177';
-import { registerDirty, confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.177';
-import { buildStats, buildToolbar, renderPager, PAGE_SIZE } from '../components/list-page.js?v=1.8.177';
-import { createSelect } from '../components/ui-select.js?v=1.8.177';
-import { createBranchBatchFilter } from '../components/branch-batch-filter.js?v=1.8.177';
-import { openMenu } from '../components/ui-menu.js?v=1.8.177';
-import { openPopup } from '../components/modal.js?v=1.8.177';
-import { createDatePicker, createMonthPicker } from '../components/ui-datepicker.js?v=1.8.177';
-import { confirmDialog } from '../components/ui-confirm.js?v=1.8.177';
-import { formatINR, formatDateIN, initials } from '../utils/formatter.js?v=1.8.177';
-import { validatePhone, validateEmail, validateDOB, validateName, validateRequired } from '../utils/validator.js?v=1.8.177';
-import { readStudentId, readReceiptNo, writeCounter } from '../services/admission.service.js?v=1.8.177';
-import { isCourseActive, batchAllowsCourse, todayISO } from '../utils/session-rules.js?v=1.8.177';
-import { compressTo100KB, readAsDataURL, blobToDataURL, isImageFile } from '../utils/image-compress.js?v=1.8.177';
-import { firstMonthlyMonth } from '../utils/school-receipt.js?v=1.8.177';
-import { playPaymentSuccessSound } from '../utils/sound.js?v=1.8.177';
-import { getRoleTitle } from '../services/user-directory.service.js?v=1.8.177';
+import { showToast } from '../components/toast.js?v=1.8.178';
+import { registerDirty, confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.178';
+import { buildStats, buildToolbar, renderPager, PAGE_SIZE } from '../components/list-page.js?v=1.8.178';
+import { createSelect } from '../components/ui-select.js?v=1.8.178';
+import { createBranchBatchFilter } from '../components/branch-batch-filter.js?v=1.8.178';
+import { openMenu } from '../components/ui-menu.js?v=1.8.178';
+import { openPopup } from '../components/modal.js?v=1.8.178';
+import { createDatePicker, createMonthPicker } from '../components/ui-datepicker.js?v=1.8.178';
+import { confirmDialog } from '../components/ui-confirm.js?v=1.8.178';
+import { formatINR, formatDateIN, initials } from '../utils/formatter.js?v=1.8.178';
+import { validatePhone, validateEmail, validateDOB, validateName, validateRequired } from '../utils/validator.js?v=1.8.178';
+import { readStudentId, readReceiptNo, writeCounter } from '../services/admission.service.js?v=1.8.178';
+import { isCourseActive, batchAllowsCourse, todayISO } from '../utils/session-rules.js?v=1.8.178';
+import { compressTo100KB, readAsDataURL, blobToDataURL, isImageFile } from '../utils/image-compress.js?v=1.8.178';
+import { firstMonthlyMonth } from '../utils/school-receipt.js?v=1.8.178';
+import { playPaymentSuccessSound } from '../utils/sound.js?v=1.8.178';
+import { getRoleTitle } from '../services/user-directory.service.js?v=1.8.178';
 
 const COL = 'students';
 const GENDERS = [

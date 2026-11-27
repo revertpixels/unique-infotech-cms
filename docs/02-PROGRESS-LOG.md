@@ -39,6 +39,36 @@
 
 ---
 
+### [2026-11-27 11:20] Version 1.8.178 — Phase 6 · Youth Centre Reports Review Fixes (Whole Session Bug, Header/Filter Redesign, Collection Rate & Sharp Compact Charts)
+
+**What was built:**
+- **Whole-Session Filtering & Dataset Parity (`public/js/services/report.service.js`, `public/js/pages/reports.page.js`)**:
+  - Updated `"Whole session"` (`datePreset === 'session'`) to filter payments strictly by `sessionId` (with zero payment-date cutoff) so advance receipts recorded before `session.startDate` (e.g. `1st Session - 2027`) appear in KPIs, Money Trend, Mode/Fee donuts, Staff Collections, Branch Comparison, and Session Comparison identically.
+  - Unified `sessionComparison.current` and `branchComparison` onto the exact same filtered entry dataset so `Total collected === Session Comparison collected === Payment History total` across all filter presets.
+- **Removed Upcoming Dues & Top 10 Debtors (`public/pages/reports.html`, `public/js/pages/reports.page.js`, `public/js/services/report.service.js`)**:
+  - Removed the Upcoming Dues (Next 30 Days) and Top 10 Students With Highest Dues tables, CSV exports, print subsections, and `evaluateYouthStudentDues` iteration inside `buildYouthReportsData`.
+- **Header, Filter Bar & 4+4 KPI Grid (`public/pages/reports.html`, `public/css/pages/financial-reports.css`, `public/js/pages/reports.page.js`)**:
+  - Removed header scope pill (`#rep-scope-badge`) and filter read-count meta line (`#rep-filter-meta`), keeping `Print / Save as PDF` right-aligned.
+  - Redesigned filter bar to a clean single desktop row (`Branch | Batch | Course | Date Range | Reset icon button (tooltip "Reset filters") | Refresh`), wrapping into 2 columns on tablet and 1 column on mobile.
+  - Added 8th equal-height KPI card **"Collection rate"** (`collected / total course fee %`) with a square progress bar and `vs previous period` change badge.
+- **Compact & Sharp-Cornered Charts (`public/js/components/charts.js`, `public/css/pages/financial-reports.css`, `public/js/services/report.service.js`)**:
+  - Compact chart heights (`~195–230px`), donuts (`160px`) with side legends on desktop, smaller point markers (`r=3`, hover `4.5`), lighter `#F1F5F9` gridlines, single-bar width capped at `<= 38px`, compact `"No data"` rows, and square `90deg` corners (`rx="0"`, `ry="0"`, `border-radius: 0`) across all bars, progress tracks, and legend swatches.
+
+**Why:**
+- Fixed the pre-session payment mismatch on future sessions (`1st Session - 2027`) and aligned the Reports page visuals cleanly with the rest of the CMS.
+
+**Files touched:**
+- MODIFIED: `public/js/services/report.service.js`, `public/js/components/charts.js`, `public/pages/reports.html`, `public/js/pages/reports.page.js`, `public/css/pages/financial-reports.css`, `docs/02-PROGRESS-LOG.md`
+
+**Firestore changes:**
+- None (read-only reporting page; zero writes, zero rule/index/fee-math changes).
+
+**Tested on:**
+- Chrome Desktop (`1440x900` Super Admin & Branch Head) + Mobile (`390x844`): ✅
+- Node unit + reconciliation suite (`run-tests.mjs` & `verify-reports.mjs`): ✅
+
+---
+
 ### [2026-11-27 10:42] Version 1.8.177 — Phase 6 · Youth Centre Reports (#/reports) with Plain-SVG Charts, Role Scoping & Whole-Page Print/PDF
 
 **What was built:**

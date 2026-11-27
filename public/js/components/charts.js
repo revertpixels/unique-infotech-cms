@@ -1,5 +1,5 @@
 // charts.js — Zero-dependency plain-SVG responsive & print-safe charts (donut, bar, stacked/grouped bar, line).
-// All colors and typography are written directly onto SVG primitives so cloned <svg> nodes print identically in PDF/Print.
+// Uses crisp 90-degree square corners on all bars and swatches; preserves inline attributes for PDF/Print.
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
@@ -69,8 +69,8 @@ function renderEmptyState(host, text = 'No data') {
   host.innerHTML = '';
   const empty = htmlEl('div', 'uich-empty');
   empty.innerHTML =
-    '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
-      '<circle cx="12" cy="12" r="9" opacity="0.35" stroke-dasharray="3 3"></circle>' +
+    '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+      '<circle cx="12" cy="12" r="9" opacity="0.4"></circle>' +
       '<line x1="8" y1="12" x2="16" y2="12"></line>' +
     '</svg>';
   empty.appendChild(htmlEl('span', 'uich-empty-text', text));
@@ -108,15 +108,15 @@ function truncLabel(s, max = 14) {
 }
 
 /**
- * Plain-SVG Donut / Pie Chart with center readout, hover tooltips, and legend.
+ * Plain-SVG Donut Chart with center readout, hover tooltips, and side legend on desktop.
  */
 export function renderDonutChart(host, {
   slices = [],
   centerLabel = 'Total',
   centerValue = '',
   valueFormatter = defaultFmt,
-  size = 176,
-  thickness = 28,
+  size = 160,
+  thickness = 24,
   emptyText = 'No data'
 } = {}) {
   const valid = (slices || [])
@@ -135,13 +135,13 @@ export function renderDonutChart(host, {
   }
 
   const ctx = ensureContainer(host, 'uich-donut-wrap');
-  const cx = 90;
-  const cy = 90;
-  const r = 64;
+  const cx = 86;
+  const cy = 86;
+  const r = 62;
   const circ = 2 * Math.PI * r;
 
   const svg = svgEl('svg', {
-    viewBox: '0 0 180 180',
+    viewBox: '0 0 172 172',
     width: size,
     height: size,
     class: 'uich-svg uich-donut-svg',
@@ -149,13 +149,12 @@ export function renderDonutChart(host, {
     'aria-label': centerLabel || 'Donut chart'
   });
 
-  // Subtle track circle
   svg.appendChild(svgEl('circle', {
     cx,
     cy,
     r,
     fill: 'none',
-    stroke: '#ECEEF4',
+    stroke: '#F1F5F9',
     'stroke-width': thickness
   }));
 
@@ -165,7 +164,7 @@ export function renderDonutChart(host, {
   valid.forEach((s, idx) => {
     const frac = s.value / total;
     const pct = Math.round(frac * 100);
-    const gap = valid.length > 1 ? Math.min(2.2, circ * 0.008) : 0;
+    const gap = valid.length > 1 ? Math.min(2, circ * 0.008) : 0;
     const dashLen = Math.max(1.5, frac * circ - gap);
     const arc = svgEl('circle', {
       cx,
@@ -184,7 +183,7 @@ export function renderDonutChart(host, {
     const onEnter = (ev) => {
       sliceEls.forEach((el, j) => {
         el.setAttribute('opacity', j === idx ? '1' : '0.45');
-        el.setAttribute('stroke-width', j === idx ? String(thickness + 4) : String(thickness));
+        el.setAttribute('stroke-width', j === idx ? String(thickness + 3) : String(thickness));
       });
       ctx.showTip(ev, s.label, `${valueFormatter(s.value)} (${pct}%)${s.sub ? ' · ' + s.sub : ''}`);
     };
@@ -203,9 +202,8 @@ export function renderDonutChart(host, {
     sliceEls.push(arc);
   });
 
-  // Center text rendered in SVG so print/PDF preserves it natively
   const cValText = centerValue || valueFormatter(total);
-  const valFontSize = String(cValText).length > 9 ? '13' : (String(cValText).length > 6 ? '15' : '17');
+  const valFontSize = String(cValText).length > 9 ? '12.5' : (String(cValText).length > 6 ? '14.5' : '16');
   svg.appendChild(svgEl('text', {
     x: cx,
     y: cy - 2,
@@ -217,10 +215,10 @@ export function renderDonutChart(host, {
   }, cValText));
   svg.appendChild(svgEl('text', {
     x: cx,
-    y: cy + 15,
+    y: cy + 14,
     'text-anchor': 'middle',
     fill: '#6B7280',
-    'font-size': '10.5',
+    'font-size': '10',
     'font-weight': '600',
     'font-family': 'Plus Jakarta Sans, sans-serif'
   }, truncLabel(centerLabel, 14)));
@@ -237,7 +235,7 @@ export function renderDonutChart(host, {
     li.addEventListener('mouseenter', (ev) => {
       sliceEls.forEach((el, j) => {
         el.setAttribute('opacity', j === idx ? '1' : '0.45');
-        el.setAttribute('stroke-width', j === idx ? String(thickness + 4) : String(thickness));
+        el.setAttribute('stroke-width', j === idx ? String(thickness + 3) : String(thickness));
       });
       ctx.showTip(ev, s.label, `${valueFormatter(s.value)} (${pct}%)`);
     });
@@ -255,13 +253,14 @@ export function renderDonutChart(host, {
 }
 
 /**
- * Plain-SVG Bar Chart (vertical or horizontal) with tooltips and responsive viewBox.
+ * Plain-SVG Bar Chart (vertical or horizontal) with sharp 90-degree corners and capped bar width.
  */
 export function renderBarChart(host, {
   items = [],
   horizontal = false,
   valueFormatter = defaultFmt,
-  height = 225,
+  viewWidth = 520,
+  height = 195,
   color = '#323A85',
   emptyText = 'No data',
   showValues = true,
@@ -284,13 +283,13 @@ export function renderBarChart(host, {
   const ctx = ensureContainer(host, horizontal ? 'uich-hbar-wrap' : 'uich-bar-wrap');
 
   if (horizontal) {
-    const rowH = 30;
-    const padL = 128;
-    const padR = 72;
-    const padT = 10;
-    const padB = 12;
-    const W = 540;
-    const H = Math.max(120, padT + padB + valid.length * rowH);
+    const rowH = 26;
+    const padL = 122;
+    const padR = 68;
+    const padT = 8;
+    const padB = 8;
+    const W = viewWidth;
+    const H = Math.max(96, padT + padB + valid.length * rowH);
     const maxVal = Math.max(1, ...valid.map((v) => v.value));
     const plotW = W - padL - padR;
 
@@ -308,29 +307,31 @@ export function renderBarChart(host, {
 
       svg.appendChild(svgEl('text', {
         x: padL - 8,
-        y: y + 17,
+        y: y + 15,
         'text-anchor': 'end',
         fill: '#374151',
-        'font-size': '11.5',
+        'font-size': '10.5',
         'font-weight': '600',
         'font-family': 'Plus Jakarta Sans, sans-serif'
       }, truncLabel(it.shortLabel, 18)));
 
       svg.appendChild(svgEl('rect', {
         x: padL,
-        y: y + 5,
+        y: y + 4,
         width: plotW,
-        height: 16,
-        rx: 4,
+        height: 14,
+        rx: 0,
+        ry: 0,
         fill: '#F1F5F9'
       }));
 
       const bar = svgEl('rect', {
         x: padL,
-        y: y + 5,
+        y: y + 4,
         width: barW.toFixed(1),
-        height: 16,
-        rx: 4,
+        height: 14,
+        rx: 0,
+        ry: 0,
         fill: it.color,
         style: onBarClick ? 'cursor:pointer;' : 'cursor:default;'
       });
@@ -350,9 +351,9 @@ export function renderBarChart(host, {
       svg.appendChild(bar);
       svg.appendChild(svgEl('text', {
         x: padL + plotW + 8,
-        y: y + 17,
+        y: y + 15,
         fill: '#171717',
-        'font-size': '11.5',
+        'font-size': '10.5',
         'font-weight': '700',
         'font-family': 'Plus Jakarta Sans, sans-serif'
       }, valueFormatter(it.value)));
@@ -362,13 +363,13 @@ export function renderBarChart(host, {
     return;
   }
 
-  // Vertical bar chart
-  const W = 560;
+  // Vertical bar chart (proportional bars capped at <= 38px)
+  const W = viewWidth;
   const H = height;
-  const padL = 52;
+  const padL = 50;
   const padR = 16;
   const padT = 18;
-  const padB = 46;
+  const padB = 34;
   const plotW = W - padL - padR;
   const plotH = H - padT - padB;
   const maxVal = Math.max(1, ...valid.map((v) => v.value));
@@ -389,7 +390,7 @@ export function renderBarChart(host, {
       y1: y.toFixed(1),
       x2: W - padR,
       y2: y.toFixed(1),
-      stroke: tk === 0 ? '#CBD5E1' : '#EEF1F6',
+      stroke: tk === 0 ? '#E2E8F0' : '#F1F5F9',
       'stroke-width': '1'
     }));
     svg.appendChild(svgEl('text', {
@@ -397,13 +398,15 @@ export function renderBarChart(host, {
       y: (y + 3.5).toFixed(1),
       'text-anchor': 'end',
       fill: '#6B7280',
-      'font-size': '10.5',
+      'font-size': '10',
       'font-family': 'Plus Jakarta Sans, sans-serif'
     }, shortAxisNum(tk)));
   });
 
   const step = plotW / valid.length;
-  const barW = Math.max(8, Math.min(40, step * 0.56));
+  const barW = valid.length <= 2
+    ? Math.min(36, Math.max(18, step * 0.28))
+    : Math.max(10, Math.min(38, step * 0.48));
   const maxXLabels = 10;
   const skipStep = valid.length > maxXLabels ? Math.ceil(valid.length / maxXLabels) : 1;
 
@@ -418,7 +421,8 @@ export function renderBarChart(host, {
       y: y.toFixed(1),
       width: barW.toFixed(1),
       height: barH.toFixed(1),
-      rx: Math.min(4, barW / 2),
+      rx: 0,
+      ry: 0,
       fill: it.color,
       style: onBarClick ? 'cursor:pointer;' : 'cursor:default;'
     });
@@ -439,7 +443,7 @@ export function renderBarChart(host, {
     if (showValues && valid.length <= 10 && it.value > 0) {
       svg.appendChild(svgEl('text', {
         x: cx.toFixed(1),
-        y: Math.max(12, y - 5).toFixed(1),
+        y: Math.max(11, y - 5).toFixed(1),
         'text-anchor': 'middle',
         fill: '#374151',
         'font-size': '10',
@@ -451,13 +455,13 @@ export function renderBarChart(host, {
     if (idx % skipStep === 0 || idx === valid.length - 1) {
       svg.appendChild(svgEl('text', {
         x: cx.toFixed(1),
-        y: (H - 18).toFixed(1),
+        y: (H - 12).toFixed(1),
         'text-anchor': 'middle',
         fill: '#525252',
-        'font-size': '10.5',
+        'font-size': '10',
         'font-weight': '600',
         'font-family': 'Plus Jakarta Sans, sans-serif'
-      }, truncLabel(it.shortLabel, 10)));
+      }, truncLabel(it.shortLabel, valid.length <= 4 ? 20 : 12)));
     }
   });
 
@@ -465,16 +469,15 @@ export function renderBarChart(host, {
 }
 
 /**
- * Plain-SVG Grouped or Stacked Bar Chart for multi-series comparison.
- * series: [{ key, label, color }]
- * categories: [{ label, shortLabel, values: { [key]: number } }]
+ * Plain-SVG Grouped or Stacked Bar Chart with sharp 90-degree corners.
  */
 export function renderStackedBarChart(host, {
   categories = [],
   series = [],
   grouped = false,
   valueFormatter = defaultFmt,
-  height = 248,
+  viewWidth = 520,
+  height = 200,
   emptyText = 'No data'
 } = {}) {
   if (!categories.length || !series.length) {
@@ -500,12 +503,12 @@ export function renderStackedBarChart(host, {
   }
 
   const ctx = ensureContainer(host, 'uich-stacked-wrap');
-  const W = 580;
+  const W = viewWidth;
   const H = height;
-  const padL = 54;
-  const padR = 16;
-  const padT = 14;
-  const padB = 42;
+  const padL = 50;
+  const padR = 14;
+  const padT = 12;
+  const padB = 32;
   const plotW = W - padL - padR;
   const plotH = H - padT - padB;
   const { top, ticks } = niceTicks(maxVal, 4);
@@ -525,7 +528,7 @@ export function renderStackedBarChart(host, {
       y1: y.toFixed(1),
       x2: W - padR,
       y2: y.toFixed(1),
-      stroke: tk === 0 ? '#CBD5E1' : '#EEF1F6',
+      stroke: tk === 0 ? '#E2E8F0' : '#F1F5F9',
       'stroke-width': '1'
     }));
     svg.appendChild(svgEl('text', {
@@ -533,7 +536,7 @@ export function renderStackedBarChart(host, {
       y: (y + 3.5).toFixed(1),
       'text-anchor': 'end',
       fill: '#6B7280',
-      'font-size': '10.5',
+      'font-size': '10',
       'font-family': 'Plus Jakarta Sans, sans-serif'
     }, shortAxisNum(tk)));
   });
@@ -544,21 +547,24 @@ export function renderStackedBarChart(host, {
     const center = gx + groupStep / 2;
 
     if (grouped) {
-      const innerW = Math.min(groupStep * 0.72, series.length * 24);
-      const subW = Math.max(6, (innerW - (series.length - 1) * 3) / series.length);
-      const startX = center - (series.length * subW + (series.length - 1) * 3) / 2;
+      const gap = 3;
+      const maxSubW = categories.length <= 2 ? 26 : 24;
+      const innerW = Math.min(groupStep * 0.68, series.length * maxSubW + (series.length - 1) * gap);
+      const subW = Math.min(maxSubW, Math.max(8, (innerW - (series.length - 1) * gap) / series.length));
+      const startX = center - (series.length * subW + (series.length - 1) * gap) / 2;
 
       series.forEach((sr, si) => {
         const val = Math.max(0, Number(cat.values?.[sr.key] || 0));
         const bh = Math.max(val > 0 ? 3 : 0, (val / top) * plotH);
-        const bx = startX + si * (subW + 3);
+        const bx = startX + si * (subW + gap);
         const by = padT + plotH - bh;
         const rect = svgEl('rect', {
           x: bx.toFixed(1),
           y: by.toFixed(1),
           width: subW.toFixed(1),
           height: bh.toFixed(1),
-          rx: 3,
+          rx: 0,
+          ry: 0,
           fill: sr.color || CHART_PALETTE[si % CHART_PALETTE.length],
           style: 'cursor:pointer;'
         });
@@ -569,7 +575,7 @@ export function renderStackedBarChart(host, {
         svg.appendChild(rect);
       });
     } else {
-      const bw = Math.max(12, Math.min(42, groupStep * 0.55));
+      const bw = Math.max(12, Math.min(38, groupStep * 0.48));
       const bx = center - bw / 2;
       let accY = padT + plotH;
       series.forEach((sr, si) => {
@@ -582,7 +588,8 @@ export function renderStackedBarChart(host, {
           y: accY.toFixed(1),
           width: bw.toFixed(1),
           height: bh.toFixed(1),
-          rx: 2,
+          rx: 0,
+          ry: 0,
           fill: sr.color || CHART_PALETTE[si % CHART_PALETTE.length],
           style: 'cursor:pointer;'
         });
@@ -596,13 +603,13 @@ export function renderStackedBarChart(host, {
 
     svg.appendChild(svgEl('text', {
       x: center.toFixed(1),
-      y: (H - 16).toFixed(1),
+      y: (H - 11).toFixed(1),
       'text-anchor': 'middle',
       fill: '#374151',
-      'font-size': '11',
+      'font-size': '10.5',
       'font-weight': '600',
       'font-family': 'Plus Jakarta Sans, sans-serif'
-    }, truncLabel(cat.shortLabel || cat.label, 12)));
+    }, truncLabel(cat.shortLabel || cat.label, categories.length <= 4 ? 22 : 14)));
   });
 
   const leg = htmlEl('ul', 'uich-legend uich-legend-row');
@@ -618,13 +625,13 @@ export function renderStackedBarChart(host, {
 }
 
 /**
- * Plain-SVG Line & Area Chart for daily/monthly trends.
- * points: [{ label, shortLabel, value, sub }]
+ * Plain-SVG Line & Area Chart with lighter grids, small point markers, and compact height.
  */
 export function renderLineChart(host, {
   points = [],
   valueFormatter = defaultFmt,
-  height = 225,
+  viewWidth = 960,
+  height = 195,
   color = '#323A85',
   emptyText = 'No data'
 } = {}) {
@@ -640,19 +647,19 @@ export function renderLineChart(host, {
     return;
   }
 
-  // When only 1 point exists, render as vertical bar cleanly so trend looks solid
+  // Single data point renders as one clean narrow vertical bar in the same viewBox proportions
   if (valid.length === 1) {
-    renderBarChart(host, { items: valid, valueFormatter, height, color, emptyText });
+    renderBarChart(host, { items: valid, valueFormatter, viewWidth, height, color, emptyText });
     return;
   }
 
   const ctx = ensureContainer(host, 'uich-line-wrap');
-  const W = 580;
+  const W = viewWidth;
   const H = height;
   const padL = 52;
   const padR = 18;
-  const padT = 18;
-  const padB = 42;
+  const padT = 16;
+  const padB = 34;
   const plotW = W - padL - padR;
   const plotH = H - padT - padB;
   const maxVal = Math.max(1, ...valid.map((p) => p.value));
@@ -673,15 +680,15 @@ export function renderLineChart(host, {
       y1: y.toFixed(1),
       x2: W - padR,
       y2: y.toFixed(1),
-      stroke: tk === 0 ? '#CBD5E1' : '#EEF1F6',
+      stroke: tk === 0 ? '#E2E8F0' : '#F1F5F9',
       'stroke-width': '1'
     }));
     svg.appendChild(svgEl('text', {
-      x: padL - 7,
+      x: padL - 8,
       y: (y + 3.5).toFixed(1),
       'text-anchor': 'end',
       fill: '#6B7280',
-      'font-size': '10.5',
+      'font-size': '10',
       'font-family': 'Plus Jakarta Sans, sans-serif'
     }, shortAxisNum(tk)));
   });
@@ -699,37 +706,37 @@ export function renderLineChart(host, {
   svg.appendChild(svgEl('polygon', {
     points: areaPts,
     fill: color,
-    'fill-opacity': '0.11'
+    'fill-opacity': '0.10'
   }));
   svg.appendChild(svgEl('polyline', {
     points: linePts,
     fill: 'none',
     stroke: color,
-    'stroke-width': '2.5',
+    'stroke-width': '2.2',
     'stroke-linejoin': 'round',
     'stroke-linecap': 'round'
   }));
 
-  const skipStep = valid.length > 8 ? Math.ceil(valid.length / 8) : 1;
+  const skipStep = valid.length > 10 ? Math.ceil(valid.length / 10) : 1;
   coords.forEach((c, idx) => {
     const dot = svgEl('circle', {
       cx: c.x.toFixed(1),
       cy: c.y.toFixed(1),
-      r: valid.length > 25 ? 3 : 4.2,
+      r: '3',
       fill: '#FFFFFF',
       stroke: color,
-      'stroke-width': '2.2',
+      'stroke-width': '2',
       style: 'cursor:pointer;'
     });
     dot.addEventListener('mouseenter', (ev) => {
-      dot.setAttribute('r', '6');
+      dot.setAttribute('r', '4.5');
       ctx.showTip(ev, c.label, `${valueFormatter(c.value)}${c.sub ? ' · ' + c.sub : ''}`);
     });
     dot.addEventListener('mousemove', (ev) => {
       ctx.showTip(ev, c.label, `${valueFormatter(c.value)}${c.sub ? ' · ' + c.sub : ''}`);
     });
     dot.addEventListener('mouseleave', () => {
-      dot.setAttribute('r', valid.length > 25 ? '3' : '4.2');
+      dot.setAttribute('r', '3');
       ctx.hideTip();
     });
     svg.appendChild(dot);
@@ -737,10 +744,10 @@ export function renderLineChart(host, {
     if (idx % skipStep === 0 || idx === coords.length - 1) {
       svg.appendChild(svgEl('text', {
         x: c.x.toFixed(1),
-        y: (H - 16).toFixed(1),
+        y: (H - 12).toFixed(1),
         'text-anchor': idx === 0 ? 'start' : (idx === coords.length - 1 ? 'end' : 'middle'),
         fill: '#525252',
-        'font-size': '10.5',
+        'font-size': '10',
         'font-weight': '600',
         'font-family': 'Plus Jakarta Sans, sans-serif'
       }, truncLabel(c.shortLabel, 10)));

@@ -22,21 +22,21 @@ import {
   fetchStudentPayments,
   calculateStudentFinancials,
   isStudentEligibleForDues
-} from './payment.service.js?v=1.8.177';
+} from './payment.service.js?v=1.8.178';
 import {
   evaluateKidsPendingBills,
   buildKidsPaymentLedger
-} from '../utils/school-billing.js?v=1.8.177';
-import { getStudentPhotoSrc } from '../utils/student-media.js?v=1.8.177';
+} from '../utils/school-billing.js?v=1.8.178';
+import { getStudentPhotoSrc } from '../utils/student-media.js?v=1.8.178';
 import {
   todayISO,
   fmtDate,
   getOrgTimezone
-} from '../utils/session-rules.js?v=1.8.177';
-import { formatINR } from '../utils/formatter.js?v=1.8.177';
-import { formatPersonName } from '../utils/formatter.js?v=1.8.177';
-import { resolveUserDisplay, loadUsersDirectory, getRoleTitle } from './user-directory.service.js?v=1.8.177';
-import { loadPdfMake, urlToDataUrl } from '../utils/admission-receipt-pdf.js?v=1.8.177';
+} from '../utils/session-rules.js?v=1.8.178';
+import { formatINR } from '../utils/formatter.js?v=1.8.178';
+import { formatPersonName } from '../utils/formatter.js?v=1.8.178';
+import { resolveUserDisplay, loadUsersDirectory, getRoleTitle } from './user-directory.service.js?v=1.8.178';
+import { loadPdfMake, urlToDataUrl } from '../utils/admission-receipt-pdf.js?v=1.8.178';
 
 const CACHE_KEY = 'financialReports';
 
@@ -1704,17 +1704,17 @@ export function openPrintSheet({
   .pr-chart-box { border: 1px solid #EAEAEA; border-radius: 8px; padding: 10px; background: #FFFFFF; break-inside: avoid; page-break-inside: avoid; }
   .pr-chart-title { font-size: 11px; font-weight: 700; color: #374151; margin-bottom: 6px; }
   .uich-wrap { position: relative; }
-  .uich-donut-wrap { display: flex; align-items: center; gap: 12px; flex-wrap: nowrap; }
-  .uich-donut-svg { width: 132px; height: 132px; flex-shrink: 0; }
-  .uich-svg { max-width: 100%; height: auto; display: block; }
+  .uich-donut-wrap { display: flex; align-items: center; gap: 14px; flex-wrap: nowrap; }
+  .uich-donut-svg { width: 150px; height: 150px; flex-shrink: 0; }
+  .uich-svg { max-width: 100%; max-height: 220px; height: auto; display: block; }
   .uich-legend { list-style: none; margin: 0; padding: 0; flex: 1; font-size: 10.5px; }
   .uich-legend-row { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 6px; }
   .uich-leg-item { display: flex; align-items: center; gap: 6px; padding: 2px 0; }
-  .uich-leg-dot { width: 8px; height: 8px; border-radius: 999px; flex-shrink: 0; display: inline-block; }
+  .uich-leg-dot { width: 9px; height: 9px; border-radius: 0; flex-shrink: 0; display: inline-block; }
   .uich-leg-label { color: #374151; font-weight: 600; flex: 1; }
   .uich-leg-val { color: #171717; font-weight: 700; font-variant-numeric: tabular-nums; margin-left: 6px; }
   .uich-tooltip { display: none !important; }
-  .uich-empty { padding: 16px; text-align: center; color: #6B7280; }
+  .uich-empty { padding: 10px 14px; display: flex; align-items: center; justify-content: center; gap: 6px; color: #6B7280; }
   table { width: 100%; border-collapse: collapse; margin-top: 6px; }
   th, td { border: 1px solid #EAEAEA; padding: 6px 8px; text-align: left; vertical-align: top; }
   th { background: #EEF0FA; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; color: #323A85; }
@@ -2653,8 +2653,11 @@ export function buildYouthReportsData({
   const batchFilter = filters.batchId || 'all';
   const courseFilter = filters.courseId || 'all';
   const datePreset = filters.datePreset || 'session';
-  const dateFrom = filters.dateFrom || '';
-  const dateTo = filters.dateTo || '';
+  const isWholeSession = datePreset === 'session';
+  // "Whole session" filters payments strictly by sessionId (never by startDate..endDate),
+  // because advance admissions/fees for upcoming sessions may be paid before session startDate.
+  const effFrom = isWholeSession ? '' : (filters.dateFrom || '');
+  const effTo = isWholeSession ? '' : (filters.dateTo || '');
   const sessId = activeSession?.id || '';
 
   const matchesStructEntry = (e, ignoreBranch = false) => {
@@ -2675,6 +2678,8 @@ export function buildYouthReportsData({
     return true;
   };
 
+  const isNonDroppedStu = (s) => !['dropped', 'left', 'inactive', 'deleted'].includes(String(s?.status || 'active').toLowerCase().trim());
+
   const inDateRange = (iso, from, to) => {
     if (!iso) return !from && !to;
     if (from && iso < from) return false;
@@ -2684,7 +2689,7 @@ export function buildYouthReportsData({
 
   // 1. Entries (Payment History exact parity)
   const structEntries = (entries || []).filter((e) => matchesStructEntry(e, false));
-  const entriesCurrent = structEntries.filter((e) => inDateRange(e.date, dateFrom, dateTo));
+  const entriesCurrent = structEntries.filter((e) => inDateRange(e.date, effFrom, effTo));
   const paySummary = summarizePaymentLedger(entriesCurrent);
 
   // 2. Pending / Overdue & Student Financials (Pending & Overdue + calculateStudentFinancials parity)
@@ -2700,12 +2705,11 @@ export function buildYouthReportsData({
   const allSessionStudents = Object.values(pendingReport?.studentsById || {}).filter(Boolean);
   const scopedStudents = allSessionStudents.filter((s) => matchesStructStudent(s, false));
   const activeStudents = scopedStudents.filter((s) => isStudentEligibleForDues(s));
+  const scopedCourseStudents = scopedStudents.filter(isNonDroppedStu);
   const paymentsByStudentId = pendingReport?.paymentsByStudentId || {};
 
   let totalOutstanding = 0;
-  const studentDueRows = [];
-  const upcoming30Days = [];
-  const plus30ISO = addDaysISO(asOfDate, 30);
+  let studentsWithBalanceCount = 0;
 
   // Student-level overdue lookup from exact overdue items
   const overdueByStu = new Map();
@@ -2737,14 +2741,7 @@ export function buildYouthReportsData({
   };
 
   for (const s of activeStudents) {
-    const pList = paymentsByStudentId[s.id] || [];
-    const ev = evaluateYouthStudentDues(s, pList, activeSession, {
-      asOfDate,
-      coursesById,
-      branchesById,
-      batchesById
-    });
-    const fin = ev.financials || { total: 0, paid: 0, outstanding: 0, percent: 0 };
+    const fin = calculateStudentFinancials(s, paymentsByStudentId[s.id] || []);
     const outAmt = Number(fin.outstanding || 0);
     totalOutstanding += outAmt;
 
@@ -2758,52 +2755,16 @@ export function buildYouthReportsData({
     const btName = bt.name || s.batchName || 'Batch';
 
     const stuOv = overdueByStu.get(s.id) || { principal: 0, lateFee: 0, count: 0 };
-    if (outAmt > 0 || stuOv.principal > 0) {
-      studentDueRows.push({
-        studentDocId: s.id,
-        studentId: s.studentId || s.id,
-        studentName: formatPersonName(s.name || '') || s.name || '-',
-        phone: s.phone || '',
-        branchId: s.branchId || '',
-        branchLabel: brCode ? `${brCode} - ${brName}` : brName,
-        branchShort: brCode || brName,
-        courseLabel: crCode ? `${crCode} - ${crName}` : crName,
-        batchName: btName,
-        totalFee: fin.total,
-        paidFee: fin.paid,
-        outstanding: outAmt,
-        overduePrincipal: stuOv.principal,
-        overdueLateFee: stuOv.lateFee,
-        overdueCount: stuOv.count
-      });
-    }
+    if (outAmt > 0 || stuOv.principal > 0) studentsWithBalanceCount += 1;
 
     bumpDuesBucket(duesByBranch, s.branchId, brCode ? `${brCode} - ${brName}` : brName, brCode || brName, outAmt, stuOv.principal);
     bumpDuesBucket(duesByBatch, s.batchId || 'UNASSIGNED', `${btName}${brCode ? ' (' + brCode + ')' : ''}`, btName, outAmt, stuOv.principal);
     bumpDuesBucket(duesByCourse, s.courseId, crCode ? `${crCode} - ${crName}` : crName, crCode || crName, outAmt, stuOv.principal);
-
-    for (const it of (ev.items || [])) {
-      if (it.status !== 'overdue' && it.dueDate && it.dueDate >= asOfDate && it.dueDate <= plus30ISO) {
-        upcoming30Days.push({
-          studentDocId: s.id,
-          studentId: s.studentId || s.id,
-          studentName: formatPersonName(s.name || '') || s.name || '-',
-          courseLabel: crCode || crName,
-          branchShort: brCode || brName,
-          batchName: btName,
-          whatIsDue: it.whatIsDue || 'Installment',
-          dueDate: it.dueDate,
-          amount: Number(it.amount || 0)
-        });
-      }
-    }
   }
 
-  upcoming30Days.sort((a, b) => a.dueDate.localeCompare(b.dueDate) || a.studentName.localeCompare(b.studentName));
-  const upcoming30Total = upcoming30Days.reduce((sum, u) => sum + u.amount, 0);
-
-  studentDueRows.sort((a, b) => b.outstanding - a.outstanding || b.overduePrincipal - a.overduePrincipal || a.studentName.localeCompare(b.studentName));
-  const top10Students = studentDueRows.slice(0, 10);
+  // Total course fee across non-dropped filtered students for Collection Rate
+  const totalCourseFee = scopedCourseStudents.reduce((sum, s) => sum + Number(calculateStudentFinancials(s, []).total || 0), 0);
+  const collectionRatePct = totalCourseFee > 0 ? Math.round((paySummary.totalCollected / totalCourseFee) * 1000) / 10 : 0;
 
   // Overdue ageing buckets
   const ageingBuckets = {
@@ -2822,13 +2783,13 @@ export function buildYouthReportsData({
 
   // New admissions count in date range
   const getAdmIso = (s) => String(s.admissionDate || safeTimestampISO(s.createdAt) || '').slice(0, 10);
-  const newAdmissions = datePreset === 'session'
+  const newAdmissions = isWholeSession
     ? scopedStudents.length
-    : scopedStudents.filter((s) => inDateRange(getAdmIso(s), dateFrom, dateTo)).length;
+    : scopedStudents.filter((s) => inDateRange(getAdmIso(s), effFrom, effTo)).length;
 
-  // Previous Period Delta computations for all 7 KPI cards
-  const prevRange = computePreviousPeriodRange(datePreset, dateFrom, dateTo, asOfDate);
-  let prevVals = { collected: null, outstanding: null, overdue: null, lateCollected: null, lateWaived: null, admissions: null, activeStudents: null };
+  // Previous Period Delta computations for all 8 KPI cards
+  const prevRange = computePreviousPeriodRange(datePreset, effFrom, effTo, asOfDate);
+  let prevVals = { collected: null, outstanding: null, overdue: null, lateCollected: null, lateWaived: null, admissions: null, activeStudents: null, collectionRate: null };
 
   if (prevRange.type === 'dates' && prevRange.from && prevRange.to) {
     const prevEntries = structEntries.filter((e) => inDateRange(e.date, prevRange.from, prevRange.to));
@@ -2837,6 +2798,12 @@ export function buildYouthReportsData({
     prevVals.lateCollected = prevPay.lateFeesCollected;
     prevVals.lateWaived = prevPay.lateFeesWaived;
     prevVals.admissions = scopedStudents.filter((s) => inDateRange(getAdmIso(s), prevRange.from, prevRange.to)).length;
+    const prevCourseTotal = scopedCourseStudents.reduce((sum, s) => {
+      const admIso = getAdmIso(s);
+      if (admIso && admIso > prevRange.to) return sum;
+      return sum + Number(calculateStudentFinancials(s, []).total || 0);
+    }, 0);
+    prevVals.collectionRate = prevCourseTotal > 0 ? Math.round((prevPay.totalCollected / prevCourseTotal) * 1000) / 10 : null;
 
     // Historical as-of snapshot at prevRange.to using only payments <= prevRange.to
     let prevOut = 0;
@@ -2883,6 +2850,8 @@ export function buildYouthReportsData({
       && (courseFilter === 'all' || s.courseId === courseFilter)
     ));
     const prevActList = prevStudents.filter(isStudentEligibleForDues);
+    const prevCourseTotal = prevStudents.filter(isNonDroppedStu).reduce((sum, s) => sum + Number(calculateStudentFinancials(s, []).total || 0), 0);
+    prevVals.collectionRate = prevCourseTotal > 0 ? Math.round((prevPay.totalCollected / prevCourseTotal) * 1000) / 10 : null;
     prevVals.admissions = prevStudents.length;
     prevVals.activeStudents = prevActList.length;
 
@@ -2899,6 +2868,17 @@ export function buildYouthReportsData({
     prevVals.overdue = summarizePendingItems(prevOvItems, prevSession.endDate || asOfDate).overdueAmount;
   }
 
+  const rateDelta = (() => {
+    if (prevVals.collectionRate === null || prevVals.collectionRate === undefined) {
+      return { pct: null, dir: 'flat', tone: 'neutral', text: `— vs ${prevRange.label}` };
+    }
+    const diff = Math.round((collectionRatePct - prevVals.collectionRate) * 10) / 10;
+    const dir = diff > 0 ? 'up' : (diff < 0 ? 'down' : 'flat');
+    const sign = diff > 0 ? '+' : '';
+    const tone = dir === 'up' ? 'good' : (dir === 'down' ? 'bad' : 'neutral');
+    return { pct: diff, dir, tone, text: `${sign}${diff}% vs ${prevRange.label}` };
+  })();
+
   const kpis = {
     totalCollected: {
       value: paySummary.totalCollected,
@@ -2907,7 +2887,7 @@ export function buildYouthReportsData({
     },
     outstandingDues: {
       value: totalOutstanding,
-      sub: `${studentDueRows.length} student${studentDueRows.length === 1 ? '' : 's'} with balance`,
+      sub: `${studentsWithBalanceCount} student${studentsWithBalanceCount === 1 ? '' : 's'} with balance`,
       delta: makeDelta(totalOutstanding, prevVals.outstanding, { label: prevRange.label, inverseBad: true })
     },
     overdueAmount: {
@@ -2930,24 +2910,31 @@ export function buildYouthReportsData({
     },
     newAdmissions: {
       value: newAdmissions,
-      sub: datePreset === 'session' ? 'In active session' : 'Admitted in period',
+      sub: isWholeSession ? 'In active session' : 'Admitted in period',
       delta: makeDelta(newAdmissions, prevVals.admissions, { label: prevRange.label })
     },
     activeStudents: {
       value: activeStudents.length,
       sub: `${scopedStudents.length} total in scope`,
       delta: makeDelta(activeStudents.length, prevVals.activeStudents, { label: prevRange.label })
+    },
+    collectionRate: {
+      value: collectionRatePct,
+      barPct: Math.min(100, Math.max(0, Math.round(collectionRatePct))),
+      totalCourseFee,
+      sub: totalCourseFee > 0 ? `${formatINR(paySummary.totalCollected)} of ${formatINR(totalCourseFee)}` : 'No course fee in scope',
+      delta: rateDelta
     }
   };
 
   // Section 2: Money
-  const spanDays = (dateFrom && dateTo) ? diffDaysISO(dateFrom, dateTo) + 1 : 999;
-  const useDailyTrend = datePreset === 'today' || datePreset === 'week' || datePreset === 'month' || datePreset === 'last_month' || (spanDays <= 45);
+  const spanDays = (!isWholeSession && effFrom && effTo) ? diffDaysISO(effFrom, effTo) + 1 : 999;
+  const useDailyTrend = datePreset === 'today' || datePreset === 'week' || datePreset === 'month' || datePreset === 'last_month' || (!isWholeSession && spanDays <= 45);
   const trendMap = new Map();
-  if (useDailyTrend && dateFrom && dateTo && spanDays <= 35) {
-    let curD = dateFrom;
+  if (useDailyTrend && effFrom && effTo && spanDays <= 35) {
+    let curD = effFrom;
     let guard = 0;
-    while (curD <= dateTo && guard < 40) {
+    while (curD <= effTo && guard < 40) {
       trendMap.set(curD, { key: curD, label: fmtDate(curD), shortLabel: fmtShortDay(curD), value: 0, receipts: 0 });
       curD = addDaysISO(curD, 1);
       guard += 1;
@@ -3162,21 +3149,22 @@ export function buildYouthReportsData({
         const bName = toTitleCaseIfCaps(s.branchName || bId);
         branchStatsMap.set(bId, {
           branchId: bId, branchCode: bCode, branchName: bName, label: bCode ? `${bCode} - ${bName}` : bName,
-          shortLabel: bCode || bName, students: 0, collected: 0, courseTotal: 0, coursePaid: 0, outstanding: 0, overdue: 0, collectionPct: 0
+          shortLabel: bCode || bName, students: 0, collected: 0, courseTotal: 0, outstanding: 0, overdue: 0, collectionPct: 0
         });
       }
       const row = branchStatsMap.get(bId);
       row.students += 1;
+      if (isNonDroppedStu(s)) {
+        row.courseTotal += Number(calculateStudentFinancials(s, []).total || 0);
+      }
       if (isStudentEligibleForDues(s)) {
         const fin = calculateStudentFinancials(s, paymentsByStudentId[s.id] || []);
-        row.courseTotal += Number(fin.total || 0);
-        row.coursePaid += Number(fin.paid || 0);
         row.outstanding += Number(fin.outstanding || 0);
       }
     });
 
     (entries || []).forEach((e) => {
-      if (!matchesStructEntry(e, true) || !inDateRange(e.date, dateFrom, dateTo)) return;
+      if (!matchesStructEntry(e, true) || !inDateRange(e.date, effFrom, effTo)) return;
       if (e.isPureWaiver || e.type === 'WA') return;
       const bId = e.branchId || 'OTHER';
       if (!branchStatsMap.has(bId)) return;
@@ -3194,18 +3182,17 @@ export function buildYouthReportsData({
     branchComparison = Array.from(branchStatsMap.values())
       .map((r) => ({
         ...r,
-        collectionPct: r.courseTotal > 0 ? Math.min(100, Math.round((r.coursePaid / r.courseTotal) * 100)) : (r.collected > 0 ? 100 : 0)
+        collectionPct: r.courseTotal > 0 ? Math.min(100, Math.round((r.collected / r.courseTotal) * 1000) / 10) : (r.collected > 0 ? 100 : 0)
       }))
       .sort((a, b) => b.collected - a.collected || b.students - a.students);
 
-    // Session comparison (current vs previous Youth session, respecting branch/course filters)
-    const curSessCollected = structEntries.filter((e) => !e.isPureWaiver && e.type !== 'WA').reduce((s, e) => s + Number(e.totalReceived || 0), 0);
+    // Session comparison uses the exact same filtered dataset for Current Session so KPI and Session Comparison match identically.
     const curSessRow = {
       sessionId: activeSession?.id || 'curr',
       label: activeSession?.name || 'Current Session',
       tag: 'Current',
       students: scopedStudents.length,
-      collected: curSessCollected,
+      collected: paySummary.totalCollected,
       dues: totalOutstanding,
       overdue: pendingSummary.overdueAmount
     };
@@ -3266,10 +3253,7 @@ export function buildYouthReportsData({
         label: b.label, value: b.value, color: b.color, sub: `${b.count} item${b.count === 1 ? '' : 's'}`
       })),
       overdueTotal: pendingSummary.overdueAmount,
-      upcoming30Days,
-      upcoming30Total,
-      top10Students,
-      studentDueRows
+      studentsWithBalanceCount
     },
     students: {
       totalCount: scopedStudents.length,

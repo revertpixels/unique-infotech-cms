@@ -4,10 +4,10 @@ import { createSelect } from '../components/ui-select.js';
 import { openMenu } from '../components/ui-menu.js';
 import { confirmDialog } from '../components/ui-confirm.js';
 import { showToast } from '../components/toast.js';
-import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.177';
-import { PAGE_SIZE, buildStats, buildToolbar, renderPager, renderEmptyTableState } from '../components/list-page.js?v=1.8.177';
-import { formatPersonName } from '../utils/formatter.js?v=1.8.177';
-import { getRoleTitle, getRolePluralTitle } from '../services/user-directory.service.js?v=1.8.177';
+import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.178';
+import { PAGE_SIZE, buildStats, buildToolbar, renderPager, renderEmptyTableState } from '../components/list-page.js?v=1.8.178';
+import { formatPersonName } from '../utils/formatter.js?v=1.8.178';
+import { getRoleTitle, getRolePluralTitle } from '../services/user-directory.service.js?v=1.8.178';
 
 let unbindBranchesBranding = null;
 

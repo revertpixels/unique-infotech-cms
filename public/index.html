@@ -9,10 +9,10 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/main.css?v=1.8.177">
-  <link rel="stylesheet" href="css/components/multi-select.css?v=1.8.177">
-  <link rel="stylesheet" href="css/pages/login.css?v=1.8.177">
-  <script>window.__BUILD__ = '1.8.177';</script>
+  <link rel="stylesheet" href="css/main.css?v=1.8.178">
+  <link rel="stylesheet" href="css/components/multi-select.css?v=1.8.178">
+  <link rel="stylesheet" href="css/pages/login.css?v=1.8.178">
+  <script>window.__BUILD__ = '1.8.178';</script>
   <style>
     body.auth-pending {
       visibility: hidden;
@@ -31,18 +31,18 @@
     </div>
   </div>
   <script type="module">
-    import { getContext, setContext, loadSavedContext } from './js/core/app.js?v=1.8.177';
-    import { tryRestoreSession, activateSession, stopInactivityTracking, setUnauthenticatedHandler, logout } from './js/core/guard.js?v=1.8.177';
-    import { startRouter, stopRouter } from './js/core/router.js?v=1.8.177';
-    import { confirmLeave, clearDirty } from './js/utils/unsaved-guard.js?v=1.8.177';
-    import { renderSidebar, setActiveRoute, setCollapsed, toggleDrawer, closeDrawer, initSidebar, destroySidebar } from './js/components/sidebar.js?v=1.8.177';
-    import { renderTopbar, setPageTitle, setSwitcherActive } from './js/components/topbar.js?v=1.8.177';
-    import { clearPersistedBranchBatchFilters } from './js/components/branch-batch-filter.js?v=1.8.177';
-    import { initDatasetSession, stopDatasetSession } from './js/core/dataset-session.js?v=1.8.177';
-    import { invalidateFinancialCache } from './js/services/report.service.js?v=1.8.177';
-    import { loadUsersDirectory, clearUsersDirectoryCache, loadPublicBranding, syncPublicBranding } from './js/services/user-directory.service.js?v=1.8.177';
-    import { renderLoginView } from './js/pages/login.page.js?v=1.8.177';
-    import { playSwitchSound, preloadSwitchSound, preloadLogoutSound } from './js/utils/sound.js?v=1.8.177';
+    import { getContext, setContext, loadSavedContext } from './js/core/app.js?v=1.8.178';
+    import { tryRestoreSession, activateSession, stopInactivityTracking, setUnauthenticatedHandler, logout } from './js/core/guard.js?v=1.8.178';
+    import { startRouter, stopRouter } from './js/core/router.js?v=1.8.178';
+    import { confirmLeave, clearDirty } from './js/utils/unsaved-guard.js?v=1.8.178';
+    import { renderSidebar, setActiveRoute, setCollapsed, toggleDrawer, closeDrawer, initSidebar, destroySidebar } from './js/components/sidebar.js?v=1.8.178';
+    import { renderTopbar, setPageTitle, setSwitcherActive } from './js/components/topbar.js?v=1.8.178';
+    import { clearPersistedBranchBatchFilters } from './js/components/branch-batch-filter.js?v=1.8.178';
+    import { initDatasetSession, stopDatasetSession } from './js/core/dataset-session.js?v=1.8.178';
+    import { invalidateFinancialCache } from './js/services/report.service.js?v=1.8.178';
+    import { loadUsersDirectory, clearUsersDirectoryCache, loadPublicBranding, syncPublicBranding } from './js/services/user-directory.service.js?v=1.8.178';
+    import { renderLoginView } from './js/pages/login.page.js?v=1.8.178';
+    import { playSwitchSound, preloadSwitchSound, preloadLogoutSound } from './js/utils/sound.js?v=1.8.178';
     import { db } from './js/config/firebase-config.js';
     import { doc, getDoc } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
 
@@ -112,7 +112,7 @@
         const pendingNotice = sessionStorage.getItem('pending_verification_notice');
         if (pendingNotice) {
           sessionStorage.removeItem('pending_verification_notice');
-          import('./js/components/toast.js?v=1.8.177').then(({ showToast }) => {
+          import('./js/components/toast.js?v=1.8.178').then(({ showToast }) => {
             showToast({
               type: 'info',
               title: 'Email Verification',
@@ -286,6 +286,6 @@
       }
     })();
   </script>
-  <script type="module" src="js/core/app.js?v=1.8.177"></script>
+  <script type="module" src="js/core/app.js?v=1.8.178"></script>
 </body>
 </html>

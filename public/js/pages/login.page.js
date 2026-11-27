@@ -5,9 +5,9 @@ import {
   resolveSession,
   sendResetEmailForUser,
   mapAuthError
-} from '../core/auth.js?v=1.8.177';
-import { preloadLoginSound, playLoginSound, stopLoginSound } from '../utils/sound.js?v=1.8.177';
-import { getRoleTitle, getRolePluralTitle, getPublicBranding, loadPublicBranding } from '../services/user-directory.service.js?v=1.8.177';
+} from '../core/auth.js?v=1.8.178';
+import { preloadLoginSound, playLoginSound, stopLoginSound } from '../utils/sound.js?v=1.8.178';
+import { getRoleTitle, getRolePluralTitle, getPublicBranding, loadPublicBranding } from '../services/user-directory.service.js?v=1.8.178';
 
 const URL_REASONS = {
   timeout: true,

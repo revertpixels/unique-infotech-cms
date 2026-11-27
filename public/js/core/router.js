@@ -1,6 +1,6 @@
-import { APP_VERSION } from './app.js?v=1.8.190';
-import { confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.190';
-import { getRoleTitle } from '../services/user-directory.service.js?v=1.8.190';
+import { APP_VERSION } from './app.js?v=1.8.191';
+import { confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.191';
+import { getRoleTitle } from '../services/user-directory.service.js?v=1.8.191';
 
 const htmlCache = new Map();
 const htmlInflight = new Map();

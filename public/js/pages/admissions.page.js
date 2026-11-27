@@ -15,37 +15,38 @@ import {
   arrayUnion,
   addDoc
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.190';
-import { registerDirty, confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.190';
-import { buildStats, buildToolbar, renderPager, renderEmptyTableState, PAGE_SIZE } from '../components/list-page.js?v=1.8.190';
-import { createSelect } from '../components/ui-select.js?v=1.8.190';
-import { createBranchBatchFilter } from '../components/branch-batch-filter.js?v=1.8.190';
-import { openMenu } from '../components/ui-menu.js?v=1.8.190';
-import { confirmDialog } from '../components/ui-confirm.js?v=1.8.190';
-import { openPopup } from '../components/modal.js?v=1.8.190';
-import { createDatePicker } from '../components/ui-datepicker.js?v=1.8.190';
-import { getSelectedSessionId, getSelectedSession, getCachedSessions, loadSessions, hasFreshSessionsCache, todayISO } from '../core/sessions.js?v=1.8.190';
-import { firstInstallmentOf, admissionState, sessionLabel, installmentSchedule, batchAllowsCourse, batchCourseLabel, isCourseActive } from '../utils/session-rules.js?v=1.8.190';
-import { formatINR, formatDateIN, formatPersonName, formatGenderDisplay, initials } from '../utils/formatter.js?v=1.8.190';
-import { validatePhone, validateEmail, validateDOB, validateName, validateRequired } from '../utils/validator.js?v=1.8.190';
-import { listStudentsRaw, checkDuplicatePhone, readStudentId, readReceiptNo, writeCounter, createStudentWithDocs, updateStudentWithDocs, updateStudent, deleteStudent } from '../services/admission.service.js?v=1.8.190';
-import { feeTotal, courseFeeOf, discountOf } from '../utils/fees.js?v=1.8.190';
-import { compressTo100KB, readAsDataURL, blobToDataURL, isImageFile, formatBytes } from '../utils/image-compress.js?v=1.8.190';
-import { fetchStudentPayments, calculateStudentFinancials, buildReceiptMenuItems } from '../services/payment.service.js?v=1.8.190';
+import { showToast } from '../components/toast.js?v=1.8.191';
+import { registerDirty, confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.191';
+import { buildStats, buildToolbar, renderPager, renderEmptyTableState, PAGE_SIZE } from '../components/list-page.js?v=1.8.191';
+import { createSelect } from '../components/ui-select.js?v=1.8.191';
+import { createBranchBatchFilter } from '../components/branch-batch-filter.js?v=1.8.191';
+import { openMenu } from '../components/ui-menu.js?v=1.8.191';
+import { confirmDialog } from '../components/ui-confirm.js?v=1.8.191';
+import { openPopup } from '../components/modal.js?v=1.8.191';
+import { createDatePicker } from '../components/ui-datepicker.js?v=1.8.191';
+import { getSelectedSessionId, getSelectedSession, getCachedSessions, loadSessions, hasFreshSessionsCache, todayISO } from '../core/sessions.js?v=1.8.191';
+import { firstInstallmentOf, admissionState, sessionLabel, installmentSchedule, batchAllowsCourse, batchCourseLabel, isCourseActive } from '../utils/session-rules.js?v=1.8.191';
+import { formatINR, formatDateIN, formatPersonName, formatGenderDisplay, initials } from '../utils/formatter.js?v=1.8.191';
+import { validatePhone, validateEmail, validateDOB, validateName, validateRequired } from '../utils/validator.js?v=1.8.191';
+import { listStudentsRaw, checkDuplicatePhone, readStudentId, readReceiptNo, writeCounter, createStudentWithDocs, updateStudentWithDocs, updateStudent, deleteStudent } from '../services/admission.service.js?v=1.8.191';
+import { feeTotal, courseFeeOf, discountOf } from '../utils/fees.js?v=1.8.191';
+import { compressTo100KB, readAsDataURL, blobToDataURL, isImageFile, formatBytes } from '../utils/image-compress.js?v=1.8.191';
+import { fetchStudentPayments, calculateStudentFinancials, buildReceiptMenuItems } from '../services/payment.service.js?v=1.8.191';
 import {
   ensureReferenceData,
   getCachedReferenceData,
   ensureYouthStudents,
+  syncYouthStudentsDelta,
   getCachedYouthStudents,
   isCacheStale,
   scheduleDelayedSkeleton,
   loadStudentPhotos,
   getCachedStudentPhoto
-} from '../services/report.service.js?v=1.8.190';
-import { getStudentPhotoSrc, getStudentDocSrc, getStudentDocMime } from '../utils/student-media.js?v=1.8.190';
-import { playPaymentSuccessSound } from '../utils/sound.js?v=1.8.190';
-import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.190';
-import { APP_CACHE } from '../core/app.js?v=1.8.190';
+} from '../services/report.service.js?v=1.8.191';
+import { getStudentPhotoSrc, getStudentDocSrc, getStudentDocMime } from '../utils/student-media.js?v=1.8.191';
+import { playPaymentSuccessSound } from '../utils/sound.js?v=1.8.191';
+import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.191';
+import { APP_CACHE } from '../core/app.js?v=1.8.191';
 
 const COL = 'students';
 
@@ -512,16 +513,16 @@ export async function mount({ container, profile, ctx }) {
   }
 
   // ---------- data load ----------
-  async function load({ forceRefresh = false, background = false } = {}) {
-    const cachedMeta = !forceRefresh ? getCachedReferenceData(profile) : null;
-    const cachedSess = !forceRefresh ? getCachedSessions('youth') : [];
-    const cachedStudents = !forceRefresh ? getCachedYouthStudents({ profile, includeAllSessions: true }) : null;
+  async function load({ forceRefresh = false, deltaRefresh = false, background = false } = {}) {
+    const cachedMeta = (!forceRefresh && !deltaRefresh) ? getCachedReferenceData(profile) : null;
+    const cachedSess = (!forceRefresh && !deltaRefresh) ? getCachedSessions('youth') : [];
+    const cachedStudents = (!forceRefresh && !deltaRefresh) ? getCachedYouthStudents({ profile, includeAllSessions: true }) : null;
 
     if (cachedMeta && cachedStudents && (cachedSess.length || hasFreshSessionsCache('youth'))) {
       applyLoadedAdmissionsData({ meta: cachedMeta, sessList: cachedSess, stRes: cachedStudents });
       const stale = isCacheStale(cachedMeta) || !hasFreshSessionsCache('youth') || isCacheStale(cachedStudents);
       if (stale && !background) {
-        load({ forceRefresh: true, background: true }).catch(() => {});
+        load({ forceRefresh: false, deltaRefresh: true, background: true }).catch(() => {});
       }
       return;
     }
@@ -547,17 +548,19 @@ export async function mount({ container, profile, ctx }) {
 
     try {
       const [meta, sessList, stRes] = await Promise.all([
-        ensureReferenceData({ forceRefresh, profile }),
+        ensureReferenceData({ forceRefresh: forceRefresh && !deltaRefresh, profile }),
         (!forceRefresh && hasFreshSessionsCache('youth'))
           ? Promise.resolve(getCachedSessions('youth'))
           : loadSessions('youth', { forceRefresh }),
-        ensureYouthStudents({
-          profile,
-          includeAllSessions: true,
-          forceRefresh,
-          returnOnFirstPage: streamPartial,
-          onProgress: streamPartial ? handleStreamUpdate : null
-        })
+        (!forceRefresh && deltaRefresh)
+          ? syncYouthStudentsDelta({ profile, includeAllSessions: true })
+          : ensureYouthStudents({
+            profile,
+            includeAllSessions: true,
+            forceRefresh,
+            returnOnFirstPage: streamPartial,
+            onProgress: streamPartial ? handleStreamUpdate : null
+          })
       ]);
       if (!mountedAlive) return;
       if (skelTask) skelTask.cancel();

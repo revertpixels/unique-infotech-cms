@@ -18,6 +18,7 @@ import {
   query,
   startAfter,
   sum,
+  Timestamp,
   where
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
 import {
@@ -26,22 +27,22 @@ import {
   fetchStudentPayments,
   calculateStudentFinancials,
   isStudentEligibleForDues
-} from './payment.service.js?v=1.8.190';
+} from './payment.service.js?v=1.8.191';
 import {
   evaluateKidsPendingBills,
   buildKidsPaymentLedger
-} from '../utils/school-billing.js?v=1.8.190';
-import { getStudentPhotoSrc } from '../utils/student-media.js?v=1.8.190';
+} from '../utils/school-billing.js?v=1.8.191';
+import { getStudentPhotoSrc } from '../utils/student-media.js?v=1.8.191';
 import {
   todayISO,
   fmtDate,
   getOrgTimezone
-} from '../utils/session-rules.js?v=1.8.190';
-import { formatINR } from '../utils/formatter.js?v=1.8.190';
-import { formatPersonName } from '../utils/formatter.js?v=1.8.190';
-import { resolveUserDisplay, loadUsersDirectory, getRoleTitle } from './user-directory.service.js?v=1.8.190';
-import { loadPdfMake, urlToDataUrl } from '../utils/admission-receipt-pdf.js?v=1.8.190';
-import { loadAllSessions, getAllCachedSessions, hasFreshSessionsCache } from '../core/sessions.js?v=1.8.190';
+} from '../utils/session-rules.js?v=1.8.191';
+import { formatINR } from '../utils/formatter.js?v=1.8.191';
+import { formatPersonName } from '../utils/formatter.js?v=1.8.191';
+import { resolveUserDisplay, loadUsersDirectory, getRoleTitle } from './user-directory.service.js?v=1.8.191';
+import { loadPdfMake, urlToDataUrl } from '../utils/admission-receipt-pdf.js?v=1.8.191';
+import { loadAllSessions, getAllCachedSessions, hasFreshSessionsCache } from '../core/sessions.js?v=1.8.191';
 
 const CACHE_KEY = 'financialReports';
 export const CACHE_STALE_MS = 30000;
@@ -344,6 +345,7 @@ export function getCachedYouthStudents({ profile = null, sessionId = '', include
         loadedCount: list.length,
         isComplete: true,
         fetchedAt: allEntry.fetchedAt,
+        syncedAtMs: allEntry.syncedAtMs || allEntry.fetchedAt,
         readCount: 0,
         fromCache: true
       };
@@ -378,6 +380,7 @@ export async function ensureYouthStudents({
   if (!forceRefresh) {
     const hit = getCachedYouthStudents({ profile, sessionId: sid, includeAllSessions });
     if (hit && hit.isComplete !== false && !isCacheStale(hit)) {
+      if (!root.studentsLists.has(key)) root.studentsLists.set(key, hit);
       return { ...hit, readCount: 0, fromCache: true };
     }
     const existing = inflightStudents.get(key);
@@ -409,6 +412,7 @@ export async function ensureYouthStudents({
   const fullPromise = (async () => {
     const firstLimit = Math.min(numericCap, Math.max(1, Number(pageSize) || YOUTH_STUDENTS_FIRST_PAGE_SIZE));
     const batchNextLimit = Math.max(1, Number(nextPageSize) || YOUTH_STUDENTS_NEXT_PAGE_SIZE);
+    const syncStartedAtMs = Date.now() - 2000;
 
     const countPromise = getCountFromServer(baseQuery).catch(() => null);
     const snap1 = await getDocs(query(collection(db, 'students'), ...baseConstraints, limit(firstLimit)));
@@ -440,6 +444,7 @@ export async function ensureYouthStudents({
       loadedCount: list.length,
       isComplete,
       fetchedAt: Date.now(),
+      syncedAtMs: syncStartedAtMs,
       readCount,
       fromCache: false,
       done: fullPromise
@@ -499,6 +504,7 @@ export async function ensureYouthStudents({
       loadedCount: list.length,
       isComplete: true,
       fetchedAt: Date.now(),
+      syncedAtMs: syncStartedAtMs,
       readCount,
       fromCache: false,
       done: fullPromise
@@ -523,6 +529,85 @@ export async function ensureYouthStudents({
     }
   });
   return returnOnFirstPage ? firstPagePromise : fullPromise;
+}
+
+/**
+ * Incrementally checks for Youth students created/updated since the last full load
+ * (using `updatedAt > syncedAtMs` + `getCountFromServer`) so second opens cost 1-20 reads.
+ */
+export async function syncYouthStudentsDelta({
+  profile = null,
+  sessionId = '',
+  includeAllSessions = false
+} = {}) {
+  const root = ensureCacheRoot();
+  const isBranchHead = profile?.role === 'branch_head' && !!profile?.branchId;
+  const sid = String(sessionId || '').trim();
+  const key = getYouthStudentsCacheKey({ profile, sessionId: sid, includeAllSessions });
+  const existing = root.studentsLists.get(key) || getCachedYouthStudents({ profile, sessionId: sid, includeAllSessions });
+  if (!existing || existing.isComplete === false || !existing.syncedAtMs) {
+    const full = await ensureYouthStudents({ profile, sessionId: sid, includeAllSessions, forceRefresh: true });
+    return { ...full, changedIds: (full.list || []).map((s) => s.id), deltaUsed: false };
+  }
+
+  const baseConstraints = [where('ctx', '==', 'youth')];
+  if (sid) baseConstraints.push(where('sessionId', '==', sid));
+  if (isBranchHead) baseConstraints.push(where('branchId', '==', profile.branchId));
+
+  const nextSyncAtMs = Date.now() - 2000;
+  const sinceTs = typeof Timestamp?.fromMillis === 'function'
+    ? Timestamp.fromMillis(existing.syncedAtMs)
+    : new Date(existing.syncedAtMs);
+
+  const [countSnap, deltaSnap] = await Promise.all([
+    getCountFromServer(query(collection(db, 'students'), ...baseConstraints)),
+    getDocs(query(collection(db, 'students'), ...baseConstraints, where('updatedAt', '>', sinceTs)))
+  ]);
+
+  const serverTotal = Number(countSnap?.data?.()?.count ?? existing.list.length);
+  if (serverTotal < existing.list.length) {
+    // A document was permanently removed; re-fetch full list to avoid stale deleted entries.
+    const full = await ensureYouthStudents({ profile, sessionId: sid, includeAllSessions, forceRefresh: true });
+    return { ...full, changedIds: [], deltaUsed: false, readCount: (full.readCount || 0) + 1 + deltaSnap.size };
+  }
+
+  const readCount = 1 + deltaSnap.size;
+  const changedIds = [];
+  let nextList = existing.list;
+  let nextById = existing.byId;
+
+  if (deltaSnap.size > 0) {
+    nextList = existing.list.slice();
+    nextById = { ...existing.byId };
+    const idxById = new Map();
+    nextList.forEach((s, idx) => { if (s?.id) idxById.set(s.id, idx); });
+
+    deltaSnap.docs.forEach((d) => {
+      const st = { id: d.id, ...d.data() };
+      changedIds.push(st.id);
+      nextById[st.id] = st;
+      root.studentsById.set(st.id, st);
+      if (idxById.has(st.id)) nextList[idxById.get(st.id)] = st;
+      else nextList.push(st);
+    });
+  }
+
+  const updated = {
+    ...existing,
+    list: nextList,
+    byId: nextById,
+    totalCount: nextList.length,
+    loadedCount: nextList.length,
+    isComplete: true,
+    fetchedAt: Date.now(),
+    syncedAtMs: nextSyncAtMs,
+    readCount,
+    fromCache: false,
+    changedIds,
+    deltaUsed: true
+  };
+  root.studentsLists.set(key, updated);
+  return updated;
 }
 
 export function getCachedYouthSessionDataset({ profile = null, session = null, sessionId = '' } = {}) {
@@ -654,8 +739,19 @@ export async function ensureYouthSessionDataset({
       activeTargets.forEach((s) => {
         const found = groupedByStudent.get(s.id) || [];
         const admittedBeforeLookback = Boolean(s.admissionDate && s.admissionDate < lookbackStart);
-        const missingExpectedPayments = Number(s.paidAmount || 0) > 0 && found.length === 0;
-        if (admittedBeforeLookback || missingExpectedPayments) {
+        const foundCoursePaid = Number(calculateStudentFinancials(s, found).paid || 0);
+        const foundMoneySum = found.reduce((acc, p) => {
+          const t = String(p?.type || '').toUpperCase().trim();
+          if (t === 'WA' || t === 'WAIVER') return acc;
+          if (p.total != null) return acc + Number(p.total || 0);
+          const lf = (p.waived || p.lateFeeWaived) ? 0 : Number(p.lateFee ?? p.lateFeeAmount ?? 0);
+          return acc + Number(p.amount || 0) + lf;
+        }, 0);
+        const expectedCoursePaid = Number(s.paidAmount ?? s.totalPaid ?? 0);
+        const paidSumMismatch = foundCoursePaid !== expectedCoursePaid;
+        const moneySumMismatch = s.moneyCollected != null && foundMoneySum !== Number(s.moneyCollected);
+        const missingExpectedPayments = expectedCoursePaid > 0 && found.length === 0;
+        if (admittedBeforeLookback || paidSumMismatch || moneySumMismatch || missingExpectedPayments) {
           fallbackTargets.push(s);
         } else {
           const sorted = sortStudentPaymentsDesc(found.slice());
@@ -700,6 +796,7 @@ export async function ensureYouthSessionDataset({
       paymentsByStudentId,
       rawPayments,
       fetchedAt: Date.now(),
+      syncedAtMs: stRes.syncedAtMs || (Date.now() - 2000),
       readCount,
       fromCache: false
     };
@@ -711,6 +808,92 @@ export async function ensureYouthSessionDataset({
 
   inflightSessionDatasets.set(key, task);
   return task;
+}
+
+/**
+ * Incrementally syncs an already-cached single-session dataset using student `updatedAt` delta
+ * and re-fetches payment subcollections ONLY for changed students.
+ */
+export async function syncYouthSessionDatasetDelta({
+  profile = null,
+  session = null,
+  sessionId = ''
+} = {}) {
+  const sid = String(sessionId || session?.id || '').trim();
+  if (!sid) return ensureYouthSessionDataset({ profile, session, sessionId: sid });
+
+  const root = ensureCacheRoot();
+  const isBranchHead = profile?.role === 'branch_head' && !!profile?.branchId;
+  const branchScope = isBranchHead ? profile.branchId : 'ALL';
+  const key = `${sid}::${branchScope}`;
+  const existing = root.youthSessionDatasets.get(key);
+  if (!existing) {
+    const full = await ensureYouthSessionDataset({ profile, session, sessionId: sid, forceRefresh: false });
+    return { ...full, changedCount: full.studentsList?.length || 0, deltaUsed: false };
+  }
+
+  const stDelta = await syncYouthStudentsDelta({ profile, sessionId: sid });
+  if (stDelta.deltaUsed === false) {
+    // A deletion forced full student refresh; rebuild full dataset.
+    const full = await ensureYouthSessionDataset({ profile, session, sessionId: sid, forceRefresh: true });
+    return { ...full, changedCount: full.studentsList?.length || 0, deltaUsed: false, readCount: (full.readCount || 0) + (stDelta.readCount || 0) };
+  }
+
+  const changedIds = (stDelta.changedIds || []).filter((id) => stDelta.byId?.[id]?.status !== 'deleted');
+  let readCount = stDelta.readCount || 0;
+
+  if (changedIds.length === 0) {
+    const refreshed = {
+      ...existing,
+      studentsList: stDelta.list,
+      studentsById: stDelta.byId,
+      fetchedAt: Date.now(),
+      syncedAtMs: stDelta.syncedAtMs || existing.syncedAtMs,
+      readCount,
+      fromCache: false,
+      changedCount: 0,
+      deltaUsed: true
+    };
+    root.youthSessionDatasets.set(key, refreshed);
+    return refreshed;
+  }
+
+  const nextPaymentsByStu = { ...(existing.paymentsByStudentId || {}) };
+  await runInChunks(changedIds, 15, async (id) => {
+    const payments = await fetchStudentPayments(id);
+    readCount += Math.max(1, payments.length);
+    nextPaymentsByStu[id] = payments.map((p) => ({ ...p, studentDocId: p.studentDocId || id }));
+  });
+
+  const nextRawPayments = [];
+  Object.entries(nextPaymentsByStu).forEach(([sId, arr]) => {
+    if (!stDelta.byId?.[sId] || stDelta.byId[sId].status === 'deleted') return;
+    (arr || []).forEach((p) => nextRawPayments.push({ ...p, studentDocId: p.studentDocId || sId }));
+  });
+
+  const updated = {
+    ...existing,
+    studentsList: stDelta.list,
+    studentsById: stDelta.byId,
+    paymentsByStudentId: nextPaymentsByStu,
+    rawPayments: nextRawPayments,
+    fetchedAt: Date.now(),
+    syncedAtMs: stDelta.syncedAtMs || Date.now() - 2000,
+    readCount,
+    fromCache: false,
+    changedCount: changedIds.length,
+    deltaUsed: true
+  };
+  root.youthSessionDatasets.set(key, updated);
+
+  // Invalidate derived pending/history caches ONLY for the session that changed.
+  for (const k of Array.from(root.youthPending.keys())) {
+    if (k.startsWith(`${sid}::`)) root.youthPending.delete(k);
+  }
+  for (const k of Array.from(root.youthHistory.keys())) {
+    if (k.includes(`S:${sid}`)) root.youthHistory.delete(k);
+  }
+  return updated;
 }
 
 /**
@@ -995,42 +1178,92 @@ export async function loadYouthDashboardServerAggregates({
   const constraints = [where('ctx', '==', 'youth')];
   if (effBranch !== 'all') constraints.push(where('branchId', '==', effBranch));
   constraints.push(where('sessionId', '==', session.id));
-  const q = query(collection(db, 'students'), ...constraints);
+  const baseQ = query(collection(db, 'students'), ...constraints);
+  const activeQ = query(collection(db, 'students'), ...constraints, where('status', '==', 'active'));
 
   try {
-    const aggSnap = await getAggregateFromServer(q, {
-      totalCount: count(),
-      feeSum: sum('feeTotal'),
-      paidSum: sum('paidAmount'),
-      balanceSum: sum('balanceDue')
-    });
-    const data = typeof aggSnap?.data === 'function' ? aggSnap.data() : {};
-    const totalCount = Number(data.totalCount || 0);
-    const feeSum = Number(data.feeSum || 0);
-    const paidSum = Number(data.paidSum || 0);
-    const balanceSum = Number(data.balanceSum || 0);
+    const [allSnap, activeSnap] = await Promise.all([
+      getAggregateFromServer(baseQ, {
+        totalCount: count(),
+        feeSum: sum('feeTotal'),
+        paidSum: sum('paidAmount'),
+        moneySum: sum('moneyCollected')
+      }),
+      getAggregateFromServer(activeQ, {
+        activeCount: count(),
+        balanceSum: sum('balanceDue')
+      })
+    ]);
+
+    const allData = typeof allSnap?.data === 'function' ? allSnap.data() : {};
+    const actData = typeof activeSnap?.data === 'function' ? activeSnap.data() : {};
+    const totalAll = Number(allData.totalCount || 0);
+    const activeCount = Number(actData.activeCount || 0);
+    let readCount = 2;
+
+    let dropCount = 0;
+    let dropFee = 0;
+    let dropPaid = 0;
+    let dropMoney = 0;
+    if (totalAll > activeCount) {
+      const dropQ = query(
+        collection(db, 'students'),
+        ...constraints,
+        where('status', 'in', ['dropped', 'left', 'inactive', 'deleted'])
+      );
+      const dropSnap = await getAggregateFromServer(dropQ, {
+        dropCount: count(),
+        dropFee: sum('feeTotal'),
+        dropPaid: sum('paidAmount'),
+        dropMoney: sum('moneyCollected')
+      }).catch(() => null);
+      if (dropSnap && typeof dropSnap.data === 'function') {
+        const dd = dropSnap.data();
+        dropCount = Number(dd.dropCount || 0);
+        dropFee = Number(dd.dropFee || 0);
+        dropPaid = Number(dd.dropPaid || 0);
+        dropMoney = Number(dd.dropMoney || 0);
+        readCount += 1;
+      }
+    }
+
+    const totalCount = Math.max(0, totalAll);
+    const feeSum = Math.max(0, Number(allData.feeSum || 0) - dropFee);
+    const paidSum = Math.max(0, Number(allData.paidSum || 0) - dropPaid);
+    // Fee Collection includes payments collected from all students in the session (including later-dropped students),
+    // matching Payment History & Reports ledger totals.
+    const moneySum = Math.max(0, Number(allData.moneySum || 0));
+    const balanceSum = Math.max(0, Number(actData.balanceSum || 0));
+
     return {
       sessionId: session.id,
       branchFilter: effBranch,
       totalCount,
+      activeCount,
+      droppedExcludedCount: dropCount,
       feeSum,
       paidSum,
+      moneySum,
       balanceSum,
       hasCurrencySums: feeSum > 0 || paidSum > 0 || balanceSum > 0 || totalCount === 0,
-      readCount: 1
+      hasMoneySum: moneySum > 0 || totalCount === 0,
+      readCount
     };
   } catch (_) {
     try {
-      const cntSnap = await getCountFromServer(q);
+      const cntSnap = await getCountFromServer(baseQ);
       const totalCount = Number(cntSnap?.data?.()?.count || 0);
       return {
         sessionId: session.id,
         branchFilter: effBranch,
         totalCount,
+        activeCount: null,
         feeSum: 0,
         paidSum: 0,
+        moneySum: 0,
         balanceSum: 0,
         hasCurrencySums: totalCount === 0,
+        hasMoneySum: totalCount === 0,
         readCount: 1
       };
     } catch (__) {
@@ -1059,6 +1292,7 @@ export async function loadYouthPendingReport({
   profile,
   session,
   forceRefresh = false,
+  deltaRefresh = false,
   asOfDate = todayISO()
 } = {}) {
   if (!session || !session.id) {
@@ -1079,21 +1313,30 @@ export async function loadYouthPendingReport({
   const isBranchHead = profile?.role === 'branch_head' && !!profile?.branchId;
   const cacheKey = `${session.id}::${isBranchHead ? profile.branchId : 'ALL'}::${asOfDate}`;
   const root = ensureCacheRoot();
-  if (!forceRefresh && root.youthPending.has(cacheKey)) {
+  if (!forceRefresh && !deltaRefresh && root.youthPending.has(cacheKey)) {
     const cached = root.youthPending.get(cacheKey);
     return { ...cached, readCount: 0, fromCache: true };
   }
-  if (!forceRefresh && inflightPending.has(cacheKey)) {
+  if (!forceRefresh && !deltaRefresh && inflightPending.has(cacheKey)) {
     return inflightPending.get(cacheKey);
   }
 
   const task = (async () => {
+    const existingCached = !forceRefresh ? root.youthPending.get(cacheKey) : null;
     const [meta, dataset] = await Promise.all([
-      ensureReferenceData({ forceRefresh, profile }),
-      ensureYouthSessionDataset({ profile, session, forceRefresh })
+      ensureReferenceData({ forceRefresh: forceRefresh && !deltaRefresh, profile }),
+      (!forceRefresh && deltaRefresh)
+        ? syncYouthSessionDatasetDelta({ profile, session })
+        : ensureYouthSessionDataset({ profile, session, forceRefresh })
     ]);
     const readCount = (meta.fromCache ? 0 : (meta.readCount || 0))
       + (dataset.fromCache ? 0 : (dataset.readCount || 0));
+
+    if (!forceRefresh && deltaRefresh && dataset.deltaUsed && dataset.changedCount === 0 && existingCached) {
+      const untouched = { ...existingCached, fetchedAt: Date.now(), readCount, fromCache: false };
+      root.youthPending.set(cacheKey, untouched);
+      return untouched;
+    }
 
     const { studentsById, paymentsByStudentId, allItems } = buildYouthPendingItemsFromDataset(
       dataset,
@@ -1402,6 +1645,7 @@ export async function loadYouthPaymentHistory({
   loadAll = false,
   maxBatches = 50,
   forceRefresh = false,
+  deltaRefresh = false,
   existingState = null
 } = {}) {
   const root = ensureCacheRoot();
@@ -1410,11 +1654,11 @@ export async function loadYouthPaymentHistory({
   const esid = String(extraSessionId || extraSession?.id || '').trim();
   const cacheKey = getYouthHistoryCacheKey({ profile, sessionId: sid, extraSessionId: esid, dateFrom, dateTo });
 
-  if (!cursor && !forceRefresh && root.youthHistory.has(cacheKey)) {
+  if (!cursor && !forceRefresh && !deltaRefresh && root.youthHistory.has(cacheKey)) {
     const cached = root.youthHistory.get(cacheKey);
     return { ...cached, readCount: 0, fromCache: true };
   }
-  if (!cursor && !forceRefresh && inflightHistory.has(cacheKey)) {
+  if (!cursor && !forceRefresh && !deltaRefresh && inflightHistory.has(cacheKey)) {
     return inflightHistory.get(cacheKey);
   }
 
@@ -1423,18 +1667,34 @@ export async function loadYouthPaymentHistory({
     if (sid && !cursor) {
       const targetSessions = [sid];
       if (esid && esid !== sid) targetSessions.push(esid);
+      const existingCached = !forceRefresh ? root.youthHistory.get(cacheKey) : null;
 
       const [meta, ...datasets] = await Promise.all([
-        ensureReferenceData({ forceRefresh, profile }),
-        ...targetSessions.map((id) => ensureYouthSessionDataset({ profile, sessionId: id, forceRefresh }))
+        ensureReferenceData({ forceRefresh: forceRefresh && !deltaRefresh, profile }),
+        ...targetSessions.map((id) => (
+          (!forceRefresh && deltaRefresh)
+            ? syncYouthSessionDatasetDelta({ profile, sessionId: id })
+            : ensureYouthSessionDataset({ profile, sessionId: id, forceRefresh })
+        ))
       ]);
 
       let readCount = meta.fromCache ? 0 : (meta.readCount || 0);
+      datasets.forEach((ds) => {
+        if (ds && !ds.fromCache) readCount += (ds.readCount || 0);
+      });
+
+      const allUnchanged = !forceRefresh && deltaRefresh && existingCached
+        && datasets.every((ds) => ds && ds.deltaUsed && ds.changedCount === 0);
+      if (allUnchanged) {
+        const untouched = { ...existingCached, fetchedAt: Date.now(), readCount, fromCache: false };
+        root.youthHistory.set(cacheKey, untouched);
+        return untouched;
+      }
+
       const studentsById = {};
       const rawList = [];
       datasets.forEach((ds) => {
         if (!ds) return;
-        if (!ds.fromCache) readCount += (ds.readCount || 0);
         Object.assign(studentsById, ds.studentsById || {});
         (ds.rawPayments || []).forEach((p) => {
           if (filterRawPaymentByDate(p, dateFrom, dateTo)) rawList.push(p);

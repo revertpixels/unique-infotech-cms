@@ -1,20 +1,20 @@
 // dashboard.page.js — Read-only Youth Centre Dashboard (#/dashboard) + preserved Unique Kids placeholder.
 
-import { ROUTES } from '../core/router.js?v=1.8.190';
-import { createSelect } from '../components/ui-select.js?v=1.8.190';
+import { ROUTES } from '../core/router.js?v=1.8.191';
+import { createSelect } from '../components/ui-select.js?v=1.8.191';
 import {
   renderDonutChart,
   renderBarChart,
   renderStackedBarChart,
   renderLineChart
-} from '../components/charts.js?v=1.8.190';
-import { openPaymentDetailsModal } from '../components/payment-details-modal.js?v=1.8.190';
-import { loadDashboardArchiveReminder, getCachedDashboardArchiveReminder } from '../services/archive.service.js?v=1.8.190';
-import { resolveUserDisplay, getRoleTitle } from '../services/user-directory.service.js?v=1.8.190';
-import { getCachedSessions, loadSessions, getSelectedSession, getSelectedSessionId, hasFreshSessionsCache } from '../core/sessions.js?v=1.8.190';
-import { getOrgTimezone } from '../utils/session-rules.js?v=1.8.190';
-import { formatPersonName, initials } from '../utils/formatter.js?v=1.8.190';
-import { buildYouthDashboardData } from '../services/dashboard.service.js?v=1.8.190';
+} from '../components/charts.js?v=1.8.191';
+import { openPaymentDetailsModal } from '../components/payment-details-modal.js?v=1.8.191';
+import { loadDashboardArchiveReminder, getCachedDashboardArchiveReminder } from '../services/archive.service.js?v=1.8.191';
+import { resolveUserDisplay, getRoleTitle } from '../services/user-directory.service.js?v=1.8.191';
+import { getCachedSessions, loadSessions, getSelectedSession, getSelectedSessionId, hasFreshSessionsCache } from '../core/sessions.js?v=1.8.191';
+import { getOrgTimezone } from '../utils/session-rules.js?v=1.8.191';
+import { formatPersonName, initials } from '../utils/formatter.js?v=1.8.191';
+import { buildYouthDashboardData } from '../services/dashboard.service.js?v=1.8.191';
 import {
   ensureReferenceData,
   getCachedReferenceData,
@@ -33,7 +33,7 @@ import {
   modeDisplayMeta,
   formatINR,
   fmtDate
-} from '../services/report.service.js?v=1.8.190';
+} from '../services/report.service.js?v=1.8.191';
 
 let state = null;
 let profileListener = null;
@@ -442,12 +442,12 @@ function dashboardSignature(histRes, pendRes) {
   return `${hLen}|${pLen}|${latestRec}|${dueSum}|${colSum}`;
 }
 
-async function loadDashboardSources({ forceRefresh = false, background = false } = {}) {
+async function loadDashboardSources({ forceRefresh = false, deltaRefresh = false, background = false } = {}) {
   if (!state || state.destroyed) return;
   const errBox = $('dash-error');
   if (errBox && !background) errBox.hidden = true;
 
-  if (!forceRefresh) {
+  if (!forceRefresh && !deltaRefresh) {
     const cachedMeta = getCachedReferenceData(state.profile);
     const cachedSessions = getCachedSessions('youth');
     const cachedSess = cachedSessions.length ? resolveSessionFromList(cachedSessions) : null;
@@ -482,7 +482,7 @@ async function loadDashboardSources({ forceRefresh = false, background = false }
           || isCacheStale(cachedHist)
           || isCacheStale(cachedPend);
         if (isStale && !background) {
-          loadDashboardSources({ forceRefresh: true, background: true }).catch(() => {});
+          loadDashboardSources({ forceRefresh: false, deltaRefresh: true, background: true }).catch(() => {});
         }
         if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
           window.dispatchEvent(new CustomEvent('uic:initial-data-ready'));
@@ -515,13 +515,16 @@ async function loadDashboardSources({ forceRefresh = false, background = false }
         session: { id: preSessId },
         branchFilter: state.branchFilter
       }).then((agg) => {
-        if (agg) applyEarlyServerAggregates(agg);
+        if (agg) {
+          if (state && !state.destroyed) state.lastServerAgg = agg;
+          applyEarlyServerAggregates(agg);
+        }
         return agg;
       }).catch(() => null)
       : Promise.resolve(null);
 
     const [meta, sessions] = await Promise.all([
-      ensureReferenceData({ forceRefresh, profile: state.profile }),
+      ensureReferenceData({ forceRefresh: forceRefresh && !deltaRefresh, profile: state.profile }),
       (!forceRefresh && hasFreshSessionsCache('youth'))
         ? Promise.resolve(getCachedSessions('youth'))
         : loadSessions('youth', { forceRefresh })
@@ -551,14 +554,17 @@ async function loadDashboardSources({ forceRefresh = false, background = false }
         session: state.activeSession,
         branchFilter: state.branchFilter
       }).then((agg) => {
-        if (agg) applyEarlyServerAggregates(agg);
+        if (agg) {
+          if (state && !state.destroyed) state.lastServerAgg = agg;
+          applyEarlyServerAggregates(agg);
+        }
       }).catch(() => {});
     } else if (!background) {
       await Promise.race([earlyAggPromise, new Promise((r) => setTimeout(r, 120))]);
     }
 
     // Phase 2: Stream active-session students early for instant Active/Admissions KPIs while payment dataset completes
-    if (!background) {
+    if (!background && !deltaRefresh) {
       ensureYouthStudents({
         profile: state.profile,
         sessionId: state.activeSession.id,
@@ -575,12 +581,14 @@ async function loadDashboardSources({ forceRefresh = false, background = false }
         dateFrom: '',
         dateTo: '',
         loadAll: false,
-        forceRefresh
+        forceRefresh,
+        deltaRefresh
       }),
       loadYouthPendingReport({
         profile: state.profile,
         session: state.activeSession,
-        forceRefresh
+        forceRefresh,
+        deltaRefresh
       })
     ]);
     if (!state || state.destroyed) return;
@@ -593,6 +601,26 @@ async function loadDashboardSources({ forceRefresh = false, background = false }
       updateHeaderUi();
       syncBranchFilterControl();
       computeAndRenderDashboard();
+    }
+    if (state.lastServerAgg && state.analytics?.kpis && state.lastServerAgg.sessionId === state.activeSession?.id) {
+      const a = state.lastServerAgg;
+      const k = state.analytics.kpis;
+      const drifts = [];
+      if (a.hasMoneySum && Math.abs(a.moneySum - Number(k.feeCollection?.value || 0)) > 1) {
+        drifts.push(`collected server=${a.moneySum} vs ledger=${k.feeCollection?.value}`);
+      }
+      if (a.hasCurrencySums && Math.abs(a.feeSum - Number(k.feeCollection?.totalCourseFee || 0)) > 1) {
+        drifts.push(`feeTotal server=${a.feeSum} vs calc=${k.feeCollection?.totalCourseFee}`);
+      }
+      if (a.hasCurrencySums && Math.abs(a.balanceSum - Number(k.outstandingDues?.value || 0)) > 1) {
+        drifts.push(`balanceDue server=${a.balanceSum} vs calc=${k.outstandingDues?.value}`);
+      }
+      if (Number.isFinite(a.activeCount) && a.activeCount !== Number(k.activeStudents?.value || 0)) {
+        drifts.push(`activeCount server=${a.activeCount} vs calc=${k.activeStudents?.value}`);
+      }
+      if (drifts.length) {
+        console.warn('[dashboard] KPI denormalization drift detected (using payment records truth):', drifts.join('; '));
+      }
     }
     if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
       window.dispatchEvent(new CustomEvent('uic:initial-data-ready'));
@@ -923,13 +951,18 @@ function applyEarlyServerAggregates(agg) {
   };
   if (Number.isFinite(agg.totalCount)) {
     setKpi('dash-kpi-admissions', 'dash-kpi-admissions-sub', agg.totalCount.toLocaleString('en-IN'), 'Session total · syncing...');
-    if (agg.totalCount === 0) {
+    if (Number.isFinite(agg.activeCount)) {
+      setKpi('dash-kpi-active', 'dash-kpi-active-sub', agg.activeCount.toLocaleString('en-IN'), agg.activeCount === 0 ? 'No enrolled students' : 'Active in session');
+    } else if (agg.totalCount === 0) {
       setKpi('dash-kpi-active', 'dash-kpi-active-sub', '0', 'No enrolled students');
     }
   }
   if (agg.hasCurrencySums) {
-    const rate = agg.feeSum > 0 ? Math.min(100, Math.round((agg.paidSum / agg.feeSum) * 100)) : 0;
-    setKpi('dash-kpi-collected', 'dash-kpi-collected-sub', formatINR(agg.paidSum), `${rate}% of ${formatINR(agg.feeSum)} billed`);
+    const colBase = agg.hasMoneySum ? agg.moneySum : agg.paidSum;
+    const rate = agg.feeSum > 0 ? Math.min(100, Math.round((colBase / agg.feeSum) * 100)) : 0;
+    if (agg.hasMoneySum) {
+      setKpi('dash-kpi-collected', 'dash-kpi-collected-sub', formatINR(agg.moneySum), `${rate}% of ${formatINR(agg.feeSum)} billed`);
+    }
     setKpi('dash-kpi-outstanding', 'dash-kpi-outstanding-sub', formatINR(agg.balanceSum), 'Total balance across active');
     setKpi('dash-kpi-rate', 'dash-kpi-rate-sub', `${rate}%`, `of ${formatINR(agg.feeSum)} total billed`);
     const bar = $('dash-kpi-rate-bar');

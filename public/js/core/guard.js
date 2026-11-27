@@ -1,23 +1,109 @@
 import { auth, db } from '../config/firebase-config.js';
 import { terminate, clearIndexedDbPersistence } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { clearAppCache } from './app.js?v=1.8.190';
-import { clearRouterCache } from './router.js?v=1.8.190';
+import { clearAppCache } from './app.js?v=1.8.191';
+import { clearRouterCache } from './router.js?v=1.8.191';
 import { resolveSession, signOutUser } from './auth.js';
-import { playLogoutSound } from '../utils/sound.js?v=1.8.190';
-import { clearAllReportCaches } from '../services/report.service.js?v=1.8.190';
-import { invalidateArchiveReminderCache } from '../services/archive.service.js?v=1.8.190';
-import { clearUsersDirectoryCache } from '../services/user-directory.service.js?v=1.8.190';
-import { clearPersistedBranchBatchFilters } from '../components/branch-batch-filter.js?v=1.8.190';
+import { playLogoutSound } from '../utils/sound.js?v=1.8.191';
+import { clearAllReportCaches } from '../services/report.service.js?v=1.8.191';
+import { invalidateArchiveReminderCache } from '../services/archive.service.js?v=1.8.191';
+import { clearUsersDirectoryCache } from '../services/user-directory.service.js?v=1.8.191';
+import { clearPersistedBranchBatchFilters } from '../components/branch-batch-filter.js?v=1.8.191';
 
 const INACTIVITY_LIMIT_MS = 30 * 60 * 1000;
 const LOGOUT_MIN_TRANSITION_MS = 1200;
 const ACTIVITY_EVENTS = ['mousedown', 'keydown', 'touchstart', 'scroll', 'mousemove'];
+const AUTH_SYNC_CHANNEL = 'uic_auth_sync';
+const LOGOUT_SIGNAL_STORAGE_KEY = 'uic_auth_logout_signal';
+const PENDING_IDB_CLEAR_KEY = 'uic_pending_idb_clear';
 
 let lastActivity = Date.now();
 let intervalId = null;
 let trackingBound = false;
 let loggingOut = false;
 let unauthHandler = null;
+let authSyncChannel = null;
+let peerLogoutBound = false;
+
+function wipeMemoryAndStorage({ keepPendingIdbFlag = true } = {}) {
+  try { clearAllReportCaches(); } catch (_) {}
+  try { invalidateArchiveReminderCache(); } catch (_) {}
+  try { clearUsersDirectoryCache(); } catch (_) {}
+  try { clearPersistedBranchBatchFilters(); } catch (_) {}
+  clearAppCache();
+
+  if (typeof sessionStorage !== 'undefined') {
+    try { sessionStorage.clear(); } catch (_) {}
+  }
+  if (typeof localStorage !== 'undefined') {
+    try {
+      const keys = [];
+      for (let i = 0; i < localStorage.length; i += 1) keys.push(localStorage.key(i));
+      keys.forEach((k) => {
+        if (!k) return;
+        if (keepPendingIdbFlag && k === PENDING_IDB_CLEAR_KEY) return;
+        if (/^(uicms\.|uic_|pending_verification|email_verification)/i.test(k)) {
+          localStorage.removeItem(k);
+        }
+      });
+    } catch (_) {}
+  }
+}
+
+async function handlePeerLogoutSignal(reason = 'signedout') {
+  if (loggingOut) return;
+  loggingOut = true;
+  try {
+    stopInactivityTracking();
+    try { clearRouterCache(); } catch (_) {}
+    // Release this tab's IndexedDB lease immediately so initiating tab's clearIndexedDbPersistence succeeds.
+    try { await terminate(db); } catch (_) {}
+    wipeMemoryAndStorage({ keepPendingIdbFlag: true });
+    const cleanReason = reason ? '?reason=' + encodeURIComponent(reason) : '';
+    if (typeof window !== 'undefined' && typeof location !== 'undefined' && typeof location.replace === 'function') {
+      location.replace('/index.html' + cleanReason);
+    } else if (typeof unauthHandler === 'function') {
+      await unauthHandler(reason || 'signedout');
+    }
+  } finally {
+    loggingOut = false;
+  }
+}
+
+function initCrossTabLogoutSync() {
+  if (peerLogoutBound || typeof window === 'undefined') return;
+  peerLogoutBound = true;
+  if (typeof BroadcastChannel === 'function') {
+    try {
+      authSyncChannel = new BroadcastChannel(AUTH_SYNC_CHANNEL);
+      authSyncChannel.addEventListener('message', (ev) => {
+        if (ev?.data?.type === 'logout') {
+          handlePeerLogoutSignal(ev.data.reason || 'signedout');
+        }
+      });
+    } catch (_) {}
+  }
+  window.addEventListener('storage', (ev) => {
+    if (ev?.key === LOGOUT_SIGNAL_STORAGE_KEY && ev.newValue) {
+      let reason = 'signedout';
+      try { reason = JSON.parse(ev.newValue).reason || 'signedout'; } catch (_) {}
+      handlePeerLogoutSignal(reason);
+    }
+  });
+}
+
+function broadcastLogoutToOtherTabs(reason = 'signedout') {
+  if (typeof window === 'undefined') return;
+  try {
+    if (authSyncChannel) authSyncChannel.postMessage({ type: 'logout', reason });
+  } catch (_) {}
+  try {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(LOGOUT_SIGNAL_STORAGE_KEY, JSON.stringify({ at: Date.now(), reason }));
+    }
+  } catch (_) {}
+}
+
+initCrossTabLogoutSync();
 
 function bump() {
   lastActivity = Date.now();
@@ -86,6 +172,8 @@ export async function logout(reason, { minDelayMs = reason === 'timeout' ? 0 : L
   try {
     playLogoutSound();
     stopInactivityTracking();
+    // Broadcast logout immediately so sibling tabs release their Firestore IndexedDB handles while sound/sign-out finishes.
+    broadcastLogoutToOtherTabs(reason || 'signedout');
     if (typeof document !== 'undefined') {
       document.body.classList.add('is-logging-out');
       const signoutBtn = document.querySelector('#sidebar .sb-identity-btn');
@@ -103,26 +191,22 @@ export async function logout(reason, { minDelayMs = reason === 'timeout' ? 0 : L
     // Stop active page listeners/routes BEFORE terminating Firestore or wiping IndexedDB.
     try { clearRouterCache(); } catch (_) {}
     try { await terminate(db); } catch (_) {}
-    try { await clearIndexedDbPersistence(db); } catch (_) {}
 
-    try { clearAllReportCaches(); } catch (_) {}
-    try { invalidateArchiveReminderCache(); } catch (_) {}
-    try { clearUsersDirectoryCache(); } catch (_) {}
-    try { clearPersistedBranchBatchFilters(); } catch (_) {}
-    clearAppCache();
-
-    if (typeof sessionStorage !== 'undefined') {
-      try { sessionStorage.clear(); } catch (_) {}
-    }
-    if (typeof localStorage !== 'undefined') {
+    let idbCleared = false;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
       try {
-        const keys = [];
-        for (let i = 0; i < localStorage.length; i += 1) keys.push(localStorage.key(i));
-        keys.forEach((k) => {
-          if (k && /^(uicms\.|uic_|pending_verification|email_verification)/i.test(k)) {
-            localStorage.removeItem(k);
-          }
-        });
+        await clearIndexedDbPersistence(db);
+        idbCleared = true;
+        break;
+      } catch (_) {
+        await new Promise((r) => setTimeout(r, 180));
+      }
+    }
+
+    wipeMemoryAndStorage({ keepPendingIdbFlag: false });
+    if (!idbCleared && typeof localStorage !== 'undefined') {
+      try {
+        localStorage.setItem(PENDING_IDB_CLEAR_KEY, '1');
       } catch (_) {}
     }
 

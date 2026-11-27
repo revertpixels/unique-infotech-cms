@@ -8,11 +8,11 @@ import {
   runTransaction,
   serverTimestamp
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { readStudentId, readReceiptNo, writeCounter } from './admission.service.js?v=1.8.190';
-import { fineFor, todayISO, installmentSchedule, examWindowOf } from '../utils/session-rules.js?v=1.8.190';
-import { courseFeeOf } from '../utils/fees.js?v=1.8.190';
-import { formatPersonName } from '../utils/formatter.js?v=1.8.190';
-import { resolveUserDisplay } from './user-directory.service.js?v=1.8.190';
+import { readStudentId, readReceiptNo, writeCounter } from './admission.service.js?v=1.8.191';
+import { fineFor, todayISO, installmentSchedule, examWindowOf } from '../utils/session-rules.js?v=1.8.191';
+import { courseFeeOf } from '../utils/fees.js?v=1.8.191';
+import { formatPersonName } from '../utils/formatter.js?v=1.8.191';
+import { resolveUserDisplay } from './user-directory.service.js?v=1.8.191';
 
 const COL = 'students';
 
@@ -606,13 +606,21 @@ export async function recordPaymentTx(tx, {
   const paymentRef = doc(collection(db, COL, studentDoc.id, 'payment'));
   const activityRef = doc(collection(db, COL, studentDoc.id, 'activity'));
 
-  const numAmount = Number(amount || 0);
+  const normType = String(type || 'IN').toUpperCase().trim();
+  const isCourseFeePayment = ['AD', 'ADM', 'ADMISSION', 'IN', 'INST', 'INSTALLMENT', 'FULL'].includes(normType);
+  const isPureWaiver = normType === 'WA' || normType === 'WAIVER';
+  const numAmount = isPureWaiver ? 0 : Number(amount || 0);
   const numLate = Number(lateFeeAmount || 0);
-  const totalAmount = numAmount + (actualWaived ? 0 : numLate);
+  const totalAmount = isPureWaiver ? 0 : (numAmount + (actualWaived ? 0 : numLate));
 
   const currentPaid = Number(sData.paidAmount ?? sData.totalPaid ?? 0);
-  const newPaid = currentPaid + numAmount;
+  const newPaid = isCourseFeePayment ? (currentPaid + numAmount) : currentPaid;
   const newBalance = Math.max(0, Number(sData.feeTotal || studentDoc.feeTotal || 0) - newPaid);
+  const currentMoney = Number(
+    sData.moneyCollected
+    ?? (currentPaid + (sData.materialPaid ? Number(sData.materialFee || sData.feeSnapshot?.material || 0) : 0))
+  );
+  const newMoneyCollected = currentMoney + totalAmount;
 
   const recDisp = resolveUserDisplay(userEmail, userName, userDesignation);
   const recName = recDisp.name && recDisp.name !== '-' ? recDisp.name : (formatPersonName(userName || '') || userName || '');
@@ -652,6 +660,7 @@ export async function recordPaymentTx(tx, {
     paidAmount: newPaid,
     totalPaid: newPaid,
     balanceDue: newBalance,
+    moneyCollected: newMoneyCollected,
     updatedAt: serverTimestamp(),
     updatedBy: (userEmail || '').toLowerCase()
   };
@@ -870,6 +879,7 @@ export async function recordAdmissionWithPayment({
       paidAmount: primaryAmt,
       totalPaid: primaryAmt,
       balanceDue: balanceDue,
+      moneyCollected: payAmt,
       feeSnapshot: pa.feeSnapshot || {},
       feeSchedule: isFull
         ? []

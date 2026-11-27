@@ -116,8 +116,8 @@ service cloud.firestore {
 
     function validBatchDoc() {
       let d = request.resource.data;
-      return (d.allCourses == null || d.allCourses is bool)
-        && (d.courseIds == null || (d.courseIds is list && d.courseIds.size() <= 100));
+      return (!('allCourses' in d) || d.allCourses == null || d.allCourses is bool)
+        && (!('courseIds' in d) || d.courseIds == null || (d.courseIds is list && d.courseIds.size() <= 100));
     }
 
     function validStudentDoc() {
@@ -126,7 +126,7 @@ service cloud.firestore {
         && (d.studentId is string && d.studentId.size() == 8)
         && (d.status is string && d.status.size() > 0)
         && (d.branchId is string && d.branchId.size() > 0)
-        && (d.receiptNo == null || d.receiptNo is string);
+        && (!('receiptNo' in d) || d.receiptNo == null || d.receiptNo is string);
     }
 
     match /users/{userEmail} {

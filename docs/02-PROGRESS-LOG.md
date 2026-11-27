@@ -39,6 +39,45 @@
 
 ---
 
+### [2026-11-27 16:00] Version 1.8.191 — Production-Safety Checks: Real Emulator Rules/Indexes, Delta Sync (0–2 Reads), Lookback Gap, Multi-Tab Logout & KPI Parity (Local Only)
+
+**What was built:**
+- **Firestore rules & composite/collection-group indexes (`firestore.rules`, `firestore.indexes.json` — UN-DEPLOYED, pending approval)**:
+  - Fixed CEL undefined-property evaluation errors in `validBatchDoc()` (`allCourses`/`courseIds`) and `validStudentDoc()` (`!('receiptNo' in d) || d.receiptNo == null || d.receiptNo is string`) caught by running live `recordPayment()` writes against the Firebase Firestore Emulator.
+  - Added composite indexes on `students` (`COLLECTION` scope): `(ctx, branchId)`, `(ctx, sessionId, status)`, `(ctx, branchId, sessionId, status)`, `(ctx, updatedAt)`, `(ctx, branchId, updatedAt)`, `(ctx, sessionId, updatedAt)`, `(ctx, branchId, sessionId, updatedAt)`, `(ctx, studentId)`, `(ctx, branchId, studentId)`, `(ctx, phone)`, `(ctx, branchId, phone)`.
+  - Fixed `executeSearch` fallback queries in `public/js/pages/pay-fees.page.js` (`studentId` / `phone`) to include `where('branchId', '==', currentUserProfile.branchId)` for `branch_head`, eliminating `permission-denied` under real rules.
+- **Second-open delta sync (`0–2` reads) & Lookback Gap (`-120d`) (`public/js/services/report.service.js`, pages)**:
+  - Added `syncedAtMs`, `syncYouthStudentsDelta`, and `syncYouthSessionDatasetDelta` using parallel `getCountFromServer` + `where('updatedAt', '>', Timestamp.fromMillis(syncedAtMs))`; fixed `getCachedYouthStudents` slice from all-sessions cache to preserve `syncedAtMs` cleanly; wired `deltaRefresh: true` across `dashboard.page.js`, `admissions.page.js`, `pay-fees.page.js`, `pending.page.js`, `payments.page.js`, and `reports.page.js`.
+  - Fixed `ensureYouthSessionDataset` lookback completeness check (`admissionDate < lookbackStart`, `calculateStudentFinancials(s, found).paid !== expectedCoursePaid`, `foundMoneySum !== Number(s.moneyCollected)`, or missing expected payments) to trigger full `fetchStudentPayments(s.id)`.
+- **Multi-tab logout & deferred IndexedDB wipe (`public/js/core/guard.js`, `public/js/config/firebase-config.js`)**:
+  - Added `BroadcastChannel('uic_auth_sync')` + `localStorage` `storage` event broadcast on `logout()` so sibling tabs immediately call `terminate(db)`, clear storage/caches, and reload cleanly; initiator retries `clearIndexedDbPersistence(db)` (up to 3x) and sets `localStorage.uic_pending_idb_clear = '1'` fallback if blocked so logout never hangs.
+  - Added startup `uic_pending_idb_clear === '1'` cleanup in `firebase-config.js` using a disposable `FirebaseApp` + `terminate` + `clearIndexedDbPersistence` + `deleteApp` BEFORE initializing primary `app`/`auth`/`db` with `persistentLocalCache`, preventing left-behind PII or terminated-client errors.
+- **KPI parity & `moneyCollected` denormalization (`public/js/services/payment.service.js`, `public/js/services/report.service.js`, `public/js/pages/dashboard.page.js`)**:
+  - Fixed `recordPaymentTx` so only course fee payments (`AD`/`ADM`/`ADMISSION`/`IN`/`INST`/`INSTALLMENT`/`FULL`) update `paidAmount`/`totalPaid`/`balanceDue`, keeping `EX` and `MAT` isolated, and maintained `moneyCollected` in `recordPaymentTx` and `recordAdmissionWithPayment`.
+  - Aligned `loadYouthDashboardServerAggregates` `moneySum` with all session payment entries (`allData.moneySum`, matching `summarizePaymentLedger`, `Dashboard`, and `Reports` even when dropped students made earlier payments), `feeSum` / `paidSum` / `balanceSum` with non-dropped/active students, and added KPI drift `console.warn` audit in `dashboard.page.js`.
+
+**Why:**
+- Verify every v1.8.190 query, write transaction, security rule, and composite index against the real Firebase Auth + Firestore Emulator Suite at 1k/4k scale, eliminate second-open reload read waste (`0–2` reads), close the `-120d` lookback edge case, harden multi-tab sign-out IndexedDB cleanup, and achieve 0-rupee KPI parity across server aggregates and payment records.
+
+**Files touched (committed locally only, NOT deployed or pushed):**
+- MODIFIED: `firestore.rules`, `firestore.indexes.json`, `public/js/config/firebase-config.js`, `public/js/core/guard.js`, `public/js/services/payment.service.js`, `public/js/services/report.service.js`, `public/js/pages/dashboard.page.js`, `public/js/pages/admissions.page.js`, `public/js/pages/pay-fees.page.js`, `public/js/pages/pending.page.js`, `public/js/pages/payments.page.js`, `public/js/pages/reports.page.js`, `docs/02-PROGRESS-LOG.md` (+ `bump-version.js 1.8.191` across 54 files).
+
+**Firestore changes (UN-DEPLOYED — awaits user approval):**
+- Rules: Updated `validBatchDoc()` and `validStudentDoc()` in `firestore.rules` (safe key-existence guards `!('receiptNo' in d)` etc.).
+- Indexes: Added 11 composite indexes on `students` in `firestore.indexes.json` (`ctx` + `branchId` / `sessionId` / `status` / `updatedAt` / `studentId` / `phone`).
+- Summary Doc Proposal (NOT implemented): `stats/{ctx}_{sessionId}_{branchId}` updated on payment/admission writes (cuts Dashboard monitoring to ~75–150 reads/day for 5 staff × 3 logins/day).
+
+**Tested on (all run after final v1.8.191 version bump):**
+- Import & syntax check (`tools/check-imports.js`, `node --check`): ✅ 114 files / 424 imports / 369 exports, 0 errors.
+- Unit & 1,200-student + Lookback Split + Delta Sync tests (`scratch/run-tests.mjs`): ✅ Passed.
+- Firebase Auth + Firestore Emulator (`1,000` students, `4,000` payments, real `firestore.rules` + `firestore.indexes.json`): ✅ Super Admin & Branch Head passed all queries (`collectionGroup`, `getCountFromServer`, `getAggregateFromServer`, `startAfter`, `updatedAt >`, fallback searches), live `recordPayment`, Lookback `-120d`, 0-rupee KPI parity, and 5 negative cross-branch/unscoped `permission-denied` checks with 0 errors.
+- Chrome 2-Tab Multi-Tab Logout (`scratch/verify-multitab-logout.mjs` against real Emulator + IDB): ✅ Scenario 1 wiped IDB (`0` cached docs, `347ms` across 2 tabs); Scenario 2 (`uic_pending_idb_clear = '1'`) wiped IDB on reload (`0` cached docs before login, `10` docs queried cleanly post-recovery).
+- Chrome Scale Benchmark (`scratch/bench-perf.mjs`, 1k students / 4k payments): ✅ Fast 4G second opens `0–2` reads (`34–59ms`), Dashboard KPIs `1,036ms` (`19` reads), Pending `483ms` -> `54ms` (`2` reads), Payment History `529ms` -> `52ms` (`0` reads), Reports -> `57ms` (`2` reads).
+- Chrome Regression Suites (`verify-router-regression.mjs`, `verify-dashboard.mjs`, `verify-reports.mjs`, `verify-archives.mjs`, `verify-auth-profile.mjs`, `verify-qa-189.mjs`): ✅ All passed cleanly.
+- Deployed: ❌ NO (local commit only; rules & indexes un-deployed pending approval).
+
+---
+
 ### [2026-11-27 15:24] Version 1.8.190 — Fix v1.8.189 Review Issues: Unlimited Pagination, Fast 4G Dashboard KPIs, Logout IndexedDB Wipe & Multi-User Freshness (Local Only)
 
 **What was built:**

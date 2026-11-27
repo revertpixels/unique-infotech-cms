@@ -11,21 +11,22 @@ import {
   runTransaction,
   serverTimestamp
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { createSelect } from '../components/ui-select.js?v=1.8.190';
-import { openPopup } from '../components/modal.js?v=1.8.190';
-import { confirmDialog } from '../components/ui-confirm.js?v=1.8.190';
-import { showToast } from '../components/toast.js?v=1.8.190';
-import { getSelectedSessionId, getCachedSessions, loadSessions, hasFreshSessionsCache } from '../core/sessions.js?v=1.8.190';
-import { todayISO, fmtDate, examWindowOf, installmentSchedule } from '../utils/session-rules.js?v=1.8.190';
-import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.190';
-import { getRoleTitle, resolveUserDisplay } from '../services/user-directory.service.js?v=1.8.190';
+import { createSelect } from '../components/ui-select.js?v=1.8.191';
+import { openPopup } from '../components/modal.js?v=1.8.191';
+import { confirmDialog } from '../components/ui-confirm.js?v=1.8.191';
+import { showToast } from '../components/toast.js?v=1.8.191';
+import { getSelectedSessionId, getCachedSessions, loadSessions, hasFreshSessionsCache } from '../core/sessions.js?v=1.8.191';
+import { todayISO, fmtDate, examWindowOf, installmentSchedule } from '../utils/session-rules.js?v=1.8.191';
+import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.191';
+import { getRoleTitle, resolveUserDisplay } from '../services/user-directory.service.js?v=1.8.191';
 import {
   ensureReferenceData,
   getCachedReferenceData,
   ensureYouthStudents,
+  syncYouthStudentsDelta,
   getCachedYouthStudents,
   isCacheStale
-} from '../services/report.service.js?v=1.8.190';
+} from '../services/report.service.js?v=1.8.191';
 import {
   calculateLateFee,
   fetchStudentPayments,
@@ -35,7 +36,7 @@ import {
   courseBalanceWithoutExam,
   calculateStudentFinancials,
   repairStudentAdmissionPayment
-} from '../services/payment.service.js?v=1.8.190';
+} from '../services/payment.service.js?v=1.8.191';
 
 let currentUserProfile = null;
 let currentCtx = 'youth';
@@ -229,11 +230,11 @@ function applyPayFeesSessionUi(cachedSessions) {
 /**
  * Loads session info, active courses and initial students cache (instant from shared APP_CACHE if warm)
  */
-async function initData({ forceRefresh = false, background = false } = {}) {
+async function initData({ forceRefresh = false, deltaRefresh = false, background = false } = {}) {
   const myToken = activeLoadToken;
-  const cachedMeta = !forceRefresh ? getCachedReferenceData(currentUserProfile) : null;
-  const cachedSessions = !forceRefresh ? getCachedSessions('youth') : [];
-  const cachedStudents = !forceRefresh ? getCachedYouthStudents({ profile: currentUserProfile, includeAllSessions: true }) : null;
+  const cachedMeta = (!forceRefresh && !deltaRefresh) ? getCachedReferenceData(currentUserProfile) : null;
+  const cachedSessions = (!forceRefresh && !deltaRefresh) ? getCachedSessions('youth') : [];
+  const cachedStudents = (!forceRefresh && !deltaRefresh) ? getCachedYouthStudents({ profile: currentUserProfile, includeAllSessions: true }) : null;
 
   if (cachedMeta && cachedStudents && (cachedSessions.length || hasFreshSessionsCache('youth'))) {
     applyPayFeesSessionUi(cachedSessions);
@@ -243,9 +244,9 @@ async function initData({ forceRefresh = false, background = false } = {}) {
     allStudentsTotalCount = Math.max(allStudentsCache.length, Number(cachedStudents.totalCount || allStudentsCache.length));
     updateExamFeeButtonDot();
 
-    // Always revalidate Pay Fees in background so fee updates from other staff appear immediately.
+    // Always revalidate Pay Fees cleanly in background via updatedAt delta query (0-20 reads).
     if (!background) {
-      initData({ forceRefresh: true, background: true }).catch(() => {});
+      initData({ forceRefresh: false, deltaRefresh: true, background: true }).catch(() => {});
     }
     return;
   }
@@ -261,21 +262,25 @@ async function initData({ forceRefresh = false, background = false } = {}) {
   };
   try {
     const [meta, sessions, stRes] = await Promise.all([
-      ensureReferenceData({ forceRefresh, profile: currentUserProfile }),
-      loadSessions('youth', { forceRefresh }),
-      ensureYouthStudents({
-        profile: currentUserProfile,
-        includeAllSessions: true,
-        forceRefresh,
-        returnOnFirstPage: streamPartial,
-        onProgress: streamPartial ? (partial) => {
-          if (myToken !== activeLoadToken || !partial) return;
-          allStudentsCache = partial.list || [];
-          allStudentsComplete = partial.isComplete !== false;
-          allStudentsTotalCount = Math.max(allStudentsCache.length, Number(partial.totalCount || allStudentsCache.length));
-          notifyLiveSearchIfTyping();
-        } : null
-      })
+      ensureReferenceData({ forceRefresh: forceRefresh && !deltaRefresh, profile: currentUserProfile }),
+      (!forceRefresh && hasFreshSessionsCache('youth'))
+        ? Promise.resolve(getCachedSessions('youth'))
+        : loadSessions('youth', { forceRefresh }),
+      (!forceRefresh && deltaRefresh)
+        ? syncYouthStudentsDelta({ profile: currentUserProfile, includeAllSessions: true })
+        : ensureYouthStudents({
+          profile: currentUserProfile,
+          includeAllSessions: true,
+          forceRefresh,
+          returnOnFirstPage: streamPartial,
+          onProgress: streamPartial ? (partial) => {
+            if (myToken !== activeLoadToken || !partial) return;
+            allStudentsCache = partial.list || [];
+            allStudentsComplete = partial.isComplete !== false;
+            allStudentsTotalCount = Math.max(allStudentsCache.length, Number(partial.totalCount || allStudentsCache.length));
+            notifyLiveSearchIfTyping();
+          } : null
+        })
     ]);
     if (myToken !== activeLoadToken) return;
     const list = sessions || getCachedSessions('youth') || [];
@@ -630,12 +635,19 @@ async function executeSearch() {
   const digitsOnly = term.replace(/\D/g, '');
   let matches = [];
 
+  const isBranchHead = currentUserProfile?.role === 'branch_head' && !!currentUserProfile?.branchId;
+  const branchScopedConstraints = (field, val) => {
+    const cs = [where('ctx', '==', 'youth'), where(field, '==', val)];
+    if (isBranchHead) cs.push(where('branchId', '==', currentUserProfile.branchId));
+    return cs;
+  };
+
   if (digitsOnly.length === 8 && /^\d{8}$/.test(term)) {
     // 8 digits -> exact student ID
     matches = scoped.filter(s => String(s.studentId || '').trim() === term);
     if (!matches.length && !allStudentsComplete) {
       try {
-        const directSnap = await getDocs(query(collection(db, 'students'), where('ctx', '==', 'youth'), where('studentId', '==', term)));
+        const directSnap = await getDocs(query(collection(db, 'students'), ...branchScopedConstraints('studentId', term)));
         matches = directSnap.docs
           .map((d) => ({ id: d.id, ...d.data() }))
           .filter((s) => !selectedSessionId || !s.sessionId || s.sessionId === selectedSessionId);
@@ -650,7 +662,7 @@ async function executeSearch() {
     });
     if (!matches.length && !allStudentsComplete) {
       try {
-        const phoneSnap = await getDocs(query(collection(db, 'students'), where('ctx', '==', 'youth'), where('phone', '==', digitsOnly)));
+        const phoneSnap = await getDocs(query(collection(db, 'students'), ...branchScopedConstraints('phone', digitsOnly)));
         matches = phoneSnap.docs
           .map((d) => ({ id: d.id, ...d.data() }))
           .filter((s) => !selectedSessionId || !s.sessionId || s.sessionId === selectedSessionId);

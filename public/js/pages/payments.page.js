@@ -1,17 +1,17 @@
 // payments.page.js — Payment History page for Youth Centre (#/payments) & Unique Kids (#/school-payments).
 // Follows Rule 1 (global toolbar session only, plain-text subtitle) & Rule 2 (shared [ Branch -> Batch ] box).
 
-import { createSelect } from '../components/ui-select.js?v=1.8.190';
-import { createBranchBatchFilter, clearPersistedBranchBatchFilters } from '../components/branch-batch-filter.js?v=1.8.190';
-import { openPopup } from '../components/modal.js?v=1.8.190';
-import { showToast } from '../components/toast.js?v=1.8.190';
-import { renderPager, renderEmptyTableState, PAGE_SIZE } from '../components/list-page.js?v=1.8.190';
+import { createSelect } from '../components/ui-select.js?v=1.8.191';
+import { createBranchBatchFilter, clearPersistedBranchBatchFilters } from '../components/branch-batch-filter.js?v=1.8.191';
+import { openPopup } from '../components/modal.js?v=1.8.191';
+import { showToast } from '../components/toast.js?v=1.8.191';
+import { renderPager, renderEmptyTableState, PAGE_SIZE } from '../components/list-page.js?v=1.8.191';
 import {
   getCachedSessions,
   loadSessions,
   getSelectedSession,
   hasFreshSessionsCache
-} from '../core/sessions.js?v=1.8.190';
+} from '../core/sessions.js?v=1.8.191';
 import {
   ensureReferenceData,
   getCachedReferenceData,
@@ -42,9 +42,9 @@ import {
   formatINR,
   fmtDate,
   todayISO
-} from '../services/report.service.js?v=1.8.190';
-import { formatPersonName, initials } from '../utils/formatter.js?v=1.8.190';
-import { resolveUserDisplay } from '../services/user-directory.service.js?v=1.8.190';
+} from '../services/report.service.js?v=1.8.191';
+import { formatPersonName, initials } from '../utils/formatter.js?v=1.8.191';
+import { resolveUserDisplay } from '../services/user-directory.service.js?v=1.8.191';
 
 let state = null;
 let sessionListener = null;
@@ -437,10 +437,10 @@ function historySignature(res) {
   return `${entries.length}|${total}|${entries[0]?.receiptNo || ''}`;
 }
 
-async function bootstrapData({ forceRefresh = false, background = false } = {}) {
+async function bootstrapData({ forceRefresh = false, deltaRefresh = false, background = false } = {}) {
   if (!state || state.destroyed) return;
 
-  if (!forceRefresh && state.ctx === 'youth') {
+  if (!forceRefresh && !deltaRefresh && state.ctx === 'youth') {
     const cachedMeta = getCachedReferenceData(state.profile);
     const cachedSessions = getCachedSessions('youth');
     if (cachedMeta && (cachedSessions.length || hasFreshSessionsCache('youth'))) {
@@ -478,7 +478,7 @@ async function bootstrapData({ forceRefresh = false, background = false } = {}) 
         applyFiltersAndRender();
 
         if (isCacheStale(cachedMeta) || !hasFreshSessionsCache('youth') || isCacheStale(cachedHist)) {
-          if (!background) bootstrapData({ forceRefresh: true, background: true }).catch(() => {});
+          if (!background) bootstrapData({ forceRefresh: false, deltaRefresh: true, background: true }).catch(() => {});
         }
         return;
       }
@@ -493,7 +493,7 @@ async function bootstrapData({ forceRefresh = false, background = false } = {}) 
 
   try {
     const [meta, sessions] = await Promise.all([
-      ensureReferenceData({ forceRefresh, profile: state.profile }),
+      ensureReferenceData({ forceRefresh: forceRefresh && !deltaRefresh, profile: state.profile }),
       state.ctx === 'youth'
         ? ((!forceRefresh && hasFreshSessionsCache('youth'))
           ? Promise.resolve(getCachedSessions('youth'))
@@ -519,7 +519,7 @@ async function bootstrapData({ forceRefresh = false, background = false } = {}) 
       return;
     }
     toggleNoSessionState(false);
-    await loadHistory({ forceRefresh, background, skelTask });
+    await loadHistory({ forceRefresh, deltaRefresh, background, skelTask });
   } catch (err) {
     if (skelTask) skelTask.cancel();
     if (!background) {
@@ -542,7 +542,7 @@ function populateCourseOptions() {
   state.selects.course.setOptions(opts);
 }
 
-async function loadHistory({ forceRefresh = false, background = false, skelTask = null } = {}) {
+async function loadHistory({ forceRefresh = false, deltaRefresh = false, background = false, skelTask = null } = {}) {
   if (!state || state.destroyed) return;
   const refreshBtn = $('payh-refresh');
   const errBox = $('payh-error');
@@ -577,7 +577,8 @@ async function loadHistory({ forceRefresh = false, background = false, skelTask 
         dateFrom,
         dateTo,
         loadAll: false,
-        forceRefresh
+        forceRefresh,
+        deltaRefresh
       });
       if (!state || state.destroyed) return;
       if (activeSkel) activeSkel.cancel();

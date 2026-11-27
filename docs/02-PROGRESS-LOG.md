@@ -39,6 +39,32 @@
 
 ---
 
+### [2026-11-27 11:48] Version 1.8.180 — Phase 6 · Youth Centre Reports Partial Revert (Keep Joined KPI Strips, Smaller 6px Card Radius, Header/Filter Bar & Square Compact Charts + Restore Multi-Colour v1.8.178 Visuals)
+
+**What was built:**
+- **Kept v1.8.179 Structural Improvements (`public/css/components/ref-cards.css`, `public/pages/reports.html`, `public/css/pages/financial-reports.css`)**:
+  - Kept the joined two-row 4-cell KPI stat strips (`#rep-kpis`) with thin `1px` dividers, grey outline icons, single compact context/delta chip (`"— vs ..."` hidden when absent), and red `Overdue amount`.
+  - Applied consistent smaller outer radius (`var(--rc-r, 6px)`) and flat zero-shadow borders across all outer cards/boxes on `#/reports` (filter bar, KPI strips, chart cards, tables, and batch filling boxes).
+  - Kept the outline `Print / Save as PDF` + icon-only `Refresh` header, single-row desktop filter bar with icon-only `Reset`, compact chart heights (`<= 240px`), square bar/progress corners, and removal of Upcoming Dues / Top 10 Debtors.
+- **Restored v1.8.178 Multi-Colour Charts & Sections (`public/js/components/charts.js`, `public/pages/reports.html`, `public/js/pages/reports.page.js`, `public/js/services/report.service.js`)**:
+  - Restored full multi-colour `CHART_PALETTE` and legends on Payment Mode, Fee Type, Overdue Ageing, Students by Course, Student Status, and Gender Split (`160px` donuts).
+  - Restored coloured Outstanding Dues Breakdown bar chart (`#0F766E` with Branch/Batch/Course toggle), Admissions Per Month bar chart (`#0284C7`), two-column Batch Filling progress grid, and grouped multi-colour Branch Financials (`#16A34A`/`#323A85`/`#DC2626`) & Current vs Previous Session (`#0F766E`/`#D97706`) charts + tables.
+
+**Why:**
+- Combine the cleaner KPI strip, header/filter bar, and uniform crisp `6px` outer card radius with the richer v1.8.178 multi-colour chart visualizations.
+
+**Files touched:**
+- MODIFIED: `public/js/components/charts.js`, `public/pages/reports.html`, `public/js/pages/reports.page.js`, `public/css/pages/financial-reports.css`, `public/js/services/report.service.js`, `docs/02-PROGRESS-LOG.md`
+
+**Firestore changes:**
+- None (no data, query, or fee-maths changes).
+
+**Tested on:**
+- Chrome Desktop (`1440x900` Super Admin & Branch Head) + Mobile (`390x844`): ✅
+- Node unit + reconciliation suite (`run-tests.mjs` & `verify-reports.mjs`): ✅
+
+---
+
 ### [2026-11-27 11:35] Version 1.8.179 — Phase 6 · Youth Centre Reports Reference UI Redesign Experiment (`ref-cards.css`)
 
 **What was built:**

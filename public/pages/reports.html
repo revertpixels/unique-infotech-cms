@@ -43,7 +43,7 @@
       </button>
     </div>
 
-    <!-- Global Filters: single row on desktop inside flat card -->
+    <!-- Global Filters: single row on desktop inside flat white card -->
     <section id="rep-toolbar" class="rc-filter-card rep-toolbar" aria-label="Report filters">
       <div class="rep-filters-row">
         <div id="rep-bb-host" class="rep-bb-host"></div>
@@ -80,7 +80,7 @@
     </section>
 
     <!-- ================= SECTION 1: JOINED KPI STAT STRIPS (4 + 4) ================= -->
-    <section id="rep-sec-kpis" class="rc-sec" aria-label="Key Performance Indicators">
+    <section id="rep-sec-kpis" class="rep-kpi-sec" aria-label="Key Performance Indicators">
       <div id="rep-kpis">
         <!-- Row 1: Money & Dues -->
         <div class="rc-stat-strip">
@@ -170,87 +170,60 @@
       </div>
     </section>
 
-    <!-- ================= SECTION 2: HERO ROW (2/3 Trend + 1/3 Dues Breakdown) & MONEY MIX ================= -->
-    <section id="rep-sec-money" class="rc-sec" aria-label="Money and Collections">
-      <div class="rc-row-2-1">
-        <div class="rc-card rep-trend-card">
-          <div class="rc-card-head">
-            <div class="rc-card-head-txt">
-              <h3 class="rc-card-title">Collection Trend</h3>
-              <p id="rep-trend-sub" class="rc-card-sub">Receipts recorded across period · <span id="rep-trend-badge">By month</span></p>
-            </div>
-            <div id="rep-trend-mode-bar" class="rc-seg-tabs" role="group" aria-label="Chart style">
-              <button type="button" id="rep-trend-btn-line" class="rc-seg-tab is-active" data-kind="line">Line</button>
-              <button type="button" id="rep-trend-btn-bar" class="rc-seg-tab" data-kind="bar">Bar</button>
-            </div>
-          </div>
-          <div class="rc-card-body">
-            <div class="rc-trend-summary">
-              <div id="rep-trend-amt" class="rc-trend-amt">—</div>
-              <div id="rep-trend-per" class="rc-trend-per">collected · Loading...</div>
-            </div>
-            <div id="rep-trend-legend" class="rc-legend-row"></div>
-            <div id="rep-chart-trend" class="rep-chart-host"></div>
-          </div>
-        </div>
-
-        <div class="rc-card">
-          <div class="rc-card-head">
-            <div class="rc-card-head-txt">
-              <h3 class="rc-card-title">Outstanding Dues</h3>
-              <p class="rc-card-sub">Remaining course fee balance</p>
-            </div>
-            <div id="rep-dues-group-tabs" class="rc-seg-tabs" role="group" aria-label="Group outstanding dues by">
-              <button type="button" id="rep-dues-grp-branch" class="rc-seg-tab is-active" data-group="branch">Branch</button>
-              <button type="button" class="rc-seg-tab" data-group="batch">Batch</button>
-              <button type="button" class="rc-seg-tab" data-group="course">Course</button>
-            </div>
-          </div>
-          <div class="rc-card-body">
-            <div id="rep-chart-dues-group"></div>
-          </div>
+    <!-- ================= SECTION 2: MONEY ================= -->
+    <section id="rep-sec-money" class="rep-sec" aria-label="Money and Collections">
+      <div class="rep-sec-head">
+        <div>
+          <h3><i data-lucide="indian-rupee"></i><span>Money &amp; Collections</span></h3>
+          <p>Collection trend, payment modes, fee category mix, and staff receipts.</p>
         </div>
       </div>
 
-      <div class="rc-row-2 rc-stack-gap">
-        <div class="rc-card">
-          <div class="rc-card-head">
-            <div class="rc-card-head-txt">
-              <h3 class="rc-card-title">Collection by Payment Mode</h3>
-              <p class="rc-card-sub">Cash, UPI, bank transfer, card &amp; cheque</p>
+      <div class="rep-grid-2">
+        <div class="lp-card rep-chart-card rep-trend-card rep-span-2">
+          <div class="lp-card-head">
+            <div class="lp-card-title">
+              <i data-lucide="trending-up"></i>
+              <span>Collection Trend</span>
+              <span id="rep-trend-badge" class="pill indigo">By month</span>
+            </div>
+            <div id="rep-trend-mode-bar" class="rep-seg-btns" role="group" aria-label="Chart style">
+              <button type="button" id="rep-trend-btn-line" class="rep-seg-btn is-active" data-kind="line">Line</button>
+              <button type="button" id="rep-trend-btn-bar" class="rep-seg-btn" data-kind="bar">Bar</button>
             </div>
           </div>
-          <div class="rc-card-body">
-            <div id="rep-chart-modes"></div>
-          </div>
+          <div id="rep-chart-trend" class="rep-chart-body"></div>
         </div>
 
-        <div class="rc-card">
-          <div class="rc-card-head">
-            <div class="rc-card-head-txt">
-              <h3 class="rc-card-title">Collection by Fee Type</h3>
-              <p class="rc-card-sub">Admission, installment, material, exam &amp; late fees</p>
-            </div>
+        <div class="lp-card rep-chart-card">
+          <div class="lp-card-head">
+            <div class="lp-card-title"><i data-lucide="credit-card"></i><span>Collection by Payment Mode</span></div>
           </div>
-          <div class="rc-card-body">
-            <div id="rep-chart-fee-types"></div>
+          <div id="rep-chart-modes" class="rep-chart-body"></div>
+        </div>
+
+        <div class="lp-card rep-chart-card">
+          <div class="lp-card-head">
+            <div class="lp-card-title"><i data-lucide="pie-chart"></i><span>Collection by Fee Type</span></div>
           </div>
+          <div id="rep-chart-fee-types" class="rep-chart-body"></div>
         </div>
       </div>
 
-      <div class="rc-card rc-stack-gap">
-        <div class="rc-card-head">
-          <div class="rc-card-head-txt">
-            <h3 class="rc-card-title">Staff-wise Collection</h3>
-            <p class="rc-card-sub"><span id="rep-staff-count">0 staff</span> recorded receipts in selected scope</p>
+      <div class="lp-card adm-table-card rep-mt">
+        <div class="lp-card-head">
+          <div class="lp-card-title">
+            <i data-lucide="user-check"></i>
+            <span>Staff-wise Collection</span>
+            <span id="rep-staff-count" class="lp-count">0 staff</span>
           </div>
-          <button type="button" id="rep-csv-staff" class="rc-btn-outline">
+          <button type="button" id="rep-csv-staff" class="ui-btn ghost sm">
             <i data-lucide="download"></i>
             <span>Download CSV</span>
           </button>
         </div>
-        <div class="rc-table-scroll">
-          <table id="rep-staff-table" class="rc-table lp-mobile-cards">
+        <div class="lp-scroll">
+          <table id="rep-staff-table" class="lp-table lp-mobile-cards">
             <thead>
               <tr>
                 <th>Staff (Designation)</th>
@@ -266,152 +239,156 @@
       </div>
     </section>
 
-    <!-- ================= SECTION 3: DUES & AGEING ================= -->
-    <section id="rep-sec-dues" class="rc-sec" aria-label="Dues and Overdue Ageing">
-      <div class="rc-row-2">
-        <div class="rc-card">
-          <div class="rc-card-head">
-            <div class="rc-card-head-txt">
-              <h3 class="rc-card-title">Overdue Ageing</h3>
-              <p class="rc-card-sub">Principal overdue grouped by days late</p>
-            </div>
-          </div>
-          <div class="rc-card-body">
-            <div id="rep-chart-ageing"></div>
-          </div>
-        </div>
-
-        <div class="rc-card">
-          <div class="rc-card-head">
-            <div class="rc-card-head-txt">
-              <h3 class="rc-card-title">Outstanding Dues Table</h3>
-              <p class="rc-card-sub">Active students, balance &amp; overdue principal</p>
-            </div>
-            <button type="button" id="rep-csv-dues-group" class="rc-btn-outline">
-              <i data-lucide="download"></i>
-              <span>Download CSV</span>
-            </button>
-          </div>
-          <div class="rc-table-scroll">
-            <table id="rep-dues-group-table" class="rc-table lp-mobile-cards">
-              <thead>
-                <tr>
-                  <th id="rep-dues-group-th-name">Branch</th>
-                  <th class="num">Active Students</th>
-                  <th class="num">Outstanding Dues</th>
-                  <th class="num">Overdue Principal</th>
-                </tr>
-              </thead>
-              <tbody id="rep-dues-group-tbody"></tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- ================= SECTION 4: STUDENTS & CAPACITY ================= -->
-    <section id="rep-sec-students" class="rc-sec" aria-label="Student Analytics">
-      <div class="rc-row-2">
-        <div class="rc-card">
-          <div class="rc-card-head">
-            <div class="rc-card-head-txt">
-              <h3 class="rc-card-title">Admissions Per Month</h3>
-              <p class="rc-card-sub">New enrollments by admission date</p>
-            </div>
-          </div>
-          <div class="rc-card-body">
-            <div id="rep-chart-admissions"></div>
-          </div>
-        </div>
-
-        <div class="rc-card">
-          <div class="rc-card-head">
-            <div class="rc-card-head-txt">
-              <h3 id="rep-stu-list-title" class="rc-card-title">Students by Course</h3>
-              <p id="rep-stu-list-sub" class="rc-card-sub">Total students enrolled in scope</p>
-            </div>
-            <div id="rep-stu-group-tabs" class="rc-seg-tabs" role="group" aria-label="Group students by" hidden>
-              <button type="button" class="rc-seg-tab is-active" data-sgroup="course">Course</button>
-              <button type="button" class="rc-seg-tab" data-sgroup="branch">Branch</button>
-            </div>
-          </div>
-          <div class="rc-card-body">
-            <div id="rep-chart-stu-course"></div>
-          </div>
+    <!-- ================= SECTION 3: DUES ================= -->
+    <section id="rep-sec-dues" class="rep-sec" aria-label="Dues and Overdue Ageing">
+      <div class="rep-sec-head">
+        <div>
+          <h3><i data-lucide="alarm-clock"></i><span>Dues &amp; Ageing</span></h3>
+          <p>Outstanding balances and overdue ageing buckets across the selected scope.</p>
         </div>
       </div>
 
-      <div class="rc-row-2 rc-stack-gap">
-        <div class="rc-card">
-          <div class="rc-card-head">
-            <div class="rc-card-head-txt">
-              <h3 class="rc-card-title">Student Breakdown</h3>
-              <p class="rc-card-sub">Current status &amp; gender distribution</p>
+      <div class="rep-grid-2">
+        <div class="lp-card rep-chart-card">
+          <div class="lp-card-head">
+            <div class="lp-card-title"><i data-lucide="bar-chart-2"></i><span>Outstanding Dues Breakdown</span></div>
+            <div id="rep-dues-group-tabs" class="rep-seg-btns" role="group" aria-label="Group outstanding dues by">
+              <button type="button" id="rep-dues-grp-branch" class="rep-seg-btn is-active" data-group="branch">Branch</button>
+              <button type="button" class="rep-seg-btn" data-group="batch">Batch</button>
+              <button type="button" class="rep-seg-btn" data-group="course">Course</button>
             </div>
           </div>
-          <div class="rc-card-body">
-            <div id="rep-chart-stu-status" class="rc-seg-wrap"></div>
-            <div id="rep-chart-gender" class="rc-seg-wrap"></div>
-          </div>
+          <div id="rep-chart-dues-group" class="rep-chart-body"></div>
         </div>
 
-        <div class="rc-card">
-          <div class="rc-card-head">
-            <div class="rc-card-head-txt">
-              <h3 class="rc-card-title">Batch Filling</h3>
-              <p class="rc-card-sub"><span id="rep-batch-count">0 batches</span> active in scope</p>
-            </div>
-            <button type="button" id="rep-csv-batches" class="rc-btn-outline">
-              <i data-lucide="download"></i>
-              <span>Download CSV</span>
-            </button>
+        <div class="lp-card rep-chart-card">
+          <div class="lp-card-head">
+            <div class="lp-card-title"><i data-lucide="clock"></i><span>Overdue Ageing</span></div>
           </div>
-          <div id="rep-batch-fill-list" class="rc-card-body"></div>
-        </div>
-      </div>
-    </section>
-
-    <!-- ================= SECTION 5: COMPARISON (SUPER ADMIN ONLY) ================= -->
-    <section id="rep-sec-comparison" class="rc-sec" aria-label="Branch and Session Comparison" hidden>
-      <div class="rc-row-2">
-        <div class="rc-card">
-          <div class="rc-card-head">
-            <div class="rc-card-head-txt">
-              <h3 class="rc-card-title">Branch Financials Comparison</h3>
-              <p class="rc-card-sub">Collected vs overdue principal per branch</p>
-            </div>
-          </div>
-          <div class="rc-card-body">
-            <div id="rep-chart-branch-comp"></div>
-          </div>
-        </div>
-
-        <div class="rc-card">
-          <div class="rc-card-head">
-            <div class="rc-card-head-txt">
-              <h3 class="rc-card-title">Current vs Previous Session</h3>
-              <p class="rc-card-sub">Collected vs overdue principal comparison</p>
-            </div>
-          </div>
-          <div class="rc-card-body">
-            <div id="rep-chart-session-comp"></div>
-          </div>
+          <div id="rep-chart-ageing" class="rep-chart-body"></div>
         </div>
       </div>
 
-      <div class="rc-card rc-stack-gap">
-        <div class="rc-card-head">
-          <div class="rc-card-head-txt">
-            <h3 class="rc-card-title">Branch Comparison Table</h3>
-            <p class="rc-card-sub">Students, collection rate, outstanding &amp; overdue across branches</p>
+      <div class="lp-card adm-table-card rep-mt">
+        <div class="lp-card-head">
+          <div class="lp-card-title">
+            <i data-lucide="table"></i>
+            <span>Outstanding Dues Table</span>
           </div>
-          <button type="button" id="rep-csv-branch-comp" class="rc-btn-outline">
+          <button type="button" id="rep-csv-dues-group" class="ui-btn ghost sm">
             <i data-lucide="download"></i>
             <span>Download CSV</span>
           </button>
         </div>
-        <div class="rc-table-scroll">
-          <table id="rep-branch-comp-table" class="rc-table lp-mobile-cards">
+        <div class="lp-scroll">
+          <table id="rep-dues-group-table" class="lp-table lp-mobile-cards">
+            <thead>
+              <tr>
+                <th id="rep-dues-group-th-name">Branch</th>
+                <th class="num">Active Students</th>
+                <th class="num">Outstanding Dues</th>
+                <th class="num">Overdue Principal</th>
+              </tr>
+            </thead>
+            <tbody id="rep-dues-group-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= SECTION 4: STUDENTS ================= -->
+    <section id="rep-sec-students" class="rep-sec" aria-label="Student Analytics">
+      <div class="rep-sec-head">
+        <div>
+          <h3><i data-lucide="users"></i><span>Students &amp; Capacity</span></h3>
+          <p>Monthly admissions, course distribution, status breakdown, gender split, and batch capacity.</p>
+        </div>
+      </div>
+
+      <div class="rep-grid-2">
+        <div class="lp-card rep-chart-card">
+          <div class="lp-card-head">
+            <div class="lp-card-title"><i data-lucide="bar-chart-3"></i><span>Admissions Per Month</span></div>
+          </div>
+          <div id="rep-chart-admissions" class="rep-chart-body"></div>
+        </div>
+
+        <div class="lp-card rep-chart-card">
+          <div class="lp-card-head">
+            <div class="lp-card-title"><i data-lucide="book-open"></i><span>Students by Course</span></div>
+          </div>
+          <div id="rep-chart-stu-course" class="rep-chart-body"></div>
+        </div>
+
+        <div class="lp-card rep-chart-card">
+          <div class="lp-card-head">
+            <div class="lp-card-title"><i data-lucide="activity"></i><span>Student Status</span></div>
+          </div>
+          <div id="rep-chart-stu-status" class="rep-chart-body"></div>
+        </div>
+
+        <div class="lp-card rep-chart-card">
+          <div class="lp-card-head">
+            <div class="lp-card-title"><i data-lucide="users-round"></i><span>Gender Split</span></div>
+          </div>
+          <div id="rep-chart-gender" class="rep-chart-body"></div>
+        </div>
+      </div>
+
+      <div class="lp-card adm-table-card rep-mt">
+        <div class="lp-card-head">
+          <div class="lp-card-title">
+            <i data-lucide="layers"></i>
+            <span>Batch Filling</span>
+            <span id="rep-batch-count" class="lp-count">0 batches</span>
+          </div>
+          <button type="button" id="rep-csv-batches" class="ui-btn ghost sm">
+            <i data-lucide="download"></i>
+            <span>Download CSV</span>
+          </button>
+        </div>
+        <div id="rep-batch-fill-list" class="rep-batch-fill-body"></div>
+      </div>
+    </section>
+
+    <!-- ================= SECTION 5: COMPARISON (SUPER ADMIN ONLY) ================= -->
+    <section id="rep-sec-comparison" class="rep-sec" aria-label="Branch and Session Comparison" hidden>
+      <div class="rep-sec-head">
+        <div>
+          <h3><i data-lucide="git-compare"></i><span>Branch &amp; Session Comparison</span></h3>
+          <p>Cross-branch performance benchmark and current vs previous session comparison.</p>
+        </div>
+      </div>
+
+      <div class="rep-grid-2">
+        <div class="lp-card rep-chart-card">
+          <div class="lp-card-head">
+            <div class="lp-card-title"><i data-lucide="git-branch"></i><span>Branch Financials Comparison</span></div>
+          </div>
+          <div id="rep-chart-branch-comp" class="rep-chart-body"></div>
+        </div>
+
+        <div class="lp-card rep-chart-card">
+          <div class="lp-card-head">
+            <div class="lp-card-title"><i data-lucide="calendar-range"></i><span>Current vs Previous Session</span></div>
+          </div>
+          <div id="rep-chart-session-comp" class="rep-chart-body"></div>
+        </div>
+      </div>
+
+      <div class="lp-card adm-table-card rep-mt">
+        <div class="lp-card-head">
+          <div class="lp-card-title">
+            <i data-lucide="git-branch"></i>
+            <span>Branch Comparison Table</span>
+          </div>
+          <button type="button" id="rep-csv-branch-comp" class="ui-btn ghost sm">
+            <i data-lucide="download"></i>
+            <span>Download CSV</span>
+          </button>
+        </div>
+        <div class="lp-scroll">
+          <table id="rep-branch-comp-table" class="lp-table lp-mobile-cards">
             <thead>
               <tr>
                 <th>Branch</th>
@@ -427,19 +404,19 @@
         </div>
       </div>
 
-      <div class="rc-card rc-stack-gap">
-        <div class="rc-card-head">
-          <div class="rc-card-head-txt">
-            <h3 class="rc-card-title">Session Comparison Table</h3>
-            <p class="rc-card-sub">Active session against immediately prior Youth session</p>
+      <div class="lp-card adm-table-card rep-mt">
+        <div class="lp-card-head">
+          <div class="lp-card-title">
+            <i data-lucide="history"></i>
+            <span>Session Comparison Table</span>
           </div>
-          <button type="button" id="rep-csv-session-comp" class="rc-btn-outline">
+          <button type="button" id="rep-csv-session-comp" class="ui-btn ghost sm">
             <i data-lucide="download"></i>
             <span>Download CSV</span>
           </button>
         </div>
-        <div class="rc-table-scroll">
-          <table id="rep-session-comp-table" class="rc-table lp-mobile-cards">
+        <div class="lp-scroll">
+          <table id="rep-session-comp-table" class="lp-table lp-mobile-cards">
             <thead>
               <tr>
                 <th>Session</th>

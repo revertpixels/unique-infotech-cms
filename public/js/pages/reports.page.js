@@ -1,24 +1,16 @@
-// reports.page.js — Read-only Youth Centre Reports page (#/reports) using calm flat ref-cards design.
-// Accessible to Super Admin (all branches + Section 5 Comparison) and Branch Head (own branch locked, Sections 1-4).
+// reports.page.js — Read-only Youth Centre Reports page (#/reports)
+// Keeps v1.8.179 joined KPI stat strips, header, filter bar & compact card radius with restored v1.8.178 multi-colour charts.
 
-import { createSelect } from '../components/ui-select.js?v=1.8.179';
-import { createBranchBatchFilter, clearPersistedBranchBatchFilters } from '../components/branch-batch-filter.js?v=1.8.179';
-import {
-  CHART_PALETTE,
-  renderDonutChart,
-  renderBarChart,
-  renderStackedBarChart,
-  renderLineChart,
-  renderThinBarList,
-  renderSegmentedBar
-} from '../components/charts.js?v=1.8.179';
-import { showToast } from '../components/toast.js?v=1.8.179';
-import { renderEmptyTableState } from '../components/list-page.js?v=1.8.179';
+import { createSelect } from '../components/ui-select.js?v=1.8.180';
+import { createBranchBatchFilter, clearPersistedBranchBatchFilters } from '../components/branch-batch-filter.js?v=1.8.180';
+import { renderDonutChart, renderBarChart, renderStackedBarChart, renderLineChart } from '../components/charts.js?v=1.8.180';
+import { showToast } from '../components/toast.js?v=1.8.180';
+import { renderEmptyTableState } from '../components/list-page.js?v=1.8.180';
 import {
   getCachedSessions,
   loadSessions,
   getSelectedSession
-} from '../core/sessions.js?v=1.8.179';
+} from '../core/sessions.js?v=1.8.180';
 import {
   ensureReferenceData,
   scopeReferenceDataByCtx,
@@ -35,11 +27,10 @@ import {
   formatINR,
   fmtDate,
   todayISO
-} from '../services/report.service.js?v=1.8.179';
-import { resolveUserDisplay, getRoleTitle } from '../services/user-directory.service.js?v=1.8.179';
+} from '../services/report.service.js?v=1.8.180';
+import { resolveUserDisplay, getRoleTitle } from '../services/user-directory.service.js?v=1.8.180';
 
 const FILTER_STORAGE_PREFIX = 'uicms.rep.v1.';
-const CALM_SEG_COLORS = ['#323A85', '#6366F1', '#64748B', '#94A3B8', '#CBD5E1'];
 
 let state = null;
 let sessionsLoadedListener = null;
@@ -92,7 +83,6 @@ function saveFilters() {
       dateFrom: state.filters.dateFrom,
       dateTo: state.filters.dateTo,
       duesGroupBy: state.duesGroupBy,
-      stuGroupBy: state.stuGroupBy,
       trendKind: state.trendKind
     }));
   } catch (_) {}
@@ -140,7 +130,7 @@ function showSkeletons() {
       el.classList.add('skel');
     });
   }
-  ['rep-chart-trend', 'rep-chart-modes', 'rep-chart-fee-types', 'rep-chart-dues-group', 'rep-chart-ageing', 'rep-chart-admissions', 'rep-chart-stu-course'].forEach((id) => {
+  ['rep-chart-trend', 'rep-chart-modes', 'rep-chart-fee-types', 'rep-chart-dues-group', 'rep-chart-ageing', 'rep-chart-admissions', 'rep-chart-stu-course', 'rep-chart-stu-status', 'rep-chart-gender'].forEach((id) => {
     const el = $(id);
     if (el) {
       el.innerHTML = '<div class="rep-chart-skel skel"></div>';
@@ -185,7 +175,6 @@ export async function mount({ profile, ctx }) {
     activeSession: null,
     prevSession: null,
     duesGroupBy: saved?.duesGroupBy || (isBranchHead ? 'batch' : 'branch'),
-    stuGroupBy: saved?.stuGroupBy || 'course',
     trendKind: saved?.trendKind || 'line',
     filters: {
       branchId: isBranchHead ? profile.branchId : (saved?.branchId || 'all'),
@@ -205,14 +194,12 @@ export async function mount({ profile, ctx }) {
     destroyed: false
   };
 
-  if (isBranchHead) {
-    if (state.duesGroupBy === 'branch') state.duesGroupBy = 'batch';
-    state.stuGroupBy = 'course';
+  if (isBranchHead && state.duesGroupBy === 'branch') {
+    state.duesGroupBy = 'batch';
   }
 
   $('rep-sec-comparison').hidden = !isSuper;
   $('rep-dues-grp-branch').hidden = isBranchHead;
-  $('rep-stu-group-tabs').hidden = !isSuper;
 
   updateHeaderUi();
   initControls();
@@ -285,14 +272,11 @@ function updateCustomDateVisibility() {
 }
 
 function syncSegmentButtons() {
-  document.querySelectorAll('#rep-trend-mode-bar .rc-seg-tab').forEach((btn) => {
+  document.querySelectorAll('#rep-trend-mode-bar .rep-seg-btn').forEach((btn) => {
     btn.classList.toggle('is-active', btn.dataset.kind === state?.trendKind);
   });
-  document.querySelectorAll('#rep-dues-group-tabs .rc-seg-tab').forEach((btn) => {
+  document.querySelectorAll('#rep-dues-group-tabs .rep-seg-btn').forEach((btn) => {
     btn.classList.toggle('is-active', btn.dataset.group === state?.duesGroupBy);
-  });
-  document.querySelectorAll('#rep-stu-group-tabs .rc-seg-tab').forEach((btn) => {
-    btn.classList.toggle('is-active', btn.dataset.sgroup === state?.stuGroupBy);
   });
 }
 
@@ -315,36 +299,23 @@ function bindEvents() {
     showToast({ type: 'success', message: 'Reports refreshed with latest data.' });
   });
 
-  document.querySelectorAll('#rep-trend-mode-bar .rc-seg-tab').forEach((btn) => {
+  document.querySelectorAll('#rep-trend-mode-bar .rep-seg-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
       if (!state) return;
       state.trendKind = btn.dataset.kind || 'line';
       saveFilters();
       syncSegmentButtons();
       renderMoneySection();
-      paint();
     });
   });
 
-  document.querySelectorAll('#rep-dues-group-tabs .rc-seg-tab').forEach((btn) => {
+  document.querySelectorAll('#rep-dues-group-tabs .rep-seg-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
       if (!state) return;
       state.duesGroupBy = btn.dataset.group || 'batch';
       saveFilters();
       syncSegmentButtons();
       renderDuesSection();
-      paint();
-    });
-  });
-
-  document.querySelectorAll('#rep-stu-group-tabs .rc-seg-tab').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      if (!state) return;
-      state.stuGroupBy = btn.dataset.sgroup || 'course';
-      saveFilters();
-      syncSegmentButtons();
-      renderStudentsSection();
-      paint();
     });
   });
 
@@ -665,43 +636,16 @@ function renderKpisSection() {
 
 function renderMoneySection() {
   const m = state.analytics?.money;
-  const k = state.analytics?.kpis;
   if (!m) return;
 
   $('rep-trend-badge').textContent = m.useDailyTrend ? 'By day' : 'By month';
-  const ovAmt = Number(k?.overdueAmount?.value || 0);
-  const periodPhrase = state.filters.datePreset === 'session'
-    ? (state.activeSession?.name || 'this session')
-    : 'selected period';
-  $('rep-trend-amt').textContent = formatINR(m.totalCollected);
-  $('rep-trend-per').textContent = ovAmt > 0
-    ? `collected in ${periodPhrase} · ${formatINR(ovAmt)} overdue`
-    : `collected in ${periodPhrase}`;
-
-  const legend = $('rep-trend-legend');
-  if (legend) {
-    legend.innerHTML = '';
-    const spCol = document.createElement('span');
-    const dotCol = document.createElement('i');
-    dotCol.style.background = '#323A85';
-    spCol.append(dotCol, document.createTextNode('Collected'));
-    legend.appendChild(spCol);
-    if (ovAmt > 0) {
-      const spOv = document.createElement('span');
-      const dotOv = document.createElement('i');
-      dotOv.style.background = '#DC2626';
-      spOv.append(dotOv, document.createTextNode(`Overdue (${formatINR(ovAmt)})`));
-      legend.appendChild(spOv);
-    }
-  }
-
   const trendHost = $('rep-chart-trend');
   if (state.trendKind === 'bar') {
     renderBarChart(trendHost, {
       items: m.trendPoints,
       valueFormatter: formatINR,
-      viewWidth: 760,
-      height: 205,
+      viewWidth: 960,
+      height: 195,
       color: '#323A85',
       emptyText: 'No collections in selected period'
     });
@@ -709,30 +653,26 @@ function renderMoneySection() {
     renderLineChart(trendHost, {
       points: m.trendPoints,
       valueFormatter: formatINR,
-      viewWidth: 760,
-      height: 205,
+      viewWidth: 960,
+      height: 195,
       color: '#323A85',
       emptyText: 'No collections in selected period'
     });
   }
 
   renderDonutChart($('rep-chart-modes'), {
-    slices: (m.modeSlices || []).map((s, idx) => ({ ...s, color: CALM_SEG_COLORS[idx % CALM_SEG_COLORS.length] })),
+    slices: m.modeSlices,
     centerLabel: 'Collected',
     centerValue: formatINR(m.totalCollected),
     valueFormatter: formatINR,
-    size: 150,
-    thickness: 22,
     emptyText: 'No payment receipts'
   });
 
   renderDonutChart($('rep-chart-fee-types'), {
-    slices: (m.feeTypeSlices || []).map((s, idx) => ({ ...s, color: CALM_SEG_COLORS[idx % CALM_SEG_COLORS.length] })),
+    slices: m.feeTypeSlices,
     centerLabel: 'By Fee Type',
     centerValue: formatINR(m.totalCollected),
     valueFormatter: formatINR,
-    size: 150,
-    thickness: 22,
     emptyText: 'No payment receipts'
   });
 
@@ -746,11 +686,12 @@ function renderMoneySection() {
   }
   rows.forEach((r) => {
     const tr = mk('tr');
-    const tdName = mk('td', 'rc-td-strong lp-td-primary', r.label);
+    const tdName = mk('td', 'lp-td-primary', r.label);
     const tdRcpt = mk('td', 'num', r.receipts); tdRcpt.dataset.label = 'Receipts';
     const tdCash = mk('td', 'num', formatINR(r.cashAmount)); tdCash.dataset.label = 'Cash';
     const tdOnl = mk('td', 'num', formatINR(r.onlineAmount)); tdOnl.dataset.label = 'Online (UPI / Bank)';
-    const tdTot = mk('td', 'num rc-td-strong', formatINR(r.amount)); tdTot.dataset.label = 'Total Amount';
+    const tdTot = mk('td', 'num'); tdTot.dataset.label = 'Total Amount';
+    tdTot.appendChild(mk('span', 'fr-money success', formatINR(r.amount)));
     tr.append(tdName, tdRcpt, tdCash, tdOnl, tdTot);
     tbody.appendChild(tr);
   });
@@ -769,36 +710,22 @@ function renderDuesSection() {
   if (!d) return;
 
   const grpLabel = state.duesGroupBy === 'batch' ? 'Batch' : (state.duesGroupBy === 'course' ? 'Course' : 'Branch');
-  const grpNoun = state.duesGroupBy === 'batch' ? 'batches' : (state.duesGroupBy === 'course' ? 'courses' : 'branches');
   $('rep-dues-group-th-name').textContent = grpLabel;
 
   const grpRows = getSelectedDuesRows();
-  const totalOutSum = grpRows.reduce((s, r) => s + Number(r.outstanding || 0), 0);
-
-  renderThinBarList($('rep-chart-dues-group'), {
-    items: grpRows.map((r) => ({
-      label: r.label,
-      value: r.outstanding,
-      valueText: formatINR(r.outstanding),
-      subText: r.overdue > 0 ? `(${formatINR(r.overdue)} overdue)` : `${r.students} stds`,
-      subDanger: r.overdue > 0
-    })),
-    totalLabel: `Total across ${grpRows.length} ${grpRows.length === 1 ? grpLabel.toLowerCase() : grpNoun}`,
-    totalText: formatINR(totalOutSum),
+  renderBarChart($('rep-chart-dues-group'), {
+    items: grpRows.map((r) => ({ label: r.label, shortLabel: r.shortLabel, value: r.outstanding, sub: `${r.students} students` })),
+    horizontal: grpRows.length > 5,
+    valueFormatter: formatINR,
+    color: '#0F766E',
     emptyText: 'No outstanding dues'
   });
 
-  const ageingSlices = d.ageingSlices || [];
-  renderThinBarList($('rep-chart-ageing'), {
-    items: ageingSlices.map((s) => ({
-      label: s.label,
-      value: s.value,
-      valueText: formatINR(s.value),
-      subText: s.sub || ''
-    })),
-    totalLabel: `Total overdue principal`,
-    totalText: formatINR(d.overdueTotal || 0),
-    danger: true,
+  renderDonutChart($('rep-chart-ageing'), {
+    slices: d.ageingSlices,
+    centerLabel: 'Overdue',
+    centerValue: formatINR(d.overdueTotal),
+    valueFormatter: formatINR,
     emptyText: 'No overdue installments'
   });
 
@@ -809,10 +736,12 @@ function renderDuesSection() {
   } else {
     grpRows.forEach((r) => {
       const tr = mk('tr');
-      const tdN = mk('td', 'rc-td-strong lp-td-primary', r.label);
+      const tdN = mk('td', 'lp-td-primary', r.label);
       const tdSt = mk('td', 'num', r.students); tdSt.dataset.label = 'Active Students';
-      const tdOut = mk('td', 'num rc-td-strong', formatINR(r.outstanding)); tdOut.dataset.label = 'Outstanding Dues';
-      const tdOv = mk('td', `num ${r.overdue > 0 ? 'rc-td-danger' : 'rc-td-mute'}`, formatINR(r.overdue)); tdOv.dataset.label = 'Overdue Principal';
+      const tdOut = mk('td', 'num'); tdOut.dataset.label = 'Outstanding Dues';
+      tdOut.appendChild(mk('span', 'fr-money', formatINR(r.outstanding)));
+      const tdOv = mk('td', 'num'); tdOv.dataset.label = 'Overdue Principal';
+      tdOv.appendChild(mk('span', `fr-money ${r.overdue > 0 ? 'danger' : 'muted'}`, formatINR(r.overdue)));
       tr.append(tdN, tdSt, tdOut, tdOv);
       grpTbody.appendChild(tr);
     });
@@ -821,77 +750,62 @@ function renderDuesSection() {
 
 function renderStudentsSection() {
   const st = state.analytics?.students;
-  const brRows = state.analytics?.comparison?.branchComparison || [];
   if (!st) return;
 
   renderBarChart($('rep-chart-admissions'), {
     items: st.admissionsByMonth,
-    viewWidth: 540,
-    height: 205,
-    color: '#323A85',
+    color: '#0284C7',
     emptyText: 'No admissions recorded'
   });
 
-  const useBranches = state.isSuper && state.stuGroupBy === 'branch';
-  if (useBranches) {
-    $('rep-stu-list-title').textContent = 'Students by Branch';
-    $('rep-stu-list-sub').textContent = 'Enrolled Youth students per centre';
-    const bList = brRows.filter((b) => b.students > 0 || state.filters.branchId === 'all');
-    const bTotal = bList.reduce((s, b) => s + Number(b.students || 0), 0);
-    renderThinBarList($('rep-chart-stu-course'), {
-      items: bList.map((b) => ({ label: b.label, value: b.students, valueText: String(b.students) })),
-      totalLabel: `Total across ${bList.length} branch${bList.length === 1 ? '' : 'es'}`,
-      totalText: `${bTotal} students`,
-      emptyText: 'No students in scope'
-    });
-  } else {
-    $('rep-stu-list-title').textContent = 'Students by Course';
-    $('rep-stu-list-sub').textContent = 'Enrolled Youth students by course';
-    const cList = st.byCourse || [];
-    const cTotal = cList.reduce((s, c) => s + Number(c.value || 0), 0);
-    renderThinBarList($('rep-chart-stu-course'), {
-      items: cList.map((c) => ({ label: c.label, value: c.value, valueText: String(c.value) })),
-      totalLabel: `Total across ${cList.length} course${cList.length === 1 ? '' : 's'}`,
-      totalText: `${cTotal} students`,
-      emptyText: 'No students in scope'
-    });
-  }
-
-  renderSegmentedBar($('rep-chart-stu-status'), {
-    title: 'Student Status',
-    segments: (st.byStatus || []).map((it, idx) => ({
-      label: it.label,
-      value: it.value,
-      color: CALM_SEG_COLORS[idx % CALM_SEG_COLORS.length]
-    })),
+  renderDonutChart($('rep-chart-stu-course'), {
+    slices: st.byCourse,
+    centerLabel: 'Students',
+    centerValue: String(st.totalCount),
     emptyText: 'No students in scope'
   });
 
-  renderSegmentedBar($('rep-chart-gender'), {
-    title: 'Gender Split',
-    segments: (st.genderSplit || []).map((it, idx) => ({
-      label: it.label,
-      value: it.value,
-      color: CALM_SEG_COLORS[idx % CALM_SEG_COLORS.length]
-    })),
+  renderDonutChart($('rep-chart-stu-status'), {
+    slices: st.byStatus,
+    centerLabel: 'Status',
+    centerValue: String(st.totalCount),
+    emptyText: 'No students in scope'
+  });
+
+  renderDonutChart($('rep-chart-gender'), {
+    slices: st.genderSplit,
+    centerLabel: 'Gender',
+    centerValue: String(st.totalCount),
     emptyText: 'No gender data'
   });
 
   const batches = st.batchFilling || [];
   $('rep-batch-count').textContent = `${batches.length} batch${batches.length === 1 ? '' : 'es'}`;
-  const totalEnrolled = batches.reduce((s, b) => s + Number(b.enrolled || 0), 0);
-  const totalCap = batches.reduce((s, b) => s + Number(b.capacity || 0), 0);
-  renderThinBarList($('rep-batch-fill-list'), {
-    items: batches.map((b) => ({
-      label: b.branchShort ? `${b.name} (${b.branchShort})` : b.name,
-      value: b.hasCapacity ? b.pct : (b.enrolled > 0 ? 45 : 0),
-      pct: b.hasCapacity ? b.pct : (b.enrolled > 0 ? 45 : 0),
-      valueText: b.hasCapacity ? `${b.enrolled} / ${b.capacity} (${b.pct}%)` : `${b.enrolled} enrolled`,
-      subText: b.isFull ? 'Full' : ''
-    })),
-    totalLabel: `Total across ${batches.length} batch${batches.length === 1 ? '' : 'es'}`,
-    totalText: totalCap > 0 ? `${totalEnrolled} / ${totalCap} seats` : `${totalEnrolled} students`,
-    emptyText: 'No batches found for active filters.'
+  const host = $('rep-batch-fill-list');
+  host.innerHTML = '';
+  if (!batches.length) {
+    host.appendChild(mk('div', 'uich-empty', 'No batches found for active filters.'));
+    return;
+  }
+
+  batches.forEach((b) => {
+    const row = mk('div', 'rep-bf-row' + (b.isFull ? ' is-full' : ''));
+    const top = mk('div', 'rep-bf-top');
+    const title = mk('div', 'rep-bf-name');
+    title.appendChild(mk('strong', '', b.name));
+    if (b.branchShort) title.appendChild(mk('span', 'pill indigo', b.branchShort));
+    if (b.isFull) title.appendChild(mk('span', 'pill overdue', 'Full'));
+
+    const capTxt = b.hasCapacity ? `${b.enrolled} / ${b.capacity} (${b.pct}%)` : `${b.enrolled} enrolled (No cap)`;
+    top.append(title, mk('span', 'rep-bf-val', capTxt));
+
+    const track = mk('div', 'rep-bf-track');
+    const fill = mk('div', 'rep-bf-fill' + (b.isFull ? ' is-full' : (b.pct >= 80 ? ' is-warn' : '')));
+    fill.style.width = `${b.hasCapacity ? b.pct : (b.enrolled > 0 ? 45 : 0)}%`;
+    track.appendChild(fill);
+
+    row.append(top, track);
+    host.appendChild(row);
   });
 }
 
@@ -906,17 +820,16 @@ function renderComparisonSection() {
 
   const brRows = cmp.branchComparison || [];
   renderStackedBarChart($('rep-chart-branch-comp'), {
-    grouped: false,
-    viewWidth: 540,
-    height: 210,
+    grouped: true,
     categories: brRows.map((b) => ({
       label: b.label,
       shortLabel: b.shortLabel,
-      values: { collected: b.collected, overdue: b.overdue }
+      values: { collected: b.collected, outstanding: b.outstanding, overdue: b.overdue }
     })),
     series: [
-      { key: 'collected', label: 'Collected', color: CHART_PALETTE[0] },
-      { key: 'overdue', label: 'Overdue', color: '#DC2626', opacity: '0.9' }
+      { key: 'collected', label: 'Collected', color: '#16A34A' },
+      { key: 'outstanding', label: 'Outstanding', color: '#323A85' },
+      { key: 'overdue', label: 'Overdue', color: '#DC2626' }
     ],
     valueFormatter: formatINR,
     emptyText: 'No branches to compare'
@@ -928,24 +841,22 @@ function renderComparisonSection() {
     sessCats.push({
       label: `${sessCmp.previous.label} (Prev)`,
       shortLabel: sessCmp.previous.label,
-      values: { collected: sessCmp.previous.collected, overdue: sessCmp.previous.overdue }
+      values: { collected: sessCmp.previous.collected, dues: sessCmp.previous.dues }
     });
   }
   if (sessCmp?.current) {
     sessCats.push({
       label: `${sessCmp.current.label} (Curr)`,
       shortLabel: sessCmp.current.label,
-      values: { collected: sessCmp.current.collected, overdue: sessCmp.current.overdue }
+      values: { collected: sessCmp.current.collected, dues: sessCmp.current.dues }
     });
   }
   renderStackedBarChart($('rep-chart-session-comp'), {
-    grouped: false,
-    viewWidth: 540,
-    height: 210,
+    grouped: true,
     categories: sessCats,
     series: [
-      { key: 'collected', label: 'Collected', color: CHART_PALETTE[0] },
-      { key: 'overdue', label: 'Overdue', color: '#DC2626', opacity: '0.9' }
+      { key: 'collected', label: 'Collected', color: '#0F766E' },
+      { key: 'dues', label: 'Outstanding Dues', color: '#D97706' }
     ],
     valueFormatter: formatINR,
     emptyText: 'No sessions to compare'
@@ -958,17 +869,12 @@ function renderComparisonSection() {
   } else {
     brRows.forEach((b) => {
       const tr = mk('tr');
-      const tdB = mk('td', 'rc-td-strong lp-td-primary', b.label);
+      const tdB = mk('td', 'lp-td-primary', b.label);
       const tdS = mk('td', 'num', b.students); tdS.dataset.label = 'Students';
-      const tdC = mk('td', 'num rc-td-strong', formatINR(b.collected)); tdC.dataset.label = 'Collected';
+      const tdC = mk('td', 'num'); tdC.dataset.label = 'Collected'; tdC.appendChild(mk('span', 'fr-money success', formatINR(b.collected)));
       const tdOut = mk('td', 'num', formatINR(b.outstanding)); tdOut.dataset.label = 'Outstanding';
-      const tdOv = mk('td', `num ${b.overdue > 0 ? 'rc-td-danger' : 'rc-td-mute'}`, formatINR(b.overdue)); tdOv.dataset.label = 'Overdue';
-      const tdPct = mk('td', 'num'); tdPct.dataset.label = 'Collection %';
-      const track = mk('div', 'rc-rate-track');
-      const fill = document.createElement('i');
-      fill.style.width = `${Math.min(100, Math.round(b.collectionPct || 0))}%`;
-      track.appendChild(fill);
-      tdPct.append(track, mk('div', 'rc-rate-text', `${b.collectionPct}%`));
+      const tdOv = mk('td', 'num'); tdOv.dataset.label = 'Overdue'; tdOv.appendChild(mk('span', `fr-money ${b.overdue > 0 ? 'danger' : 'muted'}`, formatINR(b.overdue)));
+      const tdPct = mk('td', 'num', `${b.collectionPct}%`); tdPct.dataset.label = 'Collection %';
       tr.append(tdB, tdS, tdC, tdOut, tdOv, tdPct);
       brTbody.appendChild(tr);
     });
@@ -982,12 +888,12 @@ function renderComparisonSection() {
   } else {
     scRows.forEach((r) => {
       const tr = mk('tr');
-      const tdLbl = mk('td', 'rc-td-strong lp-td-primary');
-      tdLbl.append(mk('span', '', r.label), ' ', mk('span', 'rc-chip', r.tag));
+      const tdLbl = mk('td', 'lp-td-primary');
+      tdLbl.append(mk('strong', '', r.label), ' ', mk('span', `pill ${r.tag === 'Current' ? 'indigo' : 'neutral'}`, r.tag));
       const tdS = mk('td', 'num', r.students); tdS.dataset.label = 'Students';
-      const tdC = mk('td', 'num rc-td-strong', formatINR(r.collected)); tdC.dataset.label = 'Collected';
+      const tdC = mk('td', 'num'); tdC.dataset.label = 'Collected'; tdC.appendChild(mk('span', 'fr-money success', formatINR(r.collected)));
       const tdD = mk('td', 'num', formatINR(r.dues)); tdD.dataset.label = 'Outstanding Dues';
-      const tdO = mk('td', `num ${r.overdue > 0 ? 'rc-td-danger' : 'rc-td-mute'}`, formatINR(r.overdue)); tdO.dataset.label = 'Overdue Amount';
+      const tdO = mk('td', 'num'); tdO.dataset.label = 'Overdue Amount'; tdO.appendChild(mk('span', `fr-money ${r.overdue > 0 ? 'danger' : 'muted'}`, formatINR(r.overdue)));
       tr.append(tdLbl, tdS, tdC, tdD, tdO);
       scTbody.appendChild(tr);
     });

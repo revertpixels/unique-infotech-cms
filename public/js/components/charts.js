@@ -1,14 +1,19 @@
-// charts.js — Zero-dependency plain-SVG & HTML data visuals in calm reference style.
-// Reuses white/grey + brand purple (--primary) palette; red ONLY for overdue money; square 90-degree bars/swatches.
+// charts.js — Zero-dependency plain-SVG responsive & print-safe charts (donut, bar, stacked/grouped bar, line).
+// Uses crisp 90-degree square corners on all bars and swatches; preserves inline attributes for PDF/Print.
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
 export const CHART_PALETTE = [
-  '#323A85', // Primary brand purple-indigo
-  '#6366F1', // Soft indigo
-  '#475569', // Charcoal slate
-  '#94A3B8', // Medium cool grey
-  '#CBD5E1'  // Pale slate
+  '#323A85', // Primary indigo
+  '#0F766E', // Emerald teal
+  '#D97706', // Warm amber
+  '#0284C7', // Sky blue
+  '#7C3AED', // Violet
+  '#16A34A', // Success green
+  '#DC2626', // Alert red
+  '#EC4899', // Rose
+  '#EA580C', // Orange
+  '#0891B2'  // Cyan
 ];
 
 function svgEl(tag, attrs = {}, text = null) {
@@ -103,15 +108,15 @@ function truncLabel(s, max = 14) {
 }
 
 /**
- * Small Donut Chart (~150px) with center readout and side legend (Payment Mode & Fee Type).
+ * Plain-SVG Donut Chart with center readout, hover tooltips, and side legend on desktop.
  */
 export function renderDonutChart(host, {
   slices = [],
   centerLabel = 'Total',
   centerValue = '',
   valueFormatter = defaultFmt,
-  size = 150,
-  thickness = 22,
+  size = 160,
+  thickness = 24,
   emptyText = 'No data'
 } = {}) {
   const valid = (slices || [])
@@ -130,13 +135,13 @@ export function renderDonutChart(host, {
   }
 
   const ctx = ensureContainer(host, 'uich-donut-wrap');
-  const cx = 82;
-  const cy = 82;
-  const r = 58;
+  const cx = 86;
+  const cy = 86;
+  const r = 62;
   const circ = 2 * Math.PI * r;
 
   const svg = svgEl('svg', {
-    viewBox: '0 0 164 164',
+    viewBox: '0 0 172 172',
     width: size,
     height: size,
     class: 'uich-svg uich-donut-svg',
@@ -198,7 +203,7 @@ export function renderDonutChart(host, {
   });
 
   const cValText = centerValue || valueFormatter(total);
-  const valFontSize = String(cValText).length > 9 ? '12.5' : (String(cValText).length > 6 ? '14' : '15.5');
+  const valFontSize = String(cValText).length > 9 ? '12.5' : (String(cValText).length > 6 ? '14.5' : '16');
   svg.appendChild(svgEl('text', {
     x: cx,
     y: cy - 2,
@@ -212,7 +217,7 @@ export function renderDonutChart(host, {
     x: cx,
     y: cy + 14,
     'text-anchor': 'middle',
-    fill: '#8A8A8A',
+    fill: '#6B7280',
     'font-size': '10',
     'font-weight': '600',
     'font-family': 'Plus Jakarta Sans, sans-serif'
@@ -248,13 +253,14 @@ export function renderDonutChart(host, {
 }
 
 /**
- * Plain-SVG Vertical Bar Chart with dashed #EAEAEA gridlines, square corners (rx=0, ry=0), and max ~48px bar width.
+ * Plain-SVG Bar Chart (vertical or horizontal) with sharp 90-degree corners and capped bar width.
  */
 export function renderBarChart(host, {
   items = [],
+  horizontal = false,
   valueFormatter = defaultFmt,
-  viewWidth = 560,
-  height = 210,
+  viewWidth = 520,
+  height = 195,
   color = '#323A85',
   emptyText = 'No data',
   showValues = true,
@@ -274,11 +280,94 @@ export function renderBarChart(host, {
     return;
   }
 
-  const ctx = ensureContainer(host, 'uich-bar-wrap');
+  const ctx = ensureContainer(host, horizontal ? 'uich-hbar-wrap' : 'uich-bar-wrap');
+
+  if (horizontal) {
+    const rowH = 26;
+    const padL = 122;
+    const padR = 68;
+    const padT = 8;
+    const padB = 8;
+    const W = viewWidth;
+    const H = Math.max(96, padT + padB + valid.length * rowH);
+    const maxVal = Math.max(1, ...valid.map((v) => v.value));
+    const plotW = W - padL - padR;
+
+    const svg = svgEl('svg', {
+      viewBox: `0 0 ${W} ${H}`,
+      width: '100%',
+      class: 'uich-svg uich-bar-svg',
+      role: 'img',
+      'aria-label': 'Horizontal bar chart'
+    });
+
+    valid.forEach((it, idx) => {
+      const y = padT + idx * rowH;
+      const barW = Math.max(3, (it.value / maxVal) * plotW);
+
+      svg.appendChild(svgEl('text', {
+        x: padL - 8,
+        y: y + 15,
+        'text-anchor': 'end',
+        fill: '#374151',
+        'font-size': '10.5',
+        'font-weight': '600',
+        'font-family': 'Plus Jakarta Sans, sans-serif'
+      }, truncLabel(it.shortLabel, 18)));
+
+      svg.appendChild(svgEl('rect', {
+        x: padL,
+        y: y + 4,
+        width: plotW,
+        height: 14,
+        rx: 0,
+        ry: 0,
+        fill: '#F1F5F9'
+      }));
+
+      const bar = svgEl('rect', {
+        x: padL,
+        y: y + 4,
+        width: barW.toFixed(1),
+        height: 14,
+        rx: 0,
+        ry: 0,
+        fill: it.color,
+        style: onBarClick ? 'cursor:pointer;' : 'cursor:default;'
+      });
+      bar.addEventListener('mouseenter', (ev) => {
+        bar.setAttribute('opacity', '0.82');
+        ctx.showTip(ev, it.label, `${valueFormatter(it.value)}${it.sub ? ' · ' + it.sub : ''}`);
+      });
+      bar.addEventListener('mousemove', (ev) => {
+        ctx.showTip(ev, it.label, `${valueFormatter(it.value)}${it.sub ? ' · ' + it.sub : ''}`);
+      });
+      bar.addEventListener('mouseleave', () => {
+        bar.setAttribute('opacity', '1');
+        ctx.hideTip();
+      });
+      if (onBarClick) bar.addEventListener('click', () => onBarClick(it.raw));
+
+      svg.appendChild(bar);
+      svg.appendChild(svgEl('text', {
+        x: padL + plotW + 8,
+        y: y + 15,
+        fill: '#171717',
+        'font-size': '10.5',
+        'font-weight': '700',
+        'font-family': 'Plus Jakarta Sans, sans-serif'
+      }, valueFormatter(it.value)));
+    });
+
+    ctx.wrap.appendChild(svg);
+    return;
+  }
+
+  // Vertical bar chart (proportional bars capped at <= 38px)
   const W = viewWidth;
   const H = height;
-  const padL = 48;
-  const padR = 14;
+  const padL = 50;
+  const padR = 16;
   const padT = 18;
   const padB = 34;
   const plotW = W - padL - padR;
@@ -301,24 +390,23 @@ export function renderBarChart(host, {
       y1: y.toFixed(1),
       x2: W - padR,
       y2: y.toFixed(1),
-      stroke: '#EAEAEA',
-      'stroke-dasharray': tk === 0 ? null : '3 4',
+      stroke: tk === 0 ? '#E2E8F0' : '#F1F5F9',
       'stroke-width': '1'
     }));
     svg.appendChild(svgEl('text', {
-      x: padL - 8,
+      x: padL - 7,
       y: (y + 3.5).toFixed(1),
       'text-anchor': 'end',
-      fill: '#8A8A8A',
-      'font-size': '10.5',
+      fill: '#6B7280',
+      'font-size': '10',
       'font-family': 'Plus Jakarta Sans, sans-serif'
     }, shortAxisNum(tk)));
   });
 
   const step = plotW / valid.length;
   const barW = valid.length <= 2
-    ? Math.min(46, Math.max(24, step * 0.28))
-    : Math.max(14, Math.min(48, step * 0.5));
+    ? Math.min(36, Math.max(18, step * 0.28))
+    : Math.max(10, Math.min(38, step * 0.48));
   const maxXLabels = 10;
   const skipStep = valid.length > maxXLabels ? Math.ceil(valid.length / maxXLabels) : 1;
 
@@ -339,7 +427,7 @@ export function renderBarChart(host, {
       style: onBarClick ? 'cursor:pointer;' : 'cursor:default;'
     });
     bar.addEventListener('mouseenter', (ev) => {
-      bar.setAttribute('opacity', '0.84');
+      bar.setAttribute('opacity', '0.82');
       ctx.showTip(ev, it.label, `${valueFormatter(it.value)}${it.sub ? ' · ' + it.sub : ''}`);
     });
     bar.addEventListener('mousemove', (ev) => {
@@ -357,8 +445,8 @@ export function renderBarChart(host, {
         x: cx.toFixed(1),
         y: Math.max(11, y - 5).toFixed(1),
         'text-anchor': 'middle',
-        fill: '#525252',
-        'font-size': '10.5',
+        fill: '#374151',
+        'font-size': '10',
         'font-weight': '700',
         'font-family': 'Plus Jakarta Sans, sans-serif'
       }, shortAxisNum(it.value)));
@@ -370,8 +458,8 @@ export function renderBarChart(host, {
         y: (H - 12).toFixed(1),
         'text-anchor': 'middle',
         fill: '#525252',
-        'font-size': '10.5',
-        'font-weight': '500',
+        'font-size': '10',
+        'font-weight': '600',
         'font-family': 'Plus Jakarta Sans, sans-serif'
       }, truncLabel(it.shortLabel, valid.length <= 4 ? 20 : 12)));
     }
@@ -381,15 +469,15 @@ export function renderBarChart(host, {
 }
 
 /**
- * Plain-SVG Stacked / Grouped Bar Chart matching reference `drawStack` (square corners, dashed grid, max 48px bar width).
+ * Plain-SVG Grouped or Stacked Bar Chart with sharp 90-degree corners.
  */
 export function renderStackedBarChart(host, {
   categories = [],
   series = [],
   grouped = false,
   valueFormatter = defaultFmt,
-  viewWidth = 560,
-  height = 215,
+  viewWidth = 520,
+  height = 200,
   emptyText = 'No data'
 } = {}) {
   if (!categories.length || !series.length) {
@@ -417,10 +505,10 @@ export function renderStackedBarChart(host, {
   const ctx = ensureContainer(host, 'uich-stacked-wrap');
   const W = viewWidth;
   const H = height;
-  const padL = 48;
+  const padL = 50;
   const padR = 14;
-  const padT = 14;
-  const padB = 34;
+  const padT = 12;
+  const padB = 32;
   const plotW = W - padL - padR;
   const plotH = H - padT - padB;
   const { top, ticks } = niceTicks(maxVal, 4);
@@ -440,16 +528,15 @@ export function renderStackedBarChart(host, {
       y1: y.toFixed(1),
       x2: W - padR,
       y2: y.toFixed(1),
-      stroke: '#EAEAEA',
-      'stroke-dasharray': tk === 0 ? null : '3 4',
+      stroke: tk === 0 ? '#E2E8F0' : '#F1F5F9',
       'stroke-width': '1'
     }));
     svg.appendChild(svgEl('text', {
-      x: padL - 8,
+      x: padL - 7,
       y: (y + 3.5).toFixed(1),
       'text-anchor': 'end',
-      fill: '#8A8A8A',
-      'font-size': '10.5',
+      fill: '#6B7280',
+      'font-size': '10',
       'font-family': 'Plus Jakarta Sans, sans-serif'
     }, shortAxisNum(tk)));
   });
@@ -461,9 +548,9 @@ export function renderStackedBarChart(host, {
 
     if (grouped) {
       const gap = 3;
-      const maxSubW = categories.length <= 2 ? 32 : 26;
+      const maxSubW = categories.length <= 2 ? 26 : 24;
       const innerW = Math.min(groupStep * 0.68, series.length * maxSubW + (series.length - 1) * gap);
-      const subW = Math.min(maxSubW, Math.max(10, (innerW - (series.length - 1) * gap) / series.length));
+      const subW = Math.min(maxSubW, Math.max(8, (innerW - (series.length - 1) * gap) / series.length));
       const startX = center - (series.length * subW + (series.length - 1) * gap) / 2;
 
       series.forEach((sr, si) => {
@@ -482,22 +569,19 @@ export function renderStackedBarChart(host, {
           style: 'cursor:pointer;'
         });
         const detail = series.map((sItem) => `${sItem.label}: ${valueFormatter(cat.values?.[sItem.key] || 0)}`).join(' · ');
-        rect.addEventListener('mouseenter', (ev) => { rect.setAttribute('opacity', '0.84'); ctx.showTip(ev, cat.label, detail); });
+        rect.addEventListener('mouseenter', (ev) => { rect.setAttribute('opacity', '0.82'); ctx.showTip(ev, cat.label, detail); });
         rect.addEventListener('mousemove', (ev) => ctx.showTip(ev, cat.label, detail));
         rect.addEventListener('mouseleave', () => { rect.setAttribute('opacity', '1'); ctx.hideTip(); });
         svg.appendChild(rect);
       });
     } else {
-      const bw = Math.max(18, Math.min(48, groupStep * 0.48));
+      const bw = Math.max(12, Math.min(38, groupStep * 0.48));
       const bx = center - bw / 2;
       let accY = padT + plotH;
-      let firstSeg = true;
       series.forEach((sr, si) => {
         const val = Math.max(0, Number(cat.values?.[sr.key] || 0));
         if (val <= 0) return;
         const bh = Math.max(2, (val / top) * plotH);
-        if (!firstSeg) accY -= 1; // Crisp 1px gap between stacked bars like temp_ref_dashboard
-        firstSeg = false;
         accY -= bh;
         const rect = svgEl('rect', {
           x: bx.toFixed(1),
@@ -507,11 +591,10 @@ export function renderStackedBarChart(host, {
           rx: 0,
           ry: 0,
           fill: sr.color || CHART_PALETTE[si % CHART_PALETTE.length],
-          'fill-opacity': sr.opacity || '1',
           style: 'cursor:pointer;'
         });
-        const detail = series.map((sItem) => `${sItem.label}: ${valueFormatter(cat.values?.[sItem.key] || 0)}`).join(' · ');
-        rect.addEventListener('mouseenter', (ev) => { rect.setAttribute('opacity', '0.84'); ctx.showTip(ev, cat.label, detail); });
+        const detail = `${sr.label}: ${valueFormatter(val)}`;
+        rect.addEventListener('mouseenter', (ev) => { rect.setAttribute('opacity', '0.82'); ctx.showTip(ev, cat.label, detail); });
         rect.addEventListener('mousemove', (ev) => ctx.showTip(ev, cat.label, detail));
         rect.addEventListener('mouseleave', () => { rect.setAttribute('opacity', '1'); ctx.hideTip(); });
         svg.appendChild(rect);
@@ -520,11 +603,11 @@ export function renderStackedBarChart(host, {
 
     svg.appendChild(svgEl('text', {
       x: center.toFixed(1),
-      y: (H - 12).toFixed(1),
+      y: (H - 11).toFixed(1),
       'text-anchor': 'middle',
-      fill: '#525252',
+      fill: '#374151',
       'font-size': '10.5',
-      'font-weight': '500',
+      'font-weight': '600',
       'font-family': 'Plus Jakarta Sans, sans-serif'
     }, truncLabel(cat.shortLabel || cat.label, categories.length <= 4 ? 22 : 14)));
   });
@@ -542,13 +625,13 @@ export function renderStackedBarChart(host, {
 }
 
 /**
- * Plain-SVG Line & Area Chart with dashed #EAEAEA gridlines and calm purple stroke.
+ * Plain-SVG Line & Area Chart with lighter grids, small point markers, and compact height.
  */
 export function renderLineChart(host, {
   points = [],
   valueFormatter = defaultFmt,
-  viewWidth = 760,
-  height = 205,
+  viewWidth = 960,
+  height = 195,
   color = '#323A85',
   emptyText = 'No data'
 } = {}) {
@@ -572,8 +655,8 @@ export function renderLineChart(host, {
   const ctx = ensureContainer(host, 'uich-line-wrap');
   const W = viewWidth;
   const H = height;
-  const padL = 48;
-  const padR = 16;
+  const padL = 52;
+  const padR = 18;
   const padT = 16;
   const padB = 34;
   const plotW = W - padL - padR;
@@ -596,16 +679,15 @@ export function renderLineChart(host, {
       y1: y.toFixed(1),
       x2: W - padR,
       y2: y.toFixed(1),
-      stroke: '#EAEAEA',
-      'stroke-dasharray': tk === 0 ? null : '3 4',
+      stroke: tk === 0 ? '#E2E8F0' : '#F1F5F9',
       'stroke-width': '1'
     }));
     svg.appendChild(svgEl('text', {
       x: padL - 8,
       y: (y + 3.5).toFixed(1),
       'text-anchor': 'end',
-      fill: '#8A8A8A',
-      'font-size': '10.5',
+      fill: '#6B7280',
+      'font-size': '10',
       'font-family': 'Plus Jakarta Sans, sans-serif'
     }, shortAxisNum(tk)));
   });
@@ -623,7 +705,7 @@ export function renderLineChart(host, {
   svg.appendChild(svgEl('polygon', {
     points: areaPts,
     fill: color,
-    'fill-opacity': '0.09'
+    'fill-opacity': '0.10'
   }));
   svg.appendChild(svgEl('polyline', {
     points: linePts,
@@ -664,124 +746,12 @@ export function renderLineChart(host, {
         y: (H - 12).toFixed(1),
         'text-anchor': idx === 0 ? 'start' : (idx === coords.length - 1 ? 'end' : 'middle'),
         fill: '#525252',
-        'font-size': '10.5',
-        'font-weight': '500',
+        'font-size': '10',
+        'font-weight': '600',
         'font-family': 'Plus Jakarta Sans, sans-serif'
       }, truncLabel(c.shortLabel, 10)));
     }
   });
 
   ctx.wrap.appendChild(svg);
-}
-
-/**
- * Reference "Students by Centre" thin square-ended bar list + bottom summary row.
- */
-export function renderThinBarList(host, {
-  items = [],
-  valueFormatter = defaultFmt,
-  totalLabel = '',
-  totalText = '',
-  danger = false,
-  emptyText = 'No data'
-} = {}) {
-  if (!host) return;
-  host.innerHTML = '';
-
-  const list = (items || []).filter(Boolean);
-  if (!list.length) {
-    renderEmptyState(host, emptyText);
-    return;
-  }
-
-  const maxVal = Math.max(1, ...list.map((it) => Number(it.maxValue ?? it.value ?? 0)));
-  const frag = document.createDocumentFragment();
-
-  list.forEach((it) => {
-    const row = htmlEl('div', 'rc-hb');
-    const top = htmlEl('div', 'rc-hb-top');
-    const left = htmlEl('span', 'rc-hb-name', it.label || '-');
-
-    const right = htmlEl('b', 'rc-hb-val');
-    right.textContent = it.valueText || valueFormatter(it.value || 0);
-    if (it.subText) {
-      const sub = htmlEl('span', `rc-hb-sub${it.subDanger ? ' is-danger' : ''}`, it.subText);
-      right.appendChild(sub);
-    }
-    top.append(left, right);
-
-    const track = htmlEl('div', `rc-hb-track${danger || it.danger ? ' is-danger' : ''}`);
-    const pct = it.pct !== undefined && it.pct !== null
-      ? Math.min(100, Math.max(0, Number(it.pct)))
-      : (maxVal > 0 ? Math.min(100, Math.round((Number(it.value || 0) / maxVal) * 1000) / 10) : 0);
-    const fill = document.createElement('i');
-    fill.style.width = `${pct}%`;
-    track.appendChild(fill);
-
-    row.append(top, track);
-    frag.appendChild(row);
-  });
-
-  if (totalLabel || totalText) {
-    const note = htmlEl('div', 'rc-total-note');
-    note.append(htmlEl('span', '', totalLabel), htmlEl('b', '', totalText));
-    frag.appendChild(note);
-  }
-
-  host.appendChild(frag);
-}
-
-/**
- * Reference "Students by Semester" thin stacked horizontal segment bar + square-dot legend below.
- */
-export function renderSegmentedBar(host, {
-  segments = [],
-  title = '',
-  valueFormatter = defaultFmt,
-  emptyText = 'No data'
-} = {}) {
-  if (!host) return;
-  host.innerHTML = '';
-
-  const valid = (segments || [])
-    .map((s, idx) => ({
-      label: String(s.label || `Item ${idx + 1}`),
-      value: Math.max(0, Number(s.value || 0)),
-      color: s.color || CHART_PALETTE[idx % CHART_PALETTE.length]
-    }))
-    .filter((s) => s.value > 0);
-
-  const total = valid.reduce((sum, s) => sum + s.value, 0);
-  if (!valid.length || total <= 0) {
-    if (title) host.appendChild(htmlEl('div', 'rc-seg-title', title));
-    const empty = htmlEl('div', 'uich-empty');
-    empty.appendChild(htmlEl('span', 'uich-empty-text', emptyText));
-    host.appendChild(empty);
-    return;
-  }
-
-  if (title) host.appendChild(htmlEl('div', 'rc-seg-title', title));
-
-  const bar = htmlEl('div', 'rc-seg-bar');
-  valid.forEach((s) => {
-    const seg = document.createElement('i');
-    const pct = (s.value / total) * 100;
-    seg.style.width = `${pct.toFixed(2)}%`;
-    seg.style.background = s.color;
-    seg.title = `${s.label}: ${valueFormatter(s.value)} (${Math.round(pct)}%)`;
-    bar.appendChild(seg);
-  });
-
-  const leg = htmlEl('div', 'rc-seg-legend');
-  valid.forEach((s) => {
-    const sp = document.createElement('span');
-    const dot = document.createElement('i');
-    dot.style.background = s.color;
-    const lbl = document.createTextNode(`${s.label} `);
-    const val = htmlEl('b', '', valueFormatter(s.value));
-    sp.append(dot, lbl, val);
-    leg.appendChild(sp);
-  });
-
-  host.append(bar, leg);
 }

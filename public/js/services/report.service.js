@@ -7,13 +7,17 @@ import { db } from '../config/firebase-config.js';
 import {
   collection,
   collectionGroup,
+  count,
   doc,
+  getAggregateFromServer,
+  getCountFromServer,
   getDoc,
   getDocs,
   limit,
   orderBy,
   query,
   startAfter,
+  sum,
   where
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
 import {
@@ -22,26 +26,28 @@ import {
   fetchStudentPayments,
   calculateStudentFinancials,
   isStudentEligibleForDues
-} from './payment.service.js?v=1.8.189';
+} from './payment.service.js?v=1.8.190';
 import {
   evaluateKidsPendingBills,
   buildKidsPaymentLedger
-} from '../utils/school-billing.js?v=1.8.189';
-import { getStudentPhotoSrc } from '../utils/student-media.js?v=1.8.189';
+} from '../utils/school-billing.js?v=1.8.190';
+import { getStudentPhotoSrc } from '../utils/student-media.js?v=1.8.190';
 import {
   todayISO,
   fmtDate,
   getOrgTimezone
-} from '../utils/session-rules.js?v=1.8.189';
-import { formatINR } from '../utils/formatter.js?v=1.8.189';
-import { formatPersonName } from '../utils/formatter.js?v=1.8.189';
-import { resolveUserDisplay, loadUsersDirectory, getRoleTitle } from './user-directory.service.js?v=1.8.189';
-import { loadPdfMake, urlToDataUrl } from '../utils/admission-receipt-pdf.js?v=1.8.189';
-import { loadAllSessions, getAllCachedSessions, hasFreshSessionsCache } from '../core/sessions.js?v=1.8.189';
+} from '../utils/session-rules.js?v=1.8.190';
+import { formatINR } from '../utils/formatter.js?v=1.8.190';
+import { formatPersonName } from '../utils/formatter.js?v=1.8.190';
+import { resolveUserDisplay, loadUsersDirectory, getRoleTitle } from './user-directory.service.js?v=1.8.190';
+import { loadPdfMake, urlToDataUrl } from '../utils/admission-receipt-pdf.js?v=1.8.190';
+import { loadAllSessions, getAllCachedSessions, hasFreshSessionsCache } from '../core/sessions.js?v=1.8.190';
 
 const CACHE_KEY = 'financialReports';
 export const CACHE_STALE_MS = 30000;
-const DEFAULT_YOUTH_STUDENTS_LIMIT = 500;
+const YOUTH_STUDENTS_FIRST_PAGE_SIZE = 250;
+const YOUTH_STUDENTS_NEXT_PAGE_SIZE = 500;
+const UNLIMITED_STUDENTS_KEY = 'ALL';
 
 const inflightMeta = new Map();
 const inflightStudents = new Map();
@@ -126,6 +132,18 @@ export function invalidateFinancialCache({ clearMeta = false } = {}) {
   root.youthHistory.clear();
   root.kidsHistory = null;
   root.billsById.clear();
+}
+
+export function clearAllReportCaches() {
+  invalidateFinancialCache({ clearMeta: true });
+  const root = ensureCacheRoot();
+  root.studentsById.clear();
+  root.photos.clear();
+  inflightMeta.clear();
+  inflightStudents.clear();
+  inflightSessionDatasets.clear();
+  inflightPending.clear();
+  inflightHistory.clear();
 }
 
 if (typeof window !== 'undefined' && typeof window.addEventListener === 'function' && !window.__uicReportListenersBound) {
@@ -296,82 +314,215 @@ export async function ensureReferenceData({ forceRefresh = false, profile = null
   return task;
 }
 
-function getYouthStudentsCacheKey({ profile = null, sessionId = '', includeAllSessions = false, maxLimit = DEFAULT_YOUTH_STUDENTS_LIMIT } = {}) {
+function getYouthStudentsCacheKey({ profile = null, sessionId = '', includeAllSessions = false } = {}) {
   const isBranchHead = profile?.role === 'branch_head' && !!profile?.branchId;
   const branchScope = isBranchHead ? profile.branchId : 'ALL';
   const sid = String(sessionId || '').trim();
   const scope = sid ? `S:${sid}` : (includeAllSessions ? 'ALL_SESSIONS' : 'UNSCOPED');
-  return `${scope}::${branchScope}::${maxLimit}`;
+  return `${scope}::${branchScope}::${UNLIMITED_STUDENTS_KEY}`;
 }
 
-export function getCachedYouthStudents({ profile = null, sessionId = '', includeAllSessions = false, maxLimit = DEFAULT_YOUTH_STUDENTS_LIMIT } = {}) {
+export function getCachedYouthStudents({ profile = null, sessionId = '', includeAllSessions = false } = {}) {
   const root = ensureCacheRoot();
-  const key = getYouthStudentsCacheKey({ profile, sessionId, includeAllSessions, maxLimit });
-  if (root.studentsLists.has(key)) return root.studentsLists.get(key);
+  const key = getYouthStudentsCacheKey({ profile, sessionId, includeAllSessions });
+  if (root.studentsLists.has(key)) {
+    const entry = root.studentsLists.get(key);
+    if (entry && entry.isComplete !== false) return entry;
+  }
   const sid = String(sessionId || '').trim();
   if (sid) {
-    const allKey = getYouthStudentsCacheKey({ profile, sessionId: '', includeAllSessions: true, maxLimit });
+    const allKey = getYouthStudentsCacheKey({ profile, sessionId: '', includeAllSessions: true });
     const allEntry = root.studentsLists.get(allKey);
-    if (allEntry && !isCacheStale(allEntry)) {
+    if (allEntry && allEntry.isComplete !== false && !isCacheStale(allEntry)) {
       const list = allEntry.list.filter((s) => s.sessionId === sid);
       const byId = {};
       list.forEach((s) => { byId[s.id] = s; });
-      return { list, byId, fetchedAt: allEntry.fetchedAt, readCount: 0, fromCache: true };
+      return {
+        list,
+        byId,
+        totalCount: list.length,
+        loadedCount: list.length,
+        isComplete: true,
+        fetchedAt: allEntry.fetchedAt,
+        readCount: 0,
+        fromCache: true
+      };
     }
   }
   return null;
 }
 
 /**
- * Loads Youth Centre student list once per login/session with bounded limit() and in-flight deduplication.
+ * Loads Youth Centre student list once per login/session using cursor pagination (startAfter)
+ * so ALL students load without truncation. Optionally returns immediately after page 1 while
+ * continuing remaining pages silently in the background.
  */
 export async function ensureYouthStudents({
   profile = null,
   sessionId = '',
   includeAllSessions = false,
   forceRefresh = false,
-  maxLimit = DEFAULT_YOUTH_STUDENTS_LIMIT
+  maxLimit = null,
+  pageSize = YOUTH_STUDENTS_FIRST_PAGE_SIZE,
+  nextPageSize = YOUTH_STUDENTS_NEXT_PAGE_SIZE,
+  returnOnFirstPage = false,
+  onFirstPage = null,
+  onProgress = null
 } = {}) {
   const root = ensureCacheRoot();
   const isBranchHead = profile?.role === 'branch_head' && !!profile?.branchId;
   const sid = String(sessionId || '').trim();
-  const key = getYouthStudentsCacheKey({ profile, sessionId: sid, includeAllSessions, maxLimit });
+  const key = getYouthStudentsCacheKey({ profile, sessionId: sid, includeAllSessions });
+  const numericCap = (Number.isFinite(Number(maxLimit)) && Number(maxLimit) > 0) ? Number(maxLimit) : Infinity;
 
   if (!forceRefresh) {
-    const hit = getCachedYouthStudents({ profile, sessionId: sid, includeAllSessions, maxLimit });
-    if (hit) return { ...hit, readCount: 0, fromCache: true };
-    if (inflightStudents.has(key)) return inflightStudents.get(key);
+    const hit = getCachedYouthStudents({ profile, sessionId: sid, includeAllSessions });
+    if (hit && hit.isComplete !== false && !isCacheStale(hit)) {
+      return { ...hit, readCount: 0, fromCache: true };
+    }
+    const existing = inflightStudents.get(key);
+    if (existing) {
+      if (onProgress && typeof existing.subscribe === 'function') existing.subscribe(onProgress);
+      return returnOnFirstPage && existing.firstPagePromise
+        ? existing.firstPagePromise
+        : existing.fullPromise;
+    }
   }
 
-  const task = (async () => {
-    const constraints = [where('ctx', '==', 'youth')];
-    if (sid) constraints.push(where('sessionId', '==', sid));
-    if (isBranchHead) constraints.push(where('branchId', '==', profile.branchId));
-    if (maxLimit > 0) constraints.push(limit(maxLimit));
+  const baseConstraints = [where('ctx', '==', 'youth')];
+  if (sid) baseConstraints.push(where('sessionId', '==', sid));
+  if (isBranchHead) baseConstraints.push(where('branchId', '==', profile.branchId));
+  const baseQuery = query(collection(db, 'students'), ...baseConstraints);
 
-    const snap = await getDocs(query(collection(db, 'students'), ...constraints));
-    const list = snap.docs.map((d) => {
-      const s = { id: d.id, ...d.data() };
-      root.studentsById.set(s.id, s);
-      return s;
-    });
+  const progressListeners = new Set();
+  if (typeof onProgress === 'function') progressListeners.add(onProgress);
+
+  let resolveFirstPage;
+  let rejectFirstPage;
+  const firstPagePromise = new Promise((resolve, reject) => {
+    resolveFirstPage = resolve;
+    rejectFirstPage = reject;
+  });
+  // Prevent unhandled rejection when caller awaits fullPromise instead of firstPagePromise.
+  firstPagePromise.catch(() => {});
+
+  const fullPromise = (async () => {
+    const firstLimit = Math.min(numericCap, Math.max(1, Number(pageSize) || YOUTH_STUDENTS_FIRST_PAGE_SIZE));
+    const batchNextLimit = Math.max(1, Number(nextPageSize) || YOUTH_STUDENTS_NEXT_PAGE_SIZE);
+
+    const countPromise = getCountFromServer(baseQuery).catch(() => null);
+    const snap1 = await getDocs(query(collection(db, 'students'), ...baseConstraints, limit(firstLimit)));
+    const countSnap = await countPromise;
+
+    const list = [];
     const byId = {};
-    list.forEach((s) => { byId[s.id] = s; });
+    const seen = new Set();
+    let readCount = snap1.size + (countSnap ? 1 : 0);
+
+    snap1.docs.forEach((d) => {
+      if (seen.has(d.id)) return;
+      seen.add(d.id);
+      const s = { id: d.id, ...d.data() };
+      list.push(s);
+      byId[s.id] = s;
+      root.studentsById.set(s.id, s);
+    });
+
+    const serverTotal = countSnap && typeof countSnap.data === 'function' ? Number(countSnap.data().count || 0) : 0;
+    const hitCapImmediately = Number.isFinite(numericCap) && list.length >= numericCap;
+    const singlePageComplete = snap1.docs.length < firstLimit || hitCapImmediately;
+    let totalCount = singlePageComplete ? list.length : Math.max(list.length, serverTotal || list.length);
+
+    const makePayload = (isComplete) => ({
+      list: list.slice(),
+      byId: { ...byId },
+      totalCount: isComplete ? list.length : totalCount,
+      loadedCount: list.length,
+      isComplete,
+      fetchedAt: Date.now(),
+      readCount,
+      fromCache: false,
+      done: fullPromise
+    });
+
+    const firstPayload = makePayload(singlePageComplete);
+    if (singlePageComplete) {
+      root.studentsLists.set(key, firstPayload);
+    }
+    if (typeof onFirstPage === 'function') {
+      try { onFirstPage(firstPayload); } catch (_) {}
+    }
+    resolveFirstPage(firstPayload);
+
+    let lastDoc = snap1.docs.length ? snap1.docs[snap1.docs.length - 1] : null;
+    let hasMore = !singlePageComplete && !!lastDoc;
+    let pages = 1;
+
+    while (hasMore && list.length < numericCap && pages < 200) {
+      const remaining = Number.isFinite(numericCap) ? Math.max(1, numericCap - list.length) : batchNextLimit;
+      const take = Math.min(batchNextLimit, remaining);
+      const snap = await getDocs(
+        query(collection(db, 'students'), ...baseConstraints, startAfter(lastDoc), limit(take))
+      );
+      readCount += snap.size;
+      pages += 1;
+
+      let added = 0;
+      snap.docs.forEach((d) => {
+        if (seen.has(d.id)) return;
+        seen.add(d.id);
+        const s = { id: d.id, ...d.data() };
+        list.push(s);
+        byId[s.id] = s;
+        root.studentsById.set(s.id, s);
+        added += 1;
+      });
+
+      totalCount = Math.max(totalCount, list.length);
+      lastDoc = snap.docs.length ? snap.docs[snap.docs.length - 1] : null;
+      hasMore = snap.docs.length === take && added > 0 && list.length < numericCap && !!lastDoc;
+
+      const stepPayload = makePayload(!hasMore);
+      if (!hasMore) {
+        root.studentsLists.set(key, stepPayload);
+      } else {
+        progressListeners.forEach((cb) => {
+          try { cb(stepPayload); } catch (_) {}
+        });
+      }
+    }
+
     const entry = {
       list,
       byId,
+      totalCount: list.length,
+      loadedCount: list.length,
+      isComplete: true,
       fetchedAt: Date.now(),
-      readCount: snap.size,
-      fromCache: false
+      readCount,
+      fromCache: false,
+      done: fullPromise
     };
     root.studentsLists.set(key, entry);
+    progressListeners.forEach((cb) => {
+      try { cb(entry); } catch (_) {}
+    });
     return entry;
-  })().finally(() => {
+  })().catch((err) => {
+    rejectFirstPage(err);
+    throw err;
+  }).finally(() => {
     inflightStudents.delete(key);
   });
 
-  inflightStudents.set(key, task);
-  return task;
+  inflightStudents.set(key, {
+    fullPromise,
+    firstPagePromise,
+    subscribe(cb) {
+      if (typeof cb === 'function') progressListeners.add(cb);
+    }
+  });
+  return returnOnFirstPage ? firstPagePromise : fullPromise;
 }
 
 export function getCachedYouthSessionDataset({ profile = null, session = null, sessionId = '' } = {}) {
@@ -420,9 +571,59 @@ export async function ensureYouthSessionDataset({
   }
 
   const task = (async () => {
+    const sessObj = session || (getAllCachedSessions('youth') || []).find((s) => s.id === sid) || null;
+    const lookbackStart = sessObj?.startDate ? addDaysISO(sessObj.startDate, -120) : '';
+    const canUseCollectionGroup = !isBranchHead && Boolean(lookbackStart);
+    let earlyCgPromise = null;
+    const fetchCgPayments = async () => {
+      const groupedByStudent = new Map();
+      const seenPayKeys = new Set();
+      let cur = null;
+      let cgHasMore = true;
+      let cgPages = 0;
+      const cgPageSize = 1000;
+      let cgReads = 0;
+
+      while (cgHasMore && cgPages < 40) {
+        const cgConstraints = [where('date', '>=', lookbackStart), orderBy('date', 'desc')];
+        if (cur) cgConstraints.push(startAfter(cur));
+        cgConstraints.push(limit(cgPageSize));
+
+        const cgSnap = await getDocs(query(collectionGroup(db, 'payment'), ...cgConstraints));
+        cgReads += cgSnap.size;
+        cgPages += 1;
+
+        cgSnap.docs.forEach((d) => {
+          const parentId = d.ref?.parent?.parent?.id || '';
+          const data = d.data() || {};
+          const studentDocId = data.studentDocId || parentId;
+          if (!studentDocId) return;
+          const uniqueKey = `${studentDocId}/${d.id}`;
+          if (seenPayKeys.has(uniqueKey)) return;
+          seenPayKeys.add(uniqueKey);
+          const item = { id: d.id, studentDocId, ...data };
+          if (!groupedByStudent.has(studentDocId)) groupedByStudent.set(studentDocId, []);
+          groupedByStudent.get(studentDocId).push(item);
+        });
+
+        cur = cgSnap.docs.length ? cgSnap.docs[cgSnap.docs.length - 1] : null;
+        cgHasMore = cgSnap.docs.length === cgPageSize && !!cur;
+      }
+      return { groupedByStudent, cgReads };
+    };
+
     const [metaRes, stRes] = await Promise.all([
       ensureReferenceData({ forceRefresh, profile }),
-      ensureYouthStudents({ profile, sessionId: sid, forceRefresh })
+      ensureYouthStudents({
+        profile,
+        sessionId: sid,
+        forceRefresh,
+        onFirstPage: (firstSnap) => {
+          if (canUseCollectionGroup && !earlyCgPromise && Number(firstSnap?.totalCount || 0) > 40) {
+            earlyCgPromise = fetchCgPayments();
+          }
+        }
+      })
     ]);
     let readCount = (stRes.fromCache ? 0 : (stRes.readCount || 0));
     const studentsList = stRes.list || [];
@@ -431,17 +632,64 @@ export async function ensureYouthSessionDataset({
     const rawPayments = [];
 
     const activeTargets = studentsList.filter((s) => s && s.status !== 'deleted');
-    await runInChunks(activeTargets, 15, async (s) => {
-      const payments = await fetchStudentPayments(s.id);
-      readCount += Math.max(1, payments.length);
-      paymentsByStudentId[s.id] = payments;
-      payments.forEach((p) => {
-        rawPayments.push({
-          ...p,
-          studentDocId: p.studentDocId || s.id
+    const useCgForSession = canUseCollectionGroup && (activeTargets.length > 40 || Boolean(earlyCgPromise));
+
+    const sortStudentPaymentsDesc = (arr) => {
+      arr.sort((a, b) => {
+        const da = a.paidOn || a.date || (a.createdAt && a.createdAt.seconds ? new Date(a.createdAt.seconds * 1000).toISOString().slice(0, 10) : '');
+        const dbDate = b.paidOn || b.date || (b.createdAt && b.createdAt.seconds ? new Date(b.createdAt.seconds * 1000).toISOString().slice(0, 10) : '');
+        if (da !== dbDate) return dbDate.localeCompare(da);
+        const ca = a.createdAt && a.createdAt.seconds ? a.createdAt.seconds : 0;
+        const cb = b.createdAt && b.createdAt.seconds ? b.createdAt.seconds : 0;
+        return cb - ca;
+      });
+      return arr;
+    };
+
+    if (useCgForSession) {
+      const { groupedByStudent, cgReads } = await (earlyCgPromise || fetchCgPayments());
+      readCount += cgReads;
+
+      const fallbackTargets = [];
+      activeTargets.forEach((s) => {
+        const found = groupedByStudent.get(s.id) || [];
+        const admittedBeforeLookback = Boolean(s.admissionDate && s.admissionDate < lookbackStart);
+        const missingExpectedPayments = Number(s.paidAmount || 0) > 0 && found.length === 0;
+        if (admittedBeforeLookback || missingExpectedPayments) {
+          fallbackTargets.push(s);
+        } else {
+          const sorted = sortStudentPaymentsDesc(found.slice());
+          paymentsByStudentId[s.id] = sorted;
+          sorted.forEach((p) => rawPayments.push(p));
+        }
+      });
+
+      if (fallbackTargets.length) {
+        await runInChunks(fallbackTargets, 25, async (s) => {
+          const payments = await fetchStudentPayments(s.id);
+          readCount += Math.max(1, payments.length);
+          paymentsByStudentId[s.id] = payments;
+          payments.forEach((p) => {
+            rawPayments.push({
+              ...p,
+              studentDocId: p.studentDocId || s.id
+            });
+          });
+        });
+      }
+    } else {
+      await runInChunks(activeTargets, 25, async (s) => {
+        const payments = await fetchStudentPayments(s.id);
+        readCount += Math.max(1, payments.length);
+        paymentsByStudentId[s.id] = payments;
+        payments.forEach((p) => {
+          rawPayments.push({
+            ...p,
+            studentDocId: p.studentDocId || s.id
+          });
         });
       });
-    });
+    }
 
     const entry = {
       sessionId: sid,
@@ -734,6 +982,61 @@ function buildYouthPendingItemsFromDataset(dataset, session, meta, asOfDate) {
     paymentsByStudentId,
     allItems
   };
+}
+
+export async function loadYouthDashboardServerAggregates({
+  profile = null,
+  session = null,
+  branchFilter = 'all'
+} = {}) {
+  if (!session?.id) return null;
+  const isBranchHead = profile?.role === 'branch_head' && !!profile?.branchId;
+  const effBranch = isBranchHead ? profile.branchId : (branchFilter && branchFilter !== 'all' ? branchFilter : 'all');
+  const constraints = [where('ctx', '==', 'youth')];
+  if (effBranch !== 'all') constraints.push(where('branchId', '==', effBranch));
+  constraints.push(where('sessionId', '==', session.id));
+  const q = query(collection(db, 'students'), ...constraints);
+
+  try {
+    const aggSnap = await getAggregateFromServer(q, {
+      totalCount: count(),
+      feeSum: sum('feeTotal'),
+      paidSum: sum('paidAmount'),
+      balanceSum: sum('balanceDue')
+    });
+    const data = typeof aggSnap?.data === 'function' ? aggSnap.data() : {};
+    const totalCount = Number(data.totalCount || 0);
+    const feeSum = Number(data.feeSum || 0);
+    const paidSum = Number(data.paidSum || 0);
+    const balanceSum = Number(data.balanceSum || 0);
+    return {
+      sessionId: session.id,
+      branchFilter: effBranch,
+      totalCount,
+      feeSum,
+      paidSum,
+      balanceSum,
+      hasCurrencySums: feeSum > 0 || paidSum > 0 || balanceSum > 0 || totalCount === 0,
+      readCount: 1
+    };
+  } catch (_) {
+    try {
+      const cntSnap = await getCountFromServer(q);
+      const totalCount = Number(cntSnap?.data?.()?.count || 0);
+      return {
+        sessionId: session.id,
+        branchFilter: effBranch,
+        totalCount,
+        feeSum: 0,
+        paidSum: 0,
+        balanceSum: 0,
+        hasCurrencySums: totalCount === 0,
+        readCount: 1
+      };
+    } catch (__) {
+      return null;
+    }
+  }
 }
 
 export function getCachedYouthPending({
@@ -1159,8 +1462,7 @@ export async function loadYouthPaymentHistory({
       const stRes = await ensureYouthStudents({
         profile,
         includeAllSessions: true,
-        forceRefresh,
-        maxLimit: DEFAULT_YOUTH_STUDENTS_LIMIT
+        forceRefresh
       });
       if (!stRes.fromCache) readCount += (stRes.readCount || 0);
       const studentsById = stRes.byId || {};

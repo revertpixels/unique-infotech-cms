@@ -1,6 +1,6 @@
 import { app } from '../config/firebase-config.js';
 
-export const APP_VERSION = '1.8.189';
+export const APP_VERSION = '1.8.190';
 
 export const APP_CACHE = {
   currentUser: null,
@@ -18,7 +18,36 @@ export function clearAppCache() {
   APP_CACHE.levels = [];
   APP_CACHE.org = null;
   APP_CACHE.sessions = {};
+  APP_CACHE.allSessions = {};
+  APP_CACHE.sessionsFetchedAt = {};
   APP_CACHE.currentSession = null;
+  APP_CACHE.usersByEmail = {};
+  APP_CACHE.usersList = [];
+  APP_CACHE.usersLoaded = false;
+  APP_CACHE.branding = { orgName: '', tagline: '', address: '', phone: '', logoUrl: '', logoDarkUrl: '', signatureUrl: '' };
+  if (APP_CACHE.dashboardArchiveReminder instanceof Map) {
+    APP_CACHE.dashboardArchiveReminder.clear();
+  } else {
+    APP_CACHE.dashboardArchiveReminder = new Map();
+  }
+  const fr = APP_CACHE.financialReports;
+  if (fr && typeof fr === 'object') {
+    if (fr.studentsById instanceof Map) fr.studentsById.clear();
+    if (fr.studentsLists instanceof Map) fr.studentsLists.clear();
+    if (fr.youthSessionDatasets instanceof Map) fr.youthSessionDatasets.clear();
+    if (fr.photos instanceof Map) fr.photos.clear();
+    if (fr.youthPending instanceof Map) fr.youthPending.clear();
+    if (fr.youthHistory instanceof Map) fr.youthHistory.clear();
+    if (fr.billsById instanceof Map) fr.billsById.clear();
+    fr.meta = null;
+    fr.kidsPending = null;
+    fr.kidsHistory = null;
+    fr.allYouthSessions = null;
+  }
+  delete APP_CACHE.financialReports;
+  if (typeof globalThis !== 'undefined' && globalThis.__UIC_APP_CACHE__) {
+    delete globalThis.__UIC_APP_CACHE__.financialReports;
+  }
 }
 
 export function setContext(ctx) {

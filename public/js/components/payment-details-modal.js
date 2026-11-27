@@ -1,13 +1,13 @@
 // payment-details-modal.js — Shared read-only Payment Details modal helper for Payment History & Dashboard.
 
-import { openPopup } from './modal.js?v=1.8.189';
-import { showToast } from './toast.js?v=1.8.189';
+import { openPopup } from './modal.js?v=1.8.190';
+import { showToast } from './toast.js?v=1.8.190';
 import {
   buildPaymentDetailsModel,
   getCachedBillForEntry,
   getCachedStudentPhoto
-} from '../services/report.service.js?v=1.8.189';
-import { formatPersonName } from '../utils/formatter.js?v=1.8.189';
+} from '../services/report.service.js?v=1.8.190';
+import { formatPersonName } from '../utils/formatter.js?v=1.8.190';
 
 function mk(tag, cls, text) {
   const el = document.createElement(tag);

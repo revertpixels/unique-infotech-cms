@@ -1,6 +1,6 @@
-import { APP_VERSION } from './app.js?v=1.8.189';
-import { confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.189';
-import { getRoleTitle } from '../services/user-directory.service.js?v=1.8.189';
+import { APP_VERSION } from './app.js?v=1.8.190';
+import { confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.190';
+import { getRoleTitle } from '../services/user-directory.service.js?v=1.8.190';
 
 const htmlCache = new Map();
 const htmlInflight = new Map();
@@ -146,8 +146,15 @@ export function stopRouter() {
     try { activeCleanup(); } catch (_) {}
     activeCleanup = null;
   }
-  const view = document.getElementById('view');
+  const view = typeof document !== 'undefined' ? document.getElementById('view') : null;
   if (view) view.textContent = '';
+}
+
+export function clearRouterCache() {
+  stopRouter();
+  htmlCache.clear();
+  htmlInflight.clear();
+  moduleCache.clear();
 }
 
 export function startRouter({ profile, getContext, setContext, onRouteChange }) {
@@ -212,77 +219,89 @@ export function startRouter({ profile, getContext, setContext, onRouteChange }) 
     networkErrorHeading = "Couldn't load this page",
     networkErrorLine = 'Check your internet connection and try again.'
   }) {
-    let assets;
+    if (typeof window !== 'undefined') {
+      window.__uicNavInFlight = (window.__uicNavInFlight || 0) + 1;
+    }
     try {
-      assets = await loadPageAssets(pageName);
-    } catch (e) {
-      if (thisNav !== navCounter) return;
-      console.error(e);
-      renderEmpty('inbox', networkErrorHeading, networkErrorLine);
-      setTitle(title);
-      if (typeof lucide !== 'undefined') lucide.createIcons();
-      if (onRouteChange) onRouteChange(routeKey, routeObj);
-      return;
-    }
-    if (thisNav !== navCounter) return;
-
-    const { htmlResult, modResult } = assets;
-    if (htmlResult.status === 'rejected') {
-      console.error(htmlResult.reason);
-      renderEmpty('inbox', networkErrorHeading, networkErrorLine);
-      if (retryOnNetworkError) {
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'btn pri';
-        btn.textContent = 'Try again';
-        btn.addEventListener('click', () => render(routeKey));
-        view.appendChild(btn);
-      }
-      setTitle(title);
-      if (typeof lucide !== 'undefined') lucide.createIcons();
-      if (onRouteChange) onRouteChange(routeKey, routeObj);
-      return;
-    }
-
-    const htmlRes = htmlResult.value;
-    if (!htmlRes.ok || htmlRes.empty) {
-      renderEmpty('inbox', "This page isn't available yet", htmlRes.empty ? emptyMsg : missingMsg);
-      setTitle(title);
-      if (typeof lucide !== 'undefined') lucide.createIcons();
-      if (onRouteChange) onRouteChange(routeKey, routeObj);
-      return;
-    }
-
-    view.innerHTML = htmlRes.html;
-    if (thisNav !== navCounter) return;
-
-    try {
-      if (modResult.status === 'rejected') throw modResult.reason;
-      const mod = modResult.value;
-      if (thisNav !== navCounter) return;
-      if (mod && typeof mod.mount === 'function') {
-        currentModule = mod;
-        await mod.mount({ container: document.getElementById('view'), profile, ctx: getContext(), ...mountArgs });
-      } else {
-        currentModule = null;
-      }
-    } catch (e) {
-      if (thisNav !== navCounter) return;
-      console.error(e);
-      if (throwOnModuleError) {
-        renderEmpty('alert-triangle', 'Failed to load page: ' + pageName + '.page.js', e.message || String(e));
-        setTitle('Error loading ' + title);
+      let assets;
+      try {
+        assets = await loadPageAssets(pageName);
+      } catch (e) {
+        if (thisNav !== navCounter) return;
+        console.error(e);
+        renderEmpty('inbox', networkErrorHeading, networkErrorLine);
+        setTitle(title);
+        if (typeof lucide !== 'undefined') lucide.createIcons();
         if (onRouteChange) onRouteChange(routeKey, routeObj);
         return;
       }
-    }
+      if (thisNav !== navCounter) return;
 
-    if (thisNav !== navCounter) return;
-    resetScroll();
-    setTitle(title);
-    if (onRouteChange) onRouteChange(routeKey, routeObj);
-    if (typeof lucide !== 'undefined') {
-      lucide.createIcons();
+      const { htmlResult, modResult } = assets;
+      if (htmlResult.status === 'rejected') {
+        console.error(htmlResult.reason);
+        renderEmpty('inbox', networkErrorHeading, networkErrorLine);
+        if (retryOnNetworkError) {
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'btn pri';
+          btn.textContent = 'Try again';
+          btn.addEventListener('click', () => render(routeKey));
+          view.appendChild(btn);
+        }
+        setTitle(title);
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+        if (onRouteChange) onRouteChange(routeKey, routeObj);
+        return;
+      }
+
+      const htmlRes = htmlResult.value;
+      if (!htmlRes.ok || htmlRes.empty) {
+        renderEmpty('inbox', "This page isn't available yet", htmlRes.empty ? emptyMsg : missingMsg);
+        setTitle(title);
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+        if (onRouteChange) onRouteChange(routeKey, routeObj);
+        return;
+      }
+
+      view.innerHTML = htmlRes.html;
+      if (thisNav !== navCounter) return;
+
+      try {
+        if (modResult.status === 'rejected') throw modResult.reason;
+        const mod = modResult.value;
+        if (thisNav !== navCounter) return;
+        if (mod && typeof mod.mount === 'function') {
+          currentModule = mod;
+          await mod.mount({ container: document.getElementById('view'), profile, ctx: getContext(), ...mountArgs });
+        } else {
+          currentModule = null;
+        }
+      } catch (e) {
+        if (thisNav !== navCounter) return;
+        console.error(e);
+        if (throwOnModuleError) {
+          renderEmpty('alert-triangle', 'Failed to load page: ' + pageName + '.page.js', e.message || String(e));
+          setTitle('Error loading ' + title);
+          if (onRouteChange) onRouteChange(routeKey, routeObj);
+          return;
+        }
+      }
+
+      if (thisNav !== navCounter) return;
+      resetScroll();
+      setTitle(title);
+      if (onRouteChange) onRouteChange(routeKey, routeObj);
+      if (typeof lucide !== 'undefined') {
+        lucide.createIcons();
+      }
+      if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+        window.dispatchEvent(new CustomEvent('uic:route-mounted', { detail: { pageName, routeKey } }));
+      }
+    } finally {
+      if (typeof window !== 'undefined') {
+        window.__uicNavInFlight = Math.max(0, (window.__uicNavInFlight || 1) - 1);
+      }
     }
   }
 

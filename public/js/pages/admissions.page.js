@@ -15,23 +15,23 @@ import {
   arrayUnion,
   addDoc
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.189';
-import { registerDirty, confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.189';
-import { buildStats, buildToolbar, renderPager, renderEmptyTableState, PAGE_SIZE } from '../components/list-page.js?v=1.8.189';
-import { createSelect } from '../components/ui-select.js?v=1.8.189';
-import { createBranchBatchFilter } from '../components/branch-batch-filter.js?v=1.8.189';
-import { openMenu } from '../components/ui-menu.js?v=1.8.189';
-import { confirmDialog } from '../components/ui-confirm.js?v=1.8.189';
-import { openPopup } from '../components/modal.js?v=1.8.189';
-import { createDatePicker } from '../components/ui-datepicker.js?v=1.8.189';
-import { getSelectedSessionId, getSelectedSession, getCachedSessions, loadSessions, hasFreshSessionsCache, todayISO } from '../core/sessions.js?v=1.8.189';
-import { firstInstallmentOf, admissionState, sessionLabel, installmentSchedule, batchAllowsCourse, batchCourseLabel, isCourseActive } from '../utils/session-rules.js?v=1.8.189';
-import { formatINR, formatDateIN, formatPersonName, formatGenderDisplay, initials } from '../utils/formatter.js?v=1.8.189';
-import { validatePhone, validateEmail, validateDOB, validateName, validateRequired } from '../utils/validator.js?v=1.8.189';
-import { listStudentsRaw, checkDuplicatePhone, readStudentId, readReceiptNo, writeCounter, createStudentWithDocs, updateStudentWithDocs, updateStudent, deleteStudent } from '../services/admission.service.js?v=1.8.189';
-import { feeTotal, courseFeeOf, discountOf } from '../utils/fees.js?v=1.8.189';
-import { compressTo100KB, readAsDataURL, blobToDataURL, isImageFile, formatBytes } from '../utils/image-compress.js?v=1.8.189';
-import { fetchStudentPayments, calculateStudentFinancials, buildReceiptMenuItems } from '../services/payment.service.js?v=1.8.189';
+import { showToast } from '../components/toast.js?v=1.8.190';
+import { registerDirty, confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.190';
+import { buildStats, buildToolbar, renderPager, renderEmptyTableState, PAGE_SIZE } from '../components/list-page.js?v=1.8.190';
+import { createSelect } from '../components/ui-select.js?v=1.8.190';
+import { createBranchBatchFilter } from '../components/branch-batch-filter.js?v=1.8.190';
+import { openMenu } from '../components/ui-menu.js?v=1.8.190';
+import { confirmDialog } from '../components/ui-confirm.js?v=1.8.190';
+import { openPopup } from '../components/modal.js?v=1.8.190';
+import { createDatePicker } from '../components/ui-datepicker.js?v=1.8.190';
+import { getSelectedSessionId, getSelectedSession, getCachedSessions, loadSessions, hasFreshSessionsCache, todayISO } from '../core/sessions.js?v=1.8.190';
+import { firstInstallmentOf, admissionState, sessionLabel, installmentSchedule, batchAllowsCourse, batchCourseLabel, isCourseActive } from '../utils/session-rules.js?v=1.8.190';
+import { formatINR, formatDateIN, formatPersonName, formatGenderDisplay, initials } from '../utils/formatter.js?v=1.8.190';
+import { validatePhone, validateEmail, validateDOB, validateName, validateRequired } from '../utils/validator.js?v=1.8.190';
+import { listStudentsRaw, checkDuplicatePhone, readStudentId, readReceiptNo, writeCounter, createStudentWithDocs, updateStudentWithDocs, updateStudent, deleteStudent } from '../services/admission.service.js?v=1.8.190';
+import { feeTotal, courseFeeOf, discountOf } from '../utils/fees.js?v=1.8.190';
+import { compressTo100KB, readAsDataURL, blobToDataURL, isImageFile, formatBytes } from '../utils/image-compress.js?v=1.8.190';
+import { fetchStudentPayments, calculateStudentFinancials, buildReceiptMenuItems } from '../services/payment.service.js?v=1.8.190';
 import {
   ensureReferenceData,
   getCachedReferenceData,
@@ -41,11 +41,11 @@ import {
   scheduleDelayedSkeleton,
   loadStudentPhotos,
   getCachedStudentPhoto
-} from '../services/report.service.js?v=1.8.189';
-import { getStudentPhotoSrc, getStudentDocSrc, getStudentDocMime } from '../utils/student-media.js?v=1.8.189';
-import { playPaymentSuccessSound } from '../utils/sound.js?v=1.8.189';
-import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.189';
-import { APP_CACHE } from '../core/app.js?v=1.8.189';
+} from '../services/report.service.js?v=1.8.190';
+import { getStudentPhotoSrc, getStudentDocSrc, getStudentDocMime } from '../utils/student-media.js?v=1.8.190';
+import { playPaymentSuccessSound } from '../utils/sound.js?v=1.8.190';
+import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.190';
+import { APP_CACHE } from '../core/app.js?v=1.8.190';
 
 const COL = 'students';
 
@@ -112,6 +112,7 @@ export async function mount({ container, profile, ctx }) {
 
   // ---------- list / filter state (declared first, before any use) ----------
   let students = [], courses = [], batches = [], branches = [], sessions = [];
+  let studentsTotalCount = 0, studentsComplete = true;
   let page = 1, filteredList = [];
   let admDateFilter = 'all';   // 'all'|'today'|'last7'|'thismonth'|'lastmonth'|'last3months'|'thisyear'|'custom'
   let admDateFrom = '', admDateTo = '';
@@ -444,6 +445,8 @@ export async function mount({ container, profile, ctx }) {
 
   function applyLoadedAdmissionsData({ meta, sessList, stRes }) {
     students = (stRes?.list || []).slice();
+    studentsComplete = stRes?.isComplete !== false;
+    studentsTotalCount = Math.max(students.length, Number(stRes?.totalCount || students.length));
     courses = (meta?.coursesList || []).filter(c => (!c.ctx || c.ctx === 'youth') && (c.status || 'active') === 'active');
     batches = (meta?.batchesList || []).filter(b => !b.ctx || b.ctx === 'youth');
     branches = (meta?.branchesList || []).filter(b => (!b.ctx || b.ctx === 'youth') && (b.status || 'active') === 'active');
@@ -530,18 +533,46 @@ export async function mount({ container, profile, ctx }) {
       }, 250)
       : null;
 
+    let mountedAlive = true;
+    const streamPartial = !background && students.length === 0;
+    window.__admLoadCleanup && window.__admLoadCleanup();
+    window.__admLoadCleanup = () => { mountedAlive = false; };
+    const handleStreamUpdate = (partialStRes) => {
+      if (!mountedAlive || !partialStRes) return;
+      students = (partialStRes.list || []).slice();
+      studentsComplete = partialStRes.isComplete !== false;
+      studentsTotalCount = Math.max(students.length, Number(partialStRes.totalCount || students.length));
+      render();
+    };
+
     try {
       const [meta, sessList, stRes] = await Promise.all([
         ensureReferenceData({ forceRefresh, profile }),
         (!forceRefresh && hasFreshSessionsCache('youth'))
           ? Promise.resolve(getCachedSessions('youth'))
           : loadSessions('youth', { forceRefresh }),
-        ensureYouthStudents({ profile, includeAllSessions: true, forceRefresh })
+        ensureYouthStudents({
+          profile,
+          includeAllSessions: true,
+          forceRefresh,
+          returnOnFirstPage: streamPartial,
+          onProgress: streamPartial ? handleStreamUpdate : null
+        })
       ]);
+      if (!mountedAlive) return;
       if (skelTask) skelTask.cancel();
-      const nextSig = `${stRes?.list?.length || 0}|${(meta?.coursesList || []).length}|${(meta?.batchesList || []).length}`;
+      const nextSig = `${stRes?.list?.length || 0}|${stRes?.isComplete !== false}|${(meta?.coursesList || []).length}|${(meta?.batchesList || []).length}`;
       if (!background || nextSig !== prevSig) {
         applyLoadedAdmissionsData({ meta, sessList, stRes });
+      }
+      if (stRes?.isComplete === false && stRes?.done) {
+        stRes.done.then((fullStRes) => {
+          if (!mountedAlive || !fullStRes) return;
+          students = (fullStRes.list || []).slice();
+          studentsComplete = true;
+          studentsTotalCount = students.length;
+          render();
+        }).catch(() => {});
       }
     } catch (e) {
       if (skelTask) skelTask.cancel();
@@ -1568,7 +1599,11 @@ export async function mount({ container, profile, ctx }) {
 
       const countEl = $('adm-count');
       if (countEl) {
-        countEl.textContent = total === 1 ? '1 student' : total + ' students';
+        if (!studentsComplete && studentsTotalCount > students.length) {
+          countEl.textContent = total + ' loaded of ' + studentsTotalCount + ' (loading...)';
+        } else {
+          countEl.textContent = total === 1 ? '1 student' : total + ' students';
+        }
       }
 
       const totalPages = Math.max(1, Math.ceil(list.length / PAGE_SIZE));
@@ -1769,7 +1804,9 @@ export async function mount({ container, profile, ctx }) {
             const b = Math.min(page * PAGE_SIZE, N);
             const range = a + '–' + b;
             let summary;
-            if (N === T) {
+            if (!studentsComplete && studentsTotalCount > students.length) {
+              summary = 'Showing ' + range + ' of ' + N + ' loaded (' + studentsTotalCount + ' total, loading...)';
+            } else if (N === T) {
               summary = totalPages <= 1 ? ('Showing all ' + N) : ('Showing ' + range + ' of ' + N);
             } else {
               summary = totalPages <= 1 ? ('Showing ' + N + ' of ' + T) : ('Showing ' + range + ' of ' + N + ' (filtered from ' + T + ')');
@@ -3263,6 +3300,10 @@ export async function mount({ container, profile, ctx }) {
 
 export function unmount() {
   clearDirty();
+  if (window.__admLoadCleanup) {
+    window.__admLoadCleanup();
+    window.__admLoadCleanup = null;
+  }
   if (window.__admSessionCleanup) {
     window.__admSessionCleanup();
     window.__admSessionCleanup = null;

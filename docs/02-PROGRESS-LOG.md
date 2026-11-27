@@ -39,6 +39,38 @@
 
 ---
 
+### [2026-11-27 15:24] Version 1.8.190 — Fix v1.8.189 Review Issues: Unlimited Pagination, Fast 4G Dashboard KPIs, Logout IndexedDB Wipe & Multi-User Freshness (Local Only)
+
+**What was built:**
+- **Unlimited student cursor pagination & scale dataset optimization (`public/js/services/report.service.js`, `public/js/pages/admissions.page.js`, `public/js/pages/pay-fees.page.js`)**:
+  - Removed the `DEFAULT_YOUTH_STUDENTS_LIMIT` (`500`) cap in `ensureYouthStudents`. Added parallel `getCountFromServer` + cursor pagination (`startAfter`, `250` first page + `500` subsequent pages) so Page 1 renders immediately (`"Showing X of Y..."`) while remaining students stream silently in the background (`isComplete: true`), never truncating Students, Pay Fees search, Pending, History, or Reports totals. Never stores partial pages over complete cached entries.
+  - Added Super Admin bounded `collectionGroup('payment')` batching (page size `1000`, `startAfter`, lookback `-120d` with subcollection fallback) for large sessions (`> 40` students) in `ensureYouthSessionDataset`, keeping Branch Head role rules safe (`permission-denied` avoided).
+- **Dashboard Fast 4G progressive KPIs & zero prefetch contention (`public/js/pages/dashboard.page.js`, `public/js/core/router.js`, `public/index.html`)**:
+  - Exported `loadYouthDashboardServerAggregates` (`getAggregateFromServer` `count()` + `sum()` on `(ctx, sessionId)` / `(ctx, branchId, sessionId)`), painting KPI cards progressively as server aggregates and active-session students arrive, followed cleanly by charts & recent payments.
+  - Deferred `prefetchMainPages` in `public/index.html` until `'uic:initial-data-ready'` (with `2500ms` fallback) and tracked `window.__uicNavInFlight` in `router.js`.
+- **Logout security & IndexedDB persistence wipe (`public/js/core/guard.js`, `public/js/core/app.js`, `public/js/core/router.js`, `public/js/services/report.service.js`)**:
+  - Updated `logout()` to call `clearRouterCache()`, `await terminate(db)`, `await clearIndexedDbPersistence(db)`, clear report/archive/user/filter caches, expand `clearAppCache()`, clear `sessionStorage` and app `localStorage` keys (`/^(uicms\.|uic_|pending_verification|email_verification)/i`), and reload `/index.html?reason=...` cleanly so zero IndexedDB data or stale ES closures survive.
+- **Multi-user freshness (`public/js/pages/pay-fees.page.js`, `public/js/pages/pending.page.js`)**:
+  - Removed the `< 30s` gate on Pay Fees and Pending so both pages always revalidate in the background on open while preserving warm cache lists until background completion.
+
+**Why:**
+- Eliminate silent `>500` student truncation, cut Dashboard KPI first open on Fast 4G (`<= 1.2s`), wipe offline IndexedDB PII cleanly on sign-out, guarantee <30s multi-user freshness on payment collection pages, and verify scaling cleanly at 1,000+ students / 4,000+ payments.
+
+**Files touched (modified / local commit only, NOT deployed):**
+- MODIFIED: `.gitignore`, `public/index.html`, `public/js/core/app.js`, `public/js/core/guard.js`, `public/js/core/router.js`, `public/js/services/report.service.js`, `public/js/pages/dashboard.page.js`, `public/js/pages/admissions.page.js`, `public/js/pages/pay-fees.page.js`, `public/js/pages/pending.page.js`, plus `bump-version.js 1.8.190` (`?v=1.8.190` across 54 files), `docs/02-PROGRESS-LOG.md`.
+
+**Firestore changes:**
+- None (no index changes, no security rule changes; server aggregates & queries use existing `(ctx, sessionId)`, `(ctx, branchId, sessionId)`, and `collectionGroup('payment')` `date` indexes).
+
+**Tested on:**
+- Node / Logic / 1,200-student Parity (`scratch/run-tests.mjs`): ✅ Passed (1,200 students across 2 sessions & 3 branches match unlimited ground truth 100%).
+- Chrome Router Regression + Logout IndexedDB Wipe (`scratch/verify-router-regression.mjs`): ✅ Passed all 30 routes/sub-routes, Back/Forward, deep URL hard reloads, `terminate(db)` -> `clearIndexedDbPersistence(db)` -> `0` IDB PII records & wiped storages/cache.
+- Chrome 1k/4k Scale Benchmark (`scratch/bench-perf.mjs`): ✅ Fast 4G Dashboard KPIs `1,152ms` cold / `50ms` warm; Students (1,000) `1,065ms` cold / `65ms` warm; Students search typing `166ms`; Pay Fees search typing `1ms`.
+- Chrome E2E Suites (`verify-dashboard.mjs`, `verify-reports.mjs`, `verify-archives.mjs`, `verify-auth-profile.mjs`, `verify-qa-189.mjs`): ✅ All passed cleanly with 0 unexpected console/runtime errors.
+- Deployed: ❌ NO (local commit only per instruction).
+
+---
+
 ### [2026-11-27 14:32] Version 1.8.189 — App-Wide Navigation Performance, Persistent Cache & Final QA (Local Only)
 
 **What was built:**

@@ -72,3 +72,4 @@ node_modules/
 # Task artifacts
 diff.txt
 *.zip
+/review/

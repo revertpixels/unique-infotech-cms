@@ -1,7 +1,13 @@
-import { auth } from '../config/firebase-config.js';
-import { clearAppCache } from './app.js?v=1.8.189';
+import { auth, db } from '../config/firebase-config.js';
+import { terminate, clearIndexedDbPersistence } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
+import { clearAppCache } from './app.js?v=1.8.190';
+import { clearRouterCache } from './router.js?v=1.8.190';
 import { resolveSession, signOutUser } from './auth.js';
-import { playLogoutSound } from '../utils/sound.js?v=1.8.189';
+import { playLogoutSound } from '../utils/sound.js?v=1.8.190';
+import { clearAllReportCaches } from '../services/report.service.js?v=1.8.190';
+import { invalidateArchiveReminderCache } from '../services/archive.service.js?v=1.8.190';
+import { clearUsersDirectoryCache } from '../services/user-directory.service.js?v=1.8.190';
+import { clearPersistedBranchBatchFilters } from '../components/branch-batch-filter.js?v=1.8.190';
 
 const INACTIVITY_LIMIT_MS = 30 * 60 * 1000;
 const LOGOUT_MIN_TRANSITION_MS = 1200;
@@ -93,11 +99,39 @@ export async function logout(reason, { minDelayMs = reason === 'timeout' ? 0 : L
       tasks.push(new Promise((resolve) => setTimeout(resolve, minDelayMs)));
     }
     await Promise.all(tasks);
+
+    // Stop active page listeners/routes BEFORE terminating Firestore or wiping IndexedDB.
+    try { clearRouterCache(); } catch (_) {}
+    try { await terminate(db); } catch (_) {}
+    try { await clearIndexedDbPersistence(db); } catch (_) {}
+
+    try { clearAllReportCaches(); } catch (_) {}
+    try { invalidateArchiveReminderCache(); } catch (_) {}
+    try { clearUsersDirectoryCache(); } catch (_) {}
+    try { clearPersistedBranchBatchFilters(); } catch (_) {}
     clearAppCache();
-    if (typeof unauthHandler === 'function') {
+
+    if (typeof sessionStorage !== 'undefined') {
+      try { sessionStorage.clear(); } catch (_) {}
+    }
+    if (typeof localStorage !== 'undefined') {
+      try {
+        const keys = [];
+        for (let i = 0; i < localStorage.length; i += 1) keys.push(localStorage.key(i));
+        keys.forEach((k) => {
+          if (k && /^(uicms\.|uic_|pending_verification|email_verification)/i.test(k)) {
+            localStorage.removeItem(k);
+          }
+        });
+      } catch (_) {}
+    }
+
+    const cleanReason = reason ? '?reason=' + encodeURIComponent(reason) : '';
+    const canReloadPage = typeof window !== 'undefined' && typeof location !== 'undefined' && typeof location.replace === 'function';
+    if (canReloadPage) {
+      location.replace('/index.html' + cleanReason);
+    } else if (typeof unauthHandler === 'function') {
       await unauthHandler(reason || 'signedout');
-    } else {
-      location.replace('/index.html' + (reason ? '?reason=' + reason : ''));
     }
   } finally {
     if (typeof document !== 'undefined') {

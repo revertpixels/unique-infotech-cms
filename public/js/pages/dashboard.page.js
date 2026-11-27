@@ -1,24 +1,26 @@
 // dashboard.page.js — Read-only Youth Centre Dashboard (#/dashboard) + preserved Unique Kids placeholder.
 
-import { ROUTES } from '../core/router.js?v=1.8.189';
-import { createSelect } from '../components/ui-select.js?v=1.8.189';
+import { ROUTES } from '../core/router.js?v=1.8.190';
+import { createSelect } from '../components/ui-select.js?v=1.8.190';
 import {
   renderDonutChart,
   renderBarChart,
   renderStackedBarChart,
   renderLineChart
-} from '../components/charts.js?v=1.8.189';
-import { openPaymentDetailsModal } from '../components/payment-details-modal.js?v=1.8.189';
-import { loadDashboardArchiveReminder, getCachedDashboardArchiveReminder } from '../services/archive.service.js?v=1.8.189';
-import { resolveUserDisplay, getRoleTitle } from '../services/user-directory.service.js?v=1.8.189';
-import { getCachedSessions, loadSessions, getSelectedSession, hasFreshSessionsCache } from '../core/sessions.js?v=1.8.189';
-import { getOrgTimezone } from '../utils/session-rules.js?v=1.8.189';
-import { formatPersonName, initials } from '../utils/formatter.js?v=1.8.189';
-import { buildYouthDashboardData } from '../services/dashboard.service.js?v=1.8.189';
+} from '../components/charts.js?v=1.8.190';
+import { openPaymentDetailsModal } from '../components/payment-details-modal.js?v=1.8.190';
+import { loadDashboardArchiveReminder, getCachedDashboardArchiveReminder } from '../services/archive.service.js?v=1.8.190';
+import { resolveUserDisplay, getRoleTitle } from '../services/user-directory.service.js?v=1.8.190';
+import { getCachedSessions, loadSessions, getSelectedSession, getSelectedSessionId, hasFreshSessionsCache } from '../core/sessions.js?v=1.8.190';
+import { getOrgTimezone } from '../utils/session-rules.js?v=1.8.190';
+import { formatPersonName, initials } from '../utils/formatter.js?v=1.8.190';
+import { buildYouthDashboardData } from '../services/dashboard.service.js?v=1.8.190';
 import {
   ensureReferenceData,
   getCachedReferenceData,
   scopeReferenceDataByCtx,
+  ensureYouthStudents,
+  loadYouthDashboardServerAggregates,
   loadYouthPaymentHistory,
   getCachedYouthHistory,
   loadYouthPendingReport,
@@ -31,7 +33,7 @@ import {
   modeDisplayMeta,
   formatINR,
   fmtDate
-} from '../services/report.service.js?v=1.8.189';
+} from '../services/report.service.js?v=1.8.190';
 
 let state = null;
 let profileListener = null;
@@ -482,6 +484,9 @@ async function loadDashboardSources({ forceRefresh = false, background = false }
         if (isStale && !background) {
           loadDashboardSources({ forceRefresh: true, background: true }).catch(() => {});
         }
+        if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+          window.dispatchEvent(new CustomEvent('uic:initial-data-ready'));
+        }
         return;
       }
     }
@@ -503,6 +508,18 @@ async function loadDashboardSources({ forceRefresh = false, background = false }
     : null;
 
   try {
+    const preSessId = getSelectedSessionId('youth');
+    const earlyAggPromise = (!background && preSessId)
+      ? loadYouthDashboardServerAggregates({
+        profile: state.profile,
+        session: { id: preSessId },
+        branchFilter: state.branchFilter
+      }).then((agg) => {
+        if (agg) applyEarlyServerAggregates(agg);
+        return agg;
+      }).catch(() => null)
+      : Promise.resolve(null);
+
     const [meta, sessions] = await Promise.all([
       ensureReferenceData({ forceRefresh, profile: state.profile }),
       (!forceRefresh && hasFreshSessionsCache('youth'))
@@ -527,6 +544,30 @@ async function loadDashboardSources({ forceRefresh = false, background = false }
 
     toggleNoSessionState(false);
 
+    // Phase 1: KPI server aggregate (if active session differed from pre-selected ID or wasn't started yet)
+    if (!background && state.activeSession.id !== preSessId) {
+      loadYouthDashboardServerAggregates({
+        profile: state.profile,
+        session: state.activeSession,
+        branchFilter: state.branchFilter
+      }).then((agg) => {
+        if (agg) applyEarlyServerAggregates(agg);
+      }).catch(() => {});
+    } else if (!background) {
+      await Promise.race([earlyAggPromise, new Promise((r) => setTimeout(r, 120))]);
+    }
+
+    // Phase 2: Stream active-session students early for instant Active/Admissions KPIs while payment dataset completes
+    if (!background) {
+      ensureYouthStudents({
+        profile: state.profile,
+        sessionId: state.activeSession.id,
+        forceRefresh,
+        onFirstPage: (firstSt) => applyEarlyStudentSnapshot(firstSt)
+      }).then((fullSt) => applyEarlyStudentSnapshot(fullSt)).catch(() => {});
+    }
+
+    // Phase 3: Load active-session pending & payment dataset (shared single-session dataset); paint KPIs first
     const [histRes, pendRes] = await Promise.all([
       loadYouthPaymentHistory({
         profile: state.profile,
@@ -552,6 +593,9 @@ async function loadDashboardSources({ forceRefresh = false, background = false }
       updateHeaderUi();
       syncBranchFilterControl();
       computeAndRenderDashboard();
+    }
+    if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+      window.dispatchEvent(new CustomEvent('uic:initial-data-ready'));
     }
   } catch (err) {
     if (!state || state.destroyed) return;
@@ -865,6 +909,61 @@ function bindEvents() {
   if (barBtn) barBtn.addEventListener('click', () => setTrendKind('bar'));
 }
 
+function applyEarlyServerAggregates(agg) {
+  if (!state || state.destroyed || state.analytics || !agg) return;
+  state.earlyKpisPainted = true;
+  const setKpi = (valId, subId, valText, subText, cls) => {
+    const vEl = $(valId);
+    const sEl = $(subId);
+    if (vEl && valText != null) vEl.textContent = valText;
+    if (sEl && subText != null) {
+      sEl.textContent = subText;
+      if (cls !== undefined) sEl.className = cls;
+    }
+  };
+  if (Number.isFinite(agg.totalCount)) {
+    setKpi('dash-kpi-admissions', 'dash-kpi-admissions-sub', agg.totalCount.toLocaleString('en-IN'), 'Session total · syncing...');
+    if (agg.totalCount === 0) {
+      setKpi('dash-kpi-active', 'dash-kpi-active-sub', '0', 'No enrolled students');
+    }
+  }
+  if (agg.hasCurrencySums) {
+    const rate = agg.feeSum > 0 ? Math.min(100, Math.round((agg.paidSum / agg.feeSum) * 100)) : 0;
+    setKpi('dash-kpi-collected', 'dash-kpi-collected-sub', formatINR(agg.paidSum), `${rate}% of ${formatINR(agg.feeSum)} billed`);
+    setKpi('dash-kpi-outstanding', 'dash-kpi-outstanding-sub', formatINR(agg.balanceSum), 'Total balance across active');
+    setKpi('dash-kpi-rate', 'dash-kpi-rate-sub', `${rate}%`, `of ${formatINR(agg.feeSum)} total billed`);
+    const bar = $('dash-kpi-rate-bar');
+    if (bar) bar.style.width = `${rate}%`;
+  }
+}
+
+function applyEarlyStudentSnapshot(stRes) {
+  if (!state || state.destroyed || state.analytics || !stRes?.list) return;
+  const scoped = scopeReferenceDataByCtx(state.meta || {}, 'youth');
+  const effBranch = state.isBranchHead ? state.profile.branchId : (state.branchFilter || 'all');
+  const students = (stRes.list || []).filter((s) => (
+    s && s.status !== 'deleted' && (effBranch === 'all' || s.branchId === effBranch)
+  ));
+  const nonDropped = students.filter((s) => s.status !== 'dropped' && s.status !== 'cancelled');
+  const active = nonDropped.filter((s) => s.status === 'active');
+  const sid = state.activeSession?.id || '';
+  const batches = (scoped.batchesList || []).filter((b) => (
+    b.sessionId === sid && (b.status || 'active') === 'active' && (effBranch === 'all' || b.branchId === effBranch)
+  ));
+  const nowYm = new Date().toISOString().slice(0, 7);
+  const thisMonth = nonDropped.filter((s) => String(s.admissionDate || '').startsWith(nowYm)).length;
+
+  state.earlyKpisPainted = true;
+  const setKpi = (valId, subId, valText, subText) => {
+    const vEl = $(valId);
+    const sEl = $(subId);
+    if (vEl && valText != null) vEl.textContent = valText;
+    if (sEl && subText != null) sEl.textContent = subText;
+  };
+  setKpi('dash-kpi-active', 'dash-kpi-active-sub', String(active.length), `Across ${batches.length} ${batches.length === 1 ? 'batch' : 'batches'}`);
+  setKpi('dash-kpi-admissions', 'dash-kpi-admissions-sub', String(nonDropped.length), `${thisMonth} this month`);
+}
+
 export function mount({ profile, ctx } = {}) {
   unmount();
   const activeCtx = ctx || 'youth';
@@ -926,6 +1025,16 @@ export function mount({ profile, ctx } = {}) {
   updateHeaderUi();
   bindEvents();
   updateArchiveReminder();
+  if (!state.analytics) {
+    const preSessId = getSelectedSessionId('youth');
+    if (preSessId) {
+      loadYouthDashboardServerAggregates({
+        profile,
+        session: { id: preSessId },
+        branchFilter: state.branchFilter
+      }).then((agg) => applyEarlyServerAggregates(agg)).catch(() => {});
+    }
+  }
   loadDashboardSources({ forceRefresh: false });
 
   profileListener = () => updateHeaderUi();
@@ -936,16 +1045,46 @@ export function mount({ profile, ctx } = {}) {
   sessionSelListener = (ev) => {
     if (!state || state.destroyed) return;
     if (ev?.detail?.ctx && ev.detail.ctx !== 'youth') return;
-    loadDashboardSources({ forceRefresh: false });
+    if (!state.analytics) {
+    const preSessId = getSelectedSessionId('youth');
+    if (preSessId) {
+      loadYouthDashboardServerAggregates({
+        profile,
+        session: { id: preSessId },
+        branchFilter: state.branchFilter
+      }).then((agg) => applyEarlyServerAggregates(agg)).catch(() => {});
+    }
+  }
+  loadDashboardSources({ forceRefresh: false });
   };
   sessionsLoadedListener = (ev) => {
     if (!state || state.destroyed) return;
     if (ev?.detail?.ctx && ev.detail.ctx !== 'youth') return;
-    loadDashboardSources({ forceRefresh: false });
+    if (!state.analytics) {
+    const preSessId = getSelectedSessionId('youth');
+    if (preSessId) {
+      loadYouthDashboardServerAggregates({
+        profile,
+        session: { id: preSessId },
+        branchFilter: state.branchFilter
+      }).then((agg) => applyEarlyServerAggregates(agg)).catch(() => {});
+    }
+  }
+  loadDashboardSources({ forceRefresh: false });
   };
   sessionsChangedListener = () => {
     if (!state || state.destroyed) return;
-    loadDashboardSources({ forceRefresh: false });
+    if (!state.analytics) {
+    const preSessId = getSelectedSessionId('youth');
+    if (preSessId) {
+      loadYouthDashboardServerAggregates({
+        profile,
+        session: { id: preSessId },
+        branchFilter: state.branchFilter
+      }).then((agg) => applyEarlyServerAggregates(agg)).catch(() => {});
+    }
+  }
+  loadDashboardSources({ forceRefresh: false });
   };
 
   window.addEventListener('uic:profile-updated', profileListener);

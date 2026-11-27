@@ -11,20 +11,20 @@ import {
   serverTimestamp,
   runTransaction
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.184';
-import { openPopup } from '../components/modal.js?v=1.8.184';
-import { createSelect } from '../components/ui-select.js?v=1.8.184';
-import { confirmDialog } from '../components/ui-confirm.js?v=1.8.184';
-import { openMenu } from '../components/ui-menu.js?v=1.8.184';
-import { formatINR, formatDateIN, formatPersonName, formatGenderDisplay, initials } from '../utils/formatter.js?v=1.8.184';
-import { validatePhone, validateEmail, validateDOB, validateName } from '../utils/validator.js?v=1.8.184';
-import { registerDirty } from '../utils/unsaved-guard.js?v=1.8.184';
-import { resolveUserDisplay, getRoleTitle, loadUsersDirectory } from '../services/user-directory.service.js?v=1.8.184';
-import { compressTo100KB, blobToDataURL, isImageFile, formatBytes } from '../utils/image-compress.js?v=1.8.184';
-import { getStudentPhotoSrc, getStudentDocRecord, getStudentDocSrc, getStudentDocMime } from '../utils/student-media.js?v=1.8.184';
-import { todayISO } from '../utils/session-rules.js?v=1.8.184';
-import { getSelectedSessionId } from '../core/sessions.js?v=1.8.184';
-import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.184';
+import { showToast } from '../components/toast.js?v=1.8.185';
+import { openPopup } from '../components/modal.js?v=1.8.185';
+import { createSelect } from '../components/ui-select.js?v=1.8.185';
+import { confirmDialog } from '../components/ui-confirm.js?v=1.8.185';
+import { openMenu } from '../components/ui-menu.js?v=1.8.185';
+import { formatINR, formatDateIN, formatPersonName, formatGenderDisplay, initials } from '../utils/formatter.js?v=1.8.185';
+import { validatePhone, validateEmail, validateDOB, validateName } from '../utils/validator.js?v=1.8.185';
+import { registerDirty } from '../utils/unsaved-guard.js?v=1.8.185';
+import { resolveUserDisplay, getRoleTitle, loadUsersDirectory } from '../services/user-directory.service.js?v=1.8.185';
+import { compressTo100KB, blobToDataURL, isImageFile, formatBytes } from '../utils/image-compress.js?v=1.8.185';
+import { getStudentPhotoSrc, getStudentDocRecord, getStudentDocSrc, getStudentDocMime } from '../utils/student-media.js?v=1.8.185';
+import { todayISO } from '../utils/session-rules.js?v=1.8.185';
+import { getSelectedSessionId } from '../core/sessions.js?v=1.8.185';
+import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.185';
 import {
   fetchStudentPayments,
   recordPaymentTx,
@@ -35,8 +35,8 @@ import {
   calculateStudentFinancials,
   buildReceiptMenuItems,
   repairStudentAdmissionPayment
-} from '../services/payment.service.js?v=1.8.184';
-import { courseFeeOf, discountOf } from '../utils/fees.js?v=1.8.184';
+} from '../services/payment.service.js?v=1.8.185';
+import { courseFeeOf, discountOf } from '../utils/fees.js?v=1.8.185';
 
 const COL = 'students';
 const QUALIFICATIONS = ['VIII Pass', 'Secondary (X) Pass', 'Higher Secondary (XII) Pass', 'ITI', 'Diploma', 'Undergraduate (Graduate)', 'Postgraduate', 'Other'];

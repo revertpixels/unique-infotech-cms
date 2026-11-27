@@ -39,6 +39,26 @@
 
 ---
 
+### [2026-11-27 12:50] Version 1.8.185 — Dashboard Quick Actions Full-Width Primary Pill Bar
+
+**What was built:**
+- Redesigned only the `#dash-quick-links` Quick Actions bar (`public/css/pages/dashboard.css`, `public/js/pages/dashboard.page.js`):
+  - Full-width equal-column CSS Grid (`repeat(auto-fit, minmax(0, 1fr))` on desktop, `3×2` tablet, `2×3` mobile, `10px` gap) so visible role buttons always stretch across 100% of the content area.
+  - Styled each action as a borderless `48px` primary-brand pill (`border-radius: 999px`) with a left-inset `36px` white icon circle (`6px` inset, `18px` brand-coloured Lucide icon), `10px` gap, semi-bold white single-line label (auto-fit font scaling on narrow pills instead of ellipsis), and a white pill badge with red pending count on `Pending & Overdue` (hidden when `0`).
+
+**Why:**
+- Match exact sketch specification for the Quick Actions pill bar without modifying any other section, chart, data query, or fee logic.
+
+**Files touched:**
+- MODIFIED: `public/css/pages/dashboard.css`, `public/js/pages/dashboard.page.js`, `docs/02-PROGRESS-LOG.md` (plus `tools/bump-version.js 1.8.185`).
+
+**Firestore changes:**
+- None.
+
+**Tested on:**
+- Chrome Desktop (`1440×900`), Tablet (`900px`), and Mobile (`390×844`): ✅ Verified `48px` pills, `999px` radius, `36px` white icon circles, red badge on white pill, `0` truncated text across desktop/mobile, and exact equality of width.
+---
+
 ### [2026-11-27 12:46] Version 1.8.184 — Dashboard Review Refinements (Real Quick Action Buttons, Tight Stat Rhythm & Centered Cards)
 
 **What was built:**

@@ -205,65 +205,83 @@
   }
 }
 
-/* ---------- 3b. QUICK ACTIONS ROW (real 40px outline action buttons) ---------- */
+/* ---------- 3b. QUICK ACTIONS ROW (full-width 48px primary pill buttons) ---------- */
 .dash-quick-bar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: flex-start;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
   gap: 10px;
+  width: 100%;
+  align-items: stretch;
 }
 
 .dash-qbtn {
-  height: 40px;
-  padding: 0 14px;
-  border-radius: var(--rc-r, 6px);
-  border: 1px solid var(--rc-border-strong, #D4D4D4);
-  background: var(--rc-surface, #FFFFFF);
-  color: var(--rc-text, #171717);
+  position: relative;
+  height: 48px;
+  width: 100%;
+  min-width: 0;
+  padding: 6px 12px 6px 6px;
+  border-radius: 999px;
+  border: 0;
+  background: var(--rc-primary, #4F2DA3);
+  color: #FFFFFF;
   font: inherit;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
   text-decoration: none;
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 8px;
+  justify-content: flex-start;
+  gap: 0;
   cursor: pointer;
   white-space: nowrap;
   user-select: none;
-  transition: background .14s, border-color .14s, transform .08s, box-shadow .14s;
+  box-sizing: border-box;
+  overflow: hidden;
+  transition: background 150ms ease, transform 150ms ease, box-shadow 150ms ease;
 }
 
-.dash-qbtn svg.lucide {
-  width: 17px;
-  height: 17px;
+.dash-qbtn.has-badge {
+  padding-right: 9px;
+}
+
+.dash-qbtn-ic {
+  width: 36px;
+  height: 36px;
+  margin-right: 10px;
+  border-radius: 50%;
+  background: #FFFFFF;
+  color: var(--rc-primary, #4F2DA3);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
 }
 
-.dash-qbtn.is-purple svg.lucide { color: #4F2DA3; }
-.dash-qbtn.is-green svg.lucide  { color: #16A34A; }
-.dash-qbtn.is-red svg.lucide    { color: #DC2626; }
-.dash-qbtn.is-blue svg.lucide   { color: #0284C7; }
-.dash-qbtn.is-teal svg.lucide   { color: #0F766E; }
-.dash-qbtn.is-amber svg.lucide  { color: #D97706; }
-
-.dash-qbtn:hover {
-  border-color: #B5B5BD;
-  background: #F8F8FA;
+.dash-qbtn-ic svg.lucide {
+  width: 18px;
+  height: 18px;
+  color: var(--rc-primary, #4F2DA3);
 }
 
-.dash-qbtn.is-purple:hover { background: #FAF7FE; border-color: #C7B9EE; }
-.dash-qbtn.is-green:hover  { background: #F5FCF7; border-color: #A7DFBA; }
-.dash-qbtn.is-red:hover    { background: #FEF6F6; border-color: #F2B5B5; }
-.dash-qbtn.is-blue:hover   { background: #F4F9FE; border-color: #ABD4F2; }
-.dash-qbtn.is-teal:hover   { background: #F3FBFB; border-color: #9DD8D2; }
-.dash-qbtn.is-amber:hover  { background: #FFFBF0; border-color: #F3D19C; }
+.dash-qbtn-lbl {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  line-height: 1.15;
+  color: #FFFFFF;
+}
+
+.dash-qbtn.has-badge .dash-qbtn-lbl {
+  margin-right: 6px;
+}
+
+.dash-qbtn:hover {
+  background: var(--rc-primary-hover, #3F2385);
+  transform: translateY(-1px);
+}
 
 .dash-qbtn:active {
-  background: #EFEFF4;
-  border-color: #9CA3AF;
-  transform: translateY(0.5px);
+  background: #331B6E;
+  transform: translateY(0);
 }
 
 .dash-qbtn:focus-visible {
@@ -272,18 +290,20 @@
 }
 
 .dash-qbtn-badge {
+  margin-left: auto;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 19px;
-  height: 19px;
+  min-width: 21px;
+  height: 21px;
   padding: 0 6px;
   border-radius: 999px;
-  background: #FEE2E2;
-  color: #DC2626;
-  font-size: 11px;
+  background: #FFFFFF;
+  color: var(--rc-danger, #DC2626);
+  font-size: 11.5px;
   font-weight: 700;
   line-height: 1;
+  flex-shrink: 0;
   font-variant-numeric: tabular-nums;
 }
 
@@ -773,13 +793,8 @@
 
 @media (max-width: 1024px) {
   .dash-quick-bar {
-    display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 10px;
-  }
-
-  .dash-qbtn {
-    width: 100%;
   }
 
   .dash-row-3 {
@@ -810,13 +825,15 @@
 
   .dash-quick-bar {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px;
+    gap: 10px;
   }
 
   .dash-qbtn {
-    padding: 0 10px;
-    gap: 6px;
-    font-size: 12.5px;
+    padding: 6px 10px 6px 6px;
+  }
+
+  .dash-qbtn.has-badge {
+    padding-right: 9px;
   }
 
   .dash-wrap .rc-stat-strip,

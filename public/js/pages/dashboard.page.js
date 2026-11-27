@@ -1,20 +1,20 @@
 // dashboard.page.js — Read-only Youth Centre Dashboard (#/dashboard) + preserved Unique Kids placeholder.
 
-import { ROUTES } from '../core/router.js?v=1.8.184';
-import { createSelect } from '../components/ui-select.js?v=1.8.184';
+import { ROUTES } from '../core/router.js?v=1.8.185';
+import { createSelect } from '../components/ui-select.js?v=1.8.185';
 import {
   renderDonutChart,
   renderBarChart,
   renderStackedBarChart,
   renderLineChart
-} from '../components/charts.js?v=1.8.184';
-import { openPaymentDetailsModal } from '../components/payment-details-modal.js?v=1.8.184';
-import { loadDashboardArchiveReminder } from '../services/archive.service.js?v=1.8.184';
-import { resolveUserDisplay, getRoleTitle } from '../services/user-directory.service.js?v=1.8.184';
-import { getCachedSessions, loadSessions, getSelectedSession } from '../core/sessions.js?v=1.8.184';
-import { getOrgTimezone } from '../utils/session-rules.js?v=1.8.184';
-import { formatPersonName, initials } from '../utils/formatter.js?v=1.8.184';
-import { buildYouthDashboardData } from '../services/dashboard.service.js?v=1.8.184';
+} from '../components/charts.js?v=1.8.185';
+import { openPaymentDetailsModal } from '../components/payment-details-modal.js?v=1.8.185';
+import { loadDashboardArchiveReminder } from '../services/archive.service.js?v=1.8.185';
+import { resolveUserDisplay, getRoleTitle } from '../services/user-directory.service.js?v=1.8.185';
+import { getCachedSessions, loadSessions, getSelectedSession } from '../core/sessions.js?v=1.8.185';
+import { getOrgTimezone } from '../utils/session-rules.js?v=1.8.185';
+import { formatPersonName, initials } from '../utils/formatter.js?v=1.8.185';
+import { buildYouthDashboardData } from '../services/dashboard.service.js?v=1.8.185';
 import {
   ensureReferenceData,
   scopeReferenceDataByCtx,
@@ -26,7 +26,7 @@ import {
   modeDisplayMeta,
   formatINR,
   fmtDate
-} from '../services/report.service.js?v=1.8.184';
+} from '../services/report.service.js?v=1.8.185';
 
 let state = null;
 let profileListener = null;
@@ -34,6 +34,7 @@ let usersListener = null;
 let sessionSelListener = null;
 let sessionsLoadedListener = null;
 let sessionsChangedListener = null;
+let quickResizeListener = null;
 
 function $(id) {
   return document.getElementById(id);
@@ -321,27 +322,57 @@ function syncBranchFilterControl() {
   paint();
 }
 
+function fitQuickPillLabels() {
+  const host = $('dash-quick-links');
+  if (!host) return;
+  const btns = host.querySelectorAll('.dash-qbtn');
+  btns.forEach((btn) => {
+    const lbl = btn.querySelector('.dash-qbtn-lbl');
+    if (!lbl) return;
+    const ic = btn.querySelector('.dash-qbtn-ic');
+    const badge = btn.querySelector('.dash-qbtn-badge');
+    lbl.style.fontSize = '';
+    lbl.style.letterSpacing = '';
+    const cs = getComputedStyle(btn);
+    const padL = parseFloat(cs.paddingLeft) || 6;
+    const padR = parseFloat(cs.paddingRight) || 12;
+    const icRect = ic ? ic.getBoundingClientRect() : null;
+    const icGap = ic ? (parseFloat(getComputedStyle(ic).marginRight) || 0) : 0;
+    const lblCs = getComputedStyle(lbl);
+    const lblMr = parseFloat(lblCs.marginRight) || 0;
+    const lblMl = parseFloat(lblCs.marginLeft) || 0;
+    const badgeW = badge ? badge.getBoundingClientRect().width : 0;
+    const maxLblW = Math.max(40, btn.clientWidth - padL - (icRect ? icRect.width : 0) - icGap - lblMl - lblMr - badgeW - padR - 1);
+
+    let size = parseFloat(cs.fontSize) || 14;
+    while (size > 9 && (btn.scrollWidth > btn.clientWidth + 0.5 || lbl.getBoundingClientRect().width > maxLblW)) {
+      size -= 0.5;
+      lbl.style.fontSize = `${size}px`;
+      if (size <= 12) lbl.style.letterSpacing = '-0.02em';
+    }
+  });
+}
+
 function renderQuickActions(d = null) {
   const host = $('dash-quick-links');
   const sec = $('dash-quick-sec');
   if (!host || !sec || !state) return;
 
-  const pendingCnt = d ? Number(d.kpis?.overdueFees?.studentCount || 0) : null;
+  const pendingCnt = d ? Number(d.kpis?.overdueFees?.studentCount || 0) : 0;
 
   const definitions = [
-    { key: 'students', label: 'Admissions', href: '#/students', tone: 'is-purple', icon: 'user-plus' },
-    { key: 'pay-fees', label: 'Pay Fees', href: '#/pay-fees', tone: 'is-green', icon: 'wallet' },
+    { key: 'students', label: 'Admissions', href: '#/students', icon: 'user-plus' },
+    { key: 'pay-fees', label: 'Pay Fees', href: '#/pay-fees', icon: 'wallet' },
     {
       key: 'pending',
       label: 'Pending & Overdue',
       href: '#/pending',
-      tone: 'is-red',
       icon: 'alarm-clock',
-      badge: pendingCnt && pendingCnt > 0 ? String(pendingCnt) : ''
+      badge: pendingCnt > 0 ? String(pendingCnt) : ''
     },
-    { key: 'payments', label: 'Payment History', href: '#/payments', tone: 'is-blue', icon: 'history' },
-    { key: 'reports', label: 'Reports', href: '#/reports', tone: 'is-teal', icon: 'bar-chart-3' },
-    { key: 'archives', label: 'Archives', href: '#/archives', tone: 'is-amber', icon: 'archive' }
+    { key: 'payments', label: 'Payment History', href: '#/payments', icon: 'history' },
+    { key: 'reports', label: 'Reports', href: '#/reports', icon: 'bar-chart-3' },
+    { key: 'archives', label: 'Archives', href: '#/archives', icon: 'archive' }
   ];
 
   const role = state.profile?.role || '';
@@ -360,19 +391,26 @@ function renderQuickActions(d = null) {
   host.innerHTML = '';
   visible.forEach((item) => {
     const r = ROUTES[item.key];
-    const a = mk('a', `dash-qbtn ${item.tone}`);
+    const a = mk('a', item.badge ? 'dash-qbtn has-badge' : 'dash-qbtn');
     a.href = item.href;
 
+    const icWrap = mk('span', 'dash-qbtn-ic');
     const ic = document.createElement('i');
     ic.setAttribute('data-lucide', item.icon || r?.icon || 'arrow-right');
     ic.setAttribute('aria-hidden', 'true');
-    a.append(ic, mk('span', 'dash-qbtn-lbl', item.label));
+    icWrap.appendChild(ic);
+
+    a.append(icWrap, mk('span', 'dash-qbtn-lbl', item.label));
 
     if (item.badge) {
       a.appendChild(mk('span', 'dash-qbtn-badge', item.badge));
     }
     host.appendChild(a);
   });
+
+  paint();
+  fitQuickPillLabels();
+  requestAnimationFrame(fitQuickPillLabels);
 }
 
 function resolveActiveSession() {
@@ -834,10 +872,16 @@ export function mount({ profile, ctx } = {}) {
   window.addEventListener('uic:session-selected', sessionSelListener);
   window.addEventListener('uic:sessions-loaded', sessionsLoadedListener);
   window.addEventListener('uic:sessions-changed', sessionsChangedListener);
+  quickResizeListener = () => fitQuickPillLabels();
+  window.addEventListener('resize', quickResizeListener);
 }
 
 export function unmount() {
   if (state) state.destroyed = true;
+  if (quickResizeListener) {
+    window.removeEventListener('resize', quickResizeListener);
+    quickResizeListener = null;
+  }
   if (profileListener) {
     window.removeEventListener('uic:profile-updated', profileListener);
     profileListener = null;

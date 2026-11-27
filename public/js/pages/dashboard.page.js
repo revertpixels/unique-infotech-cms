@@ -1,20 +1,20 @@
 // dashboard.page.js — Read-only Youth Centre Dashboard (#/dashboard) + preserved Unique Kids placeholder.
 
-import { ROUTES } from '../core/router.js?v=1.8.183';
-import { createSelect } from '../components/ui-select.js?v=1.8.183';
+import { ROUTES } from '../core/router.js?v=1.8.184';
+import { createSelect } from '../components/ui-select.js?v=1.8.184';
 import {
   renderDonutChart,
   renderBarChart,
   renderStackedBarChart,
   renderLineChart
-} from '../components/charts.js?v=1.8.183';
-import { openPaymentDetailsModal } from '../components/payment-details-modal.js?v=1.8.183';
-import { loadDashboardArchiveReminder } from '../services/archive.service.js?v=1.8.183';
-import { resolveUserDisplay, getRoleTitle } from '../services/user-directory.service.js?v=1.8.183';
-import { getCachedSessions, loadSessions, getSelectedSession } from '../core/sessions.js?v=1.8.183';
-import { getOrgTimezone } from '../utils/session-rules.js?v=1.8.183';
-import { formatPersonName, initials } from '../utils/formatter.js?v=1.8.183';
-import { buildYouthDashboardData } from '../services/dashboard.service.js?v=1.8.183';
+} from '../components/charts.js?v=1.8.184';
+import { openPaymentDetailsModal } from '../components/payment-details-modal.js?v=1.8.184';
+import { loadDashboardArchiveReminder } from '../services/archive.service.js?v=1.8.184';
+import { resolveUserDisplay, getRoleTitle } from '../services/user-directory.service.js?v=1.8.184';
+import { getCachedSessions, loadSessions, getSelectedSession } from '../core/sessions.js?v=1.8.184';
+import { getOrgTimezone } from '../utils/session-rules.js?v=1.8.184';
+import { formatPersonName, initials } from '../utils/formatter.js?v=1.8.184';
+import { buildYouthDashboardData } from '../services/dashboard.service.js?v=1.8.184';
 import {
   ensureReferenceData,
   scopeReferenceDataByCtx,
@@ -26,7 +26,7 @@ import {
   modeDisplayMeta,
   formatINR,
   fmtDate
-} from '../services/report.service.js?v=1.8.183';
+} from '../services/report.service.js?v=1.8.184';
 
 let state = null;
 let profileListener = null;
@@ -326,60 +326,22 @@ function renderQuickActions(d = null) {
   const sec = $('dash-quick-sec');
   if (!host || !sec || !state) return;
 
-  const pendingCnt = Number(d?.kpis?.overdueFees?.studentCount || 0);
-  const receiptsCnt = Number(d?.kpis?.feeCollection?.receipts || 0);
-  const pendingSub = d ? `${pendingCnt} ${stuWord(pendingCnt)} pending` : 'View overdue dues';
-  const receiptsSub = d ? `${receiptsCnt} ${rcptWord(receiptsCnt)}` : 'View receipts ledger';
+  const pendingCnt = d ? Number(d.kpis?.overdueFees?.studentCount || 0) : null;
 
   const definitions = [
-    {
-      key: 'students',
-      label: 'Admissions',
-      sub: 'Add or view students',
-      href: '#/students',
-      tone: 'is-purple',
-      icon: 'user-plus'
-    },
-    {
-      key: 'pay-fees',
-      label: 'Pay Fees',
-      sub: 'Collect a payment',
-      href: '#/pay-fees',
-      tone: 'is-green',
-      icon: 'wallet'
-    },
+    { key: 'students', label: 'Admissions', href: '#/students', tone: 'is-purple', icon: 'user-plus' },
+    { key: 'pay-fees', label: 'Pay Fees', href: '#/pay-fees', tone: 'is-green', icon: 'wallet' },
     {
       key: 'pending',
       label: 'Pending & Overdue',
-      sub: pendingSub,
       href: '#/pending',
       tone: 'is-red',
-      icon: 'alarm-clock'
+      icon: 'alarm-clock',
+      badge: pendingCnt && pendingCnt > 0 ? String(pendingCnt) : ''
     },
-    {
-      key: 'payments',
-      label: 'Payment History',
-      sub: receiptsSub,
-      href: '#/payments',
-      tone: 'is-blue',
-      icon: 'history'
-    },
-    {
-      key: 'reports',
-      label: 'Reports',
-      sub: 'Session analytics',
-      href: '#/reports',
-      tone: 'is-teal',
-      icon: 'bar-chart-3'
-    },
-    {
-      key: 'archives',
-      label: 'Archives',
-      sub: 'Download & verify',
-      href: '#/archives',
-      tone: 'is-amber',
-      icon: 'archive'
-    }
+    { key: 'payments', label: 'Payment History', href: '#/payments', tone: 'is-blue', icon: 'history' },
+    { key: 'reports', label: 'Reports', href: '#/reports', tone: 'is-teal', icon: 'bar-chart-3' },
+    { key: 'archives', label: 'Archives', href: '#/archives', tone: 'is-amber', icon: 'archive' }
   ];
 
   const role = state.profile?.role || '';
@@ -398,29 +360,17 @@ function renderQuickActions(d = null) {
   host.innerHTML = '';
   visible.forEach((item) => {
     const r = ROUTES[item.key];
-    const a = mk('a', 'dash-qtile');
+    const a = mk('a', `dash-qbtn ${item.tone}`);
     a.href = item.href;
 
-    const topRow = mk('span', 'dash-qtile-top');
-    const icWrap = mk('span', `dash-qtile-ic ${item.tone}`);
     const ic = document.createElement('i');
     ic.setAttribute('data-lucide', item.icon || r?.icon || 'arrow-right');
     ic.setAttribute('aria-hidden', 'true');
-    icWrap.appendChild(ic);
+    a.append(ic, mk('span', 'dash-qbtn-lbl', item.label));
 
-    const chev = document.createElement('i');
-    chev.setAttribute('data-lucide', 'chevron-right');
-    chev.setAttribute('class', 'dash-qtile-chev');
-    chev.setAttribute('aria-hidden', 'true');
-    topRow.append(icWrap, chev);
-
-    const textCol = mk('span', 'dash-qtile-text');
-    textCol.append(
-      mk('span', 'dash-qtile-title', item.label),
-      mk('span', 'dash-qtile-sub', item.sub)
-    );
-
-    a.append(topRow, textCol);
+    if (item.badge) {
+      a.appendChild(mk('span', 'dash-qbtn-badge', item.badge));
+    }
     host.appendChild(a);
   });
 }
@@ -566,7 +516,7 @@ function renderFeeHeadsAndBranches(d) {
     ],
     valueFormatter: formatINR,
     viewWidth: 640,
-    height: 195,
+    height: 185,
     emptyText: 'No fee receipts or overdue items in this session'
   });
 
@@ -624,6 +574,7 @@ function renderThreeDonuts(d) {
     slices: d.studentsByCourse,
     centerLabel: 'Students',
     centerValue: String(d.totalCourseStudents),
+    maxLegendItems: 5,
     emptyText: 'No students in scope'
   });
 }
@@ -653,7 +604,7 @@ function renderTrend(d) {
       items: d.trendPoints,
       valueFormatter: formatINR,
       viewWidth: 640,
-      height: 235,
+      height: 205,
       color: '#323A85',
       emptyText: 'No collections in selected period'
     });
@@ -662,7 +613,7 @@ function renderTrend(d) {
       points: d.trendPoints,
       valueFormatter: formatINR,
       viewWidth: 640,
-      height: 235,
+      height: 205,
       color: '#323A85',
       emptyText: 'No collections in selected period'
     });

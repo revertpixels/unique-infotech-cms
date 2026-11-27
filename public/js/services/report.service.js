@@ -22,21 +22,21 @@ import {
   fetchStudentPayments,
   calculateStudentFinancials,
   isStudentEligibleForDues
-} from './payment.service.js?v=1.8.183';
+} from './payment.service.js?v=1.8.184';
 import {
   evaluateKidsPendingBills,
   buildKidsPaymentLedger
-} from '../utils/school-billing.js?v=1.8.183';
-import { getStudentPhotoSrc } from '../utils/student-media.js?v=1.8.183';
+} from '../utils/school-billing.js?v=1.8.184';
+import { getStudentPhotoSrc } from '../utils/student-media.js?v=1.8.184';
 import {
   todayISO,
   fmtDate,
   getOrgTimezone
-} from '../utils/session-rules.js?v=1.8.183';
-import { formatINR } from '../utils/formatter.js?v=1.8.183';
-import { formatPersonName } from '../utils/formatter.js?v=1.8.183';
-import { resolveUserDisplay, loadUsersDirectory, getRoleTitle } from './user-directory.service.js?v=1.8.183';
-import { loadPdfMake, urlToDataUrl } from '../utils/admission-receipt-pdf.js?v=1.8.183';
+} from '../utils/session-rules.js?v=1.8.184';
+import { formatINR } from '../utils/formatter.js?v=1.8.184';
+import { formatPersonName } from '../utils/formatter.js?v=1.8.184';
+import { resolveUserDisplay, loadUsersDirectory, getRoleTitle } from './user-directory.service.js?v=1.8.184';
+import { loadPdfMake, urlToDataUrl } from '../utils/admission-receipt-pdf.js?v=1.8.184';
 
 const CACHE_KEY = 'financialReports';
 

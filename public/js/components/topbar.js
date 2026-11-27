@@ -1,9 +1,9 @@
-import { getRunningPeriod, getPeriodOptions } from '../utils/date.utils.js?v=1.8.183';
-import { loadSessions, getSelectedSessionId, setSelectedSession } from '../core/sessions.js?v=1.8.183';
-import { confirmLeave } from '../utils/unsaved-guard.js?v=1.8.183';
-import { formatPersonName } from '../utils/formatter.js?v=1.8.183';
-import { getRoleTitle, getUserTitle, resolveUserDisplay } from '../services/user-directory.service.js?v=1.8.183';
-import { openProfileModal } from './profile-modal.js?v=1.8.183';
+import { getRunningPeriod, getPeriodOptions } from '../utils/date.utils.js?v=1.8.184';
+import { loadSessions, getSelectedSessionId, setSelectedSession } from '../core/sessions.js?v=1.8.184';
+import { confirmLeave } from '../utils/unsaved-guard.js?v=1.8.184';
+import { formatPersonName } from '../utils/formatter.js?v=1.8.184';
+import { getRoleTitle, getUserTitle, resolveUserDisplay } from '../services/user-directory.service.js?v=1.8.184';
+import { openProfileModal } from './profile-modal.js?v=1.8.184';
 
 let topbarProfileCleanup = null;
 

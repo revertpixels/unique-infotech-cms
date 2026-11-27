@@ -117,6 +117,7 @@ export function renderDonutChart(host, {
   valueFormatter = defaultFmt,
   size = 160,
   thickness = 24,
+  maxLegendItems = 0,
   emptyText = 'No data'
 } = {}) {
   const valid = (slices || [])
@@ -224,34 +225,88 @@ export function renderDonutChart(host, {
   }, truncLabel(centerLabel, 14)));
 
   const legend = htmlEl('ul', 'uich-legend');
-  valid.forEach((s, idx) => {
-    const pct = Math.round((s.value / total) * 100);
-    const li = htmlEl('li', 'uich-leg-item');
-    const dot = htmlEl('span', 'uich-leg-dot');
-    dot.style.background = s.color;
-    const lbl = htmlEl('span', 'uich-leg-label', s.label);
-    lbl.title = s.label;
-    const right = htmlEl('span', 'uich-leg-val', `${valueFormatter(s.value)} (${pct}%)`);
-    li.title = `${s.label} — ${valueFormatter(s.value)} (${pct}%)`;
-    li.append(dot, lbl, right);
-    li.addEventListener('mouseenter', (ev) => {
-      sliceEls.forEach((el, j) => {
-        el.setAttribute('opacity', j === idx ? '1' : '0.45');
-        el.setAttribute('stroke-width', j === idx ? String(thickness + 3) : String(thickness));
+  let toggleBtn = null;
+  const shouldCollapse = Number(maxLegendItems) > 0 && valid.length > Number(maxLegendItems);
+  let expanded = false;
+
+  const paintLegend = () => {
+    legend.innerHTML = '';
+    if (toggleBtn && toggleBtn.parentNode) toggleBtn.remove();
+
+    const visibleCount = (!shouldCollapse || expanded) ? valid.length : Number(maxLegendItems);
+    for (let idx = 0; idx < visibleCount; idx += 1) {
+      const s = valid[idx];
+      const pct = Math.round((s.value / total) * 100);
+      const li = htmlEl('li', 'uich-leg-item');
+      const dot = htmlEl('span', 'uich-leg-dot');
+      dot.style.background = s.color;
+      const lbl = htmlEl('span', 'uich-leg-label', s.label);
+      lbl.title = s.label;
+      const right = htmlEl('span', 'uich-leg-val', `${valueFormatter(s.value)} (${pct}%)`);
+      li.title = `${s.label} — ${valueFormatter(s.value)} (${pct}%)`;
+      li.append(dot, lbl, right);
+      li.addEventListener('mouseenter', (ev) => {
+        sliceEls.forEach((el, j) => {
+          el.setAttribute('opacity', j === idx ? '1' : '0.45');
+          el.setAttribute('stroke-width', j === idx ? String(thickness + 3) : String(thickness));
+        });
+        ctx.showTip(ev, s.label, `${valueFormatter(s.value)} (${pct}%)`);
       });
-      ctx.showTip(ev, s.label, `${valueFormatter(s.value)} (${pct}%)`);
-    });
-    li.addEventListener('mouseleave', () => {
-      sliceEls.forEach((el) => {
-        el.setAttribute('opacity', '1');
-        el.setAttribute('stroke-width', String(thickness));
+      li.addEventListener('mouseleave', () => {
+        sliceEls.forEach((el) => {
+          el.setAttribute('opacity', '1');
+          el.setAttribute('stroke-width', String(thickness));
+        });
+        ctx.hideTip();
       });
-      ctx.hideTip();
-    });
-    legend.appendChild(li);
-  });
+      legend.appendChild(li);
+    }
+
+    if (shouldCollapse && !expanded) {
+      const rest = valid.slice(Number(maxLegendItems));
+      const restVal = rest.reduce((acc, s) => acc + s.value, 0);
+      const restPct = Math.round((restVal / total) * 100);
+      const li = htmlEl('li', 'uich-leg-item is-others');
+      const dot = htmlEl('span', 'uich-leg-dot');
+      dot.style.background = '#94A3B8';
+      const othersLabel = `Others (${rest.length})`;
+      const lbl = htmlEl('span', 'uich-leg-label', othersLabel);
+      const restNames = rest.map((s) => s.label).join(', ');
+      lbl.title = restNames;
+      const right = htmlEl('span', 'uich-leg-val', `${valueFormatter(restVal)} (${restPct}%)`);
+      li.title = restNames;
+      li.append(dot, lbl, right);
+      li.addEventListener('mouseenter', (ev) => {
+        sliceEls.forEach((el, j) => {
+          const inRest = j >= Number(maxLegendItems);
+          el.setAttribute('opacity', inRest ? '1' : '0.35');
+          el.setAttribute('stroke-width', inRest ? String(thickness + 3) : String(thickness));
+        });
+        ctx.showTip(ev, othersLabel, `${valueFormatter(restVal)} (${restPct}%)`);
+      });
+      li.addEventListener('mouseleave', () => {
+        sliceEls.forEach((el) => {
+          el.setAttribute('opacity', '1');
+          el.setAttribute('stroke-width', String(thickness));
+        });
+        ctx.hideTip();
+      });
+      legend.appendChild(li);
+    }
+
+    if (shouldCollapse) {
+      toggleBtn = htmlEl('button', 'uich-leg-toggle', expanded ? `Show top ${Number(maxLegendItems)}` : `Show all (${valid.length})`);
+      toggleBtn.type = 'button';
+      toggleBtn.addEventListener('click', () => {
+        expanded = !expanded;
+        paintLegend();
+      });
+      ctx.wrap.appendChild(toggleBtn);
+    }
+  };
 
   ctx.wrap.append(svg, legend);
+  paintLegend();
 }
 
 /**

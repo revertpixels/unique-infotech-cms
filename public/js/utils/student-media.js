@@ -1,7 +1,7 @@
 // Shared student photo, document source, and display normalization helpers.
 // Used identically across live CMS pages, receipts, photo preloading, and offline Archives.
 
-import { formatPersonName, formatGenderDisplay } from './formatter.js?v=1.8.183';
+import { formatPersonName, formatGenderDisplay } from './formatter.js?v=1.8.184';
 
 const DOC_KEY_ALIASES = {
   photo: ['photo', 'passportPhoto', 'passport_photo', 'studentPhoto', 'avatar', 'profilePhoto', 'image', 'pic'],

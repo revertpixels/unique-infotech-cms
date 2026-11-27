@@ -1,17 +1,17 @@
 // pending.page.js — Shared Overdue Payments view for Youth Centre (#/pending) & Unique Kids (#/school-pending).
 // Matches payments.page.js layout (no inner scroll, shared 10-row pager, short codes, icon actions, details popup).
 
-import { createSelect } from '../components/ui-select.js?v=1.8.183';
-import { createBranchBatchFilter, clearPersistedBranchBatchFilters } from '../components/branch-batch-filter.js?v=1.8.183';
-import { openPopup } from '../components/modal.js?v=1.8.183';
-import { showToast } from '../components/toast.js?v=1.8.183';
-import { renderPager, renderEmptyTableState, PAGE_SIZE } from '../components/list-page.js?v=1.8.183';
-import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.183';
+import { createSelect } from '../components/ui-select.js?v=1.8.184';
+import { createBranchBatchFilter, clearPersistedBranchBatchFilters } from '../components/branch-batch-filter.js?v=1.8.184';
+import { openPopup } from '../components/modal.js?v=1.8.184';
+import { showToast } from '../components/toast.js?v=1.8.184';
+import { renderPager, renderEmptyTableState, PAGE_SIZE } from '../components/list-page.js?v=1.8.184';
+import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.184';
 import {
   getCachedSessions,
   loadSessions,
   getSelectedSession
-} from '../core/sessions.js?v=1.8.183';
+} from '../core/sessions.js?v=1.8.184';
 import {
   ensureReferenceData,
   scopeReferenceDataByCtx,
@@ -33,8 +33,8 @@ import {
   formatINR,
   fmtDate,
   todayISO
-} from '../services/report.service.js?v=1.8.183';
-import { initials } from '../utils/formatter.js?v=1.8.183';
+} from '../services/report.service.js?v=1.8.184';
+import { initials } from '../utils/formatter.js?v=1.8.184';
 
 let state = null;
 let sessionListener = null;

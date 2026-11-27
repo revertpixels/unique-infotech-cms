@@ -39,6 +39,31 @@
 
 ---
 
+### [2026-11-27 12:46] Version 1.8.184 — Dashboard Review Refinements (Real Quick Action Buttons, Tight Stat Rhythm & Centered Cards)
+
+**What was built:**
+- **Real Quick Actions Buttons (`public/pages/dashboard.html`, `public/css/pages/dashboard.css`, `public/js/pages/dashboard.page.js`)**:
+  - Replaced tile cards with real `40px` flat outline buttons matching the `Collect Fees` header button (`1px` border, `6px` radius, `17px` coloured icons per action, single-line label, live red count badge on `Pending & Overdue`), hover/active/focus-visible states, left-aligned single row with `10px` gap on desktop and equal-width `3×2` tablet / `2×3` mobile grids.
+- **Tight KPI Stat Strip Rhythm (`public/css/pages/dashboard.css`)**:
+  - Scoped `.dash-wrap .rc-stat-cell` (`20px` padding, `min-height: 0`, top-aligned content) with crisp `8px` icon→label, `4px` label→value, `8px` value→chip rhythm, and `8px` above / `10px` below the `Collection Rate` progress bar.
+- **Zero-Blank-Space Card Balance (`public/js/components/charts.js`, `public/js/pages/dashboard.page.js`, `public/css/pages/dashboard.css`)**:
+  - Added optional `maxLegendItems` collapsing to `renderDonutChart()` in `charts.js`; capped `Students by Course` legend at top `5` courses + `"Others (N)"` row + `"Show all"` toggle on Dashboard while centering all 3 donut cards vertically (`justify-content: center`).
+  - Kept `Students by Branch` total row tightly under the branch bars inside vertically centered layout and matched compact chart heights (`185px` Fee Head, `205px` Trend) across equal-height rows.
+
+**Why:**
+- Eliminate AI-tile appearance and excess vertical whitespace inside KPI boxes and chart cards cleanly without affecting `#/reports`.
+
+**Files touched:**
+- MODIFIED: `public/js/components/charts.js`, `public/pages/dashboard.html`, `public/css/pages/dashboard.css`, `public/js/pages/dashboard.page.js`, `docs/02-PROGRESS-LOG.md` (plus `tools/bump-version.js 1.8.184`).
+
+**Firestore changes:**
+- None (no data, query, fee-maths, or security rules changes).
+
+**Tested on:**
+- Chrome Desktop (`1440×900`) & Tablet (`900px`): ✅ Verified `40px` Quick Action buttons in 1 row (`0` truncation), `8/4/8` & `8/10` stat strip gaps, top-5 + `Others (2)` + `Show all (7)` toggle, equal heights, and Reports regression pass.
+- Mobile (`390×844`): ✅ Verified `2×3` equal-width Quick Action buttons (`0` truncation), single-column stack, and `scrollWidth === 390`.
+---
+
 ### [2026-11-27 12:38] Version 1.8.183 — Youth Dashboard Layout Polish & Direct Action Flows
 
 **What was built:**

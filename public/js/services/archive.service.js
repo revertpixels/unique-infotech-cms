@@ -21,24 +21,24 @@ import {
   ref as storageRef,
   getDownloadURL
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-storage.js';
-import { APP_VERSION } from '../core/app.js?v=1.8.182';
-import { todayISO, installmentSchedule, getOrgTimezone } from '../utils/session-rules.js?v=1.8.182';
+import { APP_VERSION } from '../core/app.js?v=1.8.183';
+import { todayISO, installmentSchedule, getOrgTimezone } from '../utils/session-rules.js?v=1.8.183';
 import {
   calculateStudentFinancials,
   evaluateYouthStudentDues,
   normalizeYouthPaymentsLedger,
   installmentCourseFee,
   installmentBalanceDue
-} from './payment.service.js?v=1.8.182';
+} from './payment.service.js?v=1.8.183';
 import {
   loadUsersDirectory,
   resolveUserDisplay,
   getUserTitle
-} from './user-directory.service.js?v=1.8.182';
-import { formatPersonName, formatGenderDisplay } from '../utils/formatter.js?v=1.8.182';
-import { getStudentPhotoSrc, getStudentDocRecord, getStudentDocSrc, getStudentDocMime } from '../utils/student-media.js?v=1.8.182';
-import { buildOfflineViewerAssets } from '../utils/archive-viewer-builder.js?v=1.8.182';
-import { buildYouthReceiptData } from '../utils/admission-receipt.js?v=1.8.182';
+} from './user-directory.service.js?v=1.8.183';
+import { formatPersonName, formatGenderDisplay } from '../utils/formatter.js?v=1.8.183';
+import { getStudentPhotoSrc, getStudentDocRecord, getStudentDocSrc, getStudentDocMime } from '../utils/student-media.js?v=1.8.183';
+import { buildOfflineViewerAssets } from '../utils/archive-viewer-builder.js?v=1.8.183';
+import { buildYouthReceiptData } from '../utils/admission-receipt.js?v=1.8.183';
 
 /** Feature flag keeping Phase 2 session deletion OFF until Phase 1 is verified and approved. */
 export const ENABLE_ARCHIVE_SESSION_DELETE = false;

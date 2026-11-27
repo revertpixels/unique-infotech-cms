@@ -39,6 +39,33 @@
 
 ---
 
+### [2026-11-27 12:38] Version 1.8.183 — Youth Dashboard Layout Polish & Direct Action Flows
+
+**What was built:**
+- **Direct Navigation & Focus Flows (`public/js/core/router.js`, `public/js/pages/admissions.page.js`, `public/js/pages/pay-fees.page.js`)**:
+  - Updated `router.js` redirect handling (`#/admissions?new=1` -> `location.replace('#/students?new=1')`) so query params survive redirect without creating a Back-button redirect loop, and synced `lastHash` on URL replacement (`uic:route-url-replaced`).
+  - Updated `admissions.page.js` to detect `?new=1`, clear it from the URL (`history.replaceState(null, '', '#/students')`), and open the `New admission` form directly focused on `#adm-name`.
+  - Updated `pay-fees.page.js` to focus `#pf-search-input` cleanly when navigating to Collect Fees (`#/pay-fees`) without a direct student parameter.
+- **Dashboard Row Reordering, Quick Actions & Equal-Height Polish (`public/pages/dashboard.html`, `public/css/pages/dashboard.css`, `public/js/pages/dashboard.page.js`, `public/js/services/dashboard.service.js`, `public/js/components/charts.js`)**:
+  - Moved the 6-tile role-based Quick Actions bar directly below the header (1×6 desktop, 3×2 tablet, 2×3 mobile) with distinct tinted icon squares, live pending/receipt subtitles, right chevrons, and unclipped 2-zone card layout.
+  - Positioned the full-width Archive Reminder cleanly between the 2×4 KPI stat strip and Row d; paired `Collection by Fee Head` (2/3) with `Students by Branch` (1/3) in an equal-height row (`align-items: stretch`).
+  - Grouped `Collection by Payment Mode`, `Overdue Ageing`, and `Students by Course` into a balanced 3-equal-column row with stacked legends BELOW each `160px` donut and native `title` tooltips on truncated course names (`charts.js`).
+  - Paired `Collection Trend` (2/3, Line/Bar toggle) with compact `Recent Payments` (1/3, latest 5 receipts only, student photo/initials, short receipt code chip, right-aligned INR, coloured Cash/UPI/Bank mode pills), sized skeletons to match final card geometry, and preserved `16–18px` gaps across all sections.
+
+**Why:**
+- Eliminate vertical whitespace holes, align row heights cleanly across desktop/tablet/mobile, fix `New Admission` & `Collect Fees` landing UX, and keep Quick Actions prominent at the top of Youth Centre Overview.
+
+**Files touched:**
+- MODIFIED: `public/js/core/router.js`, `public/js/pages/admissions.page.js`, `public/js/pages/pay-fees.page.js`, `public/js/components/charts.js`, `public/js/services/dashboard.service.js`, `public/pages/dashboard.html`, `public/css/pages/dashboard.css`, `public/js/pages/dashboard.page.js`, `docs/02-PROGRESS-LOG.md` (plus `tools/bump-version.js 1.8.183`).
+
+**Firestore changes:**
+- None (no data, query, fee-maths, or security rules changes).
+
+**Tested on:**
+- Chrome Desktop (`1440×900`) & Tablet (`900px`): ✅ Verified equal heights across Rows d/e/f, zero Quick Action truncation, `?new=1` New Admission auto-form + Back, Pay Fees search focus + Back, Dashboard ↔ Reports exact ₹ parity & cache reuse.
+- Mobile (`390×844`): ✅ Verified Super Admin & Branch Head single-column collapse, 2×3 Quick Actions, `scrollWidth === 390` (0 horizontal overflow).
+---
+
 ### [2026-11-27 12:18] Version 1.8.182 — Hotfix: Remove Duplicate `buildYouthDashboardData` Export & Add Duplicate-Export Guard
 
 **What was built:**

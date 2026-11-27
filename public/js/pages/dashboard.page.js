@@ -1,20 +1,20 @@
 // dashboard.page.js — Read-only Youth Centre Dashboard (#/dashboard) + preserved Unique Kids placeholder.
 
-import { ROUTES } from '../core/router.js?v=1.8.182';
-import { createSelect } from '../components/ui-select.js?v=1.8.182';
+import { ROUTES } from '../core/router.js?v=1.8.183';
+import { createSelect } from '../components/ui-select.js?v=1.8.183';
 import {
   renderDonutChart,
   renderBarChart,
   renderStackedBarChart,
   renderLineChart
-} from '../components/charts.js?v=1.8.182';
-import { openPaymentDetailsModal } from '../components/payment-details-modal.js?v=1.8.182';
-import { loadDashboardArchiveReminder } from '../services/archive.service.js?v=1.8.182';
-import { resolveUserDisplay, getRoleTitle } from '../services/user-directory.service.js?v=1.8.182';
-import { getCachedSessions, loadSessions, getSelectedSession } from '../core/sessions.js?v=1.8.182';
-import { getOrgTimezone } from '../utils/session-rules.js?v=1.8.182';
-import { formatPersonName, initials } from '../utils/formatter.js?v=1.8.182';
-import { buildYouthDashboardData } from '../services/dashboard.service.js?v=1.8.182';
+} from '../components/charts.js?v=1.8.183';
+import { openPaymentDetailsModal } from '../components/payment-details-modal.js?v=1.8.183';
+import { loadDashboardArchiveReminder } from '../services/archive.service.js?v=1.8.183';
+import { resolveUserDisplay, getRoleTitle } from '../services/user-directory.service.js?v=1.8.183';
+import { getCachedSessions, loadSessions, getSelectedSession } from '../core/sessions.js?v=1.8.183';
+import { getOrgTimezone } from '../utils/session-rules.js?v=1.8.183';
+import { formatPersonName, initials } from '../utils/formatter.js?v=1.8.183';
+import { buildYouthDashboardData } from '../services/dashboard.service.js?v=1.8.183';
 import {
   ensureReferenceData,
   scopeReferenceDataByCtx,
@@ -26,7 +26,7 @@ import {
   modeDisplayMeta,
   formatINR,
   fmtDate
-} from '../services/report.service.js?v=1.8.182';
+} from '../services/report.service.js?v=1.8.183';
 
 let state = null;
 let profileListener = null;
@@ -103,6 +103,15 @@ function stuWord(n) {
   return Number(n) === 1 ? 'student' : 'students';
 }
 
+function modeChipClass(entry) {
+  const raw = String(entry?.mode || '').toLowerCase();
+  const lbl = String(modeDisplayMeta(entry).label || '').toLowerCase();
+  if (raw === 'cash' || lbl.includes('cash')) return 'is-cash';
+  if (raw === 'upi' || lbl.includes('upi')) return 'is-upi';
+  if (raw === 'bank' || raw === 'neft' || raw === 'imps' || raw === 'rtgs' || lbl.includes('bank')) return 'is-bank';
+  return 'is-other';
+}
+
 function showYouthSkeletons() {
   if (!state || state.destroyed) return;
   const kpiIds = [
@@ -117,7 +126,7 @@ function showYouthSkeletons() {
   ];
   kpiIds.forEach((id) => {
     const el = $(id);
-    if (el) el.innerHTML = '<span class="skel skel-kpi"></span>';
+    if (el) el.innerHTML = '<span class="skel dash-kpi-skel"></span>';
   });
   const subIds = [
     'dash-kpi-active-sub',
@@ -133,21 +142,24 @@ function showYouthSkeletons() {
     const el = $(id);
     if (el) el.textContent = 'Loading...';
   });
-  const chartHosts = [
-    'dash-chart-feehead',
-    'dash-branch-list',
-    'dash-chart-stu-course',
-    'dash-chart-trend',
-    'dash-chart-modes',
-    'dash-chart-ageing'
-  ];
-  chartHosts.forEach((id) => {
+
+  ['dash-chart-feehead', 'dash-chart-trend'].forEach((id) => {
     const el = $(id);
     if (el) el.innerHTML = '<div class="skel dash-chart-skel"></div>';
   });
+  const brHost = $('dash-branch-list');
+  if (brHost) brHost.innerHTML = '<div class="skel dash-branch-skel"></div>';
+
+  ['dash-chart-modes', 'dash-chart-ageing', 'dash-chart-stu-course'].forEach((id) => {
+    const el = $(id);
+    if (el) {
+      el.innerHTML = '<div class="dash-donut-skel"><div class="skel dash-donut-ring-skel"></div><div class="dash-donut-lines-skel"><div class="skel dash-donut-line-skel"></div><div class="skel dash-donut-line-skel"></div><div class="skel dash-donut-line-skel"></div></div></div>';
+    }
+  });
+
   const recentHost = $('dash-recent-list');
   if (recentHost) {
-    recentHost.innerHTML = '<div class="dash-recent-pad"><div class="skel dash-chart-skel"></div></div>';
+    recentHost.innerHTML = '<div class="dash-recent-skel-wrap"><div class="skel dash-recent-skel-row"></div><div class="skel dash-recent-skel-row"></div><div class="skel dash-recent-skel-row"></div><div class="skel dash-recent-skel-row"></div><div class="skel dash-recent-skel-row"></div></div>';
   }
 }
 
@@ -309,18 +321,65 @@ function syncBranchFilterControl() {
   paint();
 }
 
-function renderQuickLinks() {
+function renderQuickActions(d = null) {
   const host = $('dash-quick-links');
   const sec = $('dash-quick-sec');
   if (!host || !sec || !state) return;
 
+  const pendingCnt = Number(d?.kpis?.overdueFees?.studentCount || 0);
+  const receiptsCnt = Number(d?.kpis?.feeCollection?.receipts || 0);
+  const pendingSub = d ? `${pendingCnt} ${stuWord(pendingCnt)} pending` : 'View overdue dues';
+  const receiptsSub = d ? `${receiptsCnt} ${rcptWord(receiptsCnt)}` : 'View receipts ledger';
+
   const definitions = [
-    { key: 'students', label: 'Admissions', fallbackIcon: 'users' },
-    { key: 'pay-fees', label: 'Pay Fees', fallbackIcon: 'wallet' },
-    { key: 'pending', label: 'Pending & Overdue', fallbackIcon: 'alarm-clock' },
-    { key: 'payments', label: 'Payment History', fallbackIcon: 'history' },
-    { key: 'reports', label: 'Reports', fallbackIcon: 'bar-chart-3' },
-    { key: 'archives', label: 'Archives', fallbackIcon: 'archive' }
+    {
+      key: 'students',
+      label: 'Admissions',
+      sub: 'Add or view students',
+      href: '#/students',
+      tone: 'is-purple',
+      icon: 'user-plus'
+    },
+    {
+      key: 'pay-fees',
+      label: 'Pay Fees',
+      sub: 'Collect a payment',
+      href: '#/pay-fees',
+      tone: 'is-green',
+      icon: 'wallet'
+    },
+    {
+      key: 'pending',
+      label: 'Pending & Overdue',
+      sub: pendingSub,
+      href: '#/pending',
+      tone: 'is-red',
+      icon: 'alarm-clock'
+    },
+    {
+      key: 'payments',
+      label: 'Payment History',
+      sub: receiptsSub,
+      href: '#/payments',
+      tone: 'is-blue',
+      icon: 'history'
+    },
+    {
+      key: 'reports',
+      label: 'Reports',
+      sub: 'Session analytics',
+      href: '#/reports',
+      tone: 'is-teal',
+      icon: 'bar-chart-3'
+    },
+    {
+      key: 'archives',
+      label: 'Archives',
+      sub: 'Download & verify',
+      href: '#/archives',
+      tone: 'is-amber',
+      icon: 'archive'
+    }
   ];
 
   const role = state.profile?.role || '';
@@ -339,12 +398,29 @@ function renderQuickLinks() {
   host.innerHTML = '';
   visible.forEach((item) => {
     const r = ROUTES[item.key];
-    const a = mk('a', 'dash-qlink');
-    a.href = `#/${item.key}`;
+    const a = mk('a', 'dash-qtile');
+    a.href = item.href;
+
+    const topRow = mk('span', 'dash-qtile-top');
+    const icWrap = mk('span', `dash-qtile-ic ${item.tone}`);
     const ic = document.createElement('i');
-    ic.setAttribute('data-lucide', r?.icon || item.fallbackIcon);
+    ic.setAttribute('data-lucide', item.icon || r?.icon || 'arrow-right');
     ic.setAttribute('aria-hidden', 'true');
-    a.append(ic, mk('span', '', item.label));
+    icWrap.appendChild(ic);
+
+    const chev = document.createElement('i');
+    chev.setAttribute('data-lucide', 'chevron-right');
+    chev.setAttribute('class', 'dash-qtile-chev');
+    chev.setAttribute('aria-hidden', 'true');
+    topRow.append(icWrap, chev);
+
+    const textCol = mk('span', 'dash-qtile-text');
+    textCol.append(
+      mk('span', 'dash-qtile-title', item.label),
+      mk('span', 'dash-qtile-sub', item.sub)
+    );
+
+    a.append(topRow, textCol);
     host.appendChild(a);
   });
 }
@@ -366,7 +442,6 @@ async function loadDashboardSources({ forceRefresh = false } = {}) {
     refreshBtn.classList.add('spin');
   }
 
-  // Only show loading skeletons when cold so cache revisits paint cleanly without flicker
   const cacheRoot = window.APP_CACHE?.financialReports;
   const hasWarmCache = !forceRefresh && Boolean(cacheRoot?.meta && cacheRoot?.youthHistory?.size && cacheRoot?.youthPending?.size);
   if (!hasWarmCache) showYouthSkeletons();
@@ -491,11 +566,10 @@ function renderFeeHeadsAndBranches(d) {
     ],
     valueFormatter: formatINR,
     viewWidth: 640,
-    height: 230,
+    height: 195,
     emptyText: 'No fee receipts or overdue items in this session'
   });
 
-  // Right card top: Students by Branch
   const brRows = d.studentsByBranch || [];
   $('dash-branch-count-pill').textContent = `${brRows.length} branch${brRows.length === 1 ? '' : 'es'}`;
   const brHost = $('dash-branch-list');
@@ -525,40 +599,9 @@ function renderFeeHeadsAndBranches(d) {
     );
     brHost.appendChild(note);
   }
-
-  // Right card bottom: Students by Course donut
-  $('dash-course-count-note').textContent = `${d.totalCourseStudents} total`;
-  renderDonutChart($('dash-chart-stu-course'), {
-    slices: d.studentsByCourse,
-    centerLabel: 'Students',
-    centerValue: String(d.totalCourseStudents),
-    emptyText: 'No students in scope'
-  });
 }
 
-function renderTrendAndModes(d) {
-  $('dash-trend-badge').textContent = d.useDailyTrend ? 'By day' : 'By month';
-  const trendHost = $('dash-chart-trend');
-  if (state.trendKind === 'bar') {
-    renderBarChart(trendHost, {
-      items: d.trendPoints,
-      valueFormatter: formatINR,
-      viewWidth: 560,
-      height: 195,
-      color: '#323A85',
-      emptyText: 'No collections in selected period'
-    });
-  } else {
-    renderLineChart(trendHost, {
-      points: d.trendPoints,
-      valueFormatter: formatINR,
-      viewWidth: 560,
-      height: 195,
-      color: '#323A85',
-      emptyText: 'No collections in selected period'
-    });
-  }
-
+function renderThreeDonuts(d) {
   $('dash-mode-receipts').textContent = `${d.kpis.feeCollection.receipts} ${rcptWord(d.kpis.feeCollection.receipts)}`;
   renderDonutChart($('dash-chart-modes'), {
     slices: d.modeSlices,
@@ -566,6 +609,22 @@ function renderTrendAndModes(d) {
     centerValue: formatINR(d.totalCollected),
     valueFormatter: formatINR,
     emptyText: 'No payment receipts'
+  });
+
+  renderDonutChart($('dash-chart-ageing'), {
+    slices: d.ageingSlices,
+    centerLabel: 'Overdue',
+    centerValue: formatINR(d.overdueTotal),
+    valueFormatter: formatINR,
+    emptyText: 'No overdue installments'
+  });
+
+  $('dash-course-count-note').textContent = `${d.totalCourseStudents} total`;
+  renderDonutChart($('dash-chart-stu-course'), {
+    slices: d.studentsByCourse,
+    centerLabel: 'Students',
+    centerValue: String(d.totalCourseStudents),
+    emptyText: 'No students in scope'
   });
 }
 
@@ -586,78 +645,95 @@ function hydrateRecentAvatars() {
   });
 }
 
-function renderRecentAndAgeing(d) {
+function renderTrend(d) {
+  $('dash-trend-badge').textContent = d.useDailyTrend ? 'By day' : 'By month';
+  const trendHost = $('dash-chart-trend');
+  if (state.trendKind === 'bar') {
+    renderBarChart(trendHost, {
+      items: d.trendPoints,
+      valueFormatter: formatINR,
+      viewWidth: 640,
+      height: 235,
+      color: '#323A85',
+      emptyText: 'No collections in selected period'
+    });
+  } else {
+    renderLineChart(trendHost, {
+      points: d.trendPoints,
+      valueFormatter: formatINR,
+      viewWidth: 640,
+      height: 235,
+      color: '#323A85',
+      emptyText: 'No collections in selected period'
+    });
+  }
+}
+
+function renderRecentPayments(d) {
   const host = $('dash-recent-list');
-  const recent = d.recentPayments || [];
+  const recent = (d.recentPayments || []).slice(0, 5);
   host.innerHTML = '';
 
   if (!recent.length) {
     const pad = mk('div', 'dash-recent-pad');
     pad.appendChild(mk('div', 'uich-empty', 'No payment receipts recorded yet in this session'));
     host.appendChild(pad);
-  } else {
-    const missingPhotoIds = [];
-    recent.forEach((entry) => {
-      const btn = mk('button', 'dash-recent-row');
-      btn.type = 'button';
-
-      const left = mk('div', 'dash-recent-left');
-      const avatar = mk('span', 'dash-recent-avatar');
-      if (entry.studentDocId) avatar.dataset.sid = entry.studentDocId;
-
-      const stName = formatPersonName(entry.studentName || '') || entry.studentName || 'Student';
-      const cachedSrc = entry.studentDocId ? getCachedStudentPhoto(entry.studentDocId) : '';
-      if (cachedSrc) {
-        const img = document.createElement('img');
-        img.src = cachedSrc;
-        img.alt = stName;
-        avatar.appendChild(img);
-      } else {
-        avatar.textContent = initials(stName) || 'S';
-        if (entry.studentDocId) missingPhotoIds.push(entry.studentDocId);
-      }
-
-      const info = mk('div', 'dash-recent-info');
-      info.appendChild(mk('span', 'dash-recent-name', stName));
-
-      const sub = mk('div', 'dash-recent-sub');
-      const shortRcpt = formatShortReceipt(entry.receiptNo) || 'Receipt';
-      sub.appendChild(mk('span', 'dash-recent-rcpt', shortRcpt));
-      const dateTxt = entry.date ? fmtDate(entry.date) : '';
-      const timeTxt = formatPaymentTimeIST(entry.createdAtSec);
-      const dtDisplay = [dateTxt, timeTxt].filter(Boolean).join(' · ');
-      if (dtDisplay) sub.appendChild(mk('span', '', dtDisplay));
-      info.appendChild(sub);
-
-      left.append(avatar, info);
-
-      const right = mk('div', 'dash-recent-right');
-      right.append(
-        mk('span', 'dash-recent-amt', formatINR(entry.totalReceived || 0)),
-        mk('span', 'dash-recent-mode', modeDisplayMeta(entry).label)
-      );
-
-      btn.append(left, right);
-      btn.addEventListener('click', () => {
-        openPaymentDetailsModal(entry, { sessions: state?.sessions || [] });
-      });
-      host.appendChild(btn);
-    });
-
-    if (missingPhotoIds.length) {
-      loadStudentPhotos(missingPhotoIds, state.pendingResult?.studentsById || null)
-        .then(() => hydrateRecentAvatars())
-        .catch(() => {});
-    }
+    return;
   }
 
-  renderDonutChart($('dash-chart-ageing'), {
-    slices: d.ageingSlices,
-    centerLabel: 'Overdue',
-    centerValue: formatINR(d.overdueTotal),
-    valueFormatter: formatINR,
-    emptyText: 'No overdue installments'
+  const missingPhotoIds = [];
+  recent.forEach((entry) => {
+    const btn = mk('button', 'dash-recent-row');
+    btn.type = 'button';
+
+    const left = mk('div', 'dash-recent-left');
+    const avatar = mk('span', 'dash-recent-avatar');
+    if (entry.studentDocId) avatar.dataset.sid = entry.studentDocId;
+
+    const stName = formatPersonName(entry.studentName || '') || entry.studentName || 'Student';
+    const cachedSrc = entry.studentDocId ? getCachedStudentPhoto(entry.studentDocId) : '';
+    if (cachedSrc) {
+      const img = document.createElement('img');
+      img.src = cachedSrc;
+      img.alt = stName;
+      avatar.appendChild(img);
+    } else {
+      avatar.textContent = initials(stName) || 'S';
+      if (entry.studentDocId) missingPhotoIds.push(entry.studentDocId);
+    }
+
+    const info = mk('div', 'dash-recent-info');
+    info.appendChild(mk('span', 'dash-recent-name', stName));
+
+    const sub = mk('div', 'dash-recent-sub');
+    const shortRcpt = formatShortReceipt(entry.receiptNo) || 'Receipt';
+    sub.appendChild(mk('span', 'dash-recent-rcpt', shortRcpt));
+    const dateTxt = entry.date ? fmtDate(entry.date) : '';
+    const timeTxt = formatPaymentTimeIST(entry.createdAtSec);
+    const dtDisplay = [dateTxt, timeTxt].filter(Boolean).join(' · ');
+    if (dtDisplay) sub.appendChild(mk('span', '', dtDisplay));
+    info.appendChild(sub);
+
+    left.append(avatar, info);
+
+    const right = mk('div', 'dash-recent-right');
+    right.append(
+      mk('span', 'dash-recent-amt', formatINR(entry.totalReceived || 0)),
+      mk('span', `dash-recent-mode ${modeChipClass(entry)}`, modeDisplayMeta(entry).label)
+    );
+
+    btn.append(left, right);
+    btn.addEventListener('click', () => {
+      openPaymentDetailsModal(entry, { sessions: state?.sessions || [] });
+    });
+    host.appendChild(btn);
   });
+
+  if (missingPhotoIds.length) {
+    loadStudentPhotos(missingPhotoIds, state.pendingResult?.studentsById || null)
+      .then(() => hydrateRecentAvatars())
+      .catch(() => {});
+  }
 }
 
 function computeAndRenderDashboard() {
@@ -679,11 +755,12 @@ function computeAndRenderDashboard() {
   });
 
   updateHeaderUi();
+  renderQuickActions(state.analytics);
   renderKpis(state.analytics);
   renderFeeHeadsAndBranches(state.analytics);
-  renderTrendAndModes(state.analytics);
-  renderRecentAndAgeing(state.analytics);
-  renderQuickLinks();
+  renderThreeDonuts(state.analytics);
+  renderTrend(state.analytics);
+  renderRecentPayments(state.analytics);
   paint();
 }
 
@@ -711,7 +788,7 @@ function bindEvents() {
     lineBtn?.classList.toggle('is-active', kind === 'line');
     barBtn?.classList.toggle('is-active', kind === 'bar');
     if (state.analytics) {
-      renderTrendAndModes(state.analytics);
+      renderTrend(state.analytics);
       paint();
     }
   };
@@ -775,7 +852,7 @@ export function mount({ profile, ctx } = {}) {
     destroyed: false
   };
 
-  renderQuickLinks();
+  renderQuickActions(null);
   updateHeaderUi();
   bindEvents();
   updateArchiveReminder();

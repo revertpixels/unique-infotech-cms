@@ -9,8 +9,8 @@ import {
   getDatePresetRange,
   toTitleCaseIfCaps,
   todayISO
-} from './report.service.js?v=1.8.182';
-import { isStudentEligibleForDues } from './payment.service.js?v=1.8.182';
+} from './report.service.js?v=1.8.183';
+import { isStudentEligibleForDues } from './payment.service.js?v=1.8.183';
 
 function toIsoDate(ts) {
   if (!ts) return '';
@@ -254,7 +254,7 @@ export function buildYouthDashboardData({
     pct: r.count > 0 ? Math.max(4, Math.round((r.count / maxBranchStu) * 100)) : 0
   }));
 
-  // Last 8 Recent Money Receipts sorted descending
+  // Last 5 Recent Money Receipts sorted descending
   const recentPayments = structEntries
     .filter((e) => !e.isPureWaiver && e.type !== 'WA' && Number(e.totalReceived || 0) > 0)
     .slice()
@@ -263,7 +263,7 @@ export function buildYouthDashboardData({
       Number(b.createdAtSec || 0) - Number(a.createdAtSec || 0) ||
       String(b.receiptNo || '').localeCompare(String(a.receiptNo || ''))
     ))
-    .slice(0, 8);
+    .slice(0, 5);
 
   return {
     effectiveBranchId,

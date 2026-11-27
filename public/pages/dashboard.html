@@ -6,7 +6,7 @@
   </section>
 
   <div id="dash-youth-content">
-    <!-- 1. HEADER -->
+    <!-- 3a. HEADER -->
     <header class="rc-page-head dash-head">
       <div class="dash-head-left">
         <div id="dash-greeting" class="rc-eyebrow">Welcome</div>
@@ -25,7 +25,7 @@
             <span id="dash-branch-locked-name"></span>
           </span>
         </div>
-        <a id="dash-btn-admission" href="#/students" class="rc-btn-primary">
+        <a id="dash-btn-admission" href="#/admissions?new=1" class="rc-btn-primary">
           <i data-lucide="user-plus" aria-hidden="true"></i>
           <span>New Admission</span>
         </a>
@@ -39,9 +39,12 @@
       </div>
     </header>
 
-    <div id="dash-archive-reminder" class="dash-reminder-wrap" hidden></div>
+    <!-- 3b. QUICK ACTIONS ROW (6 tiles in 1 row directly under header) -->
+    <section id="dash-quick-sec" class="dash-sec dash-quick-sec" aria-label="Quick Actions">
+      <div id="dash-quick-links" class="dash-quick-grid"></div>
+    </section>
 
-    <div id="dash-no-session" class="adm-notice warn" hidden>
+    <div id="dash-no-session" class="adm-notice warn dash-sec" hidden>
       <i data-lucide="calendar-x" aria-hidden="true"></i>
       <div>
         <strong>No active Youth session selected</strong>
@@ -49,7 +52,7 @@
       </div>
     </div>
 
-    <div id="dash-error" class="adm-notice danger" hidden>
+    <div id="dash-error" class="adm-notice danger dash-sec" hidden>
       <i data-lucide="alert-triangle" aria-hidden="true"></i>
       <div class="dash-err-body">
         <strong>Could not load Youth overview</strong>
@@ -62,8 +65,8 @@
     </div>
 
     <div id="dash-main">
-      <!-- 2. JOINED KPI STAT STRIPS (4 + 4) -->
-      <section class="dash-kpi-sec" aria-label="Youth Centre Key Metrics">
+      <!-- 3c. JOINED KPI STAT STRIPS (2 rows x 4) -->
+      <section class="dash-kpi-sec dash-sec" aria-label="Youth Centre Key Metrics">
         <div class="rc-stat-strip">
           <div class="rc-stat-cell">
             <span class="rc-stat-ic"><i data-lucide="users" aria-hidden="true"></i></span>
@@ -102,7 +105,7 @@
           </a>
         </div>
 
-        <div class="rc-stat-strip dash-strip-row2">
+        <div class="rc-stat-strip">
           <div class="rc-stat-cell">
             <span class="rc-stat-ic"><i data-lucide="calendar-check" aria-hidden="true"></i></span>
             <span class="rc-stat-label">Today's Collection</span>
@@ -142,51 +145,93 @@
         </div>
       </section>
 
-      <!-- 3. MAIN ROW: 2/3 Fee Head + 1/3 Students by Branch & Course -->
-      <section class="rc-row-2-1 rc-sec" aria-label="Fee Heads and Student Mix">
+      <!-- 3g. ARCHIVE REMINDER (full width directly above Row d) -->
+      <div id="dash-archive-reminder" class="dash-reminder-wrap dash-sec" hidden></div>
+
+      <!-- 3d. ROW (2/3 + 1/3): Collection by Fee Head | Students by Branch -->
+      <section class="rc-row-2-1 dash-sec dash-eq-row" aria-label="Fee Heads and Branch Enrollment">
         <div class="rc-card dash-card">
           <div class="rc-card-head">
             <div class="dash-card-title">
-              <i data-lucide="bar-chart-2" aria-hidden="true"></i>
+              <span class="dash-title-ic is-purple"><i data-lucide="bar-chart-2" aria-hidden="true"></i></span>
               <span>Collection by Fee Head</span>
             </div>
             <span id="dash-feehead-note" class="rc-meta-note">Session scope</span>
           </div>
-          <div class="rc-card-body">
+          <div class="rc-card-body dash-card-body-stretch">
             <div class="rc-trend-summary">
               <span id="dash-feehead-total" class="rc-trend-amt">—</span>
               <span id="dash-feehead-overdue-note" class="rc-trend-per"></span>
             </div>
-            <div id="dash-chart-feehead" class="dash-chart-body"></div>
+            <div id="dash-chart-feehead" class="dash-chart-body dash-chart-fill"></div>
           </div>
         </div>
 
         <div class="rc-card dash-card">
           <div class="rc-card-head">
             <div class="dash-card-title">
-              <i data-lucide="building-2" aria-hidden="true"></i>
+              <span class="dash-title-ic is-teal"><i data-lucide="building-2" aria-hidden="true"></i></span>
               <span>Students by Branch</span>
             </div>
             <span id="dash-branch-count-pill" class="rc-chip">0 branches</span>
           </div>
-          <div class="rc-card-body">
-            <div id="dash-branch-list"></div>
-            <div class="dash-card-divider"></div>
-            <div class="dash-subcard-head">
-              <span class="dash-subcard-title">Students by Course</span>
-              <span id="dash-course-count-note" class="rc-meta-note"></span>
-            </div>
-            <div id="dash-chart-stu-course" class="dash-chart-body"></div>
+          <div class="rc-card-body dash-card-body-stretch">
+            <div id="dash-branch-list" class="dash-branch-stretch"></div>
           </div>
         </div>
       </section>
 
-      <!-- 4. SECOND ROW: 2 Equal Cols (Collection Trend + Payment Mode) -->
-      <section class="rc-row-2 rc-sec" aria-label="Collection Trend and Payment Modes">
+      <!-- 3e. ROW (3 equal cols): Payment Mode | Overdue Ageing | Students by Course -->
+      <section class="dash-row-3 dash-sec dash-eq-row" aria-label="Payment Modes, Overdue Ageing, and Course Distribution">
+        <div class="rc-card dash-card">
+          <div class="rc-card-head">
+            <div class="dash-card-title">
+              <span class="dash-title-ic is-blue"><i data-lucide="credit-card" aria-hidden="true"></i></span>
+              <span>Collection by Payment Mode</span>
+            </div>
+            <span id="dash-mode-receipts" class="rc-meta-note"></span>
+          </div>
+          <div class="rc-card-body dash-card-body-stretch">
+            <div id="dash-chart-modes" class="dash-chart-body dash-donut-stack"></div>
+          </div>
+        </div>
+
+        <div class="rc-card dash-card">
+          <div class="rc-card-head">
+            <div class="dash-card-title">
+              <span class="dash-title-ic is-red"><i data-lucide="clock" aria-hidden="true"></i></span>
+              <span>Overdue Ageing</span>
+            </div>
+            <a href="#/pending" class="dash-head-link">
+              <span>View pending</span>
+              <i data-lucide="arrow-right" aria-hidden="true"></i>
+            </a>
+          </div>
+          <div class="rc-card-body dash-card-body-stretch">
+            <div id="dash-chart-ageing" class="dash-chart-body dash-donut-stack"></div>
+          </div>
+        </div>
+
+        <div class="rc-card dash-card">
+          <div class="rc-card-head">
+            <div class="dash-card-title">
+              <span class="dash-title-ic is-purple"><i data-lucide="layers" aria-hidden="true"></i></span>
+              <span>Students by Course</span>
+            </div>
+            <span id="dash-course-count-note" class="rc-meta-note"></span>
+          </div>
+          <div class="rc-card-body dash-card-body-stretch">
+            <div id="dash-chart-stu-course" class="dash-chart-body dash-donut-stack"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 3f. ROW (2/3 + 1/3): Collection Trend | Recent Payments (latest 5) -->
+      <section class="rc-row-2-1 dash-sec dash-eq-row" aria-label="Collection Trend and Recent Payments">
         <div class="rc-card dash-card dash-trend-card">
           <div class="rc-card-head">
             <div class="dash-card-title">
-              <i data-lucide="trending-up" aria-hidden="true"></i>
+              <span class="dash-title-ic is-teal"><i data-lucide="trending-up" aria-hidden="true"></i></span>
               <span>Collection Trend</span>
               <span id="dash-trend-badge" class="rc-chip">By month</span>
             </div>
@@ -195,31 +240,15 @@
               <button type="button" id="dash-trend-btn-bar" class="rc-seg-tab" data-kind="bar">Bar</button>
             </div>
           </div>
-          <div class="rc-card-body">
-            <div id="dash-chart-trend" class="dash-chart-body"></div>
+          <div class="rc-card-body dash-card-body-stretch dash-chart-center">
+            <div id="dash-chart-trend" class="dash-chart-body dash-chart-fill"></div>
           </div>
         </div>
 
         <div class="rc-card dash-card">
           <div class="rc-card-head">
             <div class="dash-card-title">
-              <i data-lucide="credit-card" aria-hidden="true"></i>
-              <span>Collection by Payment Mode</span>
-            </div>
-            <span id="dash-mode-receipts" class="rc-meta-note"></span>
-          </div>
-          <div class="rc-card-body">
-            <div id="dash-chart-modes" class="dash-chart-body"></div>
-          </div>
-        </div>
-      </section>
-
-      <!-- 5. THIRD ROW: 2 Equal Cols (Recent Payments + Overdue Ageing) -->
-      <section class="rc-row-2 rc-sec" aria-label="Recent Payments and Overdue Ageing">
-        <div class="rc-card dash-card">
-          <div class="rc-card-head">
-            <div class="dash-card-title">
-              <i data-lucide="history" aria-hidden="true"></i>
+              <span class="dash-title-ic is-green"><i data-lucide="history" aria-hidden="true"></i></span>
               <span>Recent Payments</span>
             </div>
             <a href="#/payments" class="dash-head-link">
@@ -229,36 +258,12 @@
           </div>
           <div id="dash-recent-list" class="dash-recent-list"></div>
         </div>
-
-        <div class="rc-card dash-card">
-          <div class="rc-card-head">
-            <div class="dash-card-title">
-              <i data-lucide="clock" aria-hidden="true"></i>
-              <span>Overdue Ageing</span>
-            </div>
-            <a href="#/pending" class="dash-head-link">
-              <span>View pending</span>
-              <i data-lucide="arrow-right" aria-hidden="true"></i>
-            </a>
-          </div>
-          <div class="rc-card-body">
-            <div id="dash-chart-ageing" class="dash-chart-body"></div>
-          </div>
-        </div>
-      </section>
-
-      <!-- 6. QUICK LINKS -->
-      <section id="dash-quick-sec" class="rc-sec dash-quick-sec" aria-label="Quick Links">
-        <div class="dash-quick-head">
-          <span class="dash-subcard-title">Quick links</span>
-        </div>
-        <div id="dash-quick-links" class="dash-quick-links"></div>
       </section>
     </div>
   </div>
 </div>
 
-<!-- Unique Kids dashboard placeholder (preserved until Unique Kids dashboard is requested) -->
+<!-- Unique Kids dashboard placeholder (preserved untouched) -->
 <section id="dash-kids-shell" class="page" hidden>
   <div class="page-head">
     <h2 id="dash-kids-greeting"></h2>

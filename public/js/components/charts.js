@@ -230,7 +230,9 @@ export function renderDonutChart(host, {
     const dot = htmlEl('span', 'uich-leg-dot');
     dot.style.background = s.color;
     const lbl = htmlEl('span', 'uich-leg-label', s.label);
+    lbl.title = s.label;
     const right = htmlEl('span', 'uich-leg-val', `${valueFormatter(s.value)} (${pct}%)`);
+    li.title = `${s.label} — ${valueFormatter(s.value)} (${pct}%)`;
     li.append(dot, lbl, right);
     li.addEventListener('mouseenter', (ev) => {
       sliceEls.forEach((el, j) => {

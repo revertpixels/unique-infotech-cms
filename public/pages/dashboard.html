@@ -1,14 +1,274 @@
-<section class="page">
+<div id="dash-youth-shell" class="page dash-wrap rc-scope" hidden>
+  <section id="dash-access-denied" class="empty-state" hidden>
+    <i data-lucide="shield-alert" aria-hidden="true"></i>
+    <h3>Restricted Page</h3>
+    <p id="dash-denied-desc">This dashboard is available only for authorised Youth Centre staff.</p>
+  </section>
+
+  <div id="dash-youth-content">
+    <!-- 1. HEADER -->
+    <header class="rc-page-head dash-head">
+      <div class="dash-head-left">
+        <div id="dash-greeting" class="rc-eyebrow">Welcome</div>
+        <div class="dash-title-row">
+          <h2 class="rc-page-title">Youth Centre Overview</h2>
+          <span id="dash-role-chip" class="rc-chip dash-role-chip" hidden></span>
+        </div>
+        <p id="dash-subtitle" class="rc-page-sub">Loading session overview...</p>
+      </div>
+
+      <div class="rc-head-actions dash-head-actions">
+        <div id="dash-branch-filter-wrap" class="dash-branch-filter" hidden>
+          <div id="dash-branch-host" class="dash-branch-host"></div>
+          <span id="dash-branch-locked" class="dash-branch-locked" hidden>
+            <i data-lucide="lock" aria-hidden="true"></i>
+            <span id="dash-branch-locked-name"></span>
+          </span>
+        </div>
+        <a id="dash-btn-admission" href="#/students" class="rc-btn-primary">
+          <i data-lucide="user-plus" aria-hidden="true"></i>
+          <span>New Admission</span>
+        </a>
+        <a id="dash-btn-collect" href="#/pay-fees" class="rc-btn-outline">
+          <i data-lucide="wallet" aria-hidden="true"></i>
+          <span>Collect Fees</span>
+        </a>
+        <button type="button" id="dash-refresh" class="rc-icon-btn" aria-label="Refresh dashboard" title="Refresh dashboard">
+          <i data-lucide="refresh-cw" aria-hidden="true"></i>
+        </button>
+      </div>
+    </header>
+
+    <div id="dash-archive-reminder" class="dash-reminder-wrap" hidden></div>
+
+    <div id="dash-no-session" class="adm-notice warn" hidden>
+      <i data-lucide="calendar-x" aria-hidden="true"></i>
+      <div>
+        <strong>No active Youth session selected</strong>
+        <p>Select a session in the top toolbar to view live Youth Centre overview metrics.</p>
+      </div>
+    </div>
+
+    <div id="dash-error" class="adm-notice danger" hidden>
+      <i data-lucide="alert-triangle" aria-hidden="true"></i>
+      <div class="dash-err-body">
+        <strong>Could not load Youth overview</strong>
+        <p id="dash-error-msg">Permission or network error while reading Youth Centre records.</p>
+      </div>
+      <button type="button" id="dash-retry" class="rc-btn-outline">
+        <i data-lucide="refresh-cw" aria-hidden="true"></i>
+        <span>Retry</span>
+      </button>
+    </div>
+
+    <div id="dash-main">
+      <!-- 2. JOINED KPI STAT STRIPS (4 + 4) -->
+      <section class="dash-kpi-sec" aria-label="Youth Centre Key Metrics">
+        <div class="rc-stat-strip">
+          <div class="rc-stat-cell">
+            <span class="rc-stat-ic"><i data-lucide="users" aria-hidden="true"></i></span>
+            <span class="rc-stat-label">Active Students</span>
+            <div id="dash-kpi-active" class="rc-stat-val">—</div>
+            <div class="rc-stat-meta">
+              <span id="dash-kpi-active-sub" class="rc-chip">Loading...</span>
+            </div>
+          </div>
+
+          <div class="rc-stat-cell">
+            <span class="rc-stat-ic"><i data-lucide="user-plus" aria-hidden="true"></i></span>
+            <span class="rc-stat-label">New Admissions · Session</span>
+            <div id="dash-kpi-admissions" class="rc-stat-val">—</div>
+            <div class="rc-stat-meta">
+              <span id="dash-kpi-admissions-sub" class="rc-chip">Loading...</span>
+            </div>
+          </div>
+
+          <div class="rc-stat-cell">
+            <span class="rc-stat-ic"><i data-lucide="indian-rupee" aria-hidden="true"></i></span>
+            <span class="rc-stat-label">Fee Collection · Session</span>
+            <div id="dash-kpi-collected" class="rc-stat-val">—</div>
+            <div class="rc-stat-meta">
+              <span id="dash-kpi-collected-sub" class="rc-chip">Loading...</span>
+            </div>
+          </div>
+
+          <a id="dash-kpi-overdue-link" href="#/pending" class="rc-stat-cell dash-stat-link" title="View pending and overdue students">
+            <span class="rc-stat-ic"><i data-lucide="alert-triangle" aria-hidden="true"></i></span>
+            <span class="rc-stat-label">Overdue Fees</span>
+            <div id="dash-kpi-overdue" class="rc-stat-val is-danger">—</div>
+            <div class="rc-stat-meta">
+              <span id="dash-kpi-overdue-sub" class="rc-chip is-danger">Loading...</span>
+            </div>
+          </a>
+        </div>
+
+        <div class="rc-stat-strip dash-strip-row2">
+          <div class="rc-stat-cell">
+            <span class="rc-stat-ic"><i data-lucide="calendar-check" aria-hidden="true"></i></span>
+            <span class="rc-stat-label">Today's Collection</span>
+            <div id="dash-kpi-today" class="rc-stat-val">—</div>
+            <div class="rc-stat-meta">
+              <span id="dash-kpi-today-sub" class="rc-chip">Loading...</span>
+            </div>
+          </div>
+
+          <div class="rc-stat-cell">
+            <span class="rc-stat-ic"><i data-lucide="calendar-range" aria-hidden="true"></i></span>
+            <span class="rc-stat-label">This Month's Collection</span>
+            <div id="dash-kpi-month" class="rc-stat-val">—</div>
+            <div class="rc-stat-meta">
+              <span id="dash-kpi-month-sub" class="rc-chip">Loading...</span>
+            </div>
+          </div>
+
+          <div class="rc-stat-cell">
+            <span class="rc-stat-ic"><i data-lucide="wallet" aria-hidden="true"></i></span>
+            <span class="rc-stat-label">Outstanding Dues</span>
+            <div id="dash-kpi-outstanding" class="rc-stat-val">—</div>
+            <div class="rc-stat-meta">
+              <span id="dash-kpi-outstanding-sub" class="rc-chip">Loading...</span>
+            </div>
+          </div>
+
+          <div class="rc-stat-cell">
+            <span class="rc-stat-ic"><i data-lucide="percent" aria-hidden="true"></i></span>
+            <span class="rc-stat-label">Collection Rate</span>
+            <div id="dash-kpi-rate" class="rc-stat-val">—</div>
+            <div class="dash-rate-track" aria-hidden="true"><i id="dash-kpi-rate-bar"></i></div>
+            <div class="rc-stat-meta">
+              <span id="dash-kpi-rate-sub" class="rc-chip">Loading...</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 3. MAIN ROW: 2/3 Fee Head + 1/3 Students by Branch & Course -->
+      <section class="rc-row-2-1 rc-sec" aria-label="Fee Heads and Student Mix">
+        <div class="rc-card dash-card">
+          <div class="rc-card-head">
+            <div class="dash-card-title">
+              <i data-lucide="bar-chart-2" aria-hidden="true"></i>
+              <span>Collection by Fee Head</span>
+            </div>
+            <span id="dash-feehead-note" class="rc-meta-note">Session scope</span>
+          </div>
+          <div class="rc-card-body">
+            <div class="rc-trend-summary">
+              <span id="dash-feehead-total" class="rc-trend-amt">—</span>
+              <span id="dash-feehead-overdue-note" class="rc-trend-per"></span>
+            </div>
+            <div id="dash-chart-feehead" class="dash-chart-body"></div>
+          </div>
+        </div>
+
+        <div class="rc-card dash-card">
+          <div class="rc-card-head">
+            <div class="dash-card-title">
+              <i data-lucide="building-2" aria-hidden="true"></i>
+              <span>Students by Branch</span>
+            </div>
+            <span id="dash-branch-count-pill" class="rc-chip">0 branches</span>
+          </div>
+          <div class="rc-card-body">
+            <div id="dash-branch-list"></div>
+            <div class="dash-card-divider"></div>
+            <div class="dash-subcard-head">
+              <span class="dash-subcard-title">Students by Course</span>
+              <span id="dash-course-count-note" class="rc-meta-note"></span>
+            </div>
+            <div id="dash-chart-stu-course" class="dash-chart-body"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 4. SECOND ROW: 2 Equal Cols (Collection Trend + Payment Mode) -->
+      <section class="rc-row-2 rc-sec" aria-label="Collection Trend and Payment Modes">
+        <div class="rc-card dash-card dash-trend-card">
+          <div class="rc-card-head">
+            <div class="dash-card-title">
+              <i data-lucide="trending-up" aria-hidden="true"></i>
+              <span>Collection Trend</span>
+              <span id="dash-trend-badge" class="rc-chip">By month</span>
+            </div>
+            <div class="rc-seg-tabs" role="group" aria-label="Trend chart style">
+              <button type="button" id="dash-trend-btn-line" class="rc-seg-tab is-active" data-kind="line">Line</button>
+              <button type="button" id="dash-trend-btn-bar" class="rc-seg-tab" data-kind="bar">Bar</button>
+            </div>
+          </div>
+          <div class="rc-card-body">
+            <div id="dash-chart-trend" class="dash-chart-body"></div>
+          </div>
+        </div>
+
+        <div class="rc-card dash-card">
+          <div class="rc-card-head">
+            <div class="dash-card-title">
+              <i data-lucide="credit-card" aria-hidden="true"></i>
+              <span>Collection by Payment Mode</span>
+            </div>
+            <span id="dash-mode-receipts" class="rc-meta-note"></span>
+          </div>
+          <div class="rc-card-body">
+            <div id="dash-chart-modes" class="dash-chart-body"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 5. THIRD ROW: 2 Equal Cols (Recent Payments + Overdue Ageing) -->
+      <section class="rc-row-2 rc-sec" aria-label="Recent Payments and Overdue Ageing">
+        <div class="rc-card dash-card">
+          <div class="rc-card-head">
+            <div class="dash-card-title">
+              <i data-lucide="history" aria-hidden="true"></i>
+              <span>Recent Payments</span>
+            </div>
+            <a href="#/payments" class="dash-head-link">
+              <span>View all</span>
+              <i data-lucide="arrow-right" aria-hidden="true"></i>
+            </a>
+          </div>
+          <div id="dash-recent-list" class="dash-recent-list"></div>
+        </div>
+
+        <div class="rc-card dash-card">
+          <div class="rc-card-head">
+            <div class="dash-card-title">
+              <i data-lucide="clock" aria-hidden="true"></i>
+              <span>Overdue Ageing</span>
+            </div>
+            <a href="#/pending" class="dash-head-link">
+              <span>View pending</span>
+              <i data-lucide="arrow-right" aria-hidden="true"></i>
+            </a>
+          </div>
+          <div class="rc-card-body">
+            <div id="dash-chart-ageing" class="dash-chart-body"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 6. QUICK LINKS -->
+      <section id="dash-quick-sec" class="rc-sec dash-quick-sec" aria-label="Quick Links">
+        <div class="dash-quick-head">
+          <span class="dash-subcard-title">Quick links</span>
+        </div>
+        <div id="dash-quick-links" class="dash-quick-links"></div>
+      </section>
+    </div>
+  </div>
+</div>
+
+<!-- Unique Kids dashboard placeholder (preserved until Unique Kids dashboard is requested) -->
+<section id="dash-kids-shell" class="page" hidden>
   <div class="page-head">
-    <h2 id="dash-greeting"></h2>
+    <h2 id="dash-kids-greeting"></h2>
     <p class="text-mute">Your overview appears here.</p>
   </div>
-  <div id="dash-archive-reminder" hidden></div>
   <div class="kpi-strip">
-    <div class="kpi"><span class="kpi-label">Students</span><span class="kpi-value" id="dash-kpi-students">—</span></div>
-    <div class="kpi"><span class="kpi-label">Collected today</span><span class="kpi-value" id="dash-kpi-collected">—</span></div>
-    <div class="kpi"><span class="kpi-label">Dues pending</span><span class="kpi-value" id="dash-kpi-dues">—</span></div>
-    <div class="kpi"><span class="kpi-label">Overdue</span><span class="kpi-value" id="dash-kpi-overdue">—</span></div>
+    <div class="kpi"><span class="kpi-label">Students</span><span class="kpi-value" id="dash-kids-students">—</span></div>
+    <div class="kpi"><span class="kpi-label">Collected today</span><span class="kpi-value" id="dash-kids-collected">—</span></div>
+    <div class="kpi"><span class="kpi-label">Dues pending</span><span class="kpi-value" id="dash-kids-dues">—</span></div>
+    <div class="kpi"><span class="kpi-label">Overdue</span><span class="kpi-value" id="dash-kids-overdue">—</span></div>
   </div>
   <div class="card">
     <div class="card-body">

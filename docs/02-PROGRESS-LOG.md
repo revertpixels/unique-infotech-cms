@@ -39,6 +39,39 @@
 
 ---
 
+### [2026-11-27 12:15] Version 1.8.181 — Phase 6 · Youth Centre Dashboard Rebuild (`#/dashboard`) Matching Approved Reports Style
+
+**What was built:**
+- **Youth Dashboard Data Layer (`public/js/services/report.service.js`)**:
+  - Added read-only `buildYouthDashboardData()` built directly over `buildYouthReportsData()`, guaranteeing exact mathematical parity with Reports, Payment History, and Pending & Overdue for the active Youth session and branch filter.
+  - Added Today's & This Month's collection metrics (`todayCollection`, `monthCollection`), stacked Fee Head breakdown (`Admission`, `Inst 1`..`Inst N`, `Exam`, `Material` showing Collected vs Overdue, ignoring synthetic waiver `installmentNo: 99`), `Students by Branch`, and last `8` sorted Recent Payments.
+  - Enforced `branch_head` isolation to `profile.branchId` across queries and in-memory analytics.
+- **Shared Payment Details Modal (`public/js/components/payment-details-modal.js`)**:
+  - Added reusable `openPaymentDetailsModal()` using `openPopup`, `buildPaymentDetailsModel`, `getCachedBillForEntry`, and `getCachedStudentPhoto` so clicking any Recent Payment on `#/dashboard` opens the full Payment Details modal (with student photo, status badge, Copy, and Open Receipt action) without modifying `payments.page.js`.
+- **Youth Dashboard UI (`public/pages/dashboard.html`, `public/js/pages/dashboard.page.js`, `public/css/pages/dashboard.css`)**:
+  - Added IST greeting (`Good morning/afternoon/evening, <Name>`), dynamic role chip (`getRoleTitle`), `<Session> · X running batches across Y branches` subtitle, `New Admission` + `Collect Fees` + icon-only `Refresh` actions, and Super Admin branch filter (locked branch indicator for Branch Heads).
+  - Preserved `loadDashboardArchiveReminder()` cleanly below the header and kept Unique Kids (`#dash-kids-shell`) completely untouched in `school` mode.
+  - Added joined `4 + 4` KPI stat strips (`Active Students`, `New Admissions`, `Fee Collection`, red clickable `Overdue Fees`, `Today's Collection`, `This Month's Collection`, `Outstanding Dues`, `Collection Rate` with thin square progress bar), `2/3 + 1/3` main row (`Collection by Fee Head` stacked bar chart + `Students by Branch` bars & `Students by Course` donut), second row (`Collection Trend` Line/Bar toggle + `Collection by Payment Mode` donut), third row (`Recent Payments` last 8 with hydrated avatars + `Overdue Ageing` donut), and role-filtered `Quick links` row with `6px` flat cards and compact SVGs (`<= 235px`).
+
+**Why:**
+- Deliver an instant, read-only, calm executive Youth Centre overview matching the approved `v1.8.180` Reports style while sharing cached Firestore reads (`window.APP_CACHE.financialReports`) cleanly between Dashboard and Reports.
+
+**Files touched:**
+- CREATED: `public/js/components/payment-details-modal.js`
+- MODIFIED: `public/js/services/report.service.js`, `public/pages/dashboard.html`, `public/js/pages/dashboard.page.js`, `public/css/pages/dashboard.css`, `docs/02-PROGRESS-LOG.md` (and `bump-version.js 1.8.181` across `public/`)
+
+**Firestore changes:**
+- None (strictly read-only; no fee maths, receipt numbering, or security rules altered).
+
+**Tested on:**
+- Chrome Desktop (`1440x900`): ✅ Verified Super Admin, Branch Head (locked branch), School Head (`Unique Kids` untouched), Trend toggle, Payment Details modal, Overdue -> Pending link, Reports <-> Dashboard zero duplicate financial reads, and exact ₹ total parity.
+- Mobile (`390x844`): ✅ Verified responsive single-column stack with `scrollWidth === 390` (0 horizontal overflow).
+- Edge cases checked: Waiver sentinel `installmentNo: 99` excluded from Fee Head bar columns; Branch Head `branchFilter` bypass ignored; empty-session state & warm-cache navigation without duplicate payment/student queries.
+
+**Next task:**
+- Await review/approval before proceeding to Unique Kids dashboard updates when requested.
+---
+
 ### [2026-11-27 11:48] Version 1.8.180 — Phase 6 · Youth Centre Reports Partial Revert (Keep Joined KPI Strips, Smaller 6px Card Radius, Header/Filter Bar & Square Compact Charts + Restore Multi-Colour v1.8.178 Visuals)
 
 **What was built:**

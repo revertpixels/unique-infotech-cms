@@ -1,16 +1,16 @@
 // payments.page.js — Payment History page for Youth Centre (#/payments) & Unique Kids (#/school-payments).
 // Follows Rule 1 (global toolbar session only, plain-text subtitle) & Rule 2 (shared [ Branch -> Batch ] box).
 
-import { createSelect } from '../components/ui-select.js?v=1.8.180';
-import { createBranchBatchFilter, clearPersistedBranchBatchFilters } from '../components/branch-batch-filter.js?v=1.8.180';
-import { openPopup } from '../components/modal.js?v=1.8.180';
-import { showToast } from '../components/toast.js?v=1.8.180';
-import { renderPager, renderEmptyTableState, PAGE_SIZE } from '../components/list-page.js?v=1.8.180';
+import { createSelect } from '../components/ui-select.js?v=1.8.181';
+import { createBranchBatchFilter, clearPersistedBranchBatchFilters } from '../components/branch-batch-filter.js?v=1.8.181';
+import { openPopup } from '../components/modal.js?v=1.8.181';
+import { showToast } from '../components/toast.js?v=1.8.181';
+import { renderPager, renderEmptyTableState, PAGE_SIZE } from '../components/list-page.js?v=1.8.181';
 import {
   getCachedSessions,
   loadSessions,
   getSelectedSession
-} from '../core/sessions.js?v=1.8.180';
+} from '../core/sessions.js?v=1.8.181';
 import {
   ensureReferenceData,
   scopeReferenceDataByCtx,
@@ -37,9 +37,9 @@ import {
   formatINR,
   fmtDate,
   todayISO
-} from '../services/report.service.js?v=1.8.180';
-import { formatPersonName, initials } from '../utils/formatter.js?v=1.8.180';
-import { resolveUserDisplay } from '../services/user-directory.service.js?v=1.8.180';
+} from '../services/report.service.js?v=1.8.181';
+import { formatPersonName, initials } from '../utils/formatter.js?v=1.8.181';
+import { resolveUserDisplay } from '../services/user-directory.service.js?v=1.8.181';
 
 let state = null;
 let sessionListener = null;

@@ -2,9 +2,9 @@
 // Matching reference-templates/Ui.html.
 // Shared by the on-screen HTML sheet and the vector PDF builder.
 
-import { formatDateIN, formatPersonName, formatGenderDisplay } from './formatter.js?v=1.8.191';
-import { courseFeeOf, discountOf } from './fees.js?v=1.8.191';
-import { getStudentDocSrc, getStudentPhotoSrc } from './student-media.js?v=1.8.191';
+import { formatDateIN, formatPersonName, formatGenderDisplay } from './formatter.js?v=1.8.192';
+import { courseFeeOf, discountOf } from './fees.js?v=1.8.192';
+import { getStudentDocSrc, getStudentPhotoSrc } from './student-media.js?v=1.8.192';
 
 // Format currency as "Rs. 1,000.00"
 export function fmtRs(n) {

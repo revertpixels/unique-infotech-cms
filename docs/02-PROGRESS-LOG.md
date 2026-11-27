@@ -39,6 +39,44 @@
 
 ---
 
+### [2026-11-27 18:50] Version 1.8.192 — Live Data Backfill CLI, Pre-Backfill Safety Nets & Production Deploy Plan (Local Only)
+
+**What was built:**
+- **Admin SDK backfill CLI (`tools/backfill-v1.8.192.mjs`)**:
+  - Scans every student (`ctx: 'youth'` and `ctx: 'school'`, all sessions) and recomputes from `students/{id}/payment`: `moneyCollected`, `paidAmount`, `totalPaid`, `balanceDue` (strictly course fee types `AD`/`ADM`/`ADMISSION`/`IN`/`INST`/`INSTALLMENT`/`FULL` with `FULL`+`AD` dedup for Youth; admission payment handling for Kids `payment/payment` docs), and backfills `updatedAt` when missing (`createdAt` or `serverTimestamp()`).
+  - Default `--dry-run` mode writes `0` documents and exports `review/backfill-dryrun.csv` (`studentId,branch,session,field,old value,new value,difference`) plus summary counts per field and net rupee differences per branch.
+  - `--apply` commits batched updates (max `400` writes/batch), skips unchanged docs (100% idempotent on re-run), and writes `review/backfill-applied.csv`.
+- **Pre-backfill Dashboard & Delta-Sync Safety Nets (`public/js/services/report.service.js`, `public/js/pages/dashboard.page.js`, `firestore.indexes.json`)**:
+  - Fixed Firestore multi-field aggregation interaction in `loadYouthDashboardServerAggregates()`: separated `getCountFromServer(baseQ)`, `sum('feeTotal')`/`sum('paidAmount')`, `sum('moneyCollected')`, and `getCountFromServer(where('moneyCollected', '>=', 0))` (so un-backfilled docs lacking `moneyCollected` never undercount `totalCount`/`feeSum`/`paidSum`). When `moneyDocsCount !== totalCount`, sets `missingMoneyCollected: true`, `hasMoneySum: false`, `hasCurrencySums: false`.
+  - Updated `applyEarlyServerAggregates` and `applyEarlyStudentSnapshot` in `dashboard.page.js` so whenever `missingMoneyCollected` is detected on server counts or streamed student docs, monetary KPIs (`Fee Collection`, `Collection Rate`) wait for / fall back cleanly to ledger-computed totals (`buildYouthDashboardData`).
+  - Updated `syncYouthStudentsDelta()` to treat any student doc missing `updatedAt` in cache (or on server when counts differ) as changed and re-fetch it (1–25 docs via `getDoc`; >25 docs via full refresh), ensuring un-backfilled docs never go stale under `updatedAt > sinceTs`.
+  - Added 2 composite `students` indexes (`(ctx, sessionId, moneyCollected)`, `(ctx, branchId, sessionId, moneyCollected)`) to `firestore.indexes.json`.
+- **Deploy & Rollback Runbook (`review/v1.8.192-deploy-plan.md`, gitignored)**:
+  - Documented offline deployment sequence (`gcloud firestore export` → `firestore:indexes` wait `Enabled` → `firestore:rules` → backfill `--apply` → `hosting` → post-deploy smoke checklist + per-step rollback commands). Summary doc (`stats/{ctx}_{sessionId}_{branchId}`) remains design-only per instruction.
+
+**Why:**
+- Provide a safe, auditable, idempotent backfill path for live production documents before rollout while ensuring the v1.8.192 frontend never displays wrong early aggregate numbers or skips legacy documents during the transition window prior to backfill.
+
+**Files touched (committed locally only, NOT deployed or pushed):**
+- CREATED: `tools/backfill-v1.8.192.mjs` (plus gitignored `review/v1.8.192-deploy-plan.md`).
+- MODIFIED: `firestore.indexes.json`, `public/js/services/report.service.js`, `public/js/pages/dashboard.page.js`, `docs/02-PROGRESS-LOG.md` (+ `bump-version.js 1.8.192` across 54 files).
+
+**Firestore changes (UN-DEPLOYED — awaits user approval):**
+- Indexes added to `firestore.indexes.json`: `(ctx, sessionId, moneyCollected)`, `(ctx, branchId, sessionId, moneyCollected)`.
+- Backfill NOT executed against live Firestore (`--dry-run` command provided for user execution first).
+
+**Tested on (all 11 suites run after final v1.8.192 version bump):**
+- `check-imports.js` & `node --check`: ✅ 114 files, 424 imports, 369 exports, 0 errors.
+- `run-tests.mjs`: ✅ Passed (includes pre-backfill missing-`moneyCollected` & missing-`updatedAt` safety-net assertions + 1,200-student parity).
+- Emulator Backfill & Safety Net (`scratch/verify-backfill-emulator.mjs`, 425 seeded Youth + Kids legacy docs): ✅ `--dry-run` (`0` writes, 424 flagged), `--apply` (`2` batches, fixed `EX` inflation, `FULL+AD` dedup, waivers, Kids payment, `updatedAt`), idempotent re-run (`0` writes), pre-backfill Dashboard fallback (`ledgerFeeCollection: 425900` vs partial `1600`), delta sync on missing `updatedAt` (`phone` updated), post-backfill server `moneySum === 425900`.
+- Emulator Query/Rules (`verify-emulator-runner.mjs`, 1k/4k): ✅ Passed (Super Admin + Branch Head + 5 negative checks).
+- 2-Tab Multi-Tab Logout (`verify-multitab-logout.mjs`): ✅ Passed (`0` IDB docs after logout; deferred boot wipe verified).
+- Scale Benchmark (`bench-perf.mjs`): ✅ Fast 4G second opens `0–5` reads (`29–173ms`); Dashboard KPIs `1,077ms` (`25` reads), Pending `530ms` -> `105ms` (`0` reads), History `602ms` -> `133ms` (`4` reads), Reports `1,684ms` -> `173ms` (`0` reads).
+- Regression suites (`verify-router-regression.mjs`, `verify-dashboard.mjs`, `verify-reports.mjs`, `verify-archives.mjs`, `verify-auth-profile.mjs`, `verify-qa-189.mjs`): ✅ All passed cleanly.
+- Deployed: ❌ NO (local commit only; do NOT deploy/push until green flag).
+
+---
+
 ### [2026-11-27 16:00] Version 1.8.191 — Production-Safety Checks: Real Emulator Rules/Indexes, Delta Sync (0–2 Reads), Lookback Gap, Multi-Tab Logout & KPI Parity (Local Only)
 
 **What was built:**

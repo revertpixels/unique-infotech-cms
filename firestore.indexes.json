@@ -113,6 +113,25 @@
         { "fieldPath": "branchId", "order": "ASCENDING" },
         { "fieldPath": "phone", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "students",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "ctx", "order": "ASCENDING" },
+        { "fieldPath": "sessionId", "order": "ASCENDING" },
+        { "fieldPath": "moneyCollected", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "students",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "ctx", "order": "ASCENDING" },
+        { "fieldPath": "branchId", "order": "ASCENDING" },
+        { "fieldPath": "sessionId", "order": "ASCENDING" },
+        { "fieldPath": "moneyCollected", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": [

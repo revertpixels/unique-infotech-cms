@@ -15,23 +15,23 @@ import {
   arrayUnion,
   addDoc
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.191';
-import { registerDirty, confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.191';
-import { buildStats, buildToolbar, renderPager, renderEmptyTableState, PAGE_SIZE } from '../components/list-page.js?v=1.8.191';
-import { createSelect } from '../components/ui-select.js?v=1.8.191';
-import { createBranchBatchFilter } from '../components/branch-batch-filter.js?v=1.8.191';
-import { openMenu } from '../components/ui-menu.js?v=1.8.191';
-import { confirmDialog } from '../components/ui-confirm.js?v=1.8.191';
-import { openPopup } from '../components/modal.js?v=1.8.191';
-import { createDatePicker } from '../components/ui-datepicker.js?v=1.8.191';
-import { getSelectedSessionId, getSelectedSession, getCachedSessions, loadSessions, hasFreshSessionsCache, todayISO } from '../core/sessions.js?v=1.8.191';
-import { firstInstallmentOf, admissionState, sessionLabel, installmentSchedule, batchAllowsCourse, batchCourseLabel, isCourseActive } from '../utils/session-rules.js?v=1.8.191';
-import { formatINR, formatDateIN, formatPersonName, formatGenderDisplay, initials } from '../utils/formatter.js?v=1.8.191';
-import { validatePhone, validateEmail, validateDOB, validateName, validateRequired } from '../utils/validator.js?v=1.8.191';
-import { listStudentsRaw, checkDuplicatePhone, readStudentId, readReceiptNo, writeCounter, createStudentWithDocs, updateStudentWithDocs, updateStudent, deleteStudent } from '../services/admission.service.js?v=1.8.191';
-import { feeTotal, courseFeeOf, discountOf } from '../utils/fees.js?v=1.8.191';
-import { compressTo100KB, readAsDataURL, blobToDataURL, isImageFile, formatBytes } from '../utils/image-compress.js?v=1.8.191';
-import { fetchStudentPayments, calculateStudentFinancials, buildReceiptMenuItems } from '../services/payment.service.js?v=1.8.191';
+import { showToast } from '../components/toast.js?v=1.8.192';
+import { registerDirty, confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.192';
+import { buildStats, buildToolbar, renderPager, renderEmptyTableState, PAGE_SIZE } from '../components/list-page.js?v=1.8.192';
+import { createSelect } from '../components/ui-select.js?v=1.8.192';
+import { createBranchBatchFilter } from '../components/branch-batch-filter.js?v=1.8.192';
+import { openMenu } from '../components/ui-menu.js?v=1.8.192';
+import { confirmDialog } from '../components/ui-confirm.js?v=1.8.192';
+import { openPopup } from '../components/modal.js?v=1.8.192';
+import { createDatePicker } from '../components/ui-datepicker.js?v=1.8.192';
+import { getSelectedSessionId, getSelectedSession, getCachedSessions, loadSessions, hasFreshSessionsCache, todayISO } from '../core/sessions.js?v=1.8.192';
+import { firstInstallmentOf, admissionState, sessionLabel, installmentSchedule, batchAllowsCourse, batchCourseLabel, isCourseActive } from '../utils/session-rules.js?v=1.8.192';
+import { formatINR, formatDateIN, formatPersonName, formatGenderDisplay, initials } from '../utils/formatter.js?v=1.8.192';
+import { validatePhone, validateEmail, validateDOB, validateName, validateRequired } from '../utils/validator.js?v=1.8.192';
+import { listStudentsRaw, checkDuplicatePhone, readStudentId, readReceiptNo, writeCounter, createStudentWithDocs, updateStudentWithDocs, updateStudent, deleteStudent } from '../services/admission.service.js?v=1.8.192';
+import { feeTotal, courseFeeOf, discountOf } from '../utils/fees.js?v=1.8.192';
+import { compressTo100KB, readAsDataURL, blobToDataURL, isImageFile, formatBytes } from '../utils/image-compress.js?v=1.8.192';
+import { fetchStudentPayments, calculateStudentFinancials, buildReceiptMenuItems } from '../services/payment.service.js?v=1.8.192';
 import {
   ensureReferenceData,
   getCachedReferenceData,
@@ -42,11 +42,11 @@ import {
   scheduleDelayedSkeleton,
   loadStudentPhotos,
   getCachedStudentPhoto
-} from '../services/report.service.js?v=1.8.191';
-import { getStudentPhotoSrc, getStudentDocSrc, getStudentDocMime } from '../utils/student-media.js?v=1.8.191';
-import { playPaymentSuccessSound } from '../utils/sound.js?v=1.8.191';
-import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.191';
-import { APP_CACHE } from '../core/app.js?v=1.8.191';
+} from '../services/report.service.js?v=1.8.192';
+import { getStudentPhotoSrc, getStudentDocSrc, getStudentDocMime } from '../utils/student-media.js?v=1.8.192';
+import { playPaymentSuccessSound } from '../utils/sound.js?v=1.8.192';
+import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.192';
+import { APP_CACHE } from '../core/app.js?v=1.8.192';
 
 const COL = 'students';
 

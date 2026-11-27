@@ -1,17 +1,17 @@
 // payments.page.js — Payment History page for Youth Centre (#/payments) & Unique Kids (#/school-payments).
 // Follows Rule 1 (global toolbar session only, plain-text subtitle) & Rule 2 (shared [ Branch -> Batch ] box).
 
-import { createSelect } from '../components/ui-select.js?v=1.8.191';
-import { createBranchBatchFilter, clearPersistedBranchBatchFilters } from '../components/branch-batch-filter.js?v=1.8.191';
-import { openPopup } from '../components/modal.js?v=1.8.191';
-import { showToast } from '../components/toast.js?v=1.8.191';
-import { renderPager, renderEmptyTableState, PAGE_SIZE } from '../components/list-page.js?v=1.8.191';
+import { createSelect } from '../components/ui-select.js?v=1.8.192';
+import { createBranchBatchFilter, clearPersistedBranchBatchFilters } from '../components/branch-batch-filter.js?v=1.8.192';
+import { openPopup } from '../components/modal.js?v=1.8.192';
+import { showToast } from '../components/toast.js?v=1.8.192';
+import { renderPager, renderEmptyTableState, PAGE_SIZE } from '../components/list-page.js?v=1.8.192';
 import {
   getCachedSessions,
   loadSessions,
   getSelectedSession,
   hasFreshSessionsCache
-} from '../core/sessions.js?v=1.8.191';
+} from '../core/sessions.js?v=1.8.192';
 import {
   ensureReferenceData,
   getCachedReferenceData,
@@ -42,9 +42,9 @@ import {
   formatINR,
   fmtDate,
   todayISO
-} from '../services/report.service.js?v=1.8.191';
-import { formatPersonName, initials } from '../utils/formatter.js?v=1.8.191';
-import { resolveUserDisplay } from '../services/user-directory.service.js?v=1.8.191';
+} from '../services/report.service.js?v=1.8.192';
+import { formatPersonName, initials } from '../utils/formatter.js?v=1.8.192';
+import { resolveUserDisplay } from '../services/user-directory.service.js?v=1.8.192';
 
 let state = null;
 let sessionListener = null;

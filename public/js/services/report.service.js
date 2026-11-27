@@ -27,22 +27,22 @@ import {
   fetchStudentPayments,
   calculateStudentFinancials,
   isStudentEligibleForDues
-} from './payment.service.js?v=1.8.191';
+} from './payment.service.js?v=1.8.192';
 import {
   evaluateKidsPendingBills,
   buildKidsPaymentLedger
-} from '../utils/school-billing.js?v=1.8.191';
-import { getStudentPhotoSrc } from '../utils/student-media.js?v=1.8.191';
+} from '../utils/school-billing.js?v=1.8.192';
+import { getStudentPhotoSrc } from '../utils/student-media.js?v=1.8.192';
 import {
   todayISO,
   fmtDate,
   getOrgTimezone
-} from '../utils/session-rules.js?v=1.8.191';
-import { formatINR } from '../utils/formatter.js?v=1.8.191';
-import { formatPersonName } from '../utils/formatter.js?v=1.8.191';
-import { resolveUserDisplay, loadUsersDirectory, getRoleTitle } from './user-directory.service.js?v=1.8.191';
-import { loadPdfMake, urlToDataUrl } from '../utils/admission-receipt-pdf.js?v=1.8.191';
-import { loadAllSessions, getAllCachedSessions, hasFreshSessionsCache } from '../core/sessions.js?v=1.8.191';
+} from '../utils/session-rules.js?v=1.8.192';
+import { formatINR } from '../utils/formatter.js?v=1.8.192';
+import { formatPersonName } from '../utils/formatter.js?v=1.8.192';
+import { resolveUserDisplay, loadUsersDirectory, getRoleTitle } from './user-directory.service.js?v=1.8.192';
+import { loadPdfMake, urlToDataUrl } from '../utils/admission-receipt-pdf.js?v=1.8.192';
+import { loadAllSessions, getAllCachedSessions, hasFreshSessionsCache } from '../core/sessions.js?v=1.8.192';
 
 const CACHE_KEY = 'financialReports';
 export const CACHE_STALE_MS = 30000;
@@ -550,9 +550,24 @@ export async function syncYouthStudentsDelta({
     return { ...full, changedIds: (full.list || []).map((s) => s.id), deltaUsed: false };
   }
 
+  const missingUpdatedIds = existing.list
+    .filter((s) => s && s.status !== 'deleted' && !s.updatedAt)
+    .map((s) => s.id);
+
   const baseConstraints = [where('ctx', '==', 'youth')];
   if (sid) baseConstraints.push(where('sessionId', '==', sid));
   if (isBranchHead) baseConstraints.push(where('branchId', '==', profile.branchId));
+
+  // Safety net prior to backfill: if many cached records lack updatedAt, force a clean full reload
+  // so legacy edits invisible to `updatedAt > sinceTs` are never skipped.
+  if (missingUpdatedIds.length > 25) {
+    const full = await ensureYouthStudents({ profile, sessionId: sid, includeAllSessions, forceRefresh: true });
+    return {
+      ...full,
+      changedIds: Array.from(new Set([...(full.list || []).map((s) => s.id), ...missingUpdatedIds])),
+      deltaUsed: false
+    };
+  }
 
   const nextSyncAtMs = Date.now() - 2000;
   const sinceTs = typeof Timestamp?.fromMillis === 'function'
@@ -571,26 +586,52 @@ export async function syncYouthStudentsDelta({
     return { ...full, changedIds: [], deltaUsed: false, readCount: (full.readCount || 0) + 1 + deltaSnap.size };
   }
 
-  const readCount = 1 + deltaSnap.size;
-  const changedIds = [];
+  if (serverTotal > existing.list.length && typeof Timestamp?.fromMillis === 'function') {
+    const tsCountSnap = await getCountFromServer(
+      query(collection(db, 'students'), ...baseConstraints, where('updatedAt', '>', Timestamp.fromMillis(0)))
+    ).catch(() => null);
+    const tsCount = tsCountSnap && typeof tsCountSnap.data === 'function' ? Number(tsCountSnap.data().count ?? serverTotal) : serverTotal;
+    if (tsCount < serverTotal) {
+      const full = await ensureYouthStudents({ profile, sessionId: sid, includeAllSessions, forceRefresh: true });
+      return { ...full, changedIds: (full.list || []).map((s) => s.id), deltaUsed: false, readCount: (full.readCount || 0) + 2 + deltaSnap.size };
+    }
+  }
+
+  let readCount = 1 + deltaSnap.size;
+  const changedSet = new Set();
   let nextList = existing.list;
   let nextById = existing.byId;
 
-  if (deltaSnap.size > 0) {
+  const deltaIds = new Set(deltaSnap.docs.map((d) => d.id));
+  const fetchMissingIds = missingUpdatedIds.filter((id) => !deltaIds.has(id));
+  const extraSnaps = fetchMissingIds.length
+    ? await Promise.all(fetchMissingIds.map((id) => getDoc(doc(db, 'students', id)).catch(() => null)))
+    : [];
+  readCount += fetchMissingIds.length;
+
+  if (deltaSnap.size > 0 || extraSnaps.length > 0) {
     nextList = existing.list.slice();
     nextById = { ...existing.byId };
     const idxById = new Map();
     nextList.forEach((s, idx) => { if (s?.id) idxById.set(s.id, idx); });
 
-    deltaSnap.docs.forEach((d) => {
+    const mergeDoc = (d) => {
+      if (!d || (typeof d.exists === 'function' && !d.exists())) return;
       const st = { id: d.id, ...d.data() };
-      changedIds.push(st.id);
+      changedSet.add(st.id);
       nextById[st.id] = st;
       root.studentsById.set(st.id, st);
       if (idxById.has(st.id)) nextList[idxById.get(st.id)] = st;
-      else nextList.push(st);
-    });
+      else {
+        idxById.set(st.id, nextList.length);
+        nextList.push(st);
+      }
+    };
+    deltaSnap.docs.forEach(mergeDoc);
+    extraSnaps.forEach(mergeDoc);
   }
+  missingUpdatedIds.forEach((id) => changedSet.add(id));
+  const changedIds = Array.from(changedSet);
 
   const updated = {
     ...existing,
@@ -1180,31 +1221,40 @@ export async function loadYouthDashboardServerAggregates({
   constraints.push(where('sessionId', '==', session.id));
   const baseQ = query(collection(db, 'students'), ...constraints);
   const activeQ = query(collection(db, 'students'), ...constraints, where('status', '==', 'active'));
+  const moneyCountQ = query(collection(db, 'students'), ...constraints, where('moneyCollected', '>=', 0));
 
   try {
-    const [allSnap, activeSnap] = await Promise.all([
+    // Separate count() and moneyCollected from course sum() queries: Firestore multi-field aggregation
+    // excludes docs lacking ANY requested sum field, which would undercount totalCount/feeSum/paidSum pre-backfill.
+    const [totalCountSnap, courseAggSnap, activeAggSnap, moneyAggSnap, moneyCountSnap] = await Promise.all([
+      getCountFromServer(baseQ),
       getAggregateFromServer(baseQ, {
-        totalCount: count(),
         feeSum: sum('feeTotal'),
-        paidSum: sum('paidAmount'),
-        moneySum: sum('moneyCollected')
+        paidSum: sum('paidAmount')
       }),
       getAggregateFromServer(activeQ, {
         activeCount: count(),
         balanceSum: sum('balanceDue')
-      })
+      }),
+      getAggregateFromServer(baseQ, {
+        moneySum: sum('moneyCollected')
+      }),
+      getCountFromServer(moneyCountQ).catch(() => null)
     ]);
 
-    const allData = typeof allSnap?.data === 'function' ? allSnap.data() : {};
-    const actData = typeof activeSnap?.data === 'function' ? activeSnap.data() : {};
-    const totalAll = Number(allData.totalCount || 0);
+    const totalAll = Number(totalCountSnap?.data?.()?.count || 0);
+    const courseData = typeof courseAggSnap?.data === 'function' ? courseAggSnap.data() : {};
+    const actData = typeof activeAggSnap?.data === 'function' ? activeAggSnap.data() : {};
+    const moneyData = typeof moneyAggSnap?.data === 'function' ? moneyAggSnap.data() : {};
     const activeCount = Number(actData.activeCount || 0);
-    let readCount = 2;
+    const moneyDocsCount = (moneyCountSnap && typeof moneyCountSnap.data === 'function')
+      ? Number(moneyCountSnap.data().count ?? -1)
+      : -1;
+    let readCount = 4 + (moneyCountSnap ? 1 : 0);
 
     let dropCount = 0;
     let dropFee = 0;
     let dropPaid = 0;
-    let dropMoney = 0;
     if (totalAll > activeCount) {
       const dropQ = query(
         collection(db, 'students'),
@@ -1214,25 +1264,26 @@ export async function loadYouthDashboardServerAggregates({
       const dropSnap = await getAggregateFromServer(dropQ, {
         dropCount: count(),
         dropFee: sum('feeTotal'),
-        dropPaid: sum('paidAmount'),
-        dropMoney: sum('moneyCollected')
+        dropPaid: sum('paidAmount')
       }).catch(() => null);
       if (dropSnap && typeof dropSnap.data === 'function') {
         const dd = dropSnap.data();
         dropCount = Number(dd.dropCount || 0);
         dropFee = Number(dd.dropFee || 0);
         dropPaid = Number(dd.dropPaid || 0);
-        dropMoney = Number(dd.dropMoney || 0);
         readCount += 1;
       }
     }
 
     const totalCount = Math.max(0, totalAll);
-    const feeSum = Math.max(0, Number(allData.feeSum || 0) - dropFee);
-    const paidSum = Math.max(0, Number(allData.paidSum || 0) - dropPaid);
+    // Safety net prior to backfill: if ANY student lacks moneyCollected (or coverage query unavailable),
+    // fall back cleanly to full ledger calculation for monetary KPIs instead of painting partial sums.
+    const missingMoneyCollected = totalCount > 0 && moneyDocsCount !== totalCount;
+    const feeSum = Math.max(0, Number(courseData.feeSum || 0) - dropFee);
+    const paidSum = Math.max(0, Number(courseData.paidSum || 0) - dropPaid);
     // Fee Collection includes payments collected from all students in the session (including later-dropped students),
     // matching Payment History & Reports ledger totals.
-    const moneySum = Math.max(0, Number(allData.moneySum || 0));
+    const moneySum = missingMoneyCollected ? null : Math.max(0, Number(moneyData.moneySum || 0));
     const balanceSum = Math.max(0, Number(actData.balanceSum || 0));
 
     return {
@@ -1245,8 +1296,9 @@ export async function loadYouthDashboardServerAggregates({
       paidSum,
       moneySum,
       balanceSum,
-      hasCurrencySums: feeSum > 0 || paidSum > 0 || balanceSum > 0 || totalCount === 0,
-      hasMoneySum: moneySum > 0 || totalCount === 0,
+      missingMoneyCollected,
+      hasCurrencySums: !missingMoneyCollected && (feeSum > 0 || paidSum > 0 || balanceSum > 0 || totalCount === 0),
+      hasMoneySum: !missingMoneyCollected && (moneySum > 0 || totalCount === 0),
       readCount
     };
   } catch (_) {

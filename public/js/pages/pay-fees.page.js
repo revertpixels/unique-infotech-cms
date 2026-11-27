@@ -11,14 +11,14 @@ import {
   runTransaction,
   serverTimestamp
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { createSelect } from '../components/ui-select.js?v=1.8.191';
-import { openPopup } from '../components/modal.js?v=1.8.191';
-import { confirmDialog } from '../components/ui-confirm.js?v=1.8.191';
-import { showToast } from '../components/toast.js?v=1.8.191';
-import { getSelectedSessionId, getCachedSessions, loadSessions, hasFreshSessionsCache } from '../core/sessions.js?v=1.8.191';
-import { todayISO, fmtDate, examWindowOf, installmentSchedule } from '../utils/session-rules.js?v=1.8.191';
-import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.191';
-import { getRoleTitle, resolveUserDisplay } from '../services/user-directory.service.js?v=1.8.191';
+import { createSelect } from '../components/ui-select.js?v=1.8.192';
+import { openPopup } from '../components/modal.js?v=1.8.192';
+import { confirmDialog } from '../components/ui-confirm.js?v=1.8.192';
+import { showToast } from '../components/toast.js?v=1.8.192';
+import { getSelectedSessionId, getCachedSessions, loadSessions, hasFreshSessionsCache } from '../core/sessions.js?v=1.8.192';
+import { todayISO, fmtDate, examWindowOf, installmentSchedule } from '../utils/session-rules.js?v=1.8.192';
+import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.192';
+import { getRoleTitle, resolveUserDisplay } from '../services/user-directory.service.js?v=1.8.192';
 import {
   ensureReferenceData,
   getCachedReferenceData,
@@ -26,7 +26,7 @@ import {
   syncYouthStudentsDelta,
   getCachedYouthStudents,
   isCacheStale
-} from '../services/report.service.js?v=1.8.191';
+} from '../services/report.service.js?v=1.8.192';
 import {
   calculateLateFee,
   fetchStudentPayments,
@@ -36,7 +36,7 @@ import {
   courseBalanceWithoutExam,
   calculateStudentFinancials,
   repairStudentAdmissionPayment
-} from '../services/payment.service.js?v=1.8.191';
+} from '../services/payment.service.js?v=1.8.192';
 
 let currentUserProfile = null;
 let currentCtx = 'youth';

@@ -1,20 +1,20 @@
 // dashboard.page.js — Read-only Youth Centre Dashboard (#/dashboard) + preserved Unique Kids placeholder.
 
-import { ROUTES } from '../core/router.js?v=1.8.191';
-import { createSelect } from '../components/ui-select.js?v=1.8.191';
+import { ROUTES } from '../core/router.js?v=1.8.192';
+import { createSelect } from '../components/ui-select.js?v=1.8.192';
 import {
   renderDonutChart,
   renderBarChart,
   renderStackedBarChart,
   renderLineChart
-} from '../components/charts.js?v=1.8.191';
-import { openPaymentDetailsModal } from '../components/payment-details-modal.js?v=1.8.191';
-import { loadDashboardArchiveReminder, getCachedDashboardArchiveReminder } from '../services/archive.service.js?v=1.8.191';
-import { resolveUserDisplay, getRoleTitle } from '../services/user-directory.service.js?v=1.8.191';
-import { getCachedSessions, loadSessions, getSelectedSession, getSelectedSessionId, hasFreshSessionsCache } from '../core/sessions.js?v=1.8.191';
-import { getOrgTimezone } from '../utils/session-rules.js?v=1.8.191';
-import { formatPersonName, initials } from '../utils/formatter.js?v=1.8.191';
-import { buildYouthDashboardData } from '../services/dashboard.service.js?v=1.8.191';
+} from '../components/charts.js?v=1.8.192';
+import { openPaymentDetailsModal } from '../components/payment-details-modal.js?v=1.8.192';
+import { loadDashboardArchiveReminder, getCachedDashboardArchiveReminder } from '../services/archive.service.js?v=1.8.192';
+import { resolveUserDisplay, getRoleTitle } from '../services/user-directory.service.js?v=1.8.192';
+import { getCachedSessions, loadSessions, getSelectedSession, getSelectedSessionId, hasFreshSessionsCache } from '../core/sessions.js?v=1.8.192';
+import { getOrgTimezone } from '../utils/session-rules.js?v=1.8.192';
+import { formatPersonName, initials } from '../utils/formatter.js?v=1.8.192';
+import { buildYouthDashboardData } from '../services/dashboard.service.js?v=1.8.192';
 import {
   ensureReferenceData,
   getCachedReferenceData,
@@ -33,7 +33,7 @@ import {
   modeDisplayMeta,
   formatINR,
   fmtDate
-} from '../services/report.service.js?v=1.8.191';
+} from '../services/report.service.js?v=1.8.192';
 
 let state = null;
 let profileListener = null;
@@ -958,15 +958,18 @@ function applyEarlyServerAggregates(agg) {
     }
   }
   if (agg.hasCurrencySums) {
-    const colBase = agg.hasMoneySum ? agg.moneySum : agg.paidSum;
-    const rate = agg.feeSum > 0 ? Math.min(100, Math.round((colBase / agg.feeSum) * 100)) : 0;
-    if (agg.hasMoneySum) {
-      setKpi('dash-kpi-collected', 'dash-kpi-collected-sub', formatINR(agg.moneySum), `${rate}% of ${formatINR(agg.feeSum)} billed`);
-    }
     setKpi('dash-kpi-outstanding', 'dash-kpi-outstanding-sub', formatINR(agg.balanceSum), 'Total balance across active');
-    setKpi('dash-kpi-rate', 'dash-kpi-rate-sub', `${rate}%`, `of ${formatINR(agg.feeSum)} total billed`);
-    const bar = $('dash-kpi-rate-bar');
-    if (bar) bar.style.width = `${rate}%`;
+    if (agg.hasMoneySum && !agg.missingMoneyCollected && !state.missingMoneyCollected) {
+      const rate = agg.feeSum > 0 ? Math.min(100, Math.round((agg.moneySum / agg.feeSum) * 100)) : 0;
+      setKpi('dash-kpi-collected', 'dash-kpi-collected-sub', formatINR(agg.moneySum), `${rate}% of ${formatINR(agg.feeSum)} billed`);
+      setKpi('dash-kpi-rate', 'dash-kpi-rate-sub', `${rate}%`, `of ${formatINR(agg.feeSum)} total billed`);
+      const bar = $('dash-kpi-rate-bar');
+      if (bar) bar.style.width = `${rate}%`;
+    } else {
+      // Safety net prior to backfill: fall back to full ledger computation when any student lacks moneyCollected.
+      setKpi('dash-kpi-collected', 'dash-kpi-collected-sub', '—', 'Syncing payment ledger...');
+      setKpi('dash-kpi-rate', 'dash-kpi-rate-sub', '—', 'Syncing payment ledger...');
+    }
   }
 }
 
@@ -977,6 +980,19 @@ function applyEarlyStudentSnapshot(stRes) {
   const students = (stRes.list || []).filter((s) => (
     s && s.status !== 'deleted' && (effBranch === 'all' || s.branchId === effBranch)
   ));
+  if (students.some((s) => s.moneyCollected == null)) {
+    state.missingMoneyCollected = true;
+    const colEl = $('dash-kpi-collected');
+    const colSubEl = $('dash-kpi-collected-sub');
+    const rateEl = $('dash-kpi-rate');
+    const rateSubEl = $('dash-kpi-rate-sub');
+    const rateBar = $('dash-kpi-rate-bar');
+    if (colEl) colEl.textContent = '—';
+    if (colSubEl) colSubEl.textContent = 'Syncing payment ledger...';
+    if (rateEl) rateEl.textContent = '—';
+    if (rateSubEl) rateSubEl.textContent = 'Syncing payment ledger...';
+    if (rateBar) rateBar.style.width = '0%';
+  }
   const nonDropped = students.filter((s) => s.status !== 'dropped' && s.status !== 'cancelled');
   const active = nonDropped.filter((s) => s.status === 'active');
   const sid = state.activeSession?.id || '';

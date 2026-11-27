@@ -1,30 +1,22 @@
 <div class="fr-wrap rep-wrap">
   <section id="rep-access-denied" class="empty-state" hidden>
     <i data-lucide="shield-alert" aria-hidden="true"></i>
-    <h3 id="rep-denied-title">Restricted Page</h3>
-    <p id="rep-denied-desc">This page is restricted to top-level administration.</p>
+    <h3>Restricted Page</h3>
+    <p id="rep-denied-desc">This page is only available in Youth Centre mode for authorised staff.</p>
   </section>
 
   <div id="rep-main">
     <header class="lp-head-row">
       <div class="pg-head">
-        <div class="pg-crumbs">Finance / <span id="rep-crumb-ctx">Youth Centre</span> / <span>Financial Reports</span></div>
-        <h2 id="rep-title">Youth Centre — Financial Reports</h2>
-        <p id="rep-subtitle">Collections, collector accountability, branch cash settlement, and fine waivers.</p>
+        <div class="pg-crumbs">Insights / Youth Centre / <span id="rep-crumb">Reports</span></div>
+        <h2 id="rep-title">Youth Centre — Financial &amp; Student Reports</h2>
+        <p id="rep-subtitle">Read-only analytics across collections, dues, students, and performance.</p>
       </div>
       <div class="lp-head-actions">
         <span id="rep-scope-badge" class="pill indigo" hidden></span>
-        <button type="button" id="rep-print" class="ui-btn ghost sm">
+        <button type="button" id="rep-print" class="ui-btn primary sm">
           <i data-lucide="printer"></i>
-          <span>Print</span>
-        </button>
-        <button type="button" id="rep-export-pdf" class="ui-btn ghost sm">
-          <i data-lucide="file-text"></i>
-          <span>Export PDF</span>
-        </button>
-        <button type="button" id="rep-export-csv" class="ui-btn primary sm">
-          <i data-lucide="download"></i>
-          <span>Export CSV</span>
+          <span>Print / Save as PDF</span>
         </button>
       </div>
     </header>
@@ -32,16 +24,16 @@
     <div id="rep-no-session" class="adm-notice warn" hidden>
       <i data-lucide="calendar-x"></i>
       <div>
-        <strong>No active session selected</strong>
-        <p>Select a Youth Centre session in the top toolbar to inspect financial reports for that session.</p>
+        <strong>No active Youth session selected</strong>
+        <p>Select a session in the top toolbar to view Youth Centre reports.</p>
       </div>
     </div>
 
     <div id="rep-error" class="adm-notice danger" hidden>
       <i data-lucide="alert-triangle"></i>
       <div class="rep-err-body">
-        <strong>Could not load financial report</strong>
-        <p id="rep-error-msg">Permission or network error while reading records.</p>
+        <strong>Could not load reports</strong>
+        <p id="rep-error-msg">Permission or network error while reading Youth records.</p>
       </div>
       <button type="button" id="rep-retry" class="ui-btn ghost sm">
         <i data-lucide="refresh-cw"></i>
@@ -49,73 +41,13 @@
       </button>
     </div>
 
-    <div id="rep-partial-banner" class="fr-partial-note" hidden>
-      <div class="fr-partial-left">
-        <i data-lucide="info"></i>
-        <span id="rep-partial-text">Showing recent Youth receipts.</span>
-      </div>
-      <div class="fr-partial-actions">
-        <button type="button" id="rep-banner-loadmore" class="ui-btn ghost sm">Load older (+150)</button>
-        <button type="button" id="rep-banner-loadall" class="ui-btn ghost sm">Load All</button>
-      </div>
-    </div>
-
-    <!-- 5 KPI Cards matching Payment History -->
-    <section id="rep-stats" class="lp-stats cols-5" aria-label="Financial summary totals">
-      <div class="lp-stat green">
-        <div class="lp-stat-ic"><i data-lucide="indian-rupee"></i></div>
-        <div class="lp-stat-txt">
-          <span class="lp-stat-label">Total Collected</span>
-          <span id="rep-stat-total" class="lp-stat-value">—</span>
-          <span id="rep-stat-total-sub" class="lp-stat-sub">Loading...</span>
-        </div>
-      </div>
-      <div class="lp-stat indigo">
-        <div class="lp-stat-ic"><i data-lucide="banknote"></i></div>
-        <div class="lp-stat-txt">
-          <span class="lp-stat-label">Cash</span>
-          <span id="rep-stat-cash" class="lp-stat-value">—</span>
-          <span id="rep-stat-cash-sub" class="lp-stat-sub">Loading...</span>
-        </div>
-      </div>
-      <div class="lp-stat sky">
-        <div class="lp-stat-ic"><i data-lucide="smartphone"></i></div>
-        <div class="lp-stat-txt">
-          <span class="lp-stat-label">UPI / Bank</span>
-          <span id="rep-stat-digital" class="lp-stat-value">—</span>
-          <span id="rep-stat-digital-sub" class="lp-stat-sub">Loading...</span>
-        </div>
-      </div>
-      <div class="lp-stat amber">
-        <div class="lp-stat-ic"><i data-lucide="clock"></i></div>
-        <div class="lp-stat-txt">
-          <span class="lp-stat-label">Late Fees Paid</span>
-          <span id="rep-stat-fines" class="lp-stat-value">—</span>
-          <span id="rep-stat-fines-sub" class="lp-stat-sub">Loading...</span>
-        </div>
-      </div>
-      <div class="lp-stat red">
-        <div class="lp-stat-ic"><i data-lucide="shield-off"></i></div>
-        <div class="lp-stat-txt">
-          <span class="lp-stat-label">Fees Waived</span>
-          <span id="rep-stat-waived" class="lp-stat-value">—</span>
-          <span id="rep-stat-waived-sub" class="lp-stat-sub">Loading...</span>
-        </div>
-      </div>
-    </section>
-
-    <div id="rep-breakdown-strip" class="fr-breakdown-bar" hidden>
-      <div id="rep-chips" class="fr-chips"></div>
-      <span id="rep-meta-note" class="fr-reads-note"></span>
-    </div>
-
-    <!-- Filter Toolbar -->
+    <!-- Global Filters (apply to every section, persisted across navigation) -->
     <section id="rep-toolbar" class="lp-toolbar lp-toolbar-oneline" aria-label="Report filters">
       <div class="lp-toolbar-row-filters">
-        <div class="lp-toolbar-row-search">
-          <div class="lp-search">
-            <i data-lucide="search"></i>
-            <input id="rep-search" type="search" placeholder="Search student, ID, receipt, txn ID, collector, reason..." autocomplete="off">
+        <div class="lp-toolbar-row-search rep-filter-head-mob">
+          <div class="rep-filter-status-inline">
+            <i data-lucide="filter"></i>
+            <span id="rep-filter-meta">Loading session data...</span>
           </div>
           <button type="button" id="rep-mobile-filters-btn" class="ui-btn ghost lp-mobile-filter-btn" aria-expanded="false">
             <i data-lucide="sliders-horizontal"></i>
@@ -125,31 +57,21 @@
         </div>
 
         <div class="lp-toolbar-drawer">
-          <div class="lp-filter">
-            <span class="lp-filter-label">Date</span>
-            <div id="rep-date-host" class="lp-filter-select"></div>
-          </div>
-
           <div id="rep-bb-host" class="lp-bb-host"></div>
 
           <div class="lp-filter">
-            <span class="lp-filter-label">Collected At</span>
-            <div id="rep-loc-host" class="lp-filter-select"></div>
+            <span class="lp-filter-label">Course</span>
+            <div id="rep-course-host" class="lp-filter-select"></div>
           </div>
 
           <div class="lp-filter">
-            <span class="lp-filter-label">Collected By</span>
-            <div id="rep-collector-host" class="lp-filter-select"></div>
+            <span class="lp-filter-label">Date Range</span>
+            <div id="rep-date-host" class="lp-filter-select"></div>
           </div>
 
-          <button type="button" id="rep-more-btn" class="ui-btn ghost sm fr-more-btn" aria-expanded="false">
-            <i data-lucide="sliders-horizontal"></i>
-            <span>More</span>
-          </button>
-
-          <button type="button" id="rep-clear-filters" class="ui-btn ghost sm" hidden>
+          <button type="button" id="rep-reset-filters" class="ui-btn ghost sm" hidden>
             <i data-lucide="rotate-ccw"></i>
-            <span>Reset</span>
+            <span>Reset filters</span>
           </button>
 
           <button type="button" id="rep-refresh" class="lp-refresh" aria-label="Refresh reports" title="Refresh reports">
@@ -158,33 +80,8 @@
         </div>
       </div>
 
-      <!-- Secondary filters -->
-      <div id="rep-extra-filters" class="lp-toolbar-extra" hidden>
-        <div id="rep-course-wrap" class="lp-filter">
-          <span id="rep-course-label" class="lp-filter-label">Course</span>
-          <div id="rep-course-host" class="lp-filter-select"></div>
-        </div>
-        <div class="lp-filter">
-          <span class="lp-filter-label">Payment Type</span>
-          <div id="rep-type-host" class="lp-filter-select"></div>
-        </div>
-        <div class="lp-filter">
-          <span class="lp-filter-label">Mode</span>
-          <div id="rep-mode-host" class="lp-filter-select"></div>
-        </div>
-      </div>
-
-      <!-- Single date / Custom date range subbar -->
-      <div id="rep-date-subbar" class="lp-toolbar-row-custom rep-date-subbar" hidden>
-        <div id="rep-single-date-wrap" class="rep-date-inline" hidden>
-          <label for="rep-single-date" class="lp-filter-label">Report Date</label>
-          <input id="rep-single-date" type="date" class="ui-input rep-date-input">
-          <div class="rep-quick-dates">
-            <button type="button" id="rep-single-today" class="ui-btn ghost sm">Today</button>
-            <button type="button" id="rep-single-yesterday" class="ui-btn ghost sm">Yesterday</button>
-          </div>
-        </div>
-        <div id="rep-custom-range-wrap" class="rep-date-inline" hidden>
+      <div id="rep-date-custom" class="lp-toolbar-row-custom rep-date-subbar" hidden>
+        <div class="rep-date-inline">
           <div class="rep-date-pair">
             <label for="rep-date-from" class="lp-filter-label">From</label>
             <input id="rep-date-from" type="date" class="ui-input rep-date-input">
@@ -197,249 +94,394 @@
       </div>
     </section>
 
-    <!-- Report View Tabs -->
-    <div id="rep-tabs" class="org-tabs rep-tabs" role="tablist" aria-label="Report views">
-      <button type="button" id="rep-tab-collection" class="org-tab is-active" role="tab" aria-selected="true" aria-controls="rep-panel-collection" data-tab="collection">
-        <i data-lucide="receipt"></i>
-        <span>Collection Report</span>
-      </button>
-      <button type="button" id="rep-tab-settlement" class="org-tab" role="tab" aria-selected="false" aria-controls="rep-panel-settlement" data-tab="settlement">
-        <i data-lucide="landmark"></i>
-        <span>Branch Settlement</span>
-      </button>
-      <button type="button" id="rep-tab-waivers" class="org-tab" role="tab" aria-selected="false" aria-controls="rep-panel-waivers" data-tab="waivers">
-        <i data-lucide="shield-off"></i>
-        <span>Fine Waivers</span>
-      </button>
-      <button type="button" id="rep-tab-overview" class="org-tab" role="tab" aria-selected="false" aria-controls="rep-panel-overview" data-tab="overview">
-        <i data-lucide="bar-chart-3"></i>
-        <span>Overview &amp; Courses</span>
-      </button>
-    </div>
-
-    <!-- ================= TAB 1: COLLECTION REPORT ================= -->
-    <section id="rep-panel-collection" role="tabpanel" aria-labelledby="rep-tab-collection">
-      <div class="lp-card adm-table-card">
-        <div class="lp-card-head">
-          <div class="lp-card-title">
-            <i data-lucide="list"></i>
-            <span>Collection Ledger</span>
+    <!-- ================= SECTION 1: KPI CARDS ================= -->
+    <section id="rep-sec-kpis" class="rep-sec" aria-label="Key Performance Indicators">
+      <div id="rep-kpis" class="rep-kpi-grid">
+        <div class="lp-stat green">
+          <div class="lp-stat-ic"><i data-lucide="indian-rupee"></i></div>
+          <div class="lp-stat-txt">
+            <span class="lp-stat-label">Total collected</span>
+            <span id="rep-kpi-collected" class="lp-stat-value">—</span>
+            <span id="rep-kpi-collected-sub" class="lp-stat-sub">Loading...</span>
+            <span id="rep-kpi-collected-delta" class="rep-delta neutral">—</span>
           </div>
-          <span id="rep-col-count" class="lp-count">0 records</span>
         </div>
 
-        <div class="lp-scroll">
-          <table id="rep-col-table" class="lp-table lp-mobile-cards">
-            <thead>
-              <tr>
-                <th>
-                  <button type="button" id="rep-sort-date" class="fr-sort-th is-active">
-                    <span>Date</span>
-                    <i data-lucide="arrow-down-up"></i>
-                  </button>
-                </th>
-                <th>Student</th>
-                <th id="rep-col-th-cb">Course, Branch &amp; Batch</th>
-                <th>Mode</th>
-                <th>Collected By</th>
-                <th>Collected At</th>
-                <th class="num">
-                  <button type="button" id="rep-sort-amount" class="fr-sort-th">
-                    <span>Received</span>
-                    <i data-lucide="arrow-down-up"></i>
-                  </button>
-                </th>
-                <th class="act">Receipt</th>
-              </tr>
-            </thead>
-            <tbody id="rep-col-tbody"></tbody>
-          </table>
+        <div class="lp-stat indigo">
+          <div class="lp-stat-ic"><i data-lucide="wallet"></i></div>
+          <div class="lp-stat-txt">
+            <span class="lp-stat-label">Outstanding dues</span>
+            <span id="rep-kpi-outstanding" class="lp-stat-value">—</span>
+            <span id="rep-kpi-outstanding-sub" class="lp-stat-sub">Loading...</span>
+            <span id="rep-kpi-outstanding-delta" class="rep-delta neutral">—</span>
+          </div>
         </div>
 
-        <div id="rep-col-pager" class="lp-card-foot" hidden></div>
-      </div>
-
-      <!-- Footer Groupings: Always aggregate all filtered rows -->
-      <div id="rep-col-footer-summaries" class="rep-footer-summaries" hidden>
-        <div class="rep-summary-head">
-          <div class="rep-summary-title">
-            <i data-lucide="layers"></i>
-            <span>Grouped Totals (Filtered Scope)</span>
+        <div class="lp-stat red">
+          <div class="lp-stat-ic"><i data-lucide="alert-circle"></i></div>
+          <div class="lp-stat-txt">
+            <span class="lp-stat-label">Overdue amount</span>
+            <span id="rep-kpi-overdue" class="lp-stat-value">—</span>
+            <span id="rep-kpi-overdue-sub" class="lp-stat-sub">Loading...</span>
+            <span id="rep-kpi-overdue-delta" class="rep-delta neutral">—</span>
           </div>
-          <span id="rep-footer-counts" class="rep-footer-counts">0 receipts · 0 fines · 0 waivers</span>
         </div>
 
-        <div class="rep-summary-grid">
-          <div class="lp-card rep-group-card">
-            <div class="lp-card-head">
-              <div class="lp-card-title"><i data-lucide="map-pin"></i><span>By Collected At</span></div>
-            </div>
-            <div class="lp-scroll">
-              <table class="lp-table rep-mini-table">
-                <thead>
-                  <tr>
-                    <th>Location</th>
-                    <th class="num">Receipts</th>
-                    <th class="num">Cash</th>
-                    <th class="num">Digital</th>
-                    <th class="num">Fines / Waived</th>
-                    <th class="num">Total</th>
-                  </tr>
-                </thead>
-                <tbody id="rep-loc-summary-tbody"></tbody>
-              </table>
-            </div>
+        <div class="lp-stat amber">
+          <div class="lp-stat-ic"><i data-lucide="clock"></i></div>
+          <div class="lp-stat-txt">
+            <span class="lp-stat-label">Late fees collected</span>
+            <span id="rep-kpi-late-paid" class="lp-stat-value">—</span>
+            <span id="rep-kpi-late-paid-sub" class="lp-stat-sub">Loading...</span>
+            <span id="rep-kpi-late-paid-delta" class="rep-delta neutral">—</span>
           </div>
+        </div>
 
-          <div class="lp-card rep-group-card">
-            <div class="lp-card-head">
-              <div class="lp-card-title"><i data-lucide="user-check"></i><span>By Collected By</span></div>
-            </div>
-            <div class="lp-scroll">
-              <table class="lp-table rep-mini-table">
-                <thead>
-                  <tr>
-                    <th>Collector &amp; Role</th>
-                    <th class="num">Receipts</th>
-                    <th class="num">Cash</th>
-                    <th class="num">Digital</th>
-                    <th class="num">Total</th>
-                  </tr>
-                </thead>
-                <tbody id="rep-collector-summary-tbody"></tbody>
-              </table>
-            </div>
+        <div class="lp-stat violet">
+          <div class="lp-stat-ic"><i data-lucide="shield-off"></i></div>
+          <div class="lp-stat-txt">
+            <span class="lp-stat-label">Late fees waived</span>
+            <span id="rep-kpi-late-waived" class="lp-stat-value">—</span>
+            <span id="rep-kpi-late-waived-sub" class="lp-stat-sub">Loading...</span>
+            <span id="rep-kpi-late-waived-delta" class="rep-delta neutral">—</span>
           </div>
+        </div>
 
-          <div class="lp-card rep-group-card rep-group-mode">
-            <div class="lp-card-head">
-              <div class="lp-card-title"><i data-lucide="wallet"></i><span>By Payment Mode</span></div>
-            </div>
-            <div class="lp-scroll">
-              <table class="lp-table rep-mini-table">
-                <thead>
-                  <tr>
-                    <th>Mode</th>
-                    <th class="num">Receipts</th>
-                    <th class="num">Amount</th>
-                    <th class="num">Share</th>
-                  </tr>
-                </thead>
-                <tbody id="rep-mode-summary-tbody"></tbody>
-              </table>
-            </div>
+        <div class="lp-stat sky">
+          <div class="lp-stat-ic"><i data-lucide="user-plus"></i></div>
+          <div class="lp-stat-txt">
+            <span class="lp-stat-label">New admissions</span>
+            <span id="rep-kpi-admissions" class="lp-stat-value">—</span>
+            <span id="rep-kpi-admissions-sub" class="lp-stat-sub">Loading...</span>
+            <span id="rep-kpi-admissions-delta" class="rep-delta neutral">—</span>
+          </div>
+        </div>
+
+        <div class="lp-stat teal">
+          <div class="lp-stat-ic"><i data-lucide="users"></i></div>
+          <div class="lp-stat-txt">
+            <span class="lp-stat-label">Active students</span>
+            <span id="rep-kpi-active" class="lp-stat-value">—</span>
+            <span id="rep-kpi-active-sub" class="lp-stat-sub">Loading...</span>
+            <span id="rep-kpi-active-delta" class="rep-delta neutral">—</span>
           </div>
         </div>
       </div>
     </section>
 
-    <!-- ================= TAB 2: BRANCH SETTLEMENT ================= -->
-    <section id="rep-panel-settlement" role="tabpanel" aria-labelledby="rep-tab-settlement" hidden>
-      <div id="rep-settle-callout" class="rep-callout-grid"></div>
+    <!-- ================= SECTION 2: MONEY ================= -->
+    <section id="rep-sec-money" class="rep-sec" aria-label="Money and Collections">
+      <div class="rep-sec-head">
+        <div>
+          <h3><i data-lucide="indian-rupee"></i><span>Money &amp; Collections</span></h3>
+          <p>Collection trend, payment modes, fee category mix, and staff receipts.</p>
+        </div>
+      </div>
 
-      <div class="lp-card adm-table-card">
-        <div class="lp-card-head">
-          <div class="lp-card-title">
-            <i data-lucide="landmark"></i>
-            <span>Branch Cash Handover &amp; Settlement</span>
+      <div class="rep-grid-2">
+        <div class="lp-card rep-chart-card rep-span-2">
+          <div class="lp-card-head">
+            <div class="lp-card-title">
+              <i data-lucide="trending-up"></i>
+              <span>Collection Trend</span>
+              <span id="rep-trend-badge" class="pill indigo">By month</span>
+            </div>
+            <div id="rep-trend-mode-bar" class="rep-seg-btns" role="group" aria-label="Chart style">
+              <button type="button" id="rep-trend-btn-line" class="rep-seg-btn is-active" data-kind="line">Line</button>
+              <button type="button" id="rep-trend-btn-bar" class="rep-seg-btn" data-kind="bar">Bar</button>
+            </div>
           </div>
-          <span class="lp-count">Active filtered receipts + current overdue</span>
+          <div id="rep-chart-trend" class="rep-chart-body"></div>
         </div>
 
+        <div class="lp-card rep-chart-card">
+          <div class="lp-card-head">
+            <div class="lp-card-title"><i data-lucide="credit-card"></i><span>Collection by Payment Mode</span></div>
+          </div>
+          <div id="rep-chart-modes" class="rep-chart-body"></div>
+        </div>
+
+        <div class="lp-card rep-chart-card">
+          <div class="lp-card-head">
+            <div class="lp-card-title"><i data-lucide="pie-chart"></i><span>Collection by Fee Type</span></div>
+          </div>
+          <div id="rep-chart-fee-types" class="rep-chart-body"></div>
+        </div>
+      </div>
+
+      <div class="lp-card adm-table-card rep-mt">
+        <div class="lp-card-head">
+          <div class="lp-card-title">
+            <i data-lucide="user-check"></i>
+            <span>Staff-wise Collection</span>
+            <span id="rep-staff-count" class="lp-count">0 staff</span>
+          </div>
+          <button type="button" id="rep-csv-staff" class="ui-btn ghost sm">
+            <i data-lucide="download"></i>
+            <span>Download CSV</span>
+          </button>
+        </div>
         <div class="lp-scroll">
-          <table id="rep-settle-table" class="lp-table lp-mobile-cards">
+          <table id="rep-staff-table" class="lp-table lp-mobile-cards">
+            <thead>
+              <tr>
+                <th>Staff (Designation)</th>
+                <th class="num">Receipts</th>
+                <th class="num">Cash</th>
+                <th class="num">Online (UPI / Bank)</th>
+                <th class="num">Total Amount</th>
+              </tr>
+            </thead>
+            <tbody id="rep-staff-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= SECTION 3: DUES ================= -->
+    <section id="rep-sec-dues" class="rep-sec" aria-label="Dues and Overdue Ageing">
+      <div class="rep-sec-head">
+        <div>
+          <h3><i data-lucide="alarm-clock"></i><span>Dues &amp; Ageing</span></h3>
+          <p>Outstanding balances, overdue ageing buckets, upcoming 30-day installments, and top debtors.</p>
+        </div>
+      </div>
+
+      <div class="rep-grid-2">
+        <div class="lp-card rep-chart-card">
+          <div class="lp-card-head">
+            <div class="lp-card-title"><i data-lucide="bar-chart-2"></i><span>Outstanding Dues Breakdown</span></div>
+            <div id="rep-dues-group-tabs" class="rep-seg-btns" role="group" aria-label="Group outstanding dues by">
+              <button type="button" id="rep-dues-grp-branch" class="rep-seg-btn is-active" data-group="branch">Branch</button>
+              <button type="button" class="rep-seg-btn" data-group="batch">Batch</button>
+              <button type="button" class="rep-seg-btn" data-group="course">Course</button>
+            </div>
+          </div>
+          <div id="rep-chart-dues-group" class="rep-chart-body"></div>
+        </div>
+
+        <div class="lp-card rep-chart-card">
+          <div class="lp-card-head">
+            <div class="lp-card-title"><i data-lucide="clock"></i><span>Overdue Ageing</span></div>
+          </div>
+          <div id="rep-chart-ageing" class="rep-chart-body"></div>
+        </div>
+      </div>
+
+      <div class="lp-card adm-table-card rep-mt">
+        <div class="lp-card-head">
+          <div class="lp-card-title">
+            <i data-lucide="table"></i>
+            <span>Outstanding Dues Table</span>
+          </div>
+          <button type="button" id="rep-csv-dues-group" class="ui-btn ghost sm">
+            <i data-lucide="download"></i>
+            <span>Download CSV</span>
+          </button>
+        </div>
+        <div class="lp-scroll">
+          <table id="rep-dues-group-table" class="lp-table lp-mobile-cards">
+            <thead>
+              <tr>
+                <th id="rep-dues-group-th-name">Branch</th>
+                <th class="num">Active Students</th>
+                <th class="num">Outstanding Dues</th>
+                <th class="num">Overdue Principal</th>
+              </tr>
+            </thead>
+            <tbody id="rep-dues-group-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="rep-grid-2 rep-mt">
+        <div class="lp-card adm-table-card">
+          <div class="lp-card-head">
+            <div class="lp-card-title">
+              <i data-lucide="calendar-clock"></i>
+              <span>Upcoming Dues (Next 30 Days)</span>
+              <span id="rep-upcoming-total" class="pill sky">₹0</span>
+            </div>
+            <button type="button" id="rep-csv-upcoming" class="ui-btn ghost sm">
+              <i data-lucide="download"></i>
+              <span>Download CSV</span>
+            </button>
+          </div>
+          <div class="lp-scroll">
+            <table id="rep-upcoming-table" class="lp-table lp-mobile-cards">
+              <thead>
+                <tr>
+                  <th>Student</th>
+                  <th>Installment / Fee</th>
+                  <th>Due Date</th>
+                  <th class="num">Amount</th>
+                </tr>
+              </thead>
+              <tbody id="rep-upcoming-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="lp-card adm-table-card">
+          <div class="lp-card-head">
+            <div class="lp-card-title">
+              <i data-lucide="alert-triangle"></i>
+              <span>Top 10 Students With Highest Dues</span>
+              <span id="rep-top-dues-count" class="lp-count">0 students</span>
+            </div>
+            <button type="button" id="rep-csv-top-dues" class="ui-btn ghost sm">
+              <i data-lucide="download"></i>
+              <span>Download CSV</span>
+            </button>
+          </div>
+          <div class="lp-scroll">
+            <table id="rep-top-dues-table" class="lp-table lp-mobile-cards">
+              <thead>
+                <tr>
+                  <th>Student</th>
+                  <th>Course &amp; Branch</th>
+                  <th class="num">Overdue</th>
+                  <th class="num">Outstanding</th>
+                </tr>
+              </thead>
+              <tbody id="rep-top-dues-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= SECTION 4: STUDENTS ================= -->
+    <section id="rep-sec-students" class="rep-sec" aria-label="Student Analytics">
+      <div class="rep-sec-head">
+        <div>
+          <h3><i data-lucide="users"></i><span>Students &amp; Capacity</span></h3>
+          <p>Monthly admissions, course distribution, status breakdown, batch capacity, and gender split.</p>
+        </div>
+      </div>
+
+      <div class="rep-grid-2">
+        <div class="lp-card rep-chart-card">
+          <div class="lp-card-head">
+            <div class="lp-card-title"><i data-lucide="bar-chart-3"></i><span>Admissions Per Month</span></div>
+          </div>
+          <div id="rep-chart-admissions" class="rep-chart-body"></div>
+        </div>
+
+        <div class="lp-card rep-chart-card">
+          <div class="lp-card-head">
+            <div class="lp-card-title"><i data-lucide="book-open"></i><span>Students by Course</span></div>
+          </div>
+          <div id="rep-chart-stu-course" class="rep-chart-body"></div>
+        </div>
+
+        <div class="lp-card rep-chart-card">
+          <div class="lp-card-head">
+            <div class="lp-card-title"><i data-lucide="activity"></i><span>Student Status</span></div>
+          </div>
+          <div id="rep-chart-stu-status" class="rep-chart-body"></div>
+        </div>
+
+        <div class="lp-card rep-chart-card">
+          <div class="lp-card-head">
+            <div class="lp-card-title"><i data-lucide="users-round"></i><span>Gender Split</span></div>
+          </div>
+          <div id="rep-chart-gender" class="rep-chart-body"></div>
+        </div>
+      </div>
+
+      <div class="lp-card adm-table-card rep-mt">
+        <div class="lp-card-head">
+          <div class="lp-card-title">
+            <i data-lucide="layers"></i>
+            <span>Batch Filling</span>
+            <span id="rep-batch-count" class="lp-count">0 batches</span>
+          </div>
+          <button type="button" id="rep-csv-batches" class="ui-btn ghost sm">
+            <i data-lucide="download"></i>
+            <span>Download CSV</span>
+          </button>
+        </div>
+        <div id="rep-batch-fill-list" class="rep-batch-fill-body"></div>
+      </div>
+    </section>
+
+    <!-- ================= SECTION 5: COMPARISON (SUPER ADMIN ONLY) ================= -->
+    <section id="rep-sec-comparison" class="rep-sec" aria-label="Branch and Session Comparison" hidden>
+      <div class="rep-sec-head">
+        <div>
+          <h3><i data-lucide="git-compare"></i><span>Branch &amp; Session Comparison</span></h3>
+          <p>Cross-branch performance benchmark and current vs previous session comparison.</p>
+        </div>
+      </div>
+
+      <div class="rep-grid-2">
+        <div class="lp-card rep-chart-card">
+          <div class="lp-card-head">
+            <div class="lp-card-title"><i data-lucide="git-branch"></i><span>Branch Financials Comparison</span></div>
+          </div>
+          <div id="rep-chart-branch-comp" class="rep-chart-body"></div>
+        </div>
+
+        <div class="lp-card rep-chart-card">
+          <div class="lp-card-head">
+            <div class="lp-card-title"><i data-lucide="calendar-range"></i><span>Current vs Previous Session</span></div>
+          </div>
+          <div id="rep-chart-session-comp" class="rep-chart-body"></div>
+        </div>
+      </div>
+
+      <div class="lp-card adm-table-card rep-mt">
+        <div class="lp-card-head">
+          <div class="lp-card-title">
+            <i data-lucide="git-branch"></i>
+            <span>Branch Comparison Table</span>
+          </div>
+          <button type="button" id="rep-csv-branch-comp" class="ui-btn ghost sm">
+            <i data-lucide="download"></i>
+            <span>Download CSV</span>
+          </button>
+        </div>
+        <div class="lp-scroll">
+          <table id="rep-branch-comp-table" class="lp-table lp-mobile-cards">
             <thead>
               <tr>
                 <th>Branch</th>
-                <th class="num">Branch Cash</th>
-                <th class="num">Branch UPI / Bank</th>
-                <th id="rep-settle-th-ho" class="num">HO / Top Admin</th>
-                <th class="num">Branch Total</th>
-                <th class="num">Handover Due</th>
+                <th class="num">Students</th>
+                <th class="num">Collected</th>
+                <th class="num">Outstanding</th>
                 <th class="num">Overdue</th>
-                <th class="act">Breakdown</th>
+                <th class="num">Collection %</th>
               </tr>
             </thead>
-            <tbody id="rep-settle-tbody"></tbody>
-          </table>
-        </div>
-        <div id="rep-settle-formula-note" class="lp-card-foot rep-note-foot"></div>
-      </div>
-    </section>
-
-    <!-- ================= TAB 3: FINE WAIVERS ================= -->
-    <section id="rep-panel-waivers" role="tabpanel" aria-labelledby="rep-tab-waivers" hidden>
-      <div class="lp-card adm-table-card">
-        <div class="lp-card-head">
-          <div class="lp-card-title">
-            <i data-lucide="shield-off"></i>
-            <span>Fine &amp; Fee Waivers Audit</span>
-          </div>
-          <span id="rep-waivers-badge" class="lp-count">0 waivers</span>
-        </div>
-
-        <div class="lp-scroll">
-          <table id="rep-waivers-table" class="lp-table lp-mobile-cards">
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th>Student</th>
-                <th>Branch &amp; Course</th>
-                <th>Fee Item</th>
-                <th class="num">Waived Amount</th>
-                <th>Waived By</th>
-                <th>Reason</th>
-                <th class="act">Details</th>
-              </tr>
-            </thead>
-            <tbody id="rep-waivers-tbody"></tbody>
+            <tbody id="rep-branch-comp-tbody"></tbody>
           </table>
         </div>
       </div>
-    </section>
 
-    <!-- ================= TAB 4: OVERVIEW & COURSES ================= -->
-    <section id="rep-panel-overview" role="tabpanel" aria-labelledby="rep-tab-overview" hidden>
-      <div class="rep-overview-grid">
-        <div class="lp-card rep-viz-card">
-          <div class="lp-card-head">
-            <div class="lp-card-title"><i data-lucide="pie-chart"></i><span>Payment Mode Distribution</span></div>
-          </div>
-          <div id="rep-mode-bars" class="rep-bars-body"></div>
-        </div>
-
-        <div class="lp-card rep-viz-card">
-          <div class="lp-card-head">
-            <div class="lp-card-title"><i data-lucide="trending-up"></i><span>Daily Collection Trend</span></div>
-            <span id="rep-daily-caption" class="lp-count">0 days</span>
-          </div>
-          <div id="rep-daily-bars" class="rep-bars-body rep-daily-bars"></div>
-        </div>
-      </div>
-
-      <div class="lp-card adm-table-card rep-courses-card">
+      <div class="lp-card adm-table-card rep-mt">
         <div class="lp-card-head">
           <div class="lp-card-title">
-            <i data-lucide="book-open"></i>
-            <span>Course / Level Breakdown &amp; Overdue Tie-In</span>
+            <i data-lucide="history"></i>
+            <span>Session Comparison Table</span>
           </div>
-          <span id="rep-overdue-tiein-note" class="lp-count">Active session</span>
+          <button type="button" id="rep-csv-session-comp" class="ui-btn ghost sm">
+            <i data-lucide="download"></i>
+            <span>Download CSV</span>
+          </button>
         </div>
         <div class="lp-scroll">
-          <table id="rep-courses-table" class="lp-table lp-mobile-cards">
+          <table id="rep-session-comp-table" class="lp-table lp-mobile-cards">
             <thead>
               <tr>
-                <th id="rep-courses-th-name">Course</th>
-                <th class="num">Payers</th>
-                <th class="num">Receipts</th>
-                <th class="num">Fees Collected</th>
-                <th class="num">Late Fees</th>
-                <th class="num">Waived</th>
-                <th class="num">Total Collected</th>
-                <th class="num">Overdue Pending</th>
+                <th>Session</th>
+                <th class="num">Students</th>
+                <th class="num">Collected</th>
+                <th class="num">Outstanding Dues</th>
+                <th class="num">Overdue Amount</th>
               </tr>
             </thead>
-            <tbody id="rep-courses-tbody"></tbody>
+            <tbody id="rep-session-comp-tbody"></tbody>
           </table>
         </div>
       </div>

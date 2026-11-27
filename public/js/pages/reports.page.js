@@ -1,54 +1,41 @@
-// reports.page.js — Unified Financial Reports page (Youth Centre & Unique Kids)
-// Accessible exclusively to Super Admin role (resolved dynamically via getRoleTitle).
+// reports.page.js — Read-only Youth Centre Reports page (#/reports)
+// Accessible to Super Admin (all branches + Section 5 Comparison) and Branch Head (own branch locked, Sections 1-4).
 
-import { createSelect } from '../components/ui-select.js?v=1.8.176';
-import { createBranchBatchFilter, clearPersistedBranchBatchFilters } from '../components/branch-batch-filter.js?v=1.8.176';
-import { openPopup } from '../components/modal.js?v=1.8.176';
-import { showToast } from '../components/toast.js?v=1.8.176';
-import { renderPager, renderEmptyTableState, PAGE_SIZE } from '../components/list-page.js?v=1.8.176';
+import { createSelect } from '../components/ui-select.js?v=1.8.177';
+import { createBranchBatchFilter, clearPersistedBranchBatchFilters } from '../components/branch-batch-filter.js?v=1.8.177';
+import { renderDonutChart, renderBarChart, renderStackedBarChart, renderLineChart } from '../components/charts.js?v=1.8.177';
+import { showToast } from '../components/toast.js?v=1.8.177';
+import { renderEmptyTableState } from '../components/list-page.js?v=1.8.177';
 import {
   getCachedSessions,
   loadSessions,
   getSelectedSession
-} from '../core/sessions.js?v=1.8.176';
+} from '../core/sessions.js?v=1.8.177';
 import {
   ensureReferenceData,
   scopeReferenceDataByCtx,
-  getPaymentDatePresetOptions,
-  getPaymentTypeFilterOptions,
-  getPaymentModeFilterOptions,
-  getPaymentChipOrder,
-  loadYouthPaymentHistory,
-  loadKidsPaymentHistory,
-  loadYouthPendingReport,
-  loadKidsPendingReport,
-  loadStudentPhotos,
-  getCachedStudentPhoto,
-  getCachedBillForEntry,
+  invalidateFinancialCache,
+  getReportDatePresetOptions,
   getDatePresetRange,
-  formatCourseBranchDisplay,
-  formatCollectorName,
-  formatCollectorWithDesignation,
-  formatShortReceipt,
-  modeDisplayMeta,
-  buildPaymentDetailsModel,
-  buildFinancialReportAggregates,
-  exportFinancialReportPdf,
+  loadYouthPaymentHistory,
+  loadYouthPendingReport,
+  loadAllYouthSessionsForCompare,
+  buildYouthReportsData,
   downloadCsv,
   openPrintSheet,
   toTitleCaseIfCaps,
   formatINR,
   fmtDate,
   todayISO
-} from '../services/report.service.js?v=1.8.176';
-import { formatPersonName, initials } from '../utils/formatter.js?v=1.8.176';
-import { resolveUserDisplay, getRoleTitle } from '../services/user-directory.service.js?v=1.8.176';
+} from '../services/report.service.js?v=1.8.177';
+import { resolveUserDisplay, getRoleTitle } from '../services/user-directory.service.js?v=1.8.177';
+
+const FILTER_STORAGE_PREFIX = 'uicms.rep.v1.';
 
 let state = null;
 let sessionsLoadedListener = null;
 let sessionsChangedListener = null;
 let usersUpdatedListener = null;
-let lastMountedCtx = null;
 
 function $(id) {
   return document.getElementById(id);
@@ -71,79 +58,103 @@ function paint() {
   if (typeof lucide !== 'undefined') lucide.createIcons();
 }
 
-function yesterdayISO() {
-  const today = todayISO();
-  const [y, m, d] = today.split('-').map(Number);
-  const dt = new Date(Date.UTC(y, (m || 1) - 1, d || 1));
-  dt.setUTCDate(dt.getUTCDate() - 1);
-  return dt.toISOString().slice(0, 10);
+function storageKey(profile) {
+  return FILTER_STORAGE_PREFIX + String(profile?.email || profile?.role || 'anon').toLowerCase();
 }
 
-function resolveActiveYouthSession() {
+function readSavedFilters(profile) {
+  try {
+    const raw = sessionStorage.getItem(storageKey(profile));
+    return raw ? JSON.parse(raw) : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+function saveFilters() {
+  if (!state) return;
+  try {
+    const bb = state.bbFilter ? state.bbFilter.getValue() : { branchId: state.filters.branchId || 'all', batchId: state.filters.batchId || 'all' };
+    sessionStorage.setItem(storageKey(state.profile), JSON.stringify({
+      branchId: state.isBranchHead ? state.profile.branchId : bb.branchId,
+      batchId: bb.batchId,
+      courseId: state.filters.courseId,
+      datePreset: state.filters.datePreset,
+      dateFrom: state.filters.dateFrom,
+      dateTo: state.filters.dateTo,
+      duesGroupBy: state.duesGroupBy,
+      trendKind: state.trendKind
+    }));
+  } catch (_) {}
+}
+
+function clearSavedFilters(profile) {
+  try {
+    sessionStorage.removeItem(storageKey(profile));
+  } catch (_) {}
+}
+
+function resolveActiveSession() {
   if (!state) return null;
   const cached = getCachedSessions('youth');
   if (cached.length) state.sessions = cached;
   return getSelectedSession('youth') || state.sessions[0] || null;
 }
 
-function toggleNoSessionState(show) {
-  $('rep-no-session').hidden = !show;
-  $('rep-stats').hidden = show;
-  $('rep-toolbar').hidden = show;
-  $('rep-tabs').hidden = show;
-  $('rep-panel-collection').hidden = show || state?.activeTab !== 'collection';
-  $('rep-panel-settlement').hidden = show || state?.ctx === 'school' || state?.activeTab !== 'settlement';
-  $('rep-panel-waivers').hidden = show || state?.activeTab !== 'waivers';
-  $('rep-panel-overview').hidden = show || state?.activeTab !== 'overview';
-  if (show) {
-    $('rep-breakdown-strip').hidden = true;
-    $('rep-partial-banner').hidden = true;
-    paint();
-  }
+function resolvePreviousSession(allYouthSessions = [], activeSession = null) {
+  if (!activeSession || !Array.isArray(allYouthSessions) || !allYouthSessions.length) return null;
+  const sorted = allYouthSessions.slice().sort((a, b) => (b.startDate || '').localeCompare(a.startDate || ''));
+  const idx = sorted.findIndex((s) => s.id === activeSession.id);
+  if (idx >= 0 && sorted[idx + 1]) return sorted[idx + 1];
+  const curStart = activeSession.startDate || '';
+  return sorted.find((s) => s.id !== activeSession.id && s.startDate && s.startDate < curStart) || null;
 }
 
-function showSkeleton() {
-  $('rep-breakdown-strip').hidden = true;
-  $('rep-col-footer-summaries').hidden = true;
-  const stats = $('rep-stats');
-  if (stats) {
-    stats.classList.add('is-loading');
-    stats.querySelectorAll('.lp-stat-value').forEach((el) => {
+function toggleNoSessionState(show) {
+  $('rep-no-session').hidden = !show;
+  $('rep-toolbar').hidden = show;
+  $('rep-sec-kpis').hidden = show;
+  $('rep-sec-money').hidden = show;
+  $('rep-sec-dues').hidden = show;
+  $('rep-sec-students').hidden = show;
+  $('rep-sec-comparison').hidden = show || !state?.isSuper;
+  if (show) paint();
+}
+
+function showSkeletons() {
+  const kpis = $('rep-kpis');
+  if (kpis) {
+    kpis.classList.add('is-loading');
+    kpis.querySelectorAll('.lp-stat-value').forEach((el) => {
       el.textContent = '';
       el.classList.add('skel');
     });
   }
-  const tbody = $('rep-col-tbody');
-  if (!tbody) return;
-  tbody.innerHTML = '';
-  const widths = ['w-date', 'w-long', 'w-med', 'w-short', 'w-short', 'w-short', 'w-short', 'w-act'];
-  for (let i = 0; i < 6; i++) {
-    const tr = mk('tr', 'adm-sk-row');
-    widths.forEach((w) => {
-      const td = mk('td');
-      td.appendChild(mk('div', 'adm-sk-cell skel ' + w));
-      tr.appendChild(td);
-    });
-    tbody.appendChild(tr);
-  }
+  ['rep-chart-trend', 'rep-chart-modes', 'rep-chart-fee-types', 'rep-chart-dues-group', 'rep-chart-ageing', 'rep-chart-admissions', 'rep-chart-stu-course', 'rep-chart-stu-status', 'rep-chart-gender'].forEach((id) => {
+    const el = $(id);
+    if (el) {
+      el.innerHTML = '<div class="rep-chart-skel skel"></div>';
+    }
+  });
 }
 
-function hideSkeleton() {
-  const stats = $('rep-stats');
-  if (!stats) return;
-  stats.classList.remove('is-loading');
-  stats.querySelectorAll('.lp-stat-value').forEach((el) => el.classList.remove('skel'));
+function hideSkeletons() {
+  const kpis = $('rep-kpis');
+  if (!kpis) return;
+  kpis.classList.remove('is-loading');
+  kpis.querySelectorAll('.lp-stat-value').forEach((el) => el.classList.remove('skel'));
 }
 
 export async function mount({ profile, ctx }) {
   const isSuper = profile?.role === 'superadmin';
-  const activeCtx = ctx === 'school' ? 'school' : 'youth';
+  const isBranchHead = profile?.role === 'branch_head' && !!profile?.branchId;
 
-  if (!isSuper) {
+  if ((!isSuper && !isBranchHead) || (ctx && ctx !== 'youth')) {
     $('rep-access-denied').hidden = false;
     $('rep-main').hidden = true;
-    const superLabel = getRoleTitle('superadmin');
-    $('rep-denied-desc').textContent = `Financial reports can only be accessed by ${superLabel}.`;
+    $('rep-denied-desc').textContent = !isSuper && !isBranchHead
+      ? `Reports in Youth Centre are available to ${getRoleTitle('superadmin')} and ${getRoleTitle('branch_head')}.`
+      : 'Reports are currently available for Youth Centre only.';
     paint();
     return;
   }
@@ -151,338 +162,213 @@ export async function mount({ profile, ctx }) {
   $('rep-access-denied').hidden = true;
   $('rep-main').hidden = false;
 
-  if (lastMountedCtx && lastMountedCtx !== activeCtx) {
-    clearPersistedBranchBatchFilters('reports.');
-  }
-  lastMountedCtx = activeCtx;
-
+  const saved = readSavedFilters(profile);
   const today = todayISO();
+
   state = {
     profile,
-    ctx: activeCtx,
+    isSuper,
+    isBranchHead,
     meta: null,
     sessions: getCachedSessions('youth'),
+    allSessions: [],
     activeSession: null,
-    activeTab: 'collection',
-    sortBy: 'date',
-    sortDir: 'desc',
+    prevSession: null,
+    duesGroupBy: saved?.duesGroupBy || (isBranchHead ? 'batch' : 'branch'),
+    trendKind: saved?.trendKind || 'line',
     filters: {
-      datePreset: 'all',
-      singleDate: today,
-      dateFrom: today,
-      dateTo: today,
-      collectedAt: 'all',
-      collector: 'all',
-      courseId: 'all',
-      type: 'all',
-      mode: 'all',
-      search: ''
+      branchId: isBranchHead ? profile.branchId : (saved?.branchId || 'all'),
+      batchId: saved?.batchId || 'all',
+      courseId: saved?.courseId || 'all',
+      datePreset: saved?.datePreset || 'session',
+      dateFrom: saved?.dateFrom || today,
+      dateTo: saved?.dateTo || today
     },
     bbFilter: null,
     selects: {},
-    youthResult: null,
-    kidsResult: null,
+    historyResult: null,
     pendingResult: null,
-    mergedEntries: [],
-    filteredEntries: [],
-    aggs: null,
-    page: 1,
-    totalReadCount: 0,
+    prevPendingResult: null,
+    analytics: null,
+    totalReads: 0,
     destroyed: false
   };
 
-  updateHeaderText();
+  if (isBranchHead && state.duesGroupBy === 'branch') {
+    state.duesGroupBy = 'batch';
+  }
+
+  $('rep-sec-comparison').hidden = !isSuper;
+  $('rep-dues-grp-branch').hidden = isBranchHead;
+
+  updateHeaderUi();
   initControls();
   bindEvents();
-  switchTab('collection');
-  showSkeleton();
+  showSkeletons();
   await bootstrapData({ forceRefresh: false });
 }
 
-function updateHeaderText() {
+function updateHeaderUi() {
   if (!state) return;
-  const isSchool = state.ctx === 'school';
-  const label = isSchool ? 'Unique Kids' : 'Youth Centre';
-  const sessName = !isSchool && state.activeSession?.name ? ` · ${state.activeSession.name}` : '';
-  const superLabel = getRoleTitle('superadmin');
-
-  $('rep-crumb-ctx').textContent = label;
-  $('rep-title').textContent = `${label} — Financial Reports`;
-  $('rep-subtitle').textContent = isSchool
-    ? 'Collections, collector accountability, fine waivers, and overdue dues across Unique Kids.'
-    : `Collections, collector accountability, branch cash settlement, and fine waivers${sessName}.`;
+  const sessName = state.activeSession?.name || '';
+  $('rep-subtitle').textContent = sessName
+    ? `Read-only analytics for ${sessName} across collections, dues, and students.`
+    : 'Read-only analytics across collections, dues, students, and performance.';
 
   const badge = $('rep-scope-badge');
   if (badge) {
     badge.hidden = false;
-    badge.textContent = `${superLabel} · ${isSchool ? 'Unique Kids' : 'All Branches'}`;
-  }
-
-  $('rep-course-label').textContent = isSchool ? 'Level' : 'Course';
-  $('rep-col-th-cb').textContent = isSchool ? 'Level, Branch & Batch' : 'Course, Branch & Batch';
-  $('rep-courses-th-name').textContent = isSchool ? 'Level' : 'Course';
-
-  const settleHoTh = $('rep-settle-th-ho');
-  if (settleHoTh) settleHoTh.textContent = `HO / ${superLabel}`;
-
-  const settleTab = $('rep-tab-settlement');
-  if (settleTab) settleTab.hidden = isSchool;
-  if (isSchool && state.activeTab === 'settlement') {
-    state.activeTab = 'collection';
+    if (state.isBranchHead) {
+      const br = state.meta?.branchesById?.[state.profile.branchId];
+      const brLbl = br?.code || state.profile.branchName || state.profile.branchId;
+      badge.textContent = `${getRoleTitle('branch_head')} · ${brLbl}`;
+    } else {
+      badge.textContent = `${getRoleTitle('superadmin')} · All Branches`;
+    }
   }
 }
 
-function switchTab(tabKey) {
-  if (!state) return;
-  const target = (state.ctx === 'school' && tabKey === 'settlement') ? 'collection' : tabKey;
-  state.activeTab = target;
-
-  document.querySelectorAll('#rep-tabs .org-tab').forEach((btn) => {
-    const active = btn.dataset.tab === target;
-    btn.classList.toggle('is-active', active);
-    btn.setAttribute('aria-selected', String(active));
+function initControls() {
+  state.bbFilter = createBranchBatchFilter($('rep-bb-host'), {
+    persistKey: 'reports.youth',
+    profile: state.profile,
+    ctx: 'youth',
+    sessionId: '',
+    branches: [],
+    batches: [],
+    courses: [],
+    onChange: (next) => {
+      if (state) {
+        state.filters.branchId = state.isBranchHead ? state.profile.branchId : (next?.branchId || 'all');
+        state.filters.batchId = next?.batchId || 'all';
+        saveFilters();
+        computeAndRenderAnalytics();
+      }
+    }
   });
 
-  ['collection', 'settlement', 'waivers', 'overview'].forEach((k) => {
-    const panel = $(`rep-panel-${k}`);
-    if (!panel) return;
-    panel.hidden = k !== target || (k === 'settlement' && state.ctx === 'school');
+  state.selects.course = createSelect($('rep-course-host'), {
+    options: [{ value: 'all', label: 'All courses', icon: 'book-open' }],
+    value: state.filters.courseId,
+    ariaLabel: 'Course',
+    onChange: (val) => {
+      state.filters.courseId = val || 'all';
+      saveFilters();
+      computeAndRenderAnalytics();
+    }
   });
+
+  state.selects.datePreset = createSelect($('rep-date-host'), {
+    options: getReportDatePresetOptions(),
+    value: state.filters.datePreset,
+    ariaLabel: 'Date range',
+    onChange: (val) => {
+      state.filters.datePreset = val || 'session';
+      updateCustomDateVisibility();
+      saveFilters();
+      computeAndRenderAnalytics();
+    }
+  });
+
+  updateCustomDateVisibility();
+  syncSegmentButtons();
 }
 
-function computeActiveDateRange() {
-  if (!state) return { from: '', to: '' };
-  const f = state.filters;
-  if (f.datePreset === 'single') {
-    const d = f.singleDate || todayISO();
-    return { from: d, to: d };
-  }
-  if (f.datePreset === 'custom') {
-    return { from: f.dateFrom || '', to: f.dateTo || '' };
-  }
-  if (f.datePreset === 'all') {
-    return { from: '', to: '' };
-  }
-  return getDatePresetRange(f.datePreset, todayISO(), state.activeSession);
-}
-
-function updateDateSubbarVisibility() {
-  if (!state) return;
-  const preset = state.filters.datePreset;
-  const sub = $('rep-date-subbar');
-  const singleWrap = $('rep-single-date-wrap');
-  const customWrap = $('rep-custom-range-wrap');
-
-  const isSingle = preset === 'single';
-  const isCustom = preset === 'custom';
-  sub.hidden = !(isSingle || isCustom);
-  singleWrap.hidden = !isSingle;
-  customWrap.hidden = !isCustom;
-
-  if (isSingle && !$('rep-single-date').value) {
-    $('rep-single-date').value = state.filters.singleDate || todayISO();
-  }
+function updateCustomDateVisibility() {
+  const isCustom = state?.filters?.datePreset === 'custom';
+  $('rep-date-custom').hidden = !isCustom;
   if (isCustom) {
     if (!$('rep-date-from').value) $('rep-date-from').value = state.filters.dateFrom || todayISO();
     if (!$('rep-date-to').value) $('rep-date-to').value = state.filters.dateTo || todayISO();
   }
 }
 
-function initControls() {
-  const isSchool = state.ctx === 'school';
-
-  state.bbFilter = createBranchBatchFilter($('rep-bb-host'), {
-    persistKey: 'reports.' + state.ctx,
-    profile: state.profile,
-    ctx: state.ctx,
-    sessionId: '',
-    branches: [],
-    batches: [],
-    courses: [],
-    onChange: () => {
-      state.page = 1;
-      applyFiltersAndRender();
-    }
+function syncSegmentButtons() {
+  document.querySelectorAll('#rep-trend-mode-bar .rep-seg-btn').forEach((btn) => {
+    btn.classList.toggle('is-active', btn.dataset.kind === state?.trendKind);
   });
-
-  state.selects.datePreset = createSelect($('rep-date-host'), {
-    options: getPaymentDatePresetOptions(state.ctx, { includeSingle: true }),
-    value: state.filters.datePreset,
-    ariaLabel: 'Date range',
-    onChange: async (val) => {
-      state.filters.datePreset = val || 'all';
-      updateDateSubbarVisibility();
-      state.page = 1;
-      await loadReportData({ forceRefresh: false });
-    }
-  });
-
-  state.selects.collectedAt = createSelect($('rep-loc-host'), {
-    options: [{ value: 'all', label: 'All locations', icon: 'map-pin' }],
-    value: 'all',
-    ariaLabel: 'Collected at location',
-    onChange: (val) => {
-      state.filters.collectedAt = val || 'all';
-      state.page = 1;
-      applyFiltersAndRender();
-    }
-  });
-
-  state.selects.collector = createSelect($('rep-collector-host'), {
-    options: [{ value: 'all', label: 'All collectors', icon: 'users' }],
-    value: 'all',
-    ariaLabel: 'Collected by',
-    onChange: (val) => {
-      state.filters.collector = val || 'all';
-      state.page = 1;
-      applyFiltersAndRender();
-    }
-  });
-
-  state.selects.course = createSelect($('rep-course-host'), {
-    options: [{ value: 'all', label: isSchool ? 'All levels' : 'All courses', icon: 'book-open' }],
-    value: 'all',
-    ariaLabel: isSchool ? 'Level' : 'Course',
-    onChange: (val) => {
-      state.filters.courseId = val || 'all';
-      state.page = 1;
-      applyFiltersAndRender();
-    }
-  });
-
-  state.selects.type = createSelect($('rep-type-host'), {
-    options: getPaymentTypeFilterOptions(state.ctx),
-    value: 'all',
-    ariaLabel: 'Payment type',
-    onChange: (val) => {
-      state.filters.type = val || 'all';
-      state.page = 1;
-      applyFiltersAndRender();
-    }
-  });
-
-  state.selects.mode = createSelect($('rep-mode-host'), {
-    options: getPaymentModeFilterOptions(state.ctx),
-    value: 'all',
-    ariaLabel: 'Payment mode',
-    onChange: (val) => {
-      state.filters.mode = val || 'all';
-      state.page = 1;
-      applyFiltersAndRender();
-    }
+  document.querySelectorAll('#rep-dues-group-tabs .rep-seg-btn').forEach((btn) => {
+    btn.classList.toggle('is-active', btn.dataset.group === state?.duesGroupBy);
   });
 }
 
 function bindEvents() {
-  document.querySelectorAll('#rep-tabs .org-tab').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      switchTab(btn.dataset.tab || 'collection');
-    });
-  });
-
-  const searchInp = $('rep-search');
-  if (searchInp) {
-    searchInp.addEventListener('input', () => {
-      state.filters.search = (searchInp.value || '').trim().toLowerCase();
-      state.page = 1;
-      applyFiltersAndRender();
-    });
-  }
-
   $('rep-mobile-filters-btn')?.addEventListener('click', () => {
     const tb = $('rep-toolbar');
-    const btn = $('rep-mobile-filters-btn');
     const open = tb.classList.toggle('is-filters-open');
-    btn?.setAttribute('aria-expanded', String(open));
-    if (!open) {
-      $('rep-extra-filters').hidden = true;
-      $('rep-more-btn')?.setAttribute('aria-expanded', 'false');
-    }
+    $('rep-mobile-filters-btn')?.setAttribute('aria-expanded', String(open));
   });
 
-  $('rep-more-btn')?.addEventListener('click', () => {
-    const extra = $('rep-extra-filters');
-    const btn = $('rep-more-btn');
-    if (!extra || !btn) return;
-    extra.hidden = !extra.hidden;
-    btn.setAttribute('aria-expanded', String(!extra.hidden));
-  });
-
-  $('rep-single-date')?.addEventListener('change', async () => {
-    if (!state || state.filters.datePreset !== 'single') return;
-    state.filters.singleDate = $('rep-single-date').value || todayISO();
-    state.page = 1;
-    await loadReportData({ forceRefresh: false });
-  });
-
-  $('rep-single-today')?.addEventListener('click', async () => {
-    if (!state) return;
-    const t = todayISO();
-    state.filters.singleDate = t;
-    $('rep-single-date').value = t;
-    state.page = 1;
-    await loadReportData({ forceRefresh: false });
-  });
-
-  $('rep-single-yesterday')?.addEventListener('click', async () => {
-    if (!state) return;
-    const y = yesterdayISO();
-    state.filters.singleDate = y;
-    $('rep-single-date').value = y;
-    state.page = 1;
-    await loadReportData({ forceRefresh: false });
-  });
-
-  const onRangeChange = async () => {
+  const onCustomDateInput = () => {
     if (!state || state.filters.datePreset !== 'custom') return;
     state.filters.dateFrom = $('rep-date-from').value || '';
     state.filters.dateTo = $('rep-date-to').value || '';
-    state.page = 1;
-    await loadReportData({ forceRefresh: false });
+    saveFilters();
+    computeAndRenderAnalytics();
   };
-  $('rep-date-from')?.addEventListener('change', onRangeChange);
-  $('rep-date-to')?.addEventListener('change', onRangeChange);
+  $('rep-date-from')?.addEventListener('change', onCustomDateInput);
+  $('rep-date-to')?.addEventListener('change', onCustomDateInput);
 
-  $('rep-clear-filters')?.addEventListener('click', () => resetAllFilters());
-
+  $('rep-reset-filters')?.addEventListener('click', () => resetFilters());
+  $('rep-retry')?.addEventListener('click', () => bootstrapData({ forceRefresh: true }));
   $('rep-refresh')?.addEventListener('click', async () => {
-    await loadReportData({ forceRefresh: true });
-    showToast({ type: 'success', message: 'Financial reports refreshed.' });
+    invalidateFinancialCache({ clearMeta: false });
+    await loadAllReportSources({ forceRefresh: true });
+    showToast({ type: 'success', message: 'Reports refreshed with latest data.' });
   });
-  $('rep-retry')?.addEventListener('click', () => loadReportData({ forceRefresh: true }));
-  $('rep-banner-loadmore')?.addEventListener('click', () => loadMoreYouth({ loadAll: false }));
-  $('rep-banner-loadall')?.addEventListener('click', () => loadMoreYouth({ loadAll: true }));
 
-  $('rep-sort-date')?.addEventListener('click', () => toggleSort('date'));
-  $('rep-sort-amount')?.addEventListener('click', () => toggleSort('amount'));
+  document.querySelectorAll('#rep-trend-mode-bar .rep-seg-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      if (!state) return;
+      state.trendKind = btn.dataset.kind || 'line';
+      saveFilters();
+      syncSegmentButtons();
+      renderMoneySection();
+    });
+  });
 
-  $('rep-export-csv')?.addEventListener('click', handleExportCsv);
-  $('rep-export-pdf')?.addEventListener('click', handleExportPdf);
-  $('rep-print')?.addEventListener('click', handlePrintReport);
+  document.querySelectorAll('#rep-dues-group-tabs .rep-seg-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      if (!state) return;
+      state.duesGroupBy = btn.dataset.group || 'batch';
+      saveFilters();
+      syncSegmentButtons();
+      renderDuesSection();
+    });
+  });
 
-  const onSessionsSync = async () => {
-    if (!state || state.destroyed || state.ctx !== 'youth') return;
-    state.activeSession = resolveActiveYouthSession();
-    updateHeaderText();
+  $('rep-csv-staff')?.addEventListener('click', () => exportTableCsv('staff'));
+  $('rep-csv-dues-group')?.addEventListener('click', () => exportTableCsv('duesGroup'));
+  $('rep-csv-upcoming')?.addEventListener('click', () => exportTableCsv('upcoming'));
+  $('rep-csv-top-dues')?.addEventListener('click', () => exportTableCsv('topDues'));
+  $('rep-csv-batches')?.addEventListener('click', () => exportTableCsv('batches'));
+  $('rep-csv-branch-comp')?.addEventListener('click', () => exportTableCsv('branchComp'));
+  $('rep-csv-session-comp')?.addEventListener('click', () => exportTableCsv('sessionComp'));
+
+  $('rep-print')?.addEventListener('click', handlePrintWholePage);
+
+  const onSessionEvent = async (forceSessReload = false) => {
+    if (!state || state.destroyed) return;
+    if (forceSessReload) {
+      state.sessions = await loadSessions('youth');
+    }
+    state.activeSession = resolveActiveSession();
+    state.prevSession = resolvePreviousSession(state.allSessions, state.activeSession);
+    updateHeaderUi();
+    syncBranchBatchFilter();
     if (!state.activeSession) {
       toggleNoSessionState(true);
       return;
     }
     toggleNoSessionState(false);
-    syncBranchBatchContext();
-    await loadReportData({ forceRefresh: false });
+    await loadAllReportSources({ forceRefresh: false });
   };
 
-  sessionsLoadedListener = () => onSessionsSync();
-  sessionsChangedListener = async () => {
-    if (!state || state.destroyed || state.ctx !== 'youth') return;
-    state.sessions = await loadSessions('youth');
-    onSessionsSync();
-  };
+  sessionsLoadedListener = () => onSessionEvent(false);
+  sessionsChangedListener = () => onSessionEvent(true);
   usersUpdatedListener = () => {
-    if (!state || state.destroyed) return;
-    populateDynamicFilterOptions();
-    applyFiltersAndRender();
+    if (!state || state.destroyed || !state.historyResult) return;
+    computeAndRenderAnalytics();
   };
 
   window.addEventListener('uic:sessions-loaded', sessionsLoadedListener);
@@ -490,107 +376,40 @@ function bindEvents() {
   window.addEventListener('uic:users-updated', usersUpdatedListener);
 }
 
-function toggleSort(field) {
+function resetFilters() {
   if (!state) return;
-  if (state.sortBy === field) {
-    state.sortDir = state.sortDir === 'desc' ? 'asc' : 'desc';
-  } else {
-    state.sortBy = field;
-    state.sortDir = 'desc';
-  }
-  $('rep-sort-date')?.classList.toggle('is-active', state.sortBy === 'date');
-  $('rep-sort-amount')?.classList.toggle('is-active', state.sortBy === 'amount');
-  state.page = 1;
-  applyFiltersAndRender();
-}
-
-async function resetAllFilters() {
-  if (!state) return;
-  state.filters.search = '';
-  $('rep-search').value = '';
-  clearPersistedBranchBatchFilters('reports.');
+  clearSavedFilters(state.profile);
+  clearPersistedBranchBatchFilters('reports.youth');
   state.bbFilter?.reset();
 
-  state.filters.collectedAt = 'all';
-  state.selects.collectedAt.setValue('all');
-  state.filters.collector = 'all';
-  state.selects.collector.setValue('all');
-  state.filters.courseId = 'all';
+  const today = todayISO();
+  state.filters = {
+    branchId: state.isBranchHead ? state.profile.branchId : 'all',
+    batchId: 'all',
+    courseId: 'all',
+    datePreset: 'session',
+    dateFrom: today,
+    dateTo: today
+  };
   state.selects.course.setValue('all');
-  state.filters.type = 'all';
-  state.selects.type.setValue('all');
-  state.filters.mode = 'all';
-  state.selects.mode.setValue('all');
-
-  const needReload = state.filters.datePreset !== 'all';
-  state.filters.datePreset = 'all';
-  state.selects.datePreset.setValue('all');
-  updateDateSubbarVisibility();
-  state.page = 1;
-
-  if (needReload) await loadReportData({ forceRefresh: false });
-  else applyFiltersAndRender();
-}
-
-function syncBranchBatchContext() {
-  if (!state || !state.bbFilter) return;
-  const scoped = scopeReferenceDataByCtx(state.meta || {}, state.ctx);
-  state.bbFilter.updateData({
-    ctx: state.ctx,
-    sessionId: state.ctx === 'youth' ? (state.activeSession?.id || '') : '',
-    branches: scoped.branchesList,
-    batches: scoped.batchesList,
-    courses: scoped.coursesList
-  });
-}
-
-async function bootstrapData({ forceRefresh = false } = {}) {
-  try {
-    const [meta, sessions] = await Promise.all([
-      ensureReferenceData({ forceRefresh, profile: state.profile }),
-      state.ctx === 'youth'
-        ? (getCachedSessions('youth').length ? Promise.resolve(getCachedSessions('youth')) : loadSessions('youth'))
-        : Promise.resolve([])
-    ]);
-    if (!state || state.destroyed) return;
-
-    state.meta = meta;
-    state.sessions = sessions;
-    state.activeSession = state.ctx === 'youth' ? resolveActiveYouthSession() : null;
-
-    updateHeaderText();
-    populateCourseOptions();
-    syncBranchBatchContext();
-
-    if (state.ctx === 'youth' && !state.activeSession) {
-      hideSkeleton();
-      toggleNoSessionState(true);
-      return;
-    }
-
-    toggleNoSessionState(false);
-    await loadReportData({ forceRefresh });
-  } catch (err) {
-    if (!state || state.destroyed) return;
-    console.error('[reports] bootstrap failed', err);
-    showLoadError(err);
-  }
+  state.selects.datePreset.setValue('session');
+  updateCustomDateVisibility();
+  saveFilters();
+  computeAndRenderAnalytics();
 }
 
 function populateCourseOptions() {
-  const isSchool = state.ctx === 'school';
-  const { coursesList } = scopeReferenceDataByCtx(state.meta || {}, state.ctx);
-  const opts = [{ value: 'all', label: isSchool ? 'All levels' : 'All courses', icon: 'book-open' }]
-    .concat(
-      coursesList
-        .slice()
-        .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
-        .map((c) => ({
-          value: c.id,
-          label: [c.courseCode || c.code, c.name || c.id].filter(Boolean).join(' - '),
-          icon: 'book-open'
-        }))
-    );
+  const { coursesList } = scopeReferenceDataByCtx(state.meta || {}, 'youth');
+  const opts = [{ value: 'all', label: 'All courses', icon: 'book-open' }].concat(
+    coursesList
+      .slice()
+      .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+      .map((c) => ({
+        value: c.id,
+        label: [c.courseCode || c.code, c.name || c.id].filter(Boolean).join(' - '),
+        icon: 'book-open'
+      }))
+  );
   state.selects.course.setOptions(opts);
   if (state.filters.courseId !== 'all' && !opts.some((o) => o.value === state.filters.courseId)) {
     state.filters.courseId = 'all';
@@ -598,1189 +417,710 @@ function populateCourseOptions() {
   state.selects.course.setValue(state.filters.courseId);
 }
 
-async function loadReportData({ forceRefresh = false } = {}) {
-  if (!state || state.destroyed) return;
+function syncBranchBatchFilter() {
+  if (!state || !state.bbFilter) return;
+  const scoped = scopeReferenceDataByCtx(state.meta || {}, 'youth');
+  state.bbFilter.updateData({
+    ctx: 'youth',
+    sessionId: state.activeSession?.id || '',
+    branches: scoped.branchesList,
+    batches: scoped.batchesList,
+    courses: scoped.coursesList
+  });
+  state.bbFilter.setValue({
+    branchId: state.isBranchHead ? state.profile.branchId : (state.filters.branchId || 'all'),
+    batchId: state.filters.batchId || 'all'
+  });
+}
+
+async function bootstrapData({ forceRefresh = false } = {}) {
   $('rep-error').hidden = true;
-  showSkeleton();
-
-  const { from, to } = computeActiveDateRange();
+  showSkeletons();
   try {
-    if (state.ctx === 'youth') {
-      const [histRes, pendRes] = await Promise.all([
-        loadYouthPaymentHistory({
-          profile: state.profile,
-          dateFrom: from,
-          dateTo: to,
-          loadAll: true,
-          forceRefresh
-        }),
-        loadYouthPendingReport({
-          profile: state.profile,
-          session: state.activeSession,
-          forceRefresh
-        })
-      ]);
-      if (!state || state.destroyed) return;
-      state.youthResult = histRes;
-      state.kidsResult = null;
-      state.pendingResult = pendRes;
-      state.totalReadCount = (histRes.readCount || 0) + (pendRes?.readCount || 0);
-      state.mergedEntries = histRes.entries || [];
-    } else {
-      const [histRes, pendRes] = await Promise.all([
-        loadKidsPaymentHistory({
-          profile: state.profile,
-          dateFrom: from,
-          dateTo: to,
-          forceRefresh
-        }),
-        loadKidsPendingReport({
-          profile: state.profile,
-          forceRefresh
-        })
-      ]);
-      if (!state || state.destroyed) return;
-      state.kidsResult = histRes;
-      state.youthResult = null;
-      state.pendingResult = pendRes;
-      state.totalReadCount = (histRes.readCount || 0) + (pendRes?.readCount || 0);
-      state.mergedEntries = histRes.entries || [];
+    const [meta, activeSessions, compareInfo] = await Promise.all([
+      ensureReferenceData({ forceRefresh, profile: state.profile }),
+      getCachedSessions('youth').length ? Promise.resolve(getCachedSessions('youth')) : loadSessions('youth'),
+      loadAllYouthSessionsForCompare()
+    ]);
+    if (!state || state.destroyed) return;
+
+    state.meta = meta;
+    state.sessions = activeSessions;
+    state.allSessions = compareInfo?.sessions?.length ? compareInfo.sessions : activeSessions;
+    state.activeSession = resolveActiveSession();
+    state.prevSession = resolvePreviousSession(state.allSessions, state.activeSession);
+    state.totalReads = (meta.readCount || 0) + (compareInfo?.readCount || 0);
+
+    updateHeaderUi();
+    populateCourseOptions();
+    syncBranchBatchFilter();
+
+    if (!state.activeSession) {
+      hideSkeletons();
+      toggleNoSessionState(true);
+      return;
     }
 
-    populateDynamicFilterOptions();
-    updateLoadMoreUi();
-    applyFiltersAndRender();
+    toggleNoSessionState(false);
+    await loadAllReportSources({ forceRefresh });
+  } catch (err) {
+    if (!state || state.destroyed) return;
+    console.error('[reports] bootstrap failed', err);
+    showError(err);
+  }
+}
 
-    const uniqueIds = Array.from(new Set(state.mergedEntries.map((e) => e.studentDocId).filter(Boolean))).slice(0, 60);
-    if (uniqueIds.length) {
-      loadStudentPhotos(uniqueIds).then((map) => {
-        if (!state || state.destroyed || !map || !map.size) return;
-        renderCollectionTable();
-        paint();
-      }).catch(() => {});
-    }
+async function loadAllReportSources({ forceRefresh = false } = {}) {
+  if (!state || state.destroyed || !state.activeSession) return;
+  $('rep-error').hidden = true;
+  showSkeletons();
+  const refreshBtn = $('rep-refresh');
+  if (refreshBtn) {
+    refreshBtn.disabled = true;
+    refreshBtn.classList.add('spin');
+  }
+
+  try {
+    const tasks = [
+      loadYouthPaymentHistory({
+        profile: state.profile,
+        dateFrom: '',
+        dateTo: '',
+        loadAll: true,
+        forceRefresh
+      }),
+      loadYouthPendingReport({
+        profile: state.profile,
+        session: state.activeSession,
+        forceRefresh
+      }),
+      state.prevSession
+        ? loadYouthPendingReport({
+          profile: state.profile,
+          session: state.prevSession,
+          forceRefresh
+        })
+        : Promise.resolve(null)
+    ];
+
+    const [histRes, pendRes, prevPendRes] = await Promise.all(tasks);
+    if (!state || state.destroyed) return;
+
+    state.historyResult = histRes;
+    state.pendingResult = pendRes;
+    state.prevPendingResult = prevPendRes;
+    state.totalReads += (histRes?.readCount || 0) + (pendRes?.readCount || 0) + (prevPendRes?.readCount || 0);
+
+    computeAndRenderAnalytics();
   } catch (err) {
     if (!state || state.destroyed) return;
     console.error('[reports] load failed', err);
-    showLoadError(err);
-  }
-}
-
-async function loadMoreYouth({ loadAll = false } = {}) {
-  if (!state || state.ctx !== 'youth' || !state.youthResult?.hasMore) return;
-  const { from, to } = computeActiveDateRange();
-  const btn = loadAll ? $('rep-banner-loadall') : $('rep-banner-loadmore');
-  if (btn) btn.disabled = true;
-  try {
-    const res = await loadYouthPaymentHistory({
-      profile: state.profile,
-      dateFrom: from,
-      dateTo: to,
-      cursor: state.youthResult.lastCursor,
-      loadAll,
-      maxBatches: loadAll ? 50 : 3,
-      existingState: state.youthResult
-    });
-    if (!state || state.destroyed) return;
-    state.youthResult = res;
-    state.mergedEntries = res.entries || [];
-    populateDynamicFilterOptions();
-    updateLoadMoreUi();
-    applyFiltersAndRender();
-  } catch (err) {
-    showToast({ type: 'error', message: err?.message || 'Failed to load older receipts.' });
+    showError(err);
   } finally {
-    if (btn) btn.disabled = false;
-  }
-}
-
-function populateDynamicFilterOptions() {
-  if (!state) return;
-  const scoped = scopeReferenceDataByCtx(state.meta || {}, state.ctx);
-  const activeSessId = state.activeSession?.id || '';
-
-  // Collected At locations
-  const locMap = new Map();
-  if (state.ctx === 'school') {
-    locMap.set('HO', 'Head Office (HO)');
-  } else {
-    locMap.set('HO', 'Head Office (HO)');
-    scoped.branchesList.forEach((b) => {
-      const lbl = [b.code || b.branchCode, toTitleCaseIfCaps(b.name || b.id)].filter(Boolean).join(' - ');
-      locMap.set(b.id, lbl || b.id);
-    });
-  }
-
-  const collectors = new Map();
-  state.mergedEntries.forEach((e) => {
-    if (state.ctx === 'youth' && activeSessId && e.sessionId && e.sessionId !== activeSessId) return;
-    if (e.collectedAtKey && e.collectedAtLabel && !locMap.has(e.collectedAtKey)) {
-      locMap.set(e.collectedAtKey, e.collectedAtLabel);
+    if (refreshBtn) {
+      refreshBtn.disabled = false;
+      refreshBtn.classList.remove('spin');
     }
-    const email = String(e.recordedBy || '').toLowerCase().trim();
-    if (email) {
-      const disp = resolveUserDisplay(email, e.recordedByName, e.recordedByDesignation);
-      const name = disp.name && disp.name !== '-' ? disp.name : (formatCollectorName(e.recordedByName, email, e.recordedByDesignation) || email);
-      const desig = disp.designation || (e.collectedByRole ? getRoleTitle(e.collectedByRole) : '');
-      collectors.set(email, desig ? `${name} (${desig})` : name);
-    }
-  });
-
-  const locOpts = [{ value: 'all', label: 'All locations', icon: 'map-pin' }].concat(
-    Array.from(locMap.entries()).map(([value, label]) => ({
-      value,
-      label,
-      icon: value === 'HO' ? 'building-2' : 'git-branch'
-    }))
-  );
-  state.selects.collectedAt.setOptions(locOpts);
-  if (state.filters.collectedAt !== 'all' && !locMap.has(state.filters.collectedAt)) {
-    state.filters.collectedAt = 'all';
-  }
-  state.selects.collectedAt.setValue(state.filters.collectedAt);
-
-  const colOpts = [{ value: 'all', label: 'All collectors', icon: 'users' }].concat(
-    Array.from(collectors.entries())
-      .sort((a, b) => a[1].localeCompare(b[1]))
-      .map(([value, label]) => ({ value, label, icon: 'user' }))
-  );
-  state.selects.collector.setOptions(colOpts);
-  if (state.filters.collector !== 'all' && !collectors.has(state.filters.collector)) {
-    state.filters.collector = 'all';
-  }
-  state.selects.collector.setValue(state.filters.collector);
-}
-
-function updateLoadMoreUi() {
-  const hasMore = Boolean(state.ctx === 'youth' && state.youthResult?.hasMore);
-  const loadedCount = state.mergedEntries.length;
-  $('rep-partial-banner').hidden = !hasMore;
-  if (hasMore) {
-    $('rep-partial-text').textContent = `Showing ${loadedCount} recent Youth receipts. Load older or Load All to include every receipt.`;
   }
 }
 
-function showLoadError(err) {
-  hideSkeleton();
-  $('rep-breakdown-strip').hidden = true;
-  $('rep-col-footer-summaries').hidden = true;
-  $('rep-error-msg').textContent = err?.message || 'Permission or network failure while loading financial reports.';
+function showError(err) {
+  hideSkeletons();
+  $('rep-error-msg').textContent = err?.message || 'Permission or network failure while reading Youth reports.';
   $('rep-error').hidden = false;
   paint();
 }
 
-function updateFilterIndicators() {
-  const f = state.filters;
-  const bb = state.bbFilter ? state.bbFilter.getValue() : { branchId: 'all', batchId: 'all' };
-
-  let secondaryCount = 0;
-  if (f.courseId !== 'all') secondaryCount++;
-  if (f.type !== 'all') secondaryCount++;
-  if (f.mode !== 'all') secondaryCount++;
-
-  const mobileCount = secondaryCount +
-    (state.ctx !== 'school' && bb.branchId !== 'all' ? 1 : 0) +
-    (bb.batchId !== 'all' ? 1 : 0) +
-    (f.datePreset !== 'all' ? 1 : 0) +
-    (f.collectedAt !== 'all' ? 1 : 0) +
-    (f.collector !== 'all' ? 1 : 0);
-
-  const mobileBadge = $('rep-mobile-filters-count');
-  if (mobileBadge) {
-    mobileBadge.textContent = String(mobileCount);
-    mobileBadge.hidden = mobileCount === 0;
+function resolveEffectiveDateWindow() {
+  if (!state) return { dateFrom: '', dateTo: '' };
+  const p = state.filters.datePreset || 'session';
+  if (p === 'custom') {
+    return { dateFrom: state.filters.dateFrom || '', dateTo: state.filters.dateTo || '' };
   }
-
-  const moreBtn = $('rep-more-btn');
-  if (moreBtn) {
-    moreBtn.classList.toggle('has-active', secondaryCount > 0);
-    const sp = moreBtn.querySelector('span');
-    if (sp) sp.textContent = secondaryCount > 0 ? `More (${secondaryCount})` : 'More';
-  }
-
-  const resetBtn = $('rep-clear-filters');
-  if (resetBtn) resetBtn.hidden = !(f.search || mobileCount > 0);
+  return getDatePresetRange(p, todayISO(), state.activeSession);
 }
 
-function entryMatchesFilters(e, { applyLocationAndCollector = true } = {}) {
-  const f = state.filters;
-  const isSchool = state.ctx === 'school';
-  const bb = state.bbFilter ? state.bbFilter.getValue() : { branchId: 'all', batchId: 'all' };
-  const activeSessId = state.activeSession?.id || '';
-
-  if (e.ctx && e.ctx !== state.ctx) return false;
-  if (!isSchool && activeSessId && e.sessionId && e.sessionId !== activeSessId) return false;
-  if (!isSchool && bb.branchId !== 'all' && e.branchId !== bb.branchId) return false;
-  if (bb.batchId !== 'all' && e.batchId !== bb.batchId) return false;
-
-  if (f.courseId !== 'all' && e.courseId !== f.courseId) return false;
-  if (f.type !== 'all') {
-    if (f.type === 'WA') {
-      if (!e.isPureWaiver && e.type !== 'WA' && !(Number(e.lateFeeWaived || 0) > 0)) return false;
-    } else if (e.isAdmissionGroup && Array.isArray(e.breakdown)) {
-      if (!e.breakdown.some((b) => String(b.type || '').toUpperCase() === f.type)) return false;
-    } else if (String(e.type || '').toUpperCase() !== f.type) {
-      return false;
-    }
-  }
-  if (f.mode !== 'all') {
-    if (e.isPureWaiver) return false;
-    const m = String(e.mode || '').toLowerCase();
-    const norm = (m === 'bank_transfer' || m === 'bank') ? 'bank' : m;
-    if (norm !== f.mode) return false;
-  }
-
-  if (applyLocationAndCollector) {
-    if (f.collectedAt !== 'all' && e.collectedAtKey !== f.collectedAt) return false;
-    if (f.collector !== 'all' && String(e.recordedBy || '').toLowerCase() !== f.collector) return false;
-  }
-
-  if (f.search && !String(e.searchBlob || '').includes(f.search)) return false;
-  return true;
-}
-
-function applyFiltersAndRender() {
+function updateFilterStatusAndResetBtn() {
   if (!state) return;
-
-  const list = state.mergedEntries.filter((e) => entryMatchesFilters(e, { applyLocationAndCollector: true }));
-  list.sort((a, b) => {
-    if (state.sortBy === 'amount') {
-      const av = a.isPureWaiver ? 0 : Number(a.totalReceived || 0);
-      const bv = b.isPureWaiver ? 0 : Number(b.totalReceived || 0);
-      const cmp = av - bv;
-      if (cmp !== 0) return state.sortDir === 'asc' ? cmp : -cmp;
-    }
-    const dc = (a.date || '').localeCompare(b.date || '');
-    if (dc !== 0) return state.sortBy === 'date' && state.sortDir === 'asc' ? dc : -dc;
-    return (b.createdAtSec || 0) - (a.createdAtSec || 0);
-  });
-
-  state.filteredEntries = list;
-
-  // Scope overdue pending items for Branch Settlement & Course tie-in using active Branch/Batch/Course
   const bb = state.bbFilter ? state.bbFilter.getValue() : { branchId: 'all', batchId: 'all' };
-  const scopedPending = (state.pendingResult?.items || []).filter((p) => {
-    if (state.ctx === 'youth' && bb.branchId !== 'all' && p.branchId !== bb.branchId) return false;
-    if (bb.batchId !== 'all' && p.batchId !== bb.batchId) return false;
-    if (state.filters.courseId !== 'all' && p.courseId !== state.filters.courseId) return false;
-    return true;
+  const { dateFrom, dateTo } = resolveEffectiveDateWindow();
+
+  let activeCount = 0;
+  if (!state.isBranchHead && bb.branchId !== 'all') activeCount++;
+  if (bb.batchId !== 'all') activeCount++;
+  if (state.filters.courseId !== 'all') activeCount++;
+  if (state.filters.datePreset !== 'session') activeCount++;
+
+  $('rep-reset-filters').hidden = activeCount === 0;
+  const mobBadge = $('rep-mobile-filters-count');
+  if (mobBadge) {
+    mobBadge.textContent = String(activeCount);
+    mobBadge.hidden = activeCount === 0;
+  }
+
+  const rangeLabel = dateFrom || dateTo
+    ? (dateFrom === dateTo ? fmtDate(dateFrom) : `${dateFrom ? fmtDate(dateFrom) : 'Start'} – ${dateTo ? fmtDate(dateTo) : 'Today'}`)
+    : (state.activeSession?.name || 'All session');
+  $('rep-filter-meta').textContent = `${rangeLabel} · ${state.totalReads} cached/db reads`;
+}
+
+function computeAndRenderAnalytics() {
+  if (!state || state.destroyed) return;
+  const bb = state.bbFilter ? state.bbFilter.getValue() : { branchId: 'all', batchId: 'all' };
+  const { dateFrom, dateTo } = resolveEffectiveDateWindow();
+  const scoped = scopeReferenceDataByCtx(state.meta || {}, 'youth');
+
+  state.analytics = buildYouthReportsData({
+    entries: state.historyResult?.entries || [],
+    pendingReport: state.pendingResult,
+    activeSession: state.activeSession,
+    prevPendingReport: state.prevPendingResult,
+    prevSession: state.prevSession,
+    branchesList: scoped.branchesList,
+    coursesList: scoped.coursesList,
+    batchesList: scoped.batchesList,
+    branchesById: state.meta?.branchesById || scoped.branchesById,
+    coursesById: state.meta?.coursesById || scoped.coursesById,
+    batchesById: state.meta?.batchesById || scoped.batchesById,
+    profile: state.profile,
+    filters: {
+      branchId: state.isBranchHead ? state.profile.branchId : bb.branchId,
+      batchId: bb.batchId,
+      courseId: state.filters.courseId,
+      datePreset: state.filters.datePreset,
+      dateFrom,
+      dateTo
+    }
   });
 
-  const scoped = scopeReferenceDataByCtx(state.meta || {}, state.ctx);
-  state.aggs = buildFinancialReportAggregates(list, {
-    branchesList: bb.branchId !== 'all' ? scoped.branchesList.filter((b) => b.id === bb.branchId) : scoped.branchesList,
-    coursesList: state.filters.courseId !== 'all' ? scoped.coursesList.filter((c) => c.id === state.filters.courseId) : scoped.coursesList,
-    pendingItems: scopedPending,
-    usersByEmail: window.APP_CACHE?.usersByEmail || {},
-    ctx: state.ctx
-  });
-
-  hideSkeleton();
-  updateFilterIndicators();
-  renderStatsAndChips();
-  renderCollectionTable();
-  renderCollectionFooterSummaries();
-  renderSettlementTab();
-  renderWaiversTab();
-  renderOverviewTab();
+  hideSkeletons();
+  updateFilterStatusAndResetBtn();
+  renderKpisSection();
+  renderMoneySection();
+  renderDuesSection();
+  renderStudentsSection();
+  renderComparisonSection();
   paint();
 }
 
-function renderStatsAndChips() {
-  const s = state.aggs?.summary || {};
-  $('rep-stat-total').textContent = formatINR(s.totalCollected || 0);
-  $('rep-stat-total-sub').textContent = `${s.moneyReceipts || 0} receipt${s.moneyReceipts === 1 ? '' : 's'} · ${s.uniqueStudents || 0} student${s.uniqueStudents === 1 ? '' : 's'}`;
-
-  $('rep-stat-cash').textContent = formatINR(s.cashTotal || 0);
-  $('rep-stat-cash-sub').textContent = `${s.cashCount || 0} cash receipt${s.cashCount === 1 ? '' : 's'}`;
-
-  $('rep-stat-digital').textContent = formatINR((s.upiTotal || 0) + (s.bankTotal || 0));
-  $('rep-stat-digital-sub').textContent = `${(s.upiCount || 0) + (s.bankCount || 0)} digital receipt${((s.upiCount || 0) + (s.bankCount || 0)) === 1 ? '' : 's'}`;
-
-  $('rep-stat-fines').textContent = formatINR(s.lateFeesCollected || 0);
-  $('rep-stat-fines-sub').textContent = `${s.fineReceiptCount || 0} receipt${s.fineReceiptCount === 1 ? '' : 's'} with fine`;
-
-  $('rep-stat-waived').textContent = formatINR(s.lateFeesWaived || 0);
-  $('rep-stat-waived-sub').textContent = `${s.waiverCount || 0} waiver${s.waiverCount === 1 ? '' : 's'}`;
-
-  const chipsWrap = $('rep-chips');
-  chipsWrap.innerHTML = '';
-  const keys = getPaymentChipOrder(state.ctx);
-  let shownChips = 0;
-  keys.forEach((k) => {
-    const row = s.byType?.[k];
-    if (!row || (!row.count && !row.amount)) return;
-    shownChips++;
-    const chip = mk('span', 'fr-chip');
-    chip.append(`${row.label}: `, mk('strong', '', formatINR(row.amount)), ` (${row.count})`);
-    chipsWrap.appendChild(chip);
-  });
-
-  $('rep-breakdown-strip').hidden = shownChips === 0 && !state.filteredEntries.length;
-  const { from, to } = computeActiveDateRange();
-  const rangeTxt = from || to
-    ? (from === to ? `Date: ${fmtDate(from)}` : `Range: ${from ? fmtDate(from) : 'Start'} – ${to ? fmtDate(to) : 'Today'}`)
-    : 'All dates in loaded scope';
-  $('rep-meta-note').textContent = `${rangeTxt} · ${state.totalReadCount} reads`;
+function paintDeltaBadge(el, delta) {
+  if (!el || !delta) return;
+  el.className = `rep-delta ${delta.tone || 'neutral'}`;
+  el.textContent = '';
+  const iconName = delta.dir === 'up' ? 'trending-up' : (delta.dir === 'down' ? 'trending-down' : 'minus');
+  el.append(ic(iconName), mk('span', '', delta.text || '—'));
 }
 
-function makeAvatarCell(entry) {
-  const wrap = mk('div', 'fr-student-cell');
-  const photo = getCachedStudentPhoto(entry.studentDocId);
-  if (photo) {
-    const img = document.createElement('img');
-    img.className = 'fr-avatar';
-    img.src = photo;
-    img.alt = entry.studentName || 'Student';
-    wrap.appendChild(img);
-  } else {
-    wrap.appendChild(mk('div', 'fr-avatar-fallback', initials(entry.studentName || 'ST')));
-  }
-  const meta = mk('div', 'fr-student-meta');
-  const link = mk('a', 'fr-student-link', formatPersonName(entry.studentName || 'Student'));
-  link.href = `#/students/${encodeURIComponent(entry.studentDocId)}`;
-  meta.appendChild(link);
-  const sub = [entry.studentId, entry.phone].filter(Boolean).join(' · ');
-  if (sub) meta.appendChild(mk('span', 'fr-sub-ellipsis', sub));
-  wrap.appendChild(meta);
-  return wrap;
+function renderKpisSection() {
+  const k = state.analytics?.kpis;
+  if (!k) return;
+
+  const setKpi = (key, valStr, item) => {
+    $(`rep-kpi-${key}`).textContent = valStr;
+    $(`rep-kpi-${key}-sub`).textContent = item.sub || '';
+    paintDeltaBadge($(`rep-kpi-${key}-delta`), item.delta);
+  };
+
+  setKpi('collected', formatINR(k.totalCollected.value), k.totalCollected);
+  setKpi('outstanding', formatINR(k.outstandingDues.value), k.outstandingDues);
+  setKpi('overdue', formatINR(k.overdueAmount.value), k.overdueAmount);
+  setKpi('late-paid', formatINR(k.lateFeesCollected.value), k.lateFeesCollected);
+  setKpi('late-waived', formatINR(k.lateFeesWaived.value), k.lateFeesWaived);
+  setKpi('admissions', String(k.newAdmissions.value), k.newAdmissions);
+  setKpi('active', String(k.activeStudents.value), k.activeStudents);
 }
 
-function renderCollectionTable() {
-  const tbody = $('rep-col-tbody');
-  const pager = $('rep-col-pager');
-  const list = state.filteredEntries || [];
+function renderMoneySection() {
+  const m = state.analytics?.money;
+  if (!m) return;
 
-  $('rep-col-count').textContent = `${list.length} record${list.length === 1 ? '' : 's'}`;
-
-  if (!list.length) {
-    renderEmptyTableState(tbody, {
-      colSpan: 8,
-      title: 'No matching transactions',
-      desc: 'Try expanding the date window or clearing filters.',
-      onClear: () => resetAllFilters()
+  $('rep-trend-badge').textContent = m.useDailyTrend ? 'By day' : 'By month';
+  const trendHost = $('rep-chart-trend');
+  if (state.trendKind === 'bar') {
+    renderBarChart(trendHost, {
+      items: m.trendPoints,
+      valueFormatter: formatINR,
+      color: '#323A85',
+      emptyText: 'No collections in selected period'
     });
-    pager.hidden = true;
-    return;
+  } else {
+    renderLineChart(trendHost, {
+      points: m.trendPoints,
+      valueFormatter: formatINR,
+      color: '#323A85',
+      emptyText: 'No collections in selected period'
+    });
   }
 
-  const totalPages = Math.max(1, Math.ceil(list.length / PAGE_SIZE));
-  if (state.page > totalPages) state.page = totalPages;
-  const start = (state.page - 1) * PAGE_SIZE;
-  const pageItems = list.slice(start, start + PAGE_SIZE);
-
-  tbody.innerHTML = '';
-  pageItems.forEach((e) => {
-    const tr = mk('tr');
-
-    // 1. Date
-    const tdDate = mk('td', 'fr-col-date');
-    tdDate.dataset.label = 'Date';
-    tdDate.appendChild(mk('span', 'fr-date-main', e.date ? fmtDate(e.date) : '-'));
-    tr.appendChild(tdDate);
-
-    // 2. Student
-    const tdSt = mk('td', 'lp-td-primary fr-col-student');
-    tdSt.appendChild(makeAvatarCell(e));
-    tr.appendChild(tdSt);
-
-    // 3. Course, Branch & Batch
-    const tdCb = mk('td', 'fr-col-cb');
-    tdCb.dataset.label = state.ctx === 'school' ? 'Level & Batch' : 'Course, Branch & Batch';
-    const cbStack = mk('div', 'rep-cell-stack');
-    const cbMeta = formatCourseBranchDisplay(e);
-    const cbLine = mk('div', 'fr-cb-inline');
-    if (cbMeta.courseLabel) cbLine.appendChild(mk('span', 'fr-cb-course', cbMeta.courseLabel));
-    if (cbMeta.branchLabel) {
-      if (cbLine.childNodes.length) cbLine.appendChild(mk('span', 'fr-cb-sep', '·'));
-      cbLine.appendChild(mk('span', 'pill indigo fr-cb-branch', cbMeta.branchLabel));
-    }
-    cbStack.appendChild(cbLine);
-    const typeAndBatch = [e.typeLabel || e.type, cbMeta.batchName].filter(Boolean).join(' · ');
-    if (typeAndBatch) cbStack.appendChild(mk('span', 'fr-sub-ellipsis', typeAndBatch));
-    tdCb.appendChild(cbStack);
-    tr.appendChild(tdCb);
-
-    // 4. Mode
-    const tdMode = mk('td', 'fr-col-mode');
-    tdMode.dataset.label = 'Mode';
-    const modeStack = mk('div', 'rep-cell-stack');
-    const mMeta = modeDisplayMeta(e);
-    const badge = mk('span', `la-mode ${mMeta.cls} fr-mode-badge`);
-    badge.append(ic(mMeta.icon), mk('span', '', mMeta.label));
-    modeStack.appendChild(badge);
-    if (e.txnId) modeStack.appendChild(mk('span', 'fr-mode-ref fr-mono', e.txnId));
-    tdMode.appendChild(modeStack);
-    tr.appendChild(tdMode);
-
-    // 5. Collected By
-    const tdBy = mk('td', 'rep-col-by');
-    tdBy.dataset.label = 'Collected By';
-    const byStack = mk('div', 'rep-cell-stack');
-    const collectorTxt = formatCollectorWithDesignation(e)
-      || formatCollectorName(e.recordedByName, e.recordedBy, e.recordedByDesignation)
-      || 'Authorised Staff';
-    byStack.appendChild(mk('span', 'rep-by-main', collectorTxt));
-    if (e.collectedByRole) {
-      byStack.appendChild(mk('span', 'fr-sub-ellipsis', getRoleTitle(e.collectedByRole)));
-    }
-    tdBy.appendChild(byStack);
-    tr.appendChild(tdBy);
-
-    // 6. Collected At
-    const tdLoc = mk('td');
-    tdLoc.dataset.label = 'Collected At';
-    const locStack = mk('div', 'rep-cell-stack');
-    const locPill = mk('span', `pill ${e.collectedAtType === 'head_office' ? 'sky' : 'indigo'}`, e.collectedAtShort || e.collectedAtLabel || 'HO');
-    locStack.appendChild(locPill);
-    if (e.isCrossBranch) {
-      const cTag = mk('div', 'rep-cross-tag');
-      cTag.append(ic('arrow-left-right'), mk('span', '', `Home: ${e.homeBranchCode || e.branchCode || e.homeBranchId}`));
-      locStack.appendChild(cTag);
-    }
-    tdLoc.appendChild(locStack);
-    tr.appendChild(tdLoc);
-
-    // 7. Received
-    const tdAmt = mk('td', 'num fr-col-received');
-    tdAmt.dataset.label = 'Received';
-    const amtStack = mk('div', 'rep-cell-stack is-right');
-    const isWaiverOnly = Boolean(e.isPureWaiver);
-    const amtEl = mk('span', `fr-money ${isWaiverOnly ? 'muted' : 'success'}`, isWaiverOnly ? '₹0 (Waived)' : formatINR(e.totalReceived || 0));
-    amtStack.appendChild(amtEl);
-    const subParts = [];
-    if (Number(e.lateFeePaid || 0) > 0) subParts.push(`Incl. fine ${formatINR(e.lateFeePaid)}`);
-    if (Number(e.lateFeeWaived || 0) > 0) subParts.push(`Waived ${formatINR(e.lateFeeWaived)}`);
-    if (subParts.length) amtStack.appendChild(mk('span', 'fr-sub-ellipsis', subParts.join(' · ')));
-    tdAmt.appendChild(amtStack);
-    tr.appendChild(tdAmt);
-
-    // 8. Receipt / Info
-    const tdRcpt = mk('td', 'act fr-rcpt-td');
-    tdRcpt.dataset.label = 'Receipt';
-    const rcptBtn = mk('button', 'fr-rcpt-link');
-    rcptBtn.type = 'button';
-    rcptBtn.title = e.receiptNo && e.receiptNo !== '—' ? `Open details (${e.receiptNo})` : 'View payment details';
-    rcptBtn.append(ic('file-text'), mk('span', '', formatShortReceipt(e.receiptNo) || 'Details'));
-    rcptBtn.addEventListener('click', () => openEntryDetailsPopup(e));
-    tdRcpt.appendChild(rcptBtn);
-    tr.appendChild(tdRcpt);
-
-    tbody.appendChild(tr);
+  renderDonutChart($('rep-chart-modes'), {
+    slices: m.modeSlices,
+    centerLabel: 'Collected',
+    centerValue: formatINR(m.totalCollected),
+    valueFormatter: formatINR,
+    emptyText: 'No payment receipts'
   });
 
-  renderPager(pager, {
-    page: state.page,
-    pageSize: PAGE_SIZE,
-    totalItems: list.length,
-    showWhenSingle: true,
-    onPageChange: (p) => {
-      state.page = p;
-      renderCollectionTable();
-      paint();
-    }
-  });
-}
-
-function renderCollectionFooterSummaries() {
-  const wrap = $('rep-col-footer-summaries');
-  const aggs = state.aggs;
-  if (!wrap || !aggs || !state.filteredEntries.length) {
-    if (wrap) wrap.hidden = true;
-    return;
-  }
-  wrap.hidden = false;
-  const s = aggs.summary;
-  $('rep-footer-counts').textContent =
-    `${s.moneyReceipts} receipt${s.moneyReceipts === 1 ? '' : 's'} · ` +
-    `${s.fineReceiptCount} fine payment${s.fineReceiptCount === 1 ? '' : 's'} · ` +
-    `${s.waiverCount} waiver${s.waiverCount === 1 ? '' : 's'}`;
-
-  // By Collected At
-  const locTbody = $('rep-loc-summary-tbody');
-  locTbody.innerHTML = '';
-  (aggs.byCollectedAt || []).forEach((r) => {
-    const tr = mk('tr');
-    tr.appendChild(mk('td', '', r.label));
-    tr.appendChild(mk('td', 'num', r.receipts));
-    tr.appendChild(mk('td', 'num', formatINR(r.cashAmount)));
-    tr.appendChild(mk('td', 'num', formatINR(r.digitalAmount)));
-    tr.appendChild(mk('td', 'num', `${formatINR(r.lateFees)} / ${r.waiverCount}`));
-    tr.appendChild(mk('td', 'num fr-money success', formatINR(r.totalCollected)));
-    locTbody.appendChild(tr);
+  renderDonutChart($('rep-chart-fee-types'), {
+    slices: m.feeTypeSlices,
+    centerLabel: 'By Fee Type',
+    centerValue: formatINR(m.totalCollected),
+    valueFormatter: formatINR,
+    emptyText: 'No payment receipts'
   });
 
-  // By Collected By
-  const colTbody = $('rep-collector-summary-tbody');
-  colTbody.innerHTML = '';
-  (aggs.byCollectedBy || []).forEach((r) => {
-    const tr = mk('tr');
-    const tdName = mk('td');
-    tdName.appendChild(mk('div', '', r.label));
-    tdName.appendChild(mk('span', 'fr-sub-ellipsis', r.roleLabel));
-    tr.appendChild(tdName);
-    tr.appendChild(mk('td', 'num', r.receipts));
-    tr.appendChild(mk('td', 'num', formatINR(r.cashAmount)));
-    tr.appendChild(mk('td', 'num', formatINR(r.digitalAmount)));
-    tr.appendChild(mk('td', 'num fr-money success', formatINR(r.totalCollected)));
-    colTbody.appendChild(tr);
-  });
-
-  // By Mode
-  const modeTbody = $('rep-mode-summary-tbody');
-  modeTbody.innerHTML = '';
-  (aggs.byMode || []).forEach((m) => {
-    const tr = mk('tr');
-    const tdM = mk('td');
-    const b = mk('span', `la-mode ${m.cls} fr-mode-badge`);
-    b.append(ic(m.icon), mk('span', '', m.label));
-    tdM.appendChild(b);
-    tr.appendChild(tdM);
-    tr.appendChild(mk('td', 'num', m.receipts));
-    tr.appendChild(mk('td', 'num fr-money success', formatINR(m.amount)));
-    tr.appendChild(mk('td', 'num', `${m.sharePct}%`));
-    modeTbody.appendChild(tr);
-  });
-}
-
-function renderSettlementTab() {
-  if (!state || state.ctx !== 'youth') return;
-  const rows = state.aggs?.byBranchSettlement || [];
-  const superLabel = getRoleTitle('superadmin');
-  const branchHeadLabel = getRoleTitle('branch_head');
-
-  let totBhCash = 0;
-  let totBhDigital = 0;
-  let totSuper = 0;
-  let totHandover = 0;
-  rows.forEach((r) => {
-    totBhCash += r.bhCash || 0;
-    totBhDigital += r.bhDigital || 0;
-    totSuper += r.superAdminTotal || 0;
-    totHandover += r.cashHandoverDue || 0;
-  });
-
-  const callout = $('rep-settle-callout');
-  callout.innerHTML = '';
-  const cards = [
-    { label: 'Physical Cash at Branches', val: formatINR(totHandover), sub: `Held by ${branchHeadLabel} for handover`, hi: true },
-    { label: 'Branch Cash (Own Students)', val: formatINR(totBhCash), sub: 'Collected at branch counter', hi: false },
-    { label: 'Branch UPI / Bank', val: formatINR(totBhDigital), sub: 'Settled digitally', hi: false },
-    { label: `HO / ${superLabel} Collected`, val: formatINR(totSuper), sub: 'Bypassing branch cashbox', hi: false }
-  ];
-  cards.forEach((c) => {
-    const card = mk('div', 'rep-callout-card' + (c.hi ? ' is-highlight' : ''));
-    card.append(
-      mk('span', 'rep-callout-label', c.label),
-      mk('span', 'rep-callout-val', c.val),
-      mk('span', 'rep-callout-sub', c.sub)
-    );
-    callout.appendChild(card);
-  });
-
-  const tbody = $('rep-settle-tbody');
+  const rows = m.staffRows || [];
+  $('rep-staff-count').textContent = `${rows.length} staff`;
+  const tbody = $('rep-staff-tbody');
   tbody.innerHTML = '';
   if (!rows.length) {
-    renderEmptyTableState(tbody, {
-      colSpan: 8,
-      title: 'No branch settlement rows',
-      desc: 'No active branches match the current filter.'
-    });
+    renderEmptyTableState(tbody, { colSpan: 5, title: 'No staff collections', desc: 'No receipts recorded in this filter scope.' });
+    return;
+  }
+  rows.forEach((r) => {
+    const tr = mk('tr');
+    const tdName = mk('td', 'lp-td-primary', r.label);
+    const tdRcpt = mk('td', 'num', r.receipts); tdRcpt.dataset.label = 'Receipts';
+    const tdCash = mk('td', 'num', formatINR(r.cashAmount)); tdCash.dataset.label = 'Cash';
+    const tdOnl = mk('td', 'num', formatINR(r.onlineAmount)); tdOnl.dataset.label = 'Online (UPI / Bank)';
+    const tdTot = mk('td', 'num'); tdTot.dataset.label = 'Total Amount';
+    tdTot.appendChild(mk('span', 'fr-money success', formatINR(r.amount)));
+    tr.append(tdName, tdRcpt, tdCash, tdOnl, tdTot);
+    tbody.appendChild(tr);
+  });
+}
+
+function getSelectedDuesRows() {
+  const d = state.analytics?.dues;
+  if (!d) return [];
+  if (state.duesGroupBy === 'batch') return d.byBatch;
+  if (state.duesGroupBy === 'course') return d.byCourse;
+  return d.byBranch;
+}
+
+function renderDuesSection() {
+  const d = state.analytics?.dues;
+  if (!d) return;
+
+  const grpLabel = state.duesGroupBy === 'batch' ? 'Batch' : (state.duesGroupBy === 'course' ? 'Course' : 'Branch');
+  $('rep-dues-group-th-name').textContent = grpLabel;
+
+  const grpRows = getSelectedDuesRows();
+  renderBarChart($('rep-chart-dues-group'), {
+    items: grpRows.map((r) => ({ label: r.label, shortLabel: r.shortLabel, value: r.outstanding, sub: `${r.students} students` })),
+    horizontal: grpRows.length > 5,
+    valueFormatter: formatINR,
+    color: '#0F766E',
+    emptyText: 'No outstanding dues'
+  });
+
+  renderDonutChart($('rep-chart-ageing'), {
+    slices: d.ageingSlices,
+    centerLabel: 'Overdue',
+    centerValue: formatINR(d.overdueTotal),
+    valueFormatter: formatINR,
+    emptyText: 'No overdue installments'
+  });
+
+  // 3a Table
+  const grpTbody = $('rep-dues-group-tbody');
+  grpTbody.innerHTML = '';
+  if (!grpRows.length) {
+    renderEmptyTableState(grpTbody, { colSpan: 4, title: 'No outstanding dues', desc: 'All students in scope have zero remaining balance.' });
   } else {
-    rows.forEach((r) => {
+    grpRows.forEach((r) => {
       const tr = mk('tr');
-
-      const tdBr = mk('td', 'lp-td-primary');
-      const brStack = mk('div', 'rep-cell-stack');
-      brStack.appendChild(mk('strong', '', r.branchCode ? `${r.branchCode} — ${r.branchName}` : r.branchName));
-      if (r.crossBranchHereCount > 0) {
-        brStack.appendChild(mk('span', 'fr-sub-ellipsis', `+${r.crossBranchHereCount} cross-branch here (${formatINR(r.crossBranchCashHere)} cash)`));
-      }
-      tdBr.appendChild(brStack);
-      tr.appendChild(tdBr);
-
-      const tdBhCash = mk('td', 'num');
-      tdBhCash.dataset.label = 'Branch Cash Held';
-      const bhCashStack = mk('div', 'rep-cell-stack is-right');
-      bhCashStack.append(mk('span', '', formatINR(r.bhCash)), mk('span', 'fr-sub-ellipsis', `${r.bhCashCount} receipt${r.bhCashCount === 1 ? '' : 's'}`));
-      tdBhCash.appendChild(bhCashStack);
-      tr.appendChild(tdBhCash);
-
-      const tdBhDig = mk('td', 'num');
-      tdBhDig.dataset.label = 'Branch UPI / Bank';
-      const bhDigStack = mk('div', 'rep-cell-stack is-right');
-      bhDigStack.append(mk('span', '', formatINR(r.bhDigital)), mk('span', 'fr-sub-ellipsis', `${r.bhDigitalCount} receipt${r.bhDigitalCount === 1 ? '' : 's'}`));
-      tdBhDig.appendChild(bhDigStack);
-      tr.appendChild(tdBhDig);
-
-      const tdHo = mk('td', 'num');
-      tdHo.dataset.label = `HO / ${superLabel}`;
-      const hoStack = mk('div', 'rep-cell-stack is-right');
-      hoStack.append(mk('span', '', formatINR(r.superAdminTotal)), mk('span', 'fr-sub-ellipsis', `${r.superAdminCount} receipt${r.superAdminCount === 1 ? '' : 's'}`));
-      tdHo.appendChild(hoStack);
-      tr.appendChild(tdHo);
-
-      const tdTot = mk('td', 'num');
-      tdTot.dataset.label = 'Branch Total';
-      const totStack = mk('div', 'rep-cell-stack is-right');
-      totStack.append(mk('span', 'fr-money success', formatINR(r.homeCollected)), mk('span', 'fr-sub-ellipsis', `${r.homeReceipts} receipt${r.homeReceipts === 1 ? '' : 's'}`));
-      tdTot.appendChild(totStack);
-      tr.appendChild(tdTot);
-
-      const tdDue = mk('td', 'num');
-      tdDue.dataset.label = 'Cash Handover Due';
-      if (r.cashHandoverDue > 0) {
-        const pill = mk('span', 'rep-handover-pill', formatINR(r.cashHandoverDue));
-        tdDue.appendChild(pill);
-      } else {
-        tdDue.appendChild(mk('span', 'rep-handover-zero', '₹0'));
-      }
-      tr.appendChild(tdDue);
-
-      const tdPend = mk('td', 'num');
-      tdPend.dataset.label = 'Overdue Pending';
-      const pendStack = mk('div', 'rep-cell-stack is-right');
-      pendStack.append(mk('span', `fr-money ${r.overdueTotal > 0 ? 'danger' : 'muted'}`, formatINR(r.overdueTotal)), mk('span', 'fr-sub-ellipsis', `${r.pendingStudentCount} student${r.pendingStudentCount === 1 ? '' : 's'}`));
-      tdPend.appendChild(pendStack);
-      tr.appendChild(tdPend);
-
-      const tdAct = mk('td', 'act fr-action-td');
-      tdAct.dataset.label = 'Breakdown';
-      const btn = mk('button', 'ui-btn ghost sm fr-act-btn');
-      btn.type = 'button';
-      btn.append(ic('list-filter'), mk('span', '', `Receipts (${r.entries.length})`));
-      btn.disabled = !r.entries.length;
-      btn.addEventListener('click', () => openBranchSettlementPopup(r));
-      tdAct.appendChild(btn);
-      tr.appendChild(tdAct);
-
-      tbody.appendChild(tr);
+      const tdN = mk('td', 'lp-td-primary', r.label);
+      const tdSt = mk('td', 'num', r.students); tdSt.dataset.label = 'Active Students';
+      const tdOut = mk('td', 'num'); tdOut.dataset.label = 'Outstanding Dues';
+      tdOut.appendChild(mk('span', 'fr-money', formatINR(r.outstanding)));
+      const tdOv = mk('td', 'num'); tdOv.dataset.label = 'Overdue Principal';
+      tdOv.appendChild(mk('span', `fr-money ${r.overdue > 0 ? 'danger' : 'muted'}`, formatINR(r.overdue)));
+      tr.append(tdN, tdSt, tdOut, tdOv);
+      grpTbody.appendChild(tr);
     });
   }
 
-  $('rep-settle-formula-note').textContent =
-    `Cash Handover Due = physical Cash collected by ${branchHeadLabel} at that branch (plus any cross-branch cash taken at its counter). ` +
-    `Digital (UPI/Bank) and ${superLabel} / Head Office receipts do not require cash handover.`;
+  // 3c Upcoming 30 days
+  $('rep-upcoming-total').textContent = `${d.upcoming30Days.length} items · ${formatINR(d.upcoming30Total)}`;
+  const upTbody = $('rep-upcoming-tbody');
+  upTbody.innerHTML = '';
+  if (!d.upcoming30Days.length) {
+    renderEmptyTableState(upTbody, { colSpan: 4, title: 'No dues in next 30 days', desc: 'No scheduled unpaid installments fall within the next 30 days.' });
+  } else {
+    d.upcoming30Days.slice(0, 25).forEach((u) => {
+      const tr = mk('tr');
+      const tdSt = mk('td', 'lp-td-primary');
+      const link = mk('a', 'fr-student-link', u.studentName);
+      link.href = `#/students/${encodeURIComponent(u.studentDocId)}`;
+      tdSt.append(link, mk('span', 'fr-sub-ellipsis', `${u.studentId} · ${u.courseLabel}`));
+
+      const tdFee = mk('td', '', u.whatIsDue); tdFee.dataset.label = 'Fee Item';
+      const tdDt = mk('td', '', fmtDate(u.dueDate)); tdDt.dataset.label = 'Due Date';
+      const tdAmt = mk('td', 'num', formatINR(u.amount)); tdAmt.dataset.label = 'Amount';
+      tr.append(tdSt, tdFee, tdDt, tdAmt);
+      upTbody.appendChild(tr);
+    });
+  }
+
+  // 3d Top 10 highest dues (click opens Student Profile)
+  const topList = d.top10Students || [];
+  $('rep-top-dues-count').textContent = `Top ${topList.length}`;
+  const topTbody = $('rep-top-dues-tbody');
+  topTbody.innerHTML = '';
+  if (!topList.length) {
+    renderEmptyTableState(topTbody, { colSpan: 4, title: 'Zero student dues', desc: 'No students have outstanding balances in this scope.' });
+  } else {
+    topList.forEach((s) => {
+      const tr = mk('tr', 'rep-click-row');
+      tr.addEventListener('click', () => {
+        location.hash = `#/students/${encodeURIComponent(s.studentDocId)}`;
+      });
+
+      const tdSt = mk('td', 'lp-td-primary');
+      const link = mk('a', 'fr-student-link', s.studentName);
+      link.href = `#/students/${encodeURIComponent(s.studentDocId)}`;
+      tdSt.append(link, mk('span', 'fr-sub-ellipsis', s.studentId));
+
+      const tdCr = mk('td'); tdCr.dataset.label = 'Course & Branch';
+      tdCr.append(mk('div', '', s.courseLabel), mk('span', 'fr-sub-ellipsis', s.branchShort));
+
+      const tdOv = mk('td', 'num'); tdOv.dataset.label = 'Overdue';
+      tdOv.appendChild(mk('span', `fr-money ${s.overduePrincipal > 0 ? 'danger' : 'muted'}`, formatINR(s.overduePrincipal)));
+
+      const tdOut = mk('td', 'num'); tdOut.dataset.label = 'Outstanding';
+      tdOut.appendChild(mk('span', 'fr-money', formatINR(s.outstanding)));
+
+      tr.append(tdSt, tdCr, tdOv, tdOut);
+      topTbody.appendChild(tr);
+    });
+  }
 }
 
-function renderWaiversTab() {
-  const waivers = state.aggs?.waivers || [];
-  const sum = state.aggs?.summary || {};
-  $('rep-waivers-badge').textContent = `${waivers.length} waiver${waivers.length === 1 ? '' : 's'} · ${formatINR(sum.lateFeesWaived || 0)}`;
+function renderStudentsSection() {
+  const st = state.analytics?.students;
+  if (!st) return;
 
-  const tbody = $('rep-waivers-tbody');
-  tbody.innerHTML = '';
-  if (!waivers.length) {
-    renderEmptyTableState(tbody, {
-      colSpan: 8,
-      title: 'No fine or fee waivers in this scope',
-      desc: 'Waivers granted during fee collection or direct waiver logs appear here.'
-    });
+  renderBarChart($('rep-chart-admissions'), {
+    items: st.admissionsByMonth,
+    color: '#0284C7',
+    emptyText: 'No admissions recorded'
+  });
+
+  renderDonutChart($('rep-chart-stu-course'), {
+    slices: st.byCourse,
+    centerLabel: 'Students',
+    centerValue: String(st.totalCount),
+    emptyText: 'No students in scope'
+  });
+
+  renderDonutChart($('rep-chart-stu-status'), {
+    slices: st.byStatus,
+    centerLabel: 'Status',
+    centerValue: String(st.totalCount),
+    emptyText: 'No students in scope'
+  });
+
+  renderDonutChart($('rep-chart-gender'), {
+    slices: st.genderSplit,
+    centerLabel: 'Gender',
+    centerValue: String(st.totalCount),
+    emptyText: 'No gender data'
+  });
+
+  const batches = st.batchFilling || [];
+  $('rep-batch-count').textContent = `${batches.length} batch${batches.length === 1 ? '' : 'es'}`;
+  const host = $('rep-batch-fill-list');
+  host.innerHTML = '';
+  if (!batches.length) {
+    host.appendChild(mk('div', 'uich-empty', 'No batches found for active filters.'));
     return;
   }
 
-  waivers.forEach((w) => {
-    const tr = mk('tr');
+  batches.forEach((b) => {
+    const row = mk('div', 'rep-bf-row' + (b.isFull ? ' is-full' : ''));
+    const top = mk('div', 'rep-bf-top');
+    const title = mk('div', 'rep-bf-name');
+    title.appendChild(mk('strong', '', b.name));
+    if (b.branchShort) title.appendChild(mk('span', 'pill indigo', b.branchShort));
+    if (b.isFull) title.appendChild(mk('span', 'pill overdue', 'Full'));
 
-    const tdD = mk('td', 'fr-col-date');
-    tdD.dataset.label = 'Date';
-    tdD.textContent = w.date ? fmtDate(w.date) : '-';
-    tr.appendChild(tdD);
+    const capTxt = b.hasCapacity ? `${b.enrolled} / ${b.capacity} (${b.pct}%)` : `${b.enrolled} enrolled (No cap)`;
+    top.append(title, mk('span', 'rep-bf-val', capTxt));
 
-    const tdS = mk('td', 'lp-td-primary');
-    if (w.studentDocId) {
-      const link = mk('a', 'fr-student-link', w.studentName);
-      link.href = `#/students/${encodeURIComponent(w.studentDocId)}`;
-      tdS.appendChild(link);
-    } else {
-      tdS.appendChild(mk('strong', '', w.studentName));
-    }
-    if (w.studentId) tdS.appendChild(mk('span', 'fr-sub-ellipsis', w.studentId));
-    tr.appendChild(tdS);
+    const track = mk('div', 'rep-bf-track');
+    const fill = mk('div', 'rep-bf-fill' + (b.isFull ? ' is-full' : (b.pct >= 80 ? ' is-warn' : '')));
+    fill.style.width = `${b.hasCapacity ? b.pct : (b.enrolled > 0 ? 45 : 0)}%`;
+    track.appendChild(fill);
 
-    const tdBc = mk('td');
-    tdBc.dataset.label = 'Branch & Course';
-    tdBc.appendChild(mk('div', '', w.courseLabel));
-    tdBc.appendChild(mk('span', 'fr-sub-ellipsis', w.branchLabel));
-    tr.appendChild(tdBc);
-
-    const tdFee = mk('td');
-    tdFee.dataset.label = 'Fee Item';
-    tdFee.textContent = w.feeLabel;
-    tr.appendChild(tdFee);
-
-    const tdAmt = mk('td', 'num');
-    tdAmt.dataset.label = 'Waived Amount';
-    tdAmt.appendChild(mk('span', 'fr-money danger', formatINR(w.waivedAmount || 0)));
-    tr.appendChild(tdAmt);
-
-    const tdBy = mk('td');
-    tdBy.dataset.label = 'Waived By';
-    tdBy.textContent = w.waivedByLabel;
-    tr.appendChild(tdBy);
-
-    const tdReason = mk('td', 'rep-reason-cell');
-    tdReason.dataset.label = 'Reason';
-    tdReason.textContent = w.reason || 'Waiver granted';
-    tr.appendChild(tdReason);
-
-    const tdAct = mk('td', 'act fr-action-td');
-    tdAct.dataset.label = 'Details';
-    const btn = mk('button', 'ui-btn ghost sm fr-act-btn');
-    btn.type = 'button';
-    btn.append(ic('eye'), mk('span', '', w.receiptNo && w.receiptNo !== '-' ? formatShortReceipt(w.receiptNo) : 'View'));
-    btn.addEventListener('click', () => openEntryDetailsPopup(w.entry));
-    tdAct.appendChild(btn);
-    tr.appendChild(tdAct);
-
-    tbody.appendChild(tr);
+    row.append(top, track);
+    host.appendChild(row);
   });
 }
 
-function renderOverviewTab() {
-  const aggs = state.aggs;
-  if (!aggs) return;
-
-  // Mode bars
-  const modeWrap = $('rep-mode-bars');
-  modeWrap.innerHTML = '';
-  const modes = aggs.byMode || [];
-  if (!modes.length) {
-    modeWrap.appendChild(mk('span', 'fr-sub-ellipsis', 'No receipts in the active filter scope.'));
-  } else {
-    modes.forEach((m) => {
-      const row = mk('div', 'rep-bar-row');
-      const top = mk('div', 'rep-bar-top');
-      top.appendChild(mk('span', 'rep-bar-label', `${m.label} (${m.receipts})`));
-      const val = mk('span', 'rep-bar-val', formatINR(m.amount));
-      val.appendChild(mk('span', 'rep-bar-sub', `${m.sharePct}%`));
-      top.appendChild(val);
-
-      const track = mk('div', 'rep-bar-track');
-      const fill = mk('div', `rep-bar-fill ${m.cls || 'cash'}`);
-      fill.style.width = `${Math.max(2, Math.min(100, m.sharePct || 0))}%`;
-      track.appendChild(fill);
-      row.append(top, track);
-      modeWrap.appendChild(row);
-    });
-  }
-
-  // Daily series bars (latest 14 days shown cleanly)
-  const dailyWrap = $('rep-daily-bars');
-  dailyWrap.innerHTML = '';
-  const series = (aggs.dailySeries || []).slice(-14).reverse();
-  $('rep-daily-caption').textContent = `${aggs.dailySeries?.length || 0} day${aggs.dailySeries?.length === 1 ? '' : 's'}`;
-  if (!series.length) {
-    dailyWrap.appendChild(mk('span', 'fr-sub-ellipsis', 'No daily collections in this scope.'));
-  } else {
-    const maxAmt = Math.max(1, ...series.map((d) => d.amount || 0));
-    series.forEach((d) => {
-      const row = mk('div', 'rep-bar-row');
-      const top = mk('div', 'rep-bar-top');
-      top.appendChild(mk('span', 'rep-bar-label', d.label));
-      const val = mk('span', 'rep-bar-val', formatINR(d.amount));
-      val.appendChild(mk('span', 'rep-bar-sub', `${d.receipts} rcpt`));
-      top.appendChild(val);
-
-      const track = mk('div', 'rep-bar-track');
-      const fill = mk('div', 'rep-bar-fill');
-      fill.style.width = `${Math.round(((d.amount || 0) / maxAmt) * 100)}%`;
-      track.appendChild(fill);
-      row.append(top, track);
-      dailyWrap.appendChild(row);
-    });
-  }
-
-  // Course / Level table + Overdue tie-in
-  const overdueItems = state.pendingResult?.items || [];
-  let totalOverdue = 0;
-  overdueItems.forEach((p) => {
-    totalOverdue += Number(p.totalPayable != null ? p.totalPayable : (Number(p.amount || 0) + Number(p.lateFee || 0)));
-  });
-  $('rep-overdue-tiein-note').textContent = `Total current overdue: ${formatINR(totalOverdue)}`;
-
-  const tbody = $('rep-courses-tbody');
-  tbody.innerHTML = '';
-  const courses = aggs.byCourse || [];
-  if (!courses.length) {
-    renderEmptyTableState(tbody, {
-      colSpan: 8,
-      title: 'No course activity in scope',
-      desc: 'Adjust date or branch filters to see course breakdowns.'
-    });
+function renderComparisonSection() {
+  if (!state.isSuper) {
+    $('rep-sec-comparison').hidden = true;
     return;
   }
+  $('rep-sec-comparison').hidden = false;
+  const cmp = state.analytics?.comparison;
+  if (!cmp) return;
 
-  courses.forEach((c) => {
-    const tr = mk('tr');
-
-    const tdName = mk('td', 'lp-td-primary');
-    tdName.appendChild(mk('strong', '', [c.courseCode, c.courseName].filter(Boolean).join(' - ')));
-    tr.appendChild(tdName);
-
-    const tdPayers = mk('td', 'num', c.studentsCount);
-    tdPayers.dataset.label = 'Payers';
-    tr.appendChild(tdPayers);
-
-    const tdRcpt = mk('td', 'num', c.receipts);
-    tdRcpt.dataset.label = 'Receipts';
-    tr.appendChild(tdRcpt);
-
-    const tdBase = mk('td', 'num', formatINR(c.baseCollected));
-    tdBase.dataset.label = 'Fees Collected';
-    tr.appendChild(tdBase);
-
-    const tdFine = mk('td', 'num', formatINR(c.lateCollected));
-    tdFine.dataset.label = 'Late Fees';
-    tr.appendChild(tdFine);
-
-    const tdW = mk('td', 'num', formatINR(c.waivedAmount));
-    tdW.dataset.label = 'Waived';
-    tr.appendChild(tdW);
-
-    const tdTot = mk('td', 'num');
-    tdTot.dataset.label = 'Total Collected';
-    tdTot.appendChild(mk('span', 'fr-money success', formatINR(c.totalCollected)));
-    tr.appendChild(tdTot);
-
-    const tdOv = mk('td', 'num');
-    tdOv.dataset.label = 'Overdue Pending';
-    tdOv.appendChild(mk('div', `fr-money ${c.overdueDue > 0 ? 'danger' : 'muted'}`, formatINR(c.overdueDue)));
-    tdOv.appendChild(mk('span', 'fr-sub-ellipsis', `${c.overdueStudentCount} student${c.overdueStudentCount === 1 ? '' : 's'}`));
-    tr.appendChild(tdOv);
-
-    tbody.appendChild(tr);
-  });
-}
-
-function buildSectionCard(title, fields) {
-  const card = mk('div', 'adm-view-sec');
-  card.appendChild(mk('h4', '', title));
-  fields.forEach((f) => {
-    const row = mk('div', 'adm-view-row');
-    row.appendChild(mk('span', 'adm-view-k', f.label));
-    const v = mk('span', 'adm-view-v' + (f.mono ? ' fr-mono' : '') + (f.highlight ? ' fr-val-strong' : ''), f.value);
-    row.appendChild(v);
-    card.appendChild(row);
-  });
-  return card;
-}
-
-async function openEntryDetailsPopup(entry) {
-  if (!entry) return;
-  const sessionsById = {};
-  (state?.sessions || []).forEach((s) => { if (s?.id) sessionsById[s.id] = s; });
-  const bill = entry.billId ? await getCachedBillForEntry(entry.billId).catch(() => null) : null;
-  const model = buildPaymentDetailsModel(entry, { sessionsById, bill });
-
-  const popup = openPopup({
-    title: model.receiptId || 'Payment Details',
-    subtitle: `${formatPersonName(entry.studentName || '')} (${entry.studentId || '-'})`,
-    icon: entry.isPureWaiver ? 'shield-off' : 'receipt',
-    tone: entry.isPureWaiver ? 'amber' : 'default',
-    wide: true
+  const brRows = cmp.branchComparison || [];
+  renderStackedBarChart($('rep-chart-branch-comp'), {
+    grouped: true,
+    categories: brRows.map((b) => ({
+      label: b.label,
+      shortLabel: b.shortLabel,
+      values: { collected: b.collected, outstanding: b.outstanding, overdue: b.overdue }
+    })),
+    series: [
+      { key: 'collected', label: 'Collected', color: '#16A34A' },
+      { key: 'outstanding', label: 'Outstanding', color: '#323A85' },
+      { key: 'overdue', label: 'Overdue', color: '#DC2626' }
+    ],
+    valueFormatter: formatINR,
+    emptyText: 'No branches to compare'
   });
 
-  const headRow = mk('div', 'fr-det-head-row');
-  headRow.appendChild(mk('span', `pill ${model.status.cls === 'waived' ? 'amber' : 'green'}`, model.status.label));
-  headRow.appendChild(mk('span', 'pill indigo', entry.collectedAtLabel || 'Head Office (HO)'));
-
-  const stack = mk('div', 'fr-det-stack');
-  const grid = mk('div', 'fr-det-grid');
-  grid.append(
-    buildSectionCard('Student', model.studentFields),
-    buildSectionCard('Payment Summary', model.paymentFields),
-    buildSectionCard('Transaction & Collector', model.transactionFields)
-  );
-  const remCard = mk('div', 'adm-view-sec fr-det-card-full');
-  remCard.append(mk('h4', '', 'Remarks'), mk('div', `fr-det-remarks${model.remarksText === 'No remarks' ? ' is-empty' : ''}`, model.remarksText));
-
-  const actions = mk('div', 'adm-view-actions');
-  const copyBtn = mk('button', 'ui-btn ghost sm');
-  copyBtn.type = 'button';
-  copyBtn.append(ic('copy'), mk('span', '', 'Copy Summary'));
-  copyBtn.addEventListener('click', async () => {
-    try {
-      await navigator.clipboard.writeText(model.copyText);
-      showToast({ type: 'success', message: 'Payment summary copied.' });
-    } catch (_) {
-      showToast({ type: 'error', message: 'Could not access clipboard.' });
-    }
-  });
-  actions.appendChild(copyBtn);
-
-  if (entry.receiptRoute) {
-    const linkBtn = mk('button', 'ui-btn primary sm');
-    linkBtn.type = 'button';
-    linkBtn.append(ic('external-link'), mk('span', '', entry.ctx === 'school' ? 'Open Student Payments' : 'Open Official Receipt'));
-    linkBtn.addEventListener('click', () => {
-      popup.close();
-      location.hash = entry.receiptRoute;
+  const sessCmp = cmp.sessionComparison;
+  const sessCats = [];
+  if (sessCmp?.previous) {
+    sessCats.push({
+      label: `${sessCmp.previous.label} (Prev)`,
+      shortLabel: sessCmp.previous.label,
+      values: { collected: sessCmp.previous.collected, dues: sessCmp.previous.dues }
     });
-    actions.appendChild(linkBtn);
+  }
+  if (sessCmp?.current) {
+    sessCats.push({
+      label: `${sessCmp.current.label} (Curr)`,
+      shortLabel: sessCmp.current.label,
+      values: { collected: sessCmp.current.collected, dues: sessCmp.current.dues }
+    });
+  }
+  renderStackedBarChart($('rep-chart-session-comp'), {
+    grouped: true,
+    categories: sessCats,
+    series: [
+      { key: 'collected', label: 'Collected', color: '#0F766E' },
+      { key: 'dues', label: 'Outstanding Dues', color: '#D97706' }
+    ],
+    valueFormatter: formatINR,
+    emptyText: 'No sessions to compare'
+  });
+
+  // 5a Branch comparison table
+  const brTbody = $('rep-branch-comp-tbody');
+  brTbody.innerHTML = '';
+  if (!brRows.length) {
+    renderEmptyTableState(brTbody, { colSpan: 6, title: 'No branch data', desc: 'No Youth branches in this scope.' });
+  } else {
+    brRows.forEach((b) => {
+      const tr = mk('tr');
+      const tdB = mk('td', 'lp-td-primary', b.label);
+      const tdS = mk('td', 'num', b.students); tdS.dataset.label = 'Students';
+      const tdC = mk('td', 'num'); tdC.dataset.label = 'Collected'; tdC.appendChild(mk('span', 'fr-money success', formatINR(b.collected)));
+      const tdOut = mk('td', 'num', formatINR(b.outstanding)); tdOut.dataset.label = 'Outstanding';
+      const tdOv = mk('td', 'num'); tdOv.dataset.label = 'Overdue'; tdOv.appendChild(mk('span', `fr-money ${b.overdue > 0 ? 'danger' : 'muted'}`, formatINR(b.overdue)));
+      const tdPct = mk('td', 'num', `${b.collectionPct}%`); tdPct.dataset.label = 'Collection %';
+      tr.append(tdB, tdS, tdC, tdOut, tdOv, tdPct);
+      brTbody.appendChild(tr);
+    });
   }
 
-  stack.append(headRow, grid, remCard, actions);
-  popup.container.appendChild(stack);
-  paint();
+  // 5b Session comparison table
+  const scTbody = $('rep-session-comp-tbody');
+  scTbody.innerHTML = '';
+  const scRows = [sessCmp?.current, sessCmp?.previous].filter(Boolean);
+  if (!scRows.length) {
+    renderEmptyTableState(scTbody, { colSpan: 5, title: 'No sessions available', desc: 'Load a session to compare.' });
+  } else {
+    scRows.forEach((r) => {
+      const tr = mk('tr');
+      const tdLbl = mk('td', 'lp-td-primary');
+      tdLbl.append(mk('strong', '', r.label), ' ', mk('span', `pill ${r.tag === 'Current' ? 'indigo' : 'neutral'}`, r.tag));
+      const tdS = mk('td', 'num', r.students); tdS.dataset.label = 'Students';
+      const tdC = mk('td', 'num'); tdC.dataset.label = 'Collected'; tdC.appendChild(mk('span', 'fr-money success', formatINR(r.collected)));
+      const tdD = mk('td', 'num', formatINR(r.dues)); tdD.dataset.label = 'Outstanding Dues';
+      const tdO = mk('td', 'num'); tdO.dataset.label = 'Overdue Amount'; tdO.appendChild(mk('span', `fr-money ${r.overdue > 0 ? 'danger' : 'muted'}`, formatINR(r.overdue)));
+      tr.append(tdLbl, tdS, tdC, tdD, tdO);
+      scTbody.appendChild(tr);
+    });
+  }
 }
 
-function openBranchSettlementPopup(branchRow) {
-  const popup = openPopup({
-    title: `${branchRow.branchCode ? branchRow.branchCode + ' — ' : ''}${branchRow.branchName}`,
-    subtitle: `Cash Handover Due: ${formatINR(branchRow.cashHandoverDue)} · Total Receipts: ${branchRow.entries.length}`,
-    icon: 'landmark',
-    tone: branchRow.cashHandoverDue > 0 ? 'amber' : 'default',
-    wide: true
-  });
-
-  const wrap = mk('div', 'fr-det-inst-wrap');
-  const tbl = mk('table', 'fr-det-inst-table');
-  const thead = document.createElement('thead');
-  const hTr = document.createElement('tr');
-  ['Date', 'Student', 'Mode', 'Collected By', 'Collected At', 'Received', 'Receipt'].forEach((lbl, idx) => {
-    const th = mk('th', idx === 5 ? 'num' : '', lbl);
-    hTr.appendChild(th);
-  });
-  thead.appendChild(hTr);
-
-  const tbody = document.createElement('tbody');
-  branchRow.entries.forEach((e) => {
-    const tr = mk('tr');
-    tr.appendChild(mk('td', '', e.date ? fmtDate(e.date) : '-'));
-    tr.appendChild(mk('td', '', `${formatPersonName(e.studentName || '')} (${e.studentId || '-'})`));
-    tr.appendChild(mk('td', '', modeDisplayMeta(e).label));
-    tr.appendChild(mk('td', '', formatCollectorWithDesignation(e) || formatCollectorName(e.recordedByName, e.recordedBy) || '-'));
-    tr.appendChild(mk('td', '', e.collectedAtShort || e.collectedAtLabel || '-'));
-    tr.appendChild(mk('td', 'num', formatINR(e.totalReceived || 0)));
-    tr.appendChild(mk('td', 'fr-mono', formatShortReceipt(e.receiptNo) || '-'));
-    tbody.appendChild(tr);
-  });
-
-  tbl.append(thead, tbody);
-  wrap.appendChild(tbl);
-  popup.container.appendChild(wrap);
-  paint();
-}
-
-function getExportSubtitle() {
-  const isSchool = state.ctx === 'school';
-  const { from, to } = computeActiveDateRange();
-  const scopePart = isSchool ? 'Unique Kids' : `Youth Centre (${state.activeSession?.name || 'All Sessions'})`;
-  const datePart = from || to ? (from === to ? fmtDate(from) : `${from ? fmtDate(from) : 'Start'} to ${to ? fmtDate(to) : 'Today'}`) : 'All Loaded Dates';
-  return `${scopePart} · ${datePart}`;
-}
-
-function handleExportCsv() {
-  if (!state) return;
-  const tab = state.activeTab;
+function exportTableCsv(kind) {
+  if (!state?.analytics) return;
+  const a = state.analytics;
   const stamp = todayISO();
-  const prefix = state.ctx === 'school' ? 'kids' : 'youth';
 
-  if (tab === 'settlement' && state.ctx === 'youth') {
-    const rows = (state.aggs?.byBranchSettlement || []).map((b) => [
-      b.branchCode || b.branchId,
-      b.branchName,
-      b.bhCash,
-      b.bhDigital,
-      b.superAdminTotal,
-      b.homeCollected,
-      b.crossBranchCashHere,
-      b.cashHandoverDue,
-      b.overdueTotal
-    ]);
-    downloadCsv(
-      `branch-settlement-${stamp}.csv`,
-      ['Branch Code', 'Branch Name', 'Branch Cash Held', 'Branch UPI/Bank', 'HO / Top Admin', 'Branch Total', 'Cross-Branch Cash Here', 'Cash Handover Due', 'Overdue Pending'],
-      rows
+  if (kind === 'staff') {
+    downloadCsv(`youth-staff-collections-${stamp}.csv`,
+      ['Staff (Designation)', 'Receipts', 'Cash', 'Online', 'Total Amount'],
+      (a.money.staffRows || []).map((r) => [r.label, r.receipts, r.cashAmount, r.onlineAmount, r.amount])
     );
-    showToast({ type: 'success', message: 'Branch settlement CSV downloaded.' });
-    return;
-  }
-
-  if (tab === 'waivers') {
-    const rows = (state.aggs?.waivers || []).map((w) => [
-      w.date,
-      w.receiptNo,
-      w.studentId,
-      w.studentName,
-      w.branchLabel,
-      w.courseLabel,
-      w.feeLabel,
-      w.waivedAmount,
-      w.waivedByLabel,
-      w.reason
-    ]);
-    downloadCsv(
-      `${prefix}-fine-waivers-${stamp}.csv`,
-      ['Date', 'Receipt No', 'Student ID', 'Student Name', 'Branch', 'Course / Level', 'Fee Item', 'Amount Waived', 'Waived By', 'Reason'],
-      rows
+  } else if (kind === 'duesGroup') {
+    const lbl = state.duesGroupBy === 'batch' ? 'Batch' : (state.duesGroupBy === 'course' ? 'Course' : 'Branch');
+    downloadCsv(`youth-outstanding-by-${state.duesGroupBy}-${stamp}.csv`,
+      [lbl, 'Active Students', 'Outstanding Dues', 'Overdue Principal'],
+      getSelectedDuesRows().map((r) => [r.label, r.students, r.outstanding, r.overdue])
     );
-    showToast({ type: 'success', message: 'Fine waivers CSV downloaded.' });
-    return;
-  }
-
-  if (tab === 'overview') {
-    const rows = (state.aggs?.byCourse || []).map((c) => [
-      c.courseCode,
-      c.courseName,
-      c.studentsCount,
-      c.receipts,
-      c.baseCollected,
-      c.lateCollected,
-      c.waivedAmount,
-      c.totalCollected,
-      c.overdueStudentCount,
-      c.overdueDue
-    ]);
-    downloadCsv(
-      `${prefix}-course-summary-${stamp}.csv`,
-      ['Code', state.ctx === 'school' ? 'Level' : 'Course', 'Payers', 'Receipts', 'Fees Collected', 'Late Fees', 'Waived', 'Total Collected', 'Overdue Students', 'Overdue Amount'],
-      rows
+  } else if (kind === 'upcoming') {
+    downloadCsv(`youth-upcoming-30d-dues-${stamp}.csv`,
+      ['Student ID', 'Student Name', 'Course', 'Branch', 'Installment', 'Due Date', 'Amount'],
+      (a.dues.upcoming30Days || []).map((u) => [u.studentId, u.studentName, u.courseLabel, u.branchShort, u.whatIsDue, u.dueDate, u.amount])
     );
-    showToast({ type: 'success', message: 'Course summary CSV downloaded.' });
-    return;
+  } else if (kind === 'topDues') {
+    downloadCsv(`youth-top-student-dues-${stamp}.csv`,
+      ['Student ID', 'Student Name', 'Course', 'Branch', 'Total Course Fee', 'Paid', 'Overdue Principal', 'Outstanding'],
+      (a.dues.top10Students || []).map((s) => [s.studentId, s.studentName, s.courseLabel, s.branchLabel, s.totalFee, s.paidFee, s.overduePrincipal, s.outstanding])
+    );
+  } else if (kind === 'batches') {
+    downloadCsv(`youth-batch-filling-${stamp}.csv`,
+      ['Batch', 'Branch', 'Enrolled Active', 'Capacity', 'Fill %', 'Full'],
+      (a.students.batchFilling || []).map((b) => [b.name, b.branchShort, b.enrolled, b.hasCapacity ? b.capacity : 'Unlimited', b.hasCapacity ? `${b.pct}%` : '-', b.isFull ? 'Yes' : 'No'])
+    );
+  } else if (kind === 'branchComp' && state.isSuper) {
+    downloadCsv(`youth-branch-comparison-${stamp}.csv`,
+      ['Branch', 'Students', 'Collected', 'Outstanding', 'Overdue', 'Collection %'],
+      (a.comparison.branchComparison || []).map((b) => [b.label, b.students, b.collected, b.outstanding, b.overdue, `${b.collectionPct}%`])
+    );
+  } else if (kind === 'sessionComp' && state.isSuper) {
+    const sc = [a.comparison.sessionComparison?.current, a.comparison.sessionComparison?.previous].filter(Boolean);
+    downloadCsv(`youth-session-comparison-${stamp}.csv`,
+      ['Session', 'Scope', 'Students', 'Collected', 'Outstanding Dues', 'Overdue'],
+      sc.map((s) => [s.label, s.tag, s.students, s.collected, s.dues, s.overdue])
+    );
   }
-
-  const rows = (state.filteredEntries || []).map((e) => [
-    e.date,
-    e.receiptNo,
-    e.studentId,
-    formatPersonName(e.studentName || ''),
-    e.branchCode || e.branchName,
-    [e.courseCode, e.courseName].filter(Boolean).join(' - '),
-    e.typeLabel || e.type,
-    modeDisplayMeta(e).label,
-    e.txnId || '',
-    formatCollectorWithDesignation(e) || formatCollectorName(e.recordedByName, e.recordedBy, e.recordedByDesignation),
-    e.collectedByRole ? getRoleTitle(e.collectedByRole) : '',
-    e.collectedAtLabel || '',
-    e.amount,
-    e.lateFeePaid,
-    e.lateFeeWaived,
-    e.isPureWaiver ? 0 : e.totalReceived,
-    e.waiverReason || ''
-  ]);
-  downloadCsv(
-    `${prefix}-collection-report-${stamp}.csv`,
-    ['Date', 'Receipt No', 'Student ID', 'Student Name', 'Branch', 'Course/Level', 'Payment For', 'Mode', 'Txn ID', 'Collected By', 'Role', 'Collected At', 'Base Fee', 'Late Fee Paid', 'Waived', 'Net Received', 'Waiver Reason'],
-    rows
-  );
-  showToast({ type: 'success', message: 'Collection report CSV downloaded.' });
+  showToast({ type: 'success', message: 'CSV downloaded.' });
 }
 
-async function handleExportPdf() {
-  if (!state) return;
-  const btn = $('rep-export-pdf');
-  if (btn) btn.disabled = true;
-  try {
-    const stamp = todayISO();
-    const isSchool = state.ctx === 'school';
-    await exportFinancialReportPdf({
-      title: `${isSchool ? 'Unique Kids' : 'Youth Centre'} Financial Report`,
-      subtitle: getExportSubtitle(),
-      filename: `${isSchool ? 'kids' : 'youth'}-financial-report-${stamp}.pdf`,
-      org: window.APP_CACHE?.org || null,
-      summary: state.aggs?.summary || {},
-      aggs: state.aggs || {},
-      entries: state.filteredEntries || [],
-      ctx: state.ctx,
-      printedBy: state.profile?.name || state.profile?.email || getRoleTitle('superadmin')
-    });
-    showToast({ type: 'success', message: 'PDF report downloaded.' });
-  } catch (err) {
-    console.error('[reports] PDF export failed', err);
-    showToast({ type: 'error', message: err?.message || 'Failed to generate PDF report.' });
-  } finally {
-    if (btn) btn.disabled = false;
-  }
+function chartHtmlWithTitle(title, hostId) {
+  const el = $(hostId);
+  if (!el) return '';
+  return `<div class="pr-chart-title">${title}</div>${el.innerHTML}`;
 }
 
-function handlePrintReport() {
-  if (!state) return;
-  const s = state.aggs?.summary || {};
-  const isSchool = state.ctx === 'school';
-  const subtitle = getExportSubtitle();
+function activeFiltersText() {
+  const bb = state.bbFilter ? state.bbFilter.getValue() : { branchId: 'all', batchId: 'all' };
+  const scoped = scopeReferenceDataByCtx(state.meta || {}, 'youth');
+  const { dateFrom, dateTo } = resolveEffectiveDateWindow();
+
+  const brName = state.isBranchHead
+    ? (toTitleCaseIfCaps(scoped.branchesById[state.profile.branchId]?.name) || state.profile.branchId)
+    : (bb.branchId === 'all' ? 'All Branches' : (toTitleCaseIfCaps(scoped.branchesById[bb.branchId]?.name) || bb.branchId));
+  const btName = bb.batchId === 'all' ? 'All Batches' : (scoped.batchesById[bb.batchId]?.name || bb.batchId);
+  const crName = state.filters.courseId === 'all' ? 'All Courses' : (scoped.coursesById[state.filters.courseId]?.name || state.filters.courseId);
+  const dtStr = dateFrom || dateTo ? `${dateFrom || 'Start'} to ${dateTo || 'Today'}` : 'Whole session';
+
+  return `Session: ${state.activeSession?.name || '-'} | Branch: ${brName} | Batch: ${btName} | Course: ${crName} | Period: ${dtStr}`;
+}
+
+function handlePrintWholePage() {
+  if (!state?.analytics) return;
+  const a = state.analytics;
+  const k = a.kpis;
+  const org = window.APP_CACHE?.org || null;
+
+  const disp = resolveUserDisplay(state.profile?.email, state.profile?.name, state.profile?.designation);
+  const genName = (!disp.name || disp.name === '-' || disp.name.includes('@')) ? (state.profile?.name || getRoleTitle(state.profile?.role)) : disp.name;
+  const genDesig = disp.designation || getRoleTitle(state.profile?.role);
+  const generatedBy = genDesig ? `${genName} (${genDesig})` : genName;
+
   const summaryPairs = [
-    { label: 'Total Collected', value: formatINR(s.totalCollected || 0) },
-    { label: 'Cash', value: formatINR(s.cashTotal || 0) },
-    { label: 'UPI / Bank', value: formatINR((s.upiTotal || 0) + (s.bankTotal || 0)) },
-    { label: 'Late Fees Paid', value: formatINR(s.lateFeesCollected || 0) },
-    { label: 'Fees Waived', value: formatINR(s.lateFeesWaived || 0) },
-    { label: 'Receipts / Waivers', value: `${s.moneyReceipts || 0} / ${s.waiverCount || 0}` }
+    { label: 'Total collected', value: formatINR(k.totalCollected.value), sub: k.totalCollected.delta.text },
+    { label: 'Outstanding dues', value: formatINR(k.outstandingDues.value), sub: k.outstandingDues.delta.text },
+    { label: 'Overdue amount', value: formatINR(k.overdueAmount.value), sub: k.overdueAmount.delta.text },
+    { label: 'Late fees collected', value: formatINR(k.lateFeesCollected.value), sub: k.lateFeesCollected.delta.text },
+    { label: 'Late fees waived', value: formatINR(k.lateFeesWaived.value), sub: k.lateFeesWaived.delta.text },
+    { label: 'New admissions', value: String(k.newAdmissions.value), sub: k.newAdmissions.delta.text },
+    { label: 'Active students', value: String(k.activeStudents.value), sub: k.activeStudents.delta.text }
   ];
 
-  const tab = state.activeTab;
-  let title = `${isSchool ? 'Unique Kids' : 'Youth Centre'} — Collection Report`;
-  let columns = [
-    { label: 'Date' },
-    { label: 'Student' },
-    { label: 'Payment For' },
-    { label: 'Mode' },
-    { label: 'Collected By' },
-    { label: 'Collected At' },
-    { label: 'Received', num: true },
-    { label: 'Receipt' }
+  const sections = [
+    {
+      title: 'Money & Collections',
+      chartsHtml: [
+        chartHtmlWithTitle('Collection Trend', 'rep-chart-trend'),
+        chartHtmlWithTitle('Collection by Payment Mode', 'rep-chart-modes'),
+        chartHtmlWithTitle('Collection by Fee Type', 'rep-chart-fee-types')
+      ],
+      columns: [
+        { label: 'Staff (Designation)' },
+        { label: 'Receipts', num: true },
+        { label: 'Cash', num: true },
+        { label: 'Online', num: true },
+        { label: 'Total Amount', num: true }
+      ],
+      rows: (a.money.staffRows || []).map((r) => [r.label, r.receipts, formatINR(r.cashAmount), formatINR(r.onlineAmount), formatINR(r.amount)])
+    },
+    {
+      title: 'Dues & Ageing',
+      chartsHtml: [
+        chartHtmlWithTitle(`Outstanding Dues by ${toTitleCaseIfCaps(state.duesGroupBy)}`, 'rep-chart-dues-group'),
+        chartHtmlWithTitle('Overdue Ageing', 'rep-chart-ageing')
+      ],
+      tables: [
+        {
+          title: `Upcoming Dues (Next 30 Days) — Total: ${formatINR(a.dues.upcoming30Total)}`,
+          columns: [{ label: 'Student' }, { label: 'Course' }, { label: 'Fee Item' }, { label: 'Due Date' }, { label: 'Amount', num: true }],
+          rows: (a.dues.upcoming30Days || []).slice(0, 30).map((u) => [`${u.studentName} (${u.studentId})`, u.courseLabel, u.whatIsDue, fmtDate(u.dueDate), formatINR(u.amount)])
+        },
+        {
+          title: 'Top 10 Students With Highest Dues',
+          columns: [{ label: 'Student' }, { label: 'Course & Branch' }, { label: 'Overdue', num: true }, { label: 'Outstanding', num: true }],
+          rows: (a.dues.top10Students || []).map((s) => [`${s.studentName} (${s.studentId})`, `${s.courseLabel} · ${s.branchShort}`, formatINR(s.overduePrincipal), formatINR(s.outstanding)])
+        }
+      ]
+    },
+    {
+      title: 'Students & Batch Capacity',
+      chartsHtml: [
+        chartHtmlWithTitle('Admissions Per Month', 'rep-chart-admissions'),
+        chartHtmlWithTitle('Students by Course', 'rep-chart-stu-course'),
+        chartHtmlWithTitle('Student Status', 'rep-chart-stu-status'),
+        chartHtmlWithTitle('Gender Split', 'rep-chart-gender')
+      ],
+      columns: [{ label: 'Batch' }, { label: 'Branch' }, { label: 'Enrolled', num: true }, { label: 'Capacity', num: true }, { label: 'Status' }],
+      rows: (a.students.batchFilling || []).map((b) => [b.name, b.branchShort, b.enrolled, b.hasCapacity ? b.capacity : 'No cap', b.isFull ? 'FULL' : (b.hasCapacity ? `${b.pct}%` : 'Open')])
+    }
   ];
-  let rows = (state.filteredEntries || []).map((e) => [
-    e.date ? fmtDate(e.date) : '-',
-    `${formatPersonName(e.studentName || '')} (${e.studentId || '-'})`,
-    e.typeLabel || e.type || '-',
-    modeDisplayMeta(e).label,
-    formatCollectorWithDesignation(e) || formatCollectorName(e.recordedByName, e.recordedBy) || '-',
-    e.collectedAtLabel || '-',
-    e.isPureWaiver ? '₹0 (Waived)' : formatINR(e.totalReceived || 0),
-    e.receiptNo || '-'
-  ]);
 
-  if (tab === 'settlement' && !isSchool) {
-    title = 'Youth Centre — Branch Settlement Report';
-    columns = [
-      { label: 'Branch' },
-      { label: 'Branch Cash Held', num: true },
-      { label: 'Branch UPI / Bank', num: true },
-      { label: `HO / ${getRoleTitle('superadmin')}`, num: true },
-      { label: 'Branch Total', num: true },
-      { label: 'Cash Handover Due', num: true }
-    ];
-    rows = (state.aggs?.byBranchSettlement || []).map((b) => [
-      b.branchCode ? `${b.branchCode} - ${b.branchName}` : b.branchName,
-      formatINR(b.bhCash),
-      formatINR(b.bhDigital),
-      formatINR(b.superAdminTotal),
-      formatINR(b.homeCollected),
-      formatINR(b.cashHandoverDue)
-    ]);
-  } else if (tab === 'waivers') {
-    title = `${isSchool ? 'Unique Kids' : 'Youth Centre'} — Fine Waivers Audit`;
-    columns = [
-      { label: 'Date' },
-      { label: 'Student' },
-      { label: 'Fee Item' },
-      { label: 'Waived', num: true },
-      { label: 'Waived By' },
-      { label: 'Reason' }
-    ];
-    rows = (state.aggs?.waivers || []).map((w) => [
-      w.date ? fmtDate(w.date) : '-',
-      `${w.studentName} (${w.studentId || '-'})`,
-      w.feeLabel,
-      formatINR(w.waivedAmount),
-      w.waivedByLabel,
-      w.reason
-    ]);
+  if (state.isSuper) {
+    sections.push({
+      title: 'Branch & Session Comparison',
+      chartsHtml: [
+        chartHtmlWithTitle('Branch Financials Comparison', 'rep-chart-branch-comp'),
+        chartHtmlWithTitle('Current vs Previous Session', 'rep-chart-session-comp')
+      ],
+      tables: [
+        {
+          title: 'Branch Comparison',
+          columns: [{ label: 'Branch' }, { label: 'Students', num: true }, { label: 'Collected', num: true }, { label: 'Outstanding', num: true }, { label: 'Overdue', num: true }, { label: 'Collection %', num: true }],
+          rows: (a.comparison.branchComparison || []).map((b) => [b.label, b.students, formatINR(b.collected), formatINR(b.outstanding), formatINR(b.overdue), `${b.collectionPct}%`])
+        },
+        {
+          title: 'Session Comparison',
+          columns: [{ label: 'Session' }, { label: 'Students', num: true }, { label: 'Collected', num: true }, { label: 'Outstanding', num: true }, { label: 'Overdue', num: true }],
+          rows: [a.comparison.sessionComparison?.current, a.comparison.sessionComparison?.previous].filter(Boolean).map((s) => [`${s.label} (${s.tag})`, s.students, formatINR(s.collected), formatINR(s.dues), formatINR(s.overdue)])
+        }
+      ]
+    });
   }
 
   const ok = openPrintSheet({
-    title,
-    subtitle,
+    title: 'Youth Centre — Financial & Student Reports',
+    subtitle: `Session: ${state.activeSession?.name || '-'}`,
+    org,
+    filtersText: activeFiltersText(),
+    generatedBy,
     summaryPairs,
-    columns,
-    rows,
-    footerNote: `Prepared for ${(window.APP_CACHE?.org && window.APP_CACHE.org.orgName) || 'Unique Infotech'} · ${state.aggs?.byCollectedAt?.length || 0} location(s) · ${state.aggs?.byCollectedBy?.length || 0} collector(s)`
+    sections,
+    footerNote: `${org?.orgName || 'Unique Infotech'} · Generated by ${generatedBy}`
   });
   if (!ok) {
-    showToast({ type: 'error', message: 'Popup blocked. Allow popups to print reports.' });
+    showToast({ type: 'error', message: 'Popup blocked. Allow popups to Print / Save as PDF.' });
   }
 }
 

@@ -19,22 +19,24 @@ import {
 import {
   evaluateYouthStudentDues,
   normalizeYouthPaymentsLedger,
-  fetchStudentPayments
-} from './payment.service.js?v=1.8.176';
+  fetchStudentPayments,
+  calculateStudentFinancials,
+  isStudentEligibleForDues
+} from './payment.service.js?v=1.8.177';
 import {
   evaluateKidsPendingBills,
   buildKidsPaymentLedger
-} from '../utils/school-billing.js?v=1.8.176';
-import { getStudentPhotoSrc } from '../utils/student-media.js?v=1.8.176';
+} from '../utils/school-billing.js?v=1.8.177';
+import { getStudentPhotoSrc } from '../utils/student-media.js?v=1.8.177';
 import {
   todayISO,
   fmtDate,
   getOrgTimezone
-} from '../utils/session-rules.js?v=1.8.176';
-import { formatINR } from '../utils/formatter.js?v=1.8.176';
-import { formatPersonName } from '../utils/formatter.js?v=1.8.176';
-import { resolveUserDisplay, loadUsersDirectory, getRoleTitle } from './user-directory.service.js?v=1.8.176';
-import { loadPdfMake, urlToDataUrl } from '../utils/admission-receipt-pdf.js?v=1.8.176';
+} from '../utils/session-rules.js?v=1.8.177';
+import { formatINR } from '../utils/formatter.js?v=1.8.177';
+import { formatPersonName } from '../utils/formatter.js?v=1.8.177';
+import { resolveUserDisplay, loadUsersDirectory, getRoleTitle } from './user-directory.service.js?v=1.8.177';
+import { loadPdfMake, urlToDataUrl } from '../utils/admission-receipt-pdf.js?v=1.8.177';
 
 const CACHE_KEY = 'financialReports';
 
@@ -49,7 +51,8 @@ function ensureCacheRoot() {
       kidsPending: null,
       youthHistory: new Map(),
       kidsHistory: null,
-      billsById: new Map()
+      billsById: new Map(),
+      allYouthSessions: null
     };
   }
   return window.APP_CACHE[CACHE_KEY];
@@ -63,6 +66,7 @@ export function invalidateFinancialCache({ clearMeta = false } = {}) {
   root.youthHistory.clear();
   root.kidsHistory = null;
   root.billsById.clear();
+  root.allYouthSessions = null;
 }
 
 export async function getCachedBillForEntry(billId) {
@@ -282,6 +286,15 @@ export function getDatePresetRange(preset, asOfIso = todayISO(), session = null)
   if (preset === 'month') {
     const ym = today.slice(0, 7);
     return { dateFrom: `${ym}-01`, dateTo: `${ym}-31` };
+  }
+  if (preset === 'last_month') {
+    const parts = today.split('-').map(Number);
+    const firstCur = new Date(Date.UTC(parts[0], (parts[1] || 1) - 1, 1));
+    const lastPrev = new Date(firstCur.getTime() - 86400000);
+    const y = lastPrev.getUTCFullYear();
+    const m = String(lastPrev.getUTCMonth() + 1).padStart(2, '0');
+    const d = String(lastPrev.getUTCDate()).padStart(2, '0');
+    return { dateFrom: `${y}-${m}-01`, dateTo: `${y}-${m}-${d}` };
   }
   if (preset === 'session' && session) {
     return {
@@ -1040,7 +1053,7 @@ export function formatShortReceipt(receiptNo) {
 
 export function modeDisplayMeta(entry = {}) {
   const raw = String(entry.mode || 'cash').toLowerCase().trim();
-  if (entry.isPureWaiver || raw === 'waiver') return MODE_META.waiver;
+  if (entry.isPureWaiver || raw === 'waiver' || raw === 'waived') return MODE_META.waiver;
   return MODE_META[raw] || { label: toTitleCaseIfCaps(raw) || 'Cash', cls: 'cash', icon: 'banknote' };
 }
 
@@ -1597,17 +1610,22 @@ function escHtml(v) {
 }
 
 /**
- * Opens a clean print-formatted window for Overdue Report or Daily Cash Report.
+ * Opens a clean print-formatted window for Overdue Report, Daily Cash Report,
+ * or full multi-section Reports (with Org header, filters, generatedBy, and inline SVG charts).
  */
 export function openPrintSheet({
   title = 'Report',
   subtitle = '',
+  org = null,
+  filtersText = '',
+  generatedBy = '',
   summaryPairs = [],
   columns = [],
   rows = [],
+  sections = null,
   footerNote = ''
 } = {}) {
-  const win = window.open('', '_blank', 'width=1024,height=740');
+  const win = window.open('', '_blank', 'width=1120,height=780');
   if (!win) return false;
 
   const tz = getOrgTimezone();
@@ -1620,16 +1638,42 @@ export function openPrintSheet({
     minute: '2-digit'
   }).format(new Date());
 
+  const brandName = (org && org.orgName) || title;
+  const brandTagline = (org && org.tagline) || '';
+  const contactBits = [];
+  if (org && Array.isArray(org.phones) && org.phones.length) contactBits.push(org.phones.join(' / '));
+  if (org && org.email) contactBits.push(org.email);
+  if (org && org.address) contactBits.push(org.address);
+
   const summaryHtml = summaryPairs.length
     ? `<div class="pr-summary">${summaryPairs.map((p) => (
-      `<div class="pr-box"><div class="pr-k">${escHtml(p.label)}</div><div class="pr-v">${escHtml(p.value)}</div></div>`
+      `<div class="pr-box"><div class="pr-k">${escHtml(p.label)}</div><div class="pr-v">${escHtml(p.value)}</div>${p.sub ? `<div class="pr-s">${escHtml(p.sub)}</div>` : ''}</div>`
     )).join('')}</div>`
     : '';
 
-  const thHtml = columns.map((c) => `<th class="${c.num ? 'num' : ''}">${escHtml(c.label)}</th>`).join('');
-  const bodyHtml = rows.map((r) => (
-    `<tr>${r.map((cell, idx) => `<td class="${columns[idx]?.num ? 'num' : ''}">${escHtml(cell)}</td>`).join('')}</tr>`
-  )).join('');
+  const renderTblHtml = (cols = [], rws = []) => {
+    const thHtml = cols.map((c) => `<th class="${c.num ? 'num' : ''}">${escHtml(c.label)}</th>`).join('');
+    const bodyHtml = rws.map((r) => (
+      `<tr>${r.map((cell, idx) => `<td class="${cols[idx]?.num ? 'num' : ''}">${escHtml(cell)}</td>`).join('')}</tr>`
+    )).join('');
+    return `<table><thead><tr>${thHtml}</tr></thead><tbody>${bodyHtml || `<tr><td colspan="${Math.max(1, cols.length)}" style="text-align:center;padding:14px;color:#64748B;">No records</td></tr>`}</tbody></table>`;
+  };
+
+  let contentHtml = '';
+  if (Array.isArray(sections) && sections.length) {
+    contentHtml = sections.map((sec) => {
+      const charts = Array.isArray(sec.chartsHtml) && sec.chartsHtml.length
+        ? `<div class="pr-charts-grid">${sec.chartsHtml.map((ch) => `<div class="pr-chart-box">${ch}</div>`).join('')}</div>`
+        : '';
+      const tbl = sec.columns && sec.columns.length ? renderTblHtml(sec.columns, sec.rows || []) : '';
+      const subTables = Array.isArray(sec.tables)
+        ? sec.tables.map((t) => `<h4 class="pr-sub-h">${escHtml(t.title || '')}</h4>${renderTblHtml(t.columns || [], t.rows || [])}`).join('')
+        : '';
+      return `<section class="pr-sec"><h3 class="pr-sec-title">${escHtml(sec.title || '')}</h3>${sec.note ? `<div class="pr-sec-note">${escHtml(sec.note)}</div>` : ''}${charts}${tbl}${subTables}</section>`;
+    }).join('');
+  } else {
+    contentHtml = renderTblHtml(columns, rows);
+  }
 
   win.document.write(`<!DOCTYPE html>
 <html lang="en">
@@ -1639,48 +1683,73 @@ export function openPrintSheet({
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap');
   * { box-sizing: border-box; }
-  body { margin: 24px; font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: #171717; background: #FFFFFF; font-size: 12px; }
-  .pr-head { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #323A85; padding-bottom: 12px; margin-bottom: 16px; }
+  body { margin: 22px; font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: #171717; background: #FFFFFF; font-size: 11.5px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .pr-head { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #323A85; padding-bottom: 12px; margin-bottom: 12px; gap: 16px; }
   .pr-brand { font-size: 18px; font-weight: 800; color: #323A85; letter-spacing: -0.01em; }
-  .pr-sub { font-size: 12px; color: #525252; margin-top: 3px; }
-  .pr-meta { text-align: right; font-size: 11px; color: #6B6B6B; line-height: 1.5; }
-  .pr-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 16px; }
-  .pr-box { border: 1px solid #EAEAEA; border-radius: 8px; padding: 10px 12px; background: #F6F6F8; }
-  .pr-k { font-size: 10px; font-weight: 800; text-transform: uppercase; color: #6B6B6B; letter-spacing: .05em; }
-  .pr-v { font-size: 15px; font-weight: 800; color: #171717; margin-top: 3px; font-variant-numeric: tabular-nums; }
-  table { width: 100%; border-collapse: collapse; margin-top: 8px; }
-  th, td { border: 1px solid #EAEAEA; padding: 7px 9px; text-align: left; vertical-align: top; }
-  th { background: #EEF0FA; font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; color: #323A85; }
+  .pr-title { font-size: 13.5px; font-weight: 700; color: #171717; margin-top: 2px; }
+  .pr-sub { font-size: 11.5px; color: #525252; margin-top: 2px; }
+  .pr-contact { font-size: 10.5px; color: #6B6B6B; margin-top: 4px; }
+  .pr-meta { text-align: right; font-size: 10.5px; color: #525252; line-height: 1.55; flex-shrink: 0; }
+  .pr-filters { background: #EEF0FA; border: 1px solid #D8DDF2; border-radius: 6px; padding: 7px 11px; margin-bottom: 14px; font-size: 11px; color: #262E70; font-weight: 600; }
+  .pr-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(135px, 1fr)); gap: 9px; margin-bottom: 16px; }
+  .pr-box { border: 1px solid #EAEAEA; border-radius: 8px; padding: 9px 11px; background: #F6F6F8; break-inside: avoid; }
+  .pr-k { font-size: 9.5px; font-weight: 800; text-transform: uppercase; color: #6B6B6B; letter-spacing: .05em; }
+  .pr-v { font-size: 14.5px; font-weight: 800; color: #171717; margin-top: 3px; font-variant-numeric: tabular-nums; }
+  .pr-s { font-size: 10px; color: #525252; margin-top: 2px; }
+  .pr-sec { margin-top: 16px; break-inside: avoid; page-break-inside: avoid; }
+  .pr-sec-title { margin: 0 0 6px; font-size: 13px; font-weight: 800; color: #323A85; border-bottom: 1px solid #EAEAEA; padding-bottom: 4px; }
+  .pr-sec-note { font-size: 11px; color: #525252; margin-bottom: 8px; }
+  .pr-sub-h { margin: 10px 0 4px; font-size: 11.5px; font-weight: 700; color: #171717; }
+  .pr-charts-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 8px 0 10px; }
+  .pr-chart-box { border: 1px solid #EAEAEA; border-radius: 8px; padding: 10px; background: #FFFFFF; break-inside: avoid; page-break-inside: avoid; }
+  .pr-chart-title { font-size: 11px; font-weight: 700; color: #374151; margin-bottom: 6px; }
+  .uich-wrap { position: relative; }
+  .uich-donut-wrap { display: flex; align-items: center; gap: 12px; flex-wrap: nowrap; }
+  .uich-donut-svg { width: 132px; height: 132px; flex-shrink: 0; }
+  .uich-svg { max-width: 100%; height: auto; display: block; }
+  .uich-legend { list-style: none; margin: 0; padding: 0; flex: 1; font-size: 10.5px; }
+  .uich-legend-row { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 6px; }
+  .uich-leg-item { display: flex; align-items: center; gap: 6px; padding: 2px 0; }
+  .uich-leg-dot { width: 8px; height: 8px; border-radius: 999px; flex-shrink: 0; display: inline-block; }
+  .uich-leg-label { color: #374151; font-weight: 600; flex: 1; }
+  .uich-leg-val { color: #171717; font-weight: 700; font-variant-numeric: tabular-nums; margin-left: 6px; }
+  .uich-tooltip { display: none !important; }
+  .uich-empty { padding: 16px; text-align: center; color: #6B7280; }
+  table { width: 100%; border-collapse: collapse; margin-top: 6px; }
+  th, td { border: 1px solid #EAEAEA; padding: 6px 8px; text-align: left; vertical-align: top; }
+  th { background: #EEF0FA; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; color: #323A85; }
   tbody tr:nth-child(even) td { background: #FAFAFC; }
   .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-  .pr-foot { margin-top: 14px; padding-top: 10px; border-top: 1px solid #EAEAEA; font-size: 11px; color: #6B6B6B; display: flex; justify-content: space-between; }
+  .pr-foot { margin-top: 16px; padding-top: 10px; border-top: 1px solid #EAEAEA; font-size: 10.5px; color: #6B6B6B; display: flex; justify-content: space-between; }
   @media print {
-    body { margin: 12px; }
+    body { margin: 10px; }
     .no-print { display: none; }
+    svg { break-inside: avoid; page-break-inside: avoid; }
   }
 </style>
 </head>
 <body>
   <div class="pr-head">
     <div>
-      <div class="pr-brand">${escHtml(title)}</div>
-      <div class="pr-sub">${escHtml(subtitle)}</div>
+      <div class="pr-brand">${escHtml(brandName)}</div>
+      ${org ? `<div class="pr-title">${escHtml(title)}</div>` : ''}
+      ${brandTagline ? `<div class="pr-sub">${escHtml(brandTagline)}</div>` : ''}
+      ${subtitle ? `<div class="pr-sub">${escHtml(subtitle)}</div>` : ''}
+      ${contactBits.length ? `<div class="pr-contact">${escHtml(contactBits.join(' · '))}</div>` : ''}
     </div>
     <div class="pr-meta">
-      <div>Generated: ${escHtml(generatedAt)} (${escHtml(tz)})</div>
-      <div>Report date: ${escHtml(fmtDate(todayISO()))}</div>
+      <div><strong>Generated:</strong> ${escHtml(generatedAt)} (${escHtml(tz)})</div>
+      ${generatedBy ? `<div><strong>Generated by:</strong> ${escHtml(generatedBy)}</div>` : `<div>Report date: ${escHtml(fmtDate(todayISO()))}</div>`}
     </div>
   </div>
+  ${filtersText ? `<div class="pr-filters">Filters: ${escHtml(filtersText)}</div>` : ''}
   ${summaryHtml}
-  <table>
-    <thead><tr>${thHtml}</tr></thead>
-    <tbody>${bodyHtml || `<tr><td colspan="${columns.length}" style="text-align:center;padding:18px;color:#64748B;">No rows to print</td></tr>`}</tbody>
-  </table>
+  ${contentHtml}
   <div class="pr-foot">
-    <span>${escHtml(footerNote || 'Unique Infotech CMS')}</span>
-    <span>Rows: ${rows.length}</span>
+    <span>${escHtml(footerNote || brandName || 'Unique Infotech CMS')}</span>
+    <span>${Array.isArray(sections) ? `${sections.length} sections` : `Rows: ${rows.length}`}</span>
   </div>
-  <script>window.addEventListener('load', () => setTimeout(() => window.print(), 250));</script>
+  <script>window.addEventListener('load', () => setTimeout(() => window.print(), 260));</script>
 </body>
 </html>`);
   win.document.close();
@@ -2396,6 +2465,826 @@ export async function exportFinancialReportPdf({
       reject(err);
     }
   });
+}
+
+export function getReportDatePresetOptions() {
+  return [
+    { value: 'session', label: 'Whole session', icon: 'calendar-clock' },
+    { value: 'today', label: 'Today', icon: 'calendar-check' },
+    { value: 'week', label: 'This week', icon: 'calendar-days' },
+    { value: 'month', label: 'This month', icon: 'calendar-range' },
+    { value: 'last_month', label: 'Last month', icon: 'calendar' },
+    { value: 'custom', label: 'Custom', icon: 'sliders-horizontal' }
+  ];
+}
+
+function addDaysISO(iso, deltaDays) {
+  const [y, m, d] = String(iso || todayISO()).split('-').map(Number);
+  const dt = new Date(Date.UTC(y || 2026, (m || 1) - 1, d || 1));
+  dt.setUTCDate(dt.getUTCDate() + deltaDays);
+  return dt.toISOString().slice(0, 10);
+}
+
+function diffDaysISO(fromIso, toIso) {
+  if (!fromIso || !toIso) return 0;
+  const a = new Date(fromIso + 'T00:00:00Z');
+  const b = new Date(toIso + 'T00:00:00Z');
+  return Math.max(0, Math.round((b - a) / 86400000));
+}
+
+function fmtShortDay(iso) {
+  if (!iso || iso.length < 10) return iso || '-';
+  const [y, m, d] = iso.slice(0, 10).split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  return new Intl.DateTimeFormat('en-IN', { timeZone: 'UTC', day: 'numeric', month: 'short' }).format(dt);
+}
+
+function fmtMonthShort(ym) {
+  if (!ym || ym.length < 7) return ym || '-';
+  const [y, m] = ym.slice(0, 7).split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, 1));
+  return new Intl.DateTimeFormat('en-IN', { timeZone: 'UTC', month: 'short', year: '2-digit' }).format(dt);
+}
+
+function safeTimestampISO(ts) {
+  if (!ts) return '';
+  if (typeof ts === 'string') return ts.slice(0, 10);
+  if (typeof ts.seconds === 'number') return new Date(ts.seconds * 1000).toISOString().slice(0, 10);
+  if (typeof ts.toDate === 'function') return ts.toDate().toISOString().slice(0, 10);
+  return '';
+}
+
+function sanitizeStaffName(email, recordedByName, recordedByDesignation) {
+  const disp = resolveUserDisplay(email, recordedByName, recordedByDesignation);
+  let name = String(disp.name || recordedByName || '').trim();
+  const desig = String(disp.designation || recordedByDesignation || '').trim();
+  if (!name || name === '-' || name.includes('@')) {
+    name = 'Authorised Staff';
+  } else {
+    name = formatPersonName(name) || name;
+  }
+  const fullLabel = desig ? `${name} (${desig})` : name;
+  return { name, desig, fullLabel };
+}
+
+export async function loadAllYouthSessionsForCompare() {
+  const root = ensureCacheRoot();
+  if (Array.isArray(root.allYouthSessions)) {
+    return { sessions: root.allYouthSessions, readCount: 0 };
+  }
+  const snap = await getDocs(query(collection(db, 'sessions'), where('ctx', '==', 'youth')));
+  const list = snap.docs
+    .map((d) => ({ id: d.id, ...d.data() }))
+    .filter((s) => s.status !== 'deleted')
+    .sort((a, b) => (b.startDate || '').localeCompare(a.startDate || ''));
+  root.allYouthSessions = list;
+  return { sessions: list, readCount: snap.size };
+}
+
+export function computePreviousPeriodRange(preset, dateFrom, dateTo, asOfIso = todayISO()) {
+  if (!preset || preset === 'session') {
+    return { type: 'session', from: '', to: '', label: 'prev session' };
+  }
+  if (preset === 'today') {
+    const yday = addDaysISO(dateFrom || asOfIso, -1);
+    return { type: 'dates', from: yday, to: yday, label: 'yesterday' };
+  }
+  if (preset === 'week') {
+    const span = diffDaysISO(dateFrom, dateTo);
+    const prevFrom = addDaysISO(dateFrom, -7);
+    return { type: 'dates', from: prevFrom, to: addDaysISO(prevFrom, span), label: 'last week' };
+  }
+  if (preset === 'month') {
+    const parts = String(dateFrom || asOfIso).split('-').map(Number);
+    const prevEndDt = new Date(Date.UTC(parts[0], (parts[1] || 1) - 1, 1));
+    prevEndDt.setUTCDate(0);
+    const y = prevEndDt.getUTCFullYear();
+    const m = String(prevEndDt.getUTCMonth() + 1).padStart(2, '0');
+    const lastDay = String(prevEndDt.getUTCDate()).padStart(2, '0');
+    return { type: 'dates', from: `${y}-${m}-01`, to: `${y}-${m}-${lastDay}`, label: 'last month' };
+  }
+  if (preset === 'last_month') {
+    const parts = String(dateFrom || asOfIso).split('-').map(Number);
+    const prevEndDt = new Date(Date.UTC(parts[0], (parts[1] || 1) - 1, 1));
+    prevEndDt.setUTCDate(0);
+    const y = prevEndDt.getUTCFullYear();
+    const m = String(prevEndDt.getUTCMonth() + 1).padStart(2, '0');
+    const lastDay = String(prevEndDt.getUTCDate()).padStart(2, '0');
+    return { type: 'dates', from: `${y}-${m}-01`, to: `${y}-${m}-${lastDay}`, label: 'prior month' };
+  }
+  if (dateFrom && dateTo) {
+    const span = diffDaysISO(dateFrom, dateTo) + 1;
+    const prevTo = addDaysISO(dateFrom, -1);
+    const prevFrom = addDaysISO(prevTo, -(span - 1));
+    return { type: 'dates', from: prevFrom, to: prevTo, label: 'prev period' };
+  }
+  return { type: 'none', from: '', to: '', label: 'prev period' };
+}
+
+function makeDelta(curr, prev, { label = 'prev period', inverseBad = false } = {}) {
+  const c = Number(curr || 0);
+  if (prev === null || prev === undefined) {
+    return { pct: null, dir: 'flat', tone: 'neutral', text: `— vs ${label}` };
+  }
+  const p = Number(prev || 0);
+  if (p === 0 && c === 0) {
+    return { pct: 0, dir: 'flat', tone: 'neutral', text: `0% vs ${label}` };
+  }
+  if (p === 0) {
+    return {
+      pct: null,
+      dir: 'up',
+      tone: inverseBad ? 'bad' : 'good',
+      text: `New vs 0 (${label})`
+    };
+  }
+  const rawPct = ((c - p) / Math.abs(p)) * 100;
+  const rounded = Math.round(rawPct * 10) / 10;
+  const dir = rounded > 0 ? 'up' : (rounded < 0 ? 'down' : 'flat');
+  const sign = rounded > 0 ? '+' : '';
+  let tone = 'neutral';
+  if (dir === 'up') tone = inverseBad ? 'bad' : 'good';
+  else if (dir === 'down') tone = inverseBad ? 'good' : 'bad';
+  return { pct: rounded, dir, tone, text: `${sign}${rounded}% vs ${label}` };
+}
+
+function normalizeStudentStatus(raw) {
+  const st = String(raw || 'active').toLowerCase().trim();
+  if (st === 'active') return 'Active';
+  if (st === 'completed' || st === 'ended') return 'Completed';
+  if (st === 'transferred') return 'Transferred';
+  if (st === 'dropped' || st === 'left' || st === 'inactive' || st === 'deleted') return 'Dropped';
+  return toTitleCaseIfCaps(st) || 'Active';
+}
+
+function normalizeGenderLabel(raw) {
+  const g = String(raw || '').toLowerCase().trim();
+  if (g === 'm' || g === 'male') return 'Male';
+  if (g === 'f' || g === 'female') return 'Female';
+  if (!g) return 'Unspecified';
+  return 'Other';
+}
+
+/**
+ * Pure analytics builder for Youth Centre Reports (#/reports).
+ * Matches Payment History (summarizePaymentLedger) and Pending & Overdue (summarizePendingItems)
+ * totals exactly for identical Session / Branch / Batch / Course / Date filters.
+ */
+export function buildYouthReportsData({
+  entries = [],
+  pendingReport = null,
+  activeSession = null,
+  prevPendingReport = null,
+  prevSession = null,
+  branchesList = [],
+  coursesList = [],
+  batchesList = [],
+  branchesById = {},
+  coursesById = {},
+  batchesById = {},
+  profile = null,
+  filters = {},
+  asOfDate = todayISO()
+} = {}) {
+  const isSuper = profile?.role === 'superadmin';
+  const effectiveBranchId = (!isSuper && profile?.role === 'branch_head' && profile?.branchId)
+    ? profile.branchId
+    : (filters.branchId || 'all');
+  const batchFilter = filters.batchId || 'all';
+  const courseFilter = filters.courseId || 'all';
+  const datePreset = filters.datePreset || 'session';
+  const dateFrom = filters.dateFrom || '';
+  const dateTo = filters.dateTo || '';
+  const sessId = activeSession?.id || '';
+
+  const matchesStructEntry = (e, ignoreBranch = false) => {
+    if (!e || (e.ctx && e.ctx !== 'youth')) return false;
+    if (sessId && e.sessionId && e.sessionId !== sessId) return false;
+    if (!ignoreBranch && effectiveBranchId !== 'all' && e.branchId !== effectiveBranchId) return false;
+    if (batchFilter !== 'all' && e.batchId !== batchFilter) return false;
+    if (courseFilter !== 'all' && e.courseId !== courseFilter) return false;
+    return true;
+  };
+
+  const matchesStructStudent = (s, ignoreBranch = false) => {
+    if (!s || (s.ctx && s.ctx !== 'youth')) return false;
+    if (sessId && s.sessionId && s.sessionId !== sessId) return false;
+    if (!ignoreBranch && effectiveBranchId !== 'all' && s.branchId !== effectiveBranchId) return false;
+    if (batchFilter !== 'all' && s.batchId !== batchFilter) return false;
+    if (courseFilter !== 'all' && s.courseId !== courseFilter) return false;
+    return true;
+  };
+
+  const inDateRange = (iso, from, to) => {
+    if (!iso) return !from && !to;
+    if (from && iso < from) return false;
+    if (to && iso > to) return false;
+    return true;
+  };
+
+  // 1. Entries (Payment History exact parity)
+  const structEntries = (entries || []).filter((e) => matchesStructEntry(e, false));
+  const entriesCurrent = structEntries.filter((e) => inDateRange(e.date, dateFrom, dateTo));
+  const paySummary = summarizePaymentLedger(entriesCurrent);
+
+  // 2. Pending / Overdue & Student Financials (Pending & Overdue + calculateStudentFinancials parity)
+  const rawOverdueItems = filterOverdueItems(pendingReport?.items || [], asOfDate);
+  const filteredOverdueItems = rawOverdueItems.filter((it) => {
+    if (effectiveBranchId !== 'all' && it.branchId !== effectiveBranchId) return false;
+    if (batchFilter !== 'all' && it.batchId !== batchFilter) return false;
+    if (courseFilter !== 'all' && it.courseId !== courseFilter) return false;
+    return true;
+  });
+  const pendingSummary = summarizePendingItems(filteredOverdueItems, asOfDate);
+
+  const allSessionStudents = Object.values(pendingReport?.studentsById || {}).filter(Boolean);
+  const scopedStudents = allSessionStudents.filter((s) => matchesStructStudent(s, false));
+  const activeStudents = scopedStudents.filter((s) => isStudentEligibleForDues(s));
+  const paymentsByStudentId = pendingReport?.paymentsByStudentId || {};
+
+  let totalOutstanding = 0;
+  const studentDueRows = [];
+  const upcoming30Days = [];
+  const plus30ISO = addDaysISO(asOfDate, 30);
+
+  // Student-level overdue lookup from exact overdue items
+  const overdueByStu = new Map();
+  filteredOverdueItems.forEach((it) => {
+    if (!it.studentDocId) return;
+    if (!overdueByStu.has(it.studentDocId)) {
+      overdueByStu.set(it.studentDocId, { principal: 0, lateFee: 0, count: 0 });
+    }
+    const b = overdueByStu.get(it.studentDocId);
+    b.principal += Number(it.amount || 0);
+    b.lateFee += Number(it.lateFee || 0);
+    b.count += 1;
+  });
+
+  // Groupings for Section 3a
+  const duesByBranch = new Map();
+  const duesByBatch = new Map();
+  const duesByCourse = new Map();
+
+  const bumpDuesBucket = (map, key, label, shortLabel, outAmt, ovAmt) => {
+    const k = key || 'OTHER';
+    if (!map.has(k)) {
+      map.set(k, { key: k, label: label || k, shortLabel: shortLabel || label || k, students: 0, outstanding: 0, overdue: 0 });
+    }
+    const b = map.get(k);
+    b.students += 1;
+    b.outstanding += outAmt;
+    b.overdue += ovAmt;
+  };
+
+  for (const s of activeStudents) {
+    const pList = paymentsByStudentId[s.id] || [];
+    const ev = evaluateYouthStudentDues(s, pList, activeSession, {
+      asOfDate,
+      coursesById,
+      branchesById,
+      batchesById
+    });
+    const fin = ev.financials || { total: 0, paid: 0, outstanding: 0, percent: 0 };
+    const outAmt = Number(fin.outstanding || 0);
+    totalOutstanding += outAmt;
+
+    const br = branchesById[s.branchId] || {};
+    const cr = coursesById[s.courseId] || {};
+    const bt = batchesById[s.batchId] || {};
+    const brCode = String(br.code || br.branchCode || s.branchCode || '').trim();
+    const brName = toTitleCaseIfCaps(br.name || s.branchName || '') || s.branchId || 'Branch';
+    const crCode = String(cr.courseCode || cr.code || s.courseCode || '').trim();
+    const crName = cr.name || s.courseName || 'Course';
+    const btName = bt.name || s.batchName || 'Batch';
+
+    const stuOv = overdueByStu.get(s.id) || { principal: 0, lateFee: 0, count: 0 };
+    if (outAmt > 0 || stuOv.principal > 0) {
+      studentDueRows.push({
+        studentDocId: s.id,
+        studentId: s.studentId || s.id,
+        studentName: formatPersonName(s.name || '') || s.name || '-',
+        phone: s.phone || '',
+        branchId: s.branchId || '',
+        branchLabel: brCode ? `${brCode} - ${brName}` : brName,
+        branchShort: brCode || brName,
+        courseLabel: crCode ? `${crCode} - ${crName}` : crName,
+        batchName: btName,
+        totalFee: fin.total,
+        paidFee: fin.paid,
+        outstanding: outAmt,
+        overduePrincipal: stuOv.principal,
+        overdueLateFee: stuOv.lateFee,
+        overdueCount: stuOv.count
+      });
+    }
+
+    bumpDuesBucket(duesByBranch, s.branchId, brCode ? `${brCode} - ${brName}` : brName, brCode || brName, outAmt, stuOv.principal);
+    bumpDuesBucket(duesByBatch, s.batchId || 'UNASSIGNED', `${btName}${brCode ? ' (' + brCode + ')' : ''}`, btName, outAmt, stuOv.principal);
+    bumpDuesBucket(duesByCourse, s.courseId, crCode ? `${crCode} - ${crName}` : crName, crCode || crName, outAmt, stuOv.principal);
+
+    for (const it of (ev.items || [])) {
+      if (it.status !== 'overdue' && it.dueDate && it.dueDate >= asOfDate && it.dueDate <= plus30ISO) {
+        upcoming30Days.push({
+          studentDocId: s.id,
+          studentId: s.studentId || s.id,
+          studentName: formatPersonName(s.name || '') || s.name || '-',
+          courseLabel: crCode || crName,
+          branchShort: brCode || brName,
+          batchName: btName,
+          whatIsDue: it.whatIsDue || 'Installment',
+          dueDate: it.dueDate,
+          amount: Number(it.amount || 0)
+        });
+      }
+    }
+  }
+
+  upcoming30Days.sort((a, b) => a.dueDate.localeCompare(b.dueDate) || a.studentName.localeCompare(b.studentName));
+  const upcoming30Total = upcoming30Days.reduce((sum, u) => sum + u.amount, 0);
+
+  studentDueRows.sort((a, b) => b.outstanding - a.outstanding || b.overduePrincipal - a.overduePrincipal || a.studentName.localeCompare(b.studentName));
+  const top10Students = studentDueRows.slice(0, 10);
+
+  // Overdue ageing buckets
+  const ageingBuckets = {
+    '1-15': { label: '1-15 days', value: 0, count: 0, color: '#D97706' },
+    '16-30': { label: '16-30 days', value: 0, count: 0, color: '#EA580C' },
+    '31-60': { label: '31-60 days', value: 0, count: 0, color: '#DC2626' },
+    '60+': { label: '60+ days', value: 0, count: 0, color: '#7F1D1D' }
+  };
+  filteredOverdueItems.forEach((it) => {
+    const d = Number(it.daysLate || 0);
+    const amt = Number(it.amount || 0);
+    const k = d <= 15 ? '1-15' : (d <= 30 ? '16-30' : (d <= 60 ? '31-60' : '60+'));
+    ageingBuckets[k].value += amt;
+    ageingBuckets[k].count += 1;
+  });
+
+  // New admissions count in date range
+  const getAdmIso = (s) => String(s.admissionDate || safeTimestampISO(s.createdAt) || '').slice(0, 10);
+  const newAdmissions = datePreset === 'session'
+    ? scopedStudents.length
+    : scopedStudents.filter((s) => inDateRange(getAdmIso(s), dateFrom, dateTo)).length;
+
+  // Previous Period Delta computations for all 7 KPI cards
+  const prevRange = computePreviousPeriodRange(datePreset, dateFrom, dateTo, asOfDate);
+  let prevVals = { collected: null, outstanding: null, overdue: null, lateCollected: null, lateWaived: null, admissions: null, activeStudents: null };
+
+  if (prevRange.type === 'dates' && prevRange.from && prevRange.to) {
+    const prevEntries = structEntries.filter((e) => inDateRange(e.date, prevRange.from, prevRange.to));
+    const prevPay = summarizePaymentLedger(prevEntries);
+    prevVals.collected = prevPay.totalCollected;
+    prevVals.lateCollected = prevPay.lateFeesCollected;
+    prevVals.lateWaived = prevPay.lateFeesWaived;
+    prevVals.admissions = scopedStudents.filter((s) => inDateRange(getAdmIso(s), prevRange.from, prevRange.to)).length;
+
+    // Historical as-of snapshot at prevRange.to using only payments <= prevRange.to
+    let prevOut = 0;
+    let prevOv = 0;
+    let prevAct = 0;
+    for (const s of activeStudents) {
+      const admIso = getAdmIso(s);
+      if (admIso && admIso > prevRange.to) continue;
+      prevAct += 1;
+      const priorPays = (paymentsByStudentId[s.id] || []).filter((p) => {
+        const pd = String(p.paidOn || p.date || safeTimestampISO(p.createdAt) || '').slice(0, 10);
+        return !pd || pd <= prevRange.to;
+      });
+      const evPrev = evaluateYouthStudentDues(s, priorPays, activeSession, {
+        asOfDate: prevRange.to,
+        coursesById,
+        branchesById,
+        batchesById
+      });
+      prevOut += Number(evPrev.financials?.outstanding || 0);
+      evPrev.items.forEach((it) => {
+        if (it.status === 'overdue') prevOv += Number(it.amount || 0);
+      });
+    }
+    prevVals.outstanding = prevOut;
+    prevVals.overdue = prevOv;
+    prevVals.activeStudents = prevAct;
+  } else if (prevRange.type === 'session' && prevSession) {
+    const prevSessEntries = (entries || []).filter((e) => {
+      if (e.ctx && e.ctx !== 'youth') return false;
+      if (e.sessionId !== prevSession.id) return false;
+      if (effectiveBranchId !== 'all' && e.branchId !== effectiveBranchId) return false;
+      if (courseFilter !== 'all' && e.courseId !== courseFilter) return false;
+      return true;
+    });
+    const prevPay = summarizePaymentLedger(prevSessEntries);
+    prevVals.collected = prevPay.totalCollected;
+    prevVals.lateCollected = prevPay.lateFeesCollected;
+    prevVals.lateWaived = prevPay.lateFeesWaived;
+
+    const prevStudents = Object.values(prevPendingReport?.studentsById || {}).filter((s) => (
+      s && (!s.ctx || s.ctx === 'youth')
+      && (effectiveBranchId === 'all' || s.branchId === effectiveBranchId)
+      && (courseFilter === 'all' || s.courseId === courseFilter)
+    ));
+    const prevActList = prevStudents.filter(isStudentEligibleForDues);
+    prevVals.admissions = prevStudents.length;
+    prevVals.activeStudents = prevActList.length;
+
+    let prevOut = 0;
+    const prevPayByStu = prevPendingReport?.paymentsByStudentId || {};
+    for (const ps of prevActList) {
+      prevOut += Number(calculateStudentFinancials(ps, prevPayByStu[ps.id] || []).outstanding || 0);
+    }
+    prevVals.outstanding = prevOut;
+    const prevOvItems = filterOverdueItems(prevPendingReport?.items || [], prevSession.endDate || asOfDate).filter((it) => (
+      (effectiveBranchId === 'all' || it.branchId === effectiveBranchId)
+      && (courseFilter === 'all' || it.courseId === courseFilter)
+    ));
+    prevVals.overdue = summarizePendingItems(prevOvItems, prevSession.endDate || asOfDate).overdueAmount;
+  }
+
+  const kpis = {
+    totalCollected: {
+      value: paySummary.totalCollected,
+      sub: `${paySummary.moneyReceipts} receipt${paySummary.moneyReceipts === 1 ? '' : 's'}`,
+      delta: makeDelta(paySummary.totalCollected, prevVals.collected, { label: prevRange.label })
+    },
+    outstandingDues: {
+      value: totalOutstanding,
+      sub: `${studentDueRows.length} student${studentDueRows.length === 1 ? '' : 's'} with balance`,
+      delta: makeDelta(totalOutstanding, prevVals.outstanding, { label: prevRange.label, inverseBad: true })
+    },
+    overdueAmount: {
+      value: pendingSummary.overdueAmount,
+      sub: `Late ${formatINR(pendingSummary.lateFeesTotal)} · Total ${formatINR(pendingSummary.overdueWithLate)}`,
+      delta: makeDelta(pendingSummary.overdueAmount, prevVals.overdue, { label: prevRange.label, inverseBad: true })
+    },
+    lateFeesCollected: {
+      value: paySummary.lateFeesCollected,
+      sub: `Across collected receipts`,
+      delta: makeDelta(paySummary.lateFeesCollected, prevVals.lateCollected, { label: prevRange.label })
+    },
+    lateFeesWaived: {
+      value: paySummary.lateFeesWaived,
+      sub: (() => {
+        const wCnt = entriesCurrent.filter((e) => e.isPureWaiver || e.type === 'WA' || Number(e.lateFeeWaived || 0) > 0).length;
+        return `${wCnt} waiver${wCnt === 1 ? '' : 's'}`;
+      })(),
+      delta: makeDelta(paySummary.lateFeesWaived, prevVals.lateWaived, { label: prevRange.label, inverseBad: true })
+    },
+    newAdmissions: {
+      value: newAdmissions,
+      sub: datePreset === 'session' ? 'In active session' : 'Admitted in period',
+      delta: makeDelta(newAdmissions, prevVals.admissions, { label: prevRange.label })
+    },
+    activeStudents: {
+      value: activeStudents.length,
+      sub: `${scopedStudents.length} total in scope`,
+      delta: makeDelta(activeStudents.length, prevVals.activeStudents, { label: prevRange.label })
+    }
+  };
+
+  // Section 2: Money
+  const spanDays = (dateFrom && dateTo) ? diffDaysISO(dateFrom, dateTo) + 1 : 999;
+  const useDailyTrend = datePreset === 'today' || datePreset === 'week' || datePreset === 'month' || datePreset === 'last_month' || (spanDays <= 45);
+  const trendMap = new Map();
+  if (useDailyTrend && dateFrom && dateTo && spanDays <= 35) {
+    let curD = dateFrom;
+    let guard = 0;
+    while (curD <= dateTo && guard < 40) {
+      trendMap.set(curD, { key: curD, label: fmtDate(curD), shortLabel: fmtShortDay(curD), value: 0, receipts: 0 });
+      curD = addDaysISO(curD, 1);
+      guard += 1;
+    }
+  }
+  entriesCurrent.forEach((e) => {
+    if (e.isPureWaiver || e.type === 'WA') return;
+    const amt = Number(e.totalReceived || 0);
+    const key = useDailyTrend ? String(e.date || '').slice(0, 10) : String(e.date || '').slice(0, 7);
+    if (!key) return;
+    if (!trendMap.has(key)) {
+      trendMap.set(key, {
+        key,
+        label: useDailyTrend ? fmtDate(key) : fmtMonthShort(key),
+        shortLabel: useDailyTrend ? fmtShortDay(key) : fmtMonthShort(key),
+        value: 0,
+        receipts: 0
+      });
+    }
+    const b = trendMap.get(key);
+    b.value += amt;
+    b.receipts += 1;
+  });
+  const trendPoints = Array.from(trendMap.values())
+    .sort((a, b) => a.key.localeCompare(b.key))
+    .map((t) => ({ ...t, sub: `${t.receipts} rcpt${t.receipts === 1 ? '' : 's'}` }));
+
+  // 2b Payment mode donut
+  const modeBuckets = new Map();
+  entriesCurrent.forEach((e) => {
+    const amt = Number(e.totalReceived || 0);
+    const rawM = String(e.mode || 'cash').toLowerCase().trim();
+    if (e.isPureWaiver || e.type === 'WA' || amt <= 0 || rawM === 'waiver' || rawM === 'waived') return;
+    const meta = modeDisplayMeta(e);
+    const key = `${meta.cls || 'cash'}:${meta.label || 'Cash'}`;
+    if (!modeBuckets.has(key)) modeBuckets.set(key, { key: meta.cls || 'cash', label: meta.label, value: 0, count: 0 });
+    const b = modeBuckets.get(key);
+    b.value += amt;
+    b.count += 1;
+  });
+  const modeColors = { cash: '#323A85', upi: '#0F766E', bank: '#0284C7', card: '#7C3AED', cheque: '#D97706' };
+  const modeSlices = Array.from(modeBuckets.values())
+    .sort((a, b) => b.value - a.value)
+    .map((m) => ({ label: m.label, value: m.value, color: modeColors[m.key] || '#0F766E', sub: `${m.count} rcpt` }));
+
+  // 2c Fee type donut (Admission, Installment, Material, Exam, Late fee)
+  const feeBuckets = {
+    ADMISSION: { label: 'Admission', value: 0, color: '#323A85' },
+    IN: { label: 'Installment', value: 0, color: '#0F766E' },
+    MAT: { label: 'Material', value: 0, color: '#0284C7' },
+    EX: { label: 'Exam', value: 0, color: '#7C3AED' },
+    LF: { label: 'Late fee', value: 0, color: '#D97706' }
+  };
+  entriesCurrent.forEach((e) => {
+    if (e.isPureWaiver || e.type === 'WA') return;
+    const lf = Number(e.lateFeePaid || 0);
+    feeBuckets.LF.value += lf;
+    if (e.isAdmissionGroup && Array.isArray(e.breakdown) && e.breakdown.length) {
+      e.breakdown.forEach((b) => {
+        const bt = String(b.type || '').toUpperCase();
+        const bAmt = Number(b.amount || 0);
+        if (bt === 'MAT') feeBuckets.MAT.value += bAmt;
+        else feeBuckets.ADMISSION.value += bAmt;
+      });
+    } else {
+      const base = Math.max(0, Number(e.totalReceived || 0) - lf);
+      const t = String(e.type || '').toUpperCase();
+      if (t === 'MAT') feeBuckets.MAT.value += base;
+      else if (t === 'EX') feeBuckets.EX.value += base;
+      else if (t === 'AD' || t === 'ADMISSION' || t === 'FULL') feeBuckets.ADMISSION.value += base;
+      else feeBuckets.IN.value += base;
+    }
+  });
+  const feeTypeSlices = Object.values(feeBuckets).filter((s) => s.value > 0);
+
+  // 2d Staff-wise collection table (never show raw emails)
+  const staffMap = new Map();
+  entriesCurrent.forEach((e) => {
+    const amt = Number(e.totalReceived || 0);
+    if (e.isPureWaiver || e.type === 'WA' || amt <= 0) return;
+    const email = String(e.recordedBy || '').toLowerCase().trim();
+    const { name, desig, fullLabel } = sanitizeStaffName(email, e.recordedByName, e.recordedByDesignation);
+    const key = email || `name:${fullLabel.toLowerCase()}`;
+    if (!staffMap.has(key)) {
+      staffMap.set(key, {
+        label: fullLabel,
+        name,
+        designation: desig,
+        receipts: 0,
+        amount: 0,
+        cashAmount: 0,
+        onlineAmount: 0
+      });
+    }
+    const row = staffMap.get(key);
+    const m = String(e.mode || 'cash').toLowerCase();
+    row.receipts += 1;
+    row.amount += amt;
+    if (m === 'cash' || !m) row.cashAmount += amt;
+    else row.onlineAmount += amt;
+  });
+  const staffRows = Array.from(staffMap.values()).sort((a, b) => b.amount - a.amount || b.receipts - a.receipts);
+
+  // Section 4: Students
+  const admMonthMap = new Map();
+  const courseStuMap = new Map();
+  const statusStuMap = new Map();
+  const genderStuMap = new Map();
+  const batchEnrolledMap = new Map();
+
+  scopedStudents.forEach((s) => {
+    const admIso = getAdmIso(s);
+    const ym = admIso ? admIso.slice(0, 7) : '';
+    if (ym) {
+      if (!admMonthMap.has(ym)) {
+        admMonthMap.set(ym, { key: ym, label: fmtMonthShort(ym), shortLabel: fmtMonthShort(ym), value: 0 });
+      }
+      admMonthMap.get(ym).value += 1;
+    }
+
+    const cr = coursesById[s.courseId] || {};
+    const crLabel = [cr.courseCode || cr.code || s.courseCode, cr.name || s.courseName].filter(Boolean).join(' - ') || 'Other';
+    const cKey = s.courseId || crLabel;
+    if (!courseStuMap.has(cKey)) courseStuMap.set(cKey, { label: crLabel, value: 0 });
+    courseStuMap.get(cKey).value += 1;
+
+    const stLabel = normalizeStudentStatus(s.status);
+    if (!statusStuMap.has(stLabel)) statusStuMap.set(stLabel, { label: stLabel, value: 0 });
+    statusStuMap.get(stLabel).value += 1;
+
+    const gLabel = normalizeGenderLabel(s.gender);
+    if (!genderStuMap.has(gLabel)) genderStuMap.set(gLabel, { label: gLabel, value: 0 });
+    genderStuMap.get(gLabel).value += 1;
+
+    if (isStudentEligibleForDues(s) && s.batchId) {
+      batchEnrolledMap.set(s.batchId, (batchEnrolledMap.get(s.batchId) || 0) + 1);
+    }
+  });
+
+  const admissionsByMonth = Array.from(admMonthMap.values()).sort((a, b) => a.key.localeCompare(b.key));
+  const studentsByCourse = Array.from(courseStuMap.values()).sort((a, b) => b.value - a.value);
+  const statusColors = { Active: '#16A34A', Completed: '#323A85', Dropped: '#DC2626', Transferred: '#D97706' };
+  const studentsByStatus = Array.from(statusStuMap.values())
+    .sort((a, b) => b.value - a.value)
+    .map((it) => ({ ...it, color: statusColors[it.label] || '#64748B' }));
+  const genderColors = { Male: '#323A85', Female: '#0F766E', Other: '#7C3AED', Unspecified: '#94A3B8' };
+  const genderSplit = Array.from(genderStuMap.values())
+    .sort((a, b) => b.value - a.value)
+    .map((it) => ({ ...it, color: genderColors[it.label] || '#64748B' }));
+
+  const batchFilling = (batchesList || [])
+    .filter((b) => {
+      if (!b || (b.ctx && b.ctx !== 'youth')) return false;
+      if (sessId && b.sessionId && b.sessionId !== sessId) return false;
+      if (effectiveBranchId !== 'all' && b.branchId !== effectiveBranchId) return false;
+      if (batchFilter !== 'all' && b.id !== batchFilter) return false;
+      if (courseFilter !== 'all') {
+        const cIds = Array.isArray(b.courseIds) ? b.courseIds : (b.courseId ? [b.courseId] : []);
+        if (cIds.length && !cIds.includes(courseFilter)) return false;
+      }
+      return true;
+    })
+    .map((b) => {
+      const enrolled = batchEnrolledMap.get(b.id) || 0;
+      const cap = b.capacity !== null && b.capacity !== undefined && b.capacity !== '' ? Number(b.capacity) : 0;
+      const br = branchesById[b.branchId] || {};
+      const brCode = String(br.code || br.branchCode || '').trim();
+      const pct = cap > 0 ? Math.min(100, Math.round((enrolled / cap) * 100)) : 0;
+      return {
+        batchId: b.id,
+        name: b.name || b.id,
+        branchShort: brCode || br.name || '',
+        enrolled,
+        capacity: cap,
+        hasCapacity: cap > 0,
+        pct,
+        isFull: cap > 0 && enrolled >= cap
+      };
+    })
+    .sort((a, b) => (b.isFull ? 1 : 0) - (a.isFull ? 1 : 0) || b.pct - a.pct || b.enrolled - a.enrolled);
+
+  // Section 5: Super Admin Comparison
+  let branchComparison = [];
+  let sessionComparison = null;
+  if (isSuper) {
+    const branchStatsMap = new Map();
+    (branchesList || []).forEach((b) => {
+      if (!b || !b.id || (b.ctx && b.ctx !== 'youth')) return;
+      const code = String(b.code || b.branchCode || '').trim();
+      const name = toTitleCaseIfCaps(b.name || b.id) || b.id;
+      branchStatsMap.set(b.id, {
+        branchId: b.id,
+        branchCode: code,
+        branchName: name,
+        label: code ? `${code} - ${name}` : name,
+        shortLabel: code || name,
+        students: 0,
+        collected: 0,
+        courseTotal: 0,
+        coursePaid: 0,
+        outstanding: 0,
+        overdue: 0,
+        collectionPct: 0
+      });
+    });
+
+    const brStudentsAll = allSessionStudents.filter((s) => matchesStructStudent(s, true));
+    brStudentsAll.forEach((s) => {
+      const bId = s.branchId || 'OTHER';
+      if (!branchStatsMap.has(bId)) {
+        const bCode = s.branchCode || '';
+        const bName = toTitleCaseIfCaps(s.branchName || bId);
+        branchStatsMap.set(bId, {
+          branchId: bId, branchCode: bCode, branchName: bName, label: bCode ? `${bCode} - ${bName}` : bName,
+          shortLabel: bCode || bName, students: 0, collected: 0, courseTotal: 0, coursePaid: 0, outstanding: 0, overdue: 0, collectionPct: 0
+        });
+      }
+      const row = branchStatsMap.get(bId);
+      row.students += 1;
+      if (isStudentEligibleForDues(s)) {
+        const fin = calculateStudentFinancials(s, paymentsByStudentId[s.id] || []);
+        row.courseTotal += Number(fin.total || 0);
+        row.coursePaid += Number(fin.paid || 0);
+        row.outstanding += Number(fin.outstanding || 0);
+      }
+    });
+
+    (entries || []).forEach((e) => {
+      if (!matchesStructEntry(e, true) || !inDateRange(e.date, dateFrom, dateTo)) return;
+      if (e.isPureWaiver || e.type === 'WA') return;
+      const bId = e.branchId || 'OTHER';
+      if (!branchStatsMap.has(bId)) return;
+      branchStatsMap.get(bId).collected += Number(e.totalReceived || 0);
+    });
+
+    rawOverdueItems.forEach((it) => {
+      if (batchFilter !== 'all' && it.batchId !== batchFilter) return;
+      if (courseFilter !== 'all' && it.courseId !== courseFilter) return;
+      const bId = it.branchId || 'OTHER';
+      if (!branchStatsMap.has(bId)) return;
+      branchStatsMap.get(bId).overdue += Number(it.amount || 0);
+    });
+
+    branchComparison = Array.from(branchStatsMap.values())
+      .map((r) => ({
+        ...r,
+        collectionPct: r.courseTotal > 0 ? Math.min(100, Math.round((r.coursePaid / r.courseTotal) * 100)) : (r.collected > 0 ? 100 : 0)
+      }))
+      .sort((a, b) => b.collected - a.collected || b.students - a.students);
+
+    // Session comparison (current vs previous Youth session, respecting branch/course filters)
+    const curSessCollected = structEntries.filter((e) => !e.isPureWaiver && e.type !== 'WA').reduce((s, e) => s + Number(e.totalReceived || 0), 0);
+    const curSessRow = {
+      sessionId: activeSession?.id || 'curr',
+      label: activeSession?.name || 'Current Session',
+      tag: 'Current',
+      students: scopedStudents.length,
+      collected: curSessCollected,
+      dues: totalOutstanding,
+      overdue: pendingSummary.overdueAmount
+    };
+    let prevSessRow = null;
+    if (prevSession) {
+      const pEntries = (entries || []).filter((e) => (
+        (!e.ctx || e.ctx === 'youth')
+        && e.sessionId === prevSession.id
+        && (effectiveBranchId === 'all' || e.branchId === effectiveBranchId)
+        && (courseFilter === 'all' || e.courseId === courseFilter)
+      ));
+      const pPay = summarizePaymentLedger(pEntries);
+      const pStus = Object.values(prevPendingReport?.studentsById || {}).filter((s) => (
+        s && (!s.ctx || s.ctx === 'youth')
+        && (effectiveBranchId === 'all' || s.branchId === effectiveBranchId)
+        && (courseFilter === 'all' || s.courseId === courseFilter)
+      ));
+      const pPayMap = prevPendingReport?.paymentsByStudentId || {};
+      let pOut = 0;
+      pStus.filter(isStudentEligibleForDues).forEach((ps) => {
+        pOut += Number(calculateStudentFinancials(ps, pPayMap[ps.id] || []).outstanding || 0);
+      });
+      const pOv = summarizePendingItems(
+        filterOverdueItems(prevPendingReport?.items || [], prevSession.endDate || asOfDate).filter((it) => (
+          (effectiveBranchId === 'all' || it.branchId === effectiveBranchId)
+          && (courseFilter === 'all' || it.courseId === courseFilter)
+        )),
+        prevSession.endDate || asOfDate
+      );
+      prevSessRow = {
+        sessionId: prevSession.id,
+        label: prevSession.name || 'Previous Session',
+        tag: 'Previous',
+        students: pStus.length,
+        collected: pPay.totalCollected,
+        dues: pOut,
+        overdue: pOv.overdueAmount
+      };
+    }
+    sessionComparison = { current: curSessRow, previous: prevSessRow };
+  }
+
+  return {
+    kpis,
+    money: {
+      useDailyTrend,
+      trendPoints,
+      modeSlices,
+      feeTypeSlices,
+      totalCollected: paySummary.totalCollected,
+      staffRows
+    },
+    dues: {
+      byBranch: Array.from(duesByBranch.values()).sort((a, b) => b.outstanding - a.outstanding),
+      byBatch: Array.from(duesByBatch.values()).sort((a, b) => b.outstanding - a.outstanding),
+      byCourse: Array.from(duesByCourse.values()).sort((a, b) => b.outstanding - a.outstanding),
+      ageingSlices: Object.values(ageingBuckets).filter((b) => b.value > 0).map((b) => ({
+        label: b.label, value: b.value, color: b.color, sub: `${b.count} item${b.count === 1 ? '' : 's'}`
+      })),
+      overdueTotal: pendingSummary.overdueAmount,
+      upcoming30Days,
+      upcoming30Total,
+      top10Students,
+      studentDueRows
+    },
+    students: {
+      totalCount: scopedStudents.length,
+      activeCount: activeStudents.length,
+      admissionsByMonth,
+      byCourse: studentsByCourse,
+      byStatus: studentsByStatus,
+      batchFilling,
+      genderSplit
+    },
+    comparison: {
+      branchComparison,
+      sessionComparison
+    }
+  };
 }
 
 export { formatINR, fmtDate, todayISO };

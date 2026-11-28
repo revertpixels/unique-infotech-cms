@@ -8,6 +8,13 @@ import { showToast } from '../components/toast.js';
 import { buildStats, buildToolbar, renderPager, renderEmptyTableState, PAGE_SIZE } from '../components/list-page.js?v=1.8.196';
 import { INST_PER_SEM, feeTotal, courseFeeOf, discountOf } from '../utils/fees.js?v=1.8.196';
 import { isCourseActive } from '../utils/session-rules.js?v=1.8.196';
+import {
+  ensureReferenceData,
+  getCachedReferenceData,
+  scopeReferenceDataByCtx,
+  isCacheStale,
+  scheduleDelayedSkeleton
+} from '../services/report.service.js?v=1.8.196';
 
 const ENDED = ['ended', 'closed', 'completed', 'archived', 'cancelled'];
 const LOCK_FIELDS = { admission: 'Admission fee', installment: 'Installment amount', material: 'Material fee' };
@@ -864,7 +871,45 @@ export async function mount({ ctx, profile }) {
     }
 
     // ---------- data ----------
-    async function load() {
+    async function load({ forceRefresh = false, background = false } = {}) {
+      if (!Y) {
+        const applySchoolMeta = (meta) => {
+          const scoped = scopeReferenceDataByCtx(meta || {}, 'school');
+          sessions = [];
+          batches = scoped.batchesList || [];
+          all = (scoped.coursesList || []).slice().sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { numeric: true }));
+          byId = {};
+          all.forEach((c) => { byId[c.id] = c; });
+        };
+        if (!forceRefresh) {
+          const cachedMeta = getCachedReferenceData(profile);
+          if (cachedMeta) {
+            applySchoolMeta(cachedMeta);
+            render();
+            if (!background && isCacheStale(cachedMeta)) {
+              load({ forceRefresh: true, background: true }).catch(() => {});
+            }
+            return;
+          }
+        }
+        const skelTask = !background
+          ? scheduleDelayedSkeleton(() => { setState('Loading levels...', ''); }, 300)
+          : null;
+        try {
+          const meta = await ensureReferenceData({ forceRefresh, profile });
+          if (skelTask) skelTask.cancel();
+          applySchoolMeta(meta);
+        } catch (e) {
+          if (skelTask) skelTask.cancel();
+          if (!background) {
+            console.error('[courses] load failed', e);
+            showToast({ type: 'error', message: 'Could not load ' + T.many + ' (' + (e.code || 'error') + ')' });
+            all = []; byId = {}; batches = [];
+          }
+        }
+        render();
+        return;
+      }
       try {
         await loadBatches();
         const snap = await getDocs(collection(db, 'courses'));
@@ -881,7 +926,7 @@ export async function mount({ ctx, profile }) {
     }
     async function toggle(r) {
       const next = (r.status || 'active') === 'active' ? 'inactive' : 'active';
-      try { await updateDoc(doc(db, 'courses', r.id), { status: next, updatedAt: serverTimestamp() }); window.dispatchEvent(new CustomEvent('uic:meta-mutated', { detail: { reason: 'course:toggle' } })); showToast({ type: 'success', message: 'Status updated' }); await load(); }
+      try { await updateDoc(doc(db, 'courses', r.id), { status: next, updatedAt: serverTimestamp() }); window.dispatchEvent(new CustomEvent('uic:meta-mutated', { detail: { reason: 'course:toggle' } })); showToast({ type: 'success', message: 'Status updated' }); await load({ forceRefresh: true }); }
       catch (e) { showToast({ type: 'error', message: 'Status update failed (' + (e.code || 'error') + ')' }); }
     }
     async function del(r) {
@@ -897,7 +942,7 @@ export async function mount({ ctx, profile }) {
       const key = Y ? (r.code || 'DELETE') : 'DELETE';
       const ok = await confirmDialog({ title: 'Delete ' + T.one + '?', message: 'This permanently deletes "' + (r.name || '') + '". Students already admitted keep their saved fee details.', confirmText: 'Delete ' + T.one, danger: true, requireText: key });
       if (!ok) return;
-      try { await deleteDoc(doc(db, 'courses', r.id)); window.dispatchEvent(new CustomEvent('uic:meta-mutated', { detail: { reason: 'course:delete' } })); if (editId === r.id) closeForm(); showToast({ type: 'success', message: (Y ? 'Course' : 'Level') + ' deleted' }); await load(); }
+      try { await deleteDoc(doc(db, 'courses', r.id)); window.dispatchEvent(new CustomEvent('uic:meta-mutated', { detail: { reason: 'course:delete' } })); if (editId === r.id) closeForm(); showToast({ type: 'success', message: (Y ? 'Course' : 'Level') + ' deleted' }); await load({ forceRefresh: true }); }
       catch (e) { showToast({ type: 'error', message: 'Delete failed (' + (e.code || 'error') + ')' }); }
     }
     async function save() {
@@ -922,7 +967,7 @@ export async function mount({ ctx, profile }) {
           await Promise.all(deps.map((c) => updateDoc(doc(db, 'courses', c.id), { prerequisiteCode: v.code, eligibility: 'Completed ' + v.code, updatedAt: serverTimestamp() })));
         }
         window.dispatchEvent(new CustomEvent('uic:meta-mutated', { detail: { reason: 'course:save' } }));
-        saving = false; closeForm(); await load();
+        saving = false; closeForm(); await load({ forceRefresh: true });
         showToast({ type: 'success', message: (Y ? 'Course' : 'Level') + (wasEdit ? ' updated' : ' added') });
       } catch (e) {
         saving = false; refresh(); setState('Save failed (' + (e.code || 'error') + ')', 'error');

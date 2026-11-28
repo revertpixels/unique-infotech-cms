@@ -116,17 +116,28 @@ export function isBreakOverdueReturn(record, asOfDate) {
   return curYM > endYM;
 }
 
-// Allowed range and default for "First monthly billing month" selector:
-// - admission mode: default = calendar +2 months (firstMonthlyMonth), min = -1 month, max = +3 months from admissionDate
-// - upgrade mode: default = next month (+1), min = -1 month, max = +3 months from effective/current date
-export function computeBillingStartBounds({ anchorDate, today, mode = 'admission' } = {}) {
+// Allowed options and default for "First monthly billing month" dropdown (Kids Admissions & Upgrades):
+// - Only TWO options are allowed: next month (+1) or month after next (+2) from anchor date.
+// - Full / Difference payment -> default is month after next (+2 months; gap month in between).
+// - No payment -> default is next month (+1 month).
+export function computeBillingStartBounds({ anchorDate, today, paymentMode = 'full', mode = 'admission' } = {}) {
   const refDate = anchorDate || today || localToday();
   const anchorYM = String(refDate).slice(0, 7);
-  const isUpgrade = mode === 'upgrade';
-  const defaultYM = isUpgrade ? addMonthsYM(anchorYM, 1) : (firstMonthlyMonth(refDate) || addMonthsYM(anchorYM, 2));
-  const minYM = addMonthsYM(anchorYM, -1);
-  const maxYM = addMonthsYM(anchorYM, 3);
-  return { anchorYM, defaultYM, minYM, maxYM };
+  const nextMonthYM = addMonthsYM(anchorYM, 1);
+  const afterNextMonthYM = addMonthsYM(anchorYM, 2);
+  const modeKey = String(paymentMode || 'full').toLowerCase().trim();
+  const defaultYM = modeKey === 'none' ? nextMonthYM : afterNextMonthYM;
+  return {
+    anchorYM,
+    mode,
+    paymentMode: modeKey,
+    nextMonthYM,
+    afterNextMonthYM,
+    options: [nextMonthYM, afterNextMonthYM],
+    defaultYM,
+    minYM: nextMonthYM,
+    maxYM: afterNextMonthYM
+  };
 }
 
 // ---------- bill month helpers ----------

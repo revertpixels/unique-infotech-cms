@@ -101,72 +101,68 @@ function pButtons(popup, label, { icon = '', tone = 'default' } = {}) {
 
 /**
  * Shared First Monthly Billing Month selector (used on Kids Admission form AND Upgrade modal).
+ * Only TWO choices are allowed: next month (+1) or month after next (+2).
+ * Default resets whenever paymentMode changes:
+ * - full / difference -> month after next (+2)
+ * - none -> next month (+1)
  */
 export function createBillingStartSelector(host, {
   mode = 'admission',
   anchorDate = localToday(),
   monthlyFee = 0,
+  paymentMode = 'full',
   ariaLabel = 'First monthly billing month',
   onChange
 } = {}) {
   host.innerHTML = '';
   const pickerHost = mk('div', 'sk-bill-start-picker');
   const previewEl = mk('div', 'sk-bill-start-preview');
-  const warnBox = mk('div', 'adm-note warn sk-bill-start-warn');
-  warnBox.hidden = true;
-  const warnMsg = mk('div', 'sk-bill-start-warn-msg');
-  const warnLabel = mk('label', 'pk-check-row sk-bill-start-confirm-row');
-  const confirmCb = document.createElement('input');
-  confirmCb.type = 'checkbox';
-  warnLabel.append(confirmCb, mk('span', null, 'I confirm starting monthly billing before the ' + (mode === 'upgrade' ? 'current' : 'admission') + ' month.'));
-  warnBox.append(warnMsg, warnLabel);
-
-  host.append(pickerHost, previewEl, warnBox);
+  host.append(pickerHost, previewEl);
 
   let curAnchor = anchorDate;
   let curFee = Number(monthlyFee || 0);
-  let bounds = computeBillingStartBounds({ anchorDate: curAnchor, mode });
+  let curMode = String(paymentMode || 'full').toLowerCase().trim();
+  let bounds = computeBillingStartBounds({ anchorDate: curAnchor, paymentMode: curMode, mode });
   let manualOverride = false;
   let locked = false;
+  let curValue = bounds.defaultYM;
 
-  const picker = createMonthPicker(pickerHost, {
-    value: bounds.defaultYM,
-    min: bounds.minYM,
-    max: bounds.maxYM,
+  function buildOpts(b, extraVal) {
+    const opts = [
+      { value: b.nextMonthYM, label: `${formatLongMonthYear(b.nextMonthYM)} (Next month)`, icon: 'calendar' },
+      { value: b.afterNextMonthYM, label: `${formatLongMonthYear(b.afterNextMonthYM)} (Month after next)`, icon: 'calendar-clock' }
+    ];
+    if (extraVal && !opts.some((o) => o.value === extraVal)) {
+      opts.unshift({ value: extraVal, label: formatLongMonthYear(extraVal), icon: 'calendar' });
+    }
+    return opts;
+  }
+
+  const sel = createSelect(pickerHost, {
+    options: buildOpts(bounds),
+    value: curValue,
     ariaLabel,
     onChange: (val) => {
-      manualOverride = Boolean(val && val !== bounds.defaultYM);
-      confirmCb.checked = false;
+      curValue = val || bounds.defaultYM;
+      manualOverride = curValue !== bounds.defaultYM;
       syncUI();
       if (onChange) onChange(getState());
     }
   });
 
-  // Update manualOverride on the target element BEFORE the 'change' event bubbles up to
-  // parent forms that may call setConfig() synchronously inside their own change handler.
-  pickerHost.addEventListener('change', () => {
-    manualOverride = Boolean(picker.value && picker.value !== bounds.defaultYM);
-    confirmCb.checked = false;
-    syncUI();
-  });
-
-  confirmCb.addEventListener('change', () => {
-    syncUI();
-    if (onChange) onChange(getState());
-  });
-
   function getState() {
-    const val = picker.value || bounds.defaultYM;
-    const isEarlier = Boolean(val && bounds.anchorYM && val < bounds.anchorYM);
+    const val = curValue || bounds.defaultYM;
     return {
       value: val,
       defaultValue: bounds.defaultYM,
       minValue: bounds.minYM,
       maxValue: bounds.maxYM,
+      options: bounds.options.slice(),
       anchorMonth: bounds.anchorYM,
+      paymentMode: curMode,
       changedFromDefault: val !== bounds.defaultYM,
-      needsEarlyConfirm: isEarlier && !locked,
-      earlyConfirmed: !isEarlier || confirmCb.checked || locked
+      needsEarlyConfirm: false,
+      earlyConfirmed: true
     };
   }
 
@@ -182,13 +178,7 @@ export function createBillingStartSelector(host, {
     } else {
       previewEl.textContent = 'Select billing start month.';
     }
-
-    const isEarlier = Boolean(st.value && bounds.anchorYM && st.value < bounds.anchorYM && !locked);
-    warnBox.hidden = !isEarlier;
-    if (isEarlier) {
-      warnMsg.textContent = `Heads up: ${formatLongMonthYear(st.value)} is earlier than ${formatLongMonthYear(bounds.anchorYM)}. Previous month will be billed in full.`;
-    }
-    const btn = pickerHost.querySelector('button');
+    const btn = pickerHost.querySelector('.ui-select-btn, button');
     if (btn) btn.disabled = locked;
   }
 
@@ -196,33 +186,31 @@ export function createBillingStartSelector(host, {
 
   return {
     getState,
-    get value() { return picker.value; },
-    setConfig({ anchorDate: nextAnchor, monthlyFee: nextFee, value: explicitValue, resetOverride = false, isLocked = false } = {}) {
-      const prevDefault = bounds.defaultYM;
-      if (resetOverride) {
-        manualOverride = false;
-        confirmCb.checked = false;
-      }
+    get value() { return curValue; },
+    setConfig({ anchorDate: nextAnchor, monthlyFee: nextFee, paymentMode: nextPayMode, value: explicitValue, resetOverride = false, isLocked = false } = {}) {
+      const prevMode = curMode;
       if (nextAnchor !== undefined) curAnchor = nextAnchor || localToday();
       if (nextFee !== undefined) curFee = Number(nextFee || 0);
+      if (nextPayMode !== undefined) curMode = String(nextPayMode || 'full').toLowerCase().trim();
       locked = !!isLocked;
-      bounds = computeBillingStartBounds({ anchorDate: curAnchor, mode });
-      if (locked) {
-        picker.setMin('');
-        picker.setMax('');
-      } else {
-        picker.setMin(bounds.minYM);
-        picker.setMax(bounds.maxYM);
+
+      const modeChanged = curMode !== prevMode;
+      bounds = computeBillingStartBounds({ anchorDate: curAnchor, paymentMode: curMode, mode });
+
+      if (resetOverride || modeChanged) {
+        manualOverride = false;
       }
+
       if (explicitValue !== undefined) {
-        picker.value = explicitValue || bounds.defaultYM;
-        manualOverride = (picker.value !== bounds.defaultYM);
-      } else if (!manualOverride && !locked && (!picker.value || picker.value === prevDefault)) {
-        picker.value = bounds.defaultYM;
-      } else if (!locked) {
-        if (picker.value < bounds.minYM) picker.value = bounds.minYM;
-        if (picker.value > bounds.maxYM) picker.value = bounds.maxYM;
+        curValue = explicitValue || bounds.defaultYM;
+        manualOverride = curValue !== bounds.defaultYM;
+      } else if (modeChanged || resetOverride || !manualOverride || !bounds.options.includes(curValue)) {
+        curValue = bounds.defaultYM;
+        manualOverride = false;
       }
+
+      sel.setOptions(buildOpts(bounds, locked ? curValue : ''));
+      sel.value = curValue;
       syncUI();
     }
   };
@@ -367,6 +355,7 @@ export async function openKidsStartBreakModal({ student, profile, onSuccess } = 
         asOfDate: today
       });
       showToast({ type: 'success', message: `Break recorded for ${student.name || 'Student'} (${formatBreakPeriod(fromPicker.value, toPicker.value)}).` });
+      window.dispatchEvent(new CustomEvent('uic:data-mutated', { detail: { reason: 'break:start' } }));
       popup.close(true);
       if (onSuccess) await onSuccess();
     } catch (err) {
@@ -457,6 +446,7 @@ export async function openKidsResumeBreakModal({ student, breakDoc = null, profi
         asOfDate: today
       });
       showToast({ type: 'success', message: `${student.name || 'Student'} rejoined (billing from ${formatShortMonthYear(returnDate.slice(0, 7))}).` });
+      window.dispatchEvent(new CustomEvent('uic:data-mutated', { detail: { reason: 'break:resume' } }));
       popup.close(true);
       if (onSuccess) await onSuccess();
     } catch (err) {
@@ -578,6 +568,7 @@ export async function openKidsUpgradePackageModal({ student, levels = [], batche
     mode: 'upgrade',
     anchorDate: today,
     monthlyFee: 0,
+    paymentMode,
     ariaLabel: 'New package billing starts from',
     onChange: () => check()
   });
@@ -602,13 +593,14 @@ export async function openKidsUpgradePackageModal({ student, levels = [], batche
       : 'Select a new level to preview upgrade charges and monthly fee.';
     billingSelector.setConfig({
       anchorDate: today,
-      monthlyFee: cr ? Number(cr.monthlyFee || 0) : 0
+      monthlyFee: cr ? Number(cr.monthlyFee || 0) : 0,
+      paymentMode
     });
   }
 
   function check() {
     const st = billingSelector.getState();
-    okBtn.disabled = saving || !selectedLevelId || !selectedBatchId || !st.value || !st.earlyConfirmed;
+    okBtn.disabled = saving || !selectedLevelId || !selectedBatchId || !st.value;
   }
 
   syncBillingAndFee();
@@ -641,6 +633,7 @@ export async function openKidsUpgradePackageModal({ student, levels = [], batche
         asOfDate: today
       });
       showToast({ type: 'success', message: `Upgraded to ${cr.name || cr.id}; new fee starts ${formatShortMonthYear(st.value)}.` });
+      window.dispatchEvent(new CustomEvent('uic:data-mutated', { detail: { reason: 'student:upgrade' } }));
       popup.close(true);
       if (onSuccess) await onSuccess();
     } catch (err) {

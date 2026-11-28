@@ -16,10 +16,22 @@ import { isCourseActive } from '../utils/session-rules.js?v=1.8.196';
 import { localToday, monthSeq, nextMonth } from '../utils/school-lifecycle.js?v=1.8.196';
 import { playPaymentSuccessSound } from '../utils/sound.js?v=1.8.196';
 import { daysLate, computeLateFee, syncOpenKidsBills } from '../utils/school-billing.js?v=1.8.196';
+import {
+  ensureReferenceData,
+  getCachedReferenceData,
+  scopeReferenceDataByCtx,
+  ensureKidsDataset,
+  getCachedKidsDataset,
+  syncKidsDatasetDelta,
+  isCacheStale,
+  scheduleDelayedSkeleton
+} from '../services/report.service.js?v=1.8.196';
 
 const COL = 'students';
 const BILLS_COL = 'bills';
 const PAYMENTS_COL = 'payments';
+let cleanupPage = null;
+export function unmount() { if (cleanupPage) cleanupPage(); cleanupPage = null; }
 
 function $(id) { const el = document.getElementById(id); if (!el) console.warn('[school-fees] missing #' + id); return el; }
 function mk(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; }
@@ -63,7 +75,7 @@ export async function mount({ container, profile, ctx }) {
     placeholder: 'Search student name, Student ID or phone',
     filters: tbFilters,
     onChange: () => { page = 1; render(); },
-    onRefresh: () => load()
+    onRefresh: () => load({ forceRefresh: true })
   });
   const tbHost = $('sk-toolbar');
   if (tbHost) { tbHost.innerHTML = ''; tb.el.classList.add('sf-toolbar-row'); tbHost.appendChild(tb.el); }
@@ -111,44 +123,82 @@ export async function mount({ container, profile, ctx }) {
     footEl.hidden = true;
   }
 
+  let alive = true;
+
+  function applyLoadedData(meta, dataset) {
+    const scoped = scopeReferenceDataByCtx(meta || {}, 'school');
+    students = (dataset?.studentsList || []).slice();
+    const studentKeys = new Set();
+    students.forEach((s) => { if (s.id) studentKeys.add(s.id); if (s.studentId) studentKeys.add(String(s.studentId)); });
+    bills = (dataset?.bills || [])
+      .filter((b) => studentKeys.has(b.studentId))
+      .sort((a, b) => String(b.month || '').localeCompare(String(a.month || '')));
+    levels = (scoped.coursesList || []).filter((c) => (c.status || 'active') === 'active');
+    coursesById = {};
+    levels.forEach((c) => { coursesById[c.id] = c; });
+    batches = (scoped.batchesList || []).filter((b) => (b.status || 'active') === 'active');
+    const months = Array.from(new Set(bills.map((b) => b.month).filter(Boolean))).sort().reverse();
+    tb.setFilterOptions('month', [{ value: 'all', label: 'All months', icon: 'calendar' }].concat(
+      months.map((m) => ({ value: m, label: m, icon: 'calendar' }))
+    ));
+    tb.setFilterOptions('level', [{ value: 'all', label: 'All levels', icon: 'book-open' }].concat(
+      levels.slice().sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+        .map((c) => ({ value: c.id, label: c.name || c.id, icon: 'book-open' }))
+    ));
+    render();
+  }
+
   // ---------- load ----------
-  async function load() {
-    setLoading(true);
+  async function load({ forceRefresh = false, deltaRefresh = false, background = false } = {}) {
     loadError = null;
+    const today = localToday();
+    if (!forceRefresh && !deltaRefresh) {
+      const cachedMeta = getCachedReferenceData(profile);
+      const cachedDs = getCachedKidsDataset();
+      if (cachedMeta && cachedDs) {
+        applyLoadedData(cachedMeta, cachedDs);
+        if (!background && (isCacheStale(cachedMeta) || isCacheStale(cachedDs) || cachedDs.billsSyncedAsOf !== today)) {
+          load({ deltaRefresh: true, background: true }).catch(() => {});
+        }
+        return;
+      }
+    }
+
+    const skelTask = (!background && !bills.length)
+      ? scheduleDelayedSkeleton(() => {
+        if (alive && !bills.length) setLoading(true);
+      }, 300)
+      : null;
+
     try {
-      const [bSnap, sSnap, cSnap, brSnap, brkSnap] = await Promise.all([
-        getDocs(collection(db, BILLS_COL)),
-        getDocs(query(collection(db, COL), where('ctx', '==', 'school'))),
-        getDocs(query(collection(db, 'courses'), where('ctx', '==', 'school'))),
-        getDocs(query(collection(db, 'batches'), where('ctx', '==', 'school'))),
-        getDocs(collection(db, 'breaks')).catch(() => null)
+      const [meta, dataset] = await Promise.all([
+        ensureReferenceData({ forceRefresh: forceRefresh && !deltaRefresh, profile }),
+        deltaRefresh
+          ? syncKidsDatasetDelta({ profile, syncOpenBills: true })
+          : ensureKidsDataset({ profile, forceRefresh, syncOpenBills: true })
       ]);
-      students = sSnap.docs.map(d => Object.assign({ id: d.id }, d.data()));
-      const studentKeys = new Set();
-      students.forEach((s) => { if (s.id) studentKeys.add(s.id); if (s.studentId) studentKeys.add(String(s.studentId)); });
-      const rawBills = bSnap.docs.map(d => Object.assign({ id: d.id }, d.data()))
-        .filter((b) => studentKeys.has(b.studentId));
-      const allBreaks = brkSnap ? brkSnap.docs.map(d => ({ id: d.id, ...d.data() })).filter(b => !b.ctx || b.ctx === 'school') : [];
-      const newBills = await syncOpenKidsBills(db, { students, bills: rawBills, breaks: allBreaks }).catch(() => []);
-      bills = rawBills.concat(newBills || []);
-      bills.sort((a, b) => String(b.month || '').localeCompare(String(a.month || '')));
-      levels = cSnap.docs.map(d => Object.assign({ id: d.id }, d.data())).filter(c => (c.status || 'active') === 'active');
-      coursesById = {}; levels.forEach(c => { coursesById[c.id] = c; });
-      batches = brSnap.docs.map(d => Object.assign({ id: d.id }, d.data())).filter(b => (b.status || 'active') === 'active');
-      const months = Array.from(new Set(bills.map(b => b.month).filter(Boolean))).sort().reverse();
-      tb.setFilterOptions('month', [{ value: 'all', label: 'All months', icon: 'calendar' }].concat(
-        months.map(m => ({ value: m, label: m, icon: 'calendar' }))
-      ));
-      tb.setFilterOptions('level', [{ value: 'all', label: 'All levels', icon: 'book-open' }].concat(
-        levels.slice().sort((a, b) => (a.name || '').localeCompare(b.name || ''))
-          .map(c => ({ value: c.id, label: c.name || c.id, icon: 'book-open' }))
-      ));
-      render();
+      if (skelTask) skelTask.cancel();
+      if (!alive) return;
+      if (!background || !deltaRefresh || !dataset.deltaUsed || dataset.changedCount !== 0 || meta?.fromCache === false) {
+        applyLoadedData(meta, dataset);
+      }
     } catch (e) {
-      console.error('[school-fees] load failed', e);
-      setError('Could not load fees (' + (e.code || 'error') + ').');
+      if (skelTask) skelTask.cancel();
+      if (!background && alive) {
+        console.error('[school-fees] load failed', e);
+        setError('Could not load fees (' + (e.code || 'error') + ').');
+      }
     }
   }
+
+  const onMutated = () => { if (alive) load({ forceRefresh: false }); };
+  window.addEventListener('uic:data-mutated', onMutated);
+  window.addEventListener('uic:meta-mutated', onMutated);
+  cleanupPage = () => {
+    alive = false;
+    window.removeEventListener('uic:data-mutated', onMutated);
+    window.removeEventListener('uic:meta-mutated', onMutated);
+  };
 
   // ---------- render ----------
   function render() {
@@ -308,7 +358,8 @@ export async function mount({ container, profile, ctx }) {
           allocations: [], createdAt: serverTimestamp()
         });
       });
-      await load();
+      window.dispatchEvent(new CustomEvent('uic:data-mutated', { detail: { reason: 'kids:payment' } }));
+      await load({ forceRefresh: true });
       playPaymentSuccessSound();
       showToast({ type: 'success', message: 'Payment of ' + formatINR(paid) + ' recorded.' });
     } catch (e) {

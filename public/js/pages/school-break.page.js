@@ -19,9 +19,18 @@ import {
   openKidsResumeBreakModal
 } from '../utils/school-break-modals.js?v=1.8.196';
 import { getRoleTitle, resolveUserDisplay } from '../services/user-directory.service.js?v=1.8.196';
+import {
+  ensureKidsDataset,
+  getCachedKidsDataset,
+  syncKidsDatasetDelta,
+  isCacheStale,
+  scheduleDelayedSkeleton
+} from '../services/report.service.js?v=1.8.196';
 
 const COL = 'students';
 const BREAKS_COL = 'breaks';
+let cleanupPage = null;
+export function unmount() { if (cleanupPage) cleanupPage(); cleanupPage = null; }
 
 function $(id) { const el = document.getElementById(id); if (!el) console.warn('[school-break] missing #' + id); return el; }
 function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;'); }
@@ -107,7 +116,7 @@ export async function mount({ container, profile, ctx }) {
     placeholder: 'Search student name, ID, phone or reason',
     filters: tbFilters,
     onChange: () => { page = 1; render(); },
-    onRefresh: () => load()
+    onRefresh: () => load({ forceRefresh: true })
   });
   tb.state.status = initialFilter;
   const tbHost = $('skb-toolbar');
@@ -154,59 +163,92 @@ export async function mount({ container, profile, ctx }) {
     footEl.hidden = true;
   }
 
-  async function load() {
-    setLoading(true);
+  let alive = true;
+
+  function applyDataset(dataset) {
+    students = (dataset?.studentsList || []).slice();
+    const rawBreaks = (dataset?.breaks || []).map((b) => ({ ...b }));
+
+    // Include any student still marked status='break' who lacks a doc in `breaks` (legacy draft records).
+    const hasActiveBreakDoc = new Set();
+    rawBreaks.forEach((b) => {
+      if (isOngoingBreak(b)) {
+        if (b.studentId) hasActiveBreakDoc.add(b.studentId);
+        if (b.studentCode) hasActiveBreakDoc.add(b.studentCode);
+      }
+    });
+    students.forEach((s) => {
+      if ((s.status || '').toLowerCase() === 'break' && !hasActiveBreakDoc.has(s.id) && !hasActiveBreakDoc.has(s.studentId)) {
+        rawBreaks.push({
+          id: 'legacy-' + s.id,
+          ctx: 'school',
+          studentId: s.id,
+          studentCode: s.studentId || '',
+          studentName: s.name || '',
+          startMonth: s.breakFrom || '',
+          endMonth: s.breakTo || '',
+          plannedEndMonth: s.breakTo || '',
+          reason: s.breakReason || 'Student break',
+          status: 'active',
+          startedBy: s.breakStartedBy || '',
+          _synthetic: true
+        });
+      }
+    });
+
+    rawBreaks.sort((a, b) => {
+      const ao = isOngoingBreak(a) ? 0 : 1;
+      const bo = isOngoingBreak(b) ? 0 : 1;
+      if (ao !== bo) return ao - bo;
+      return String(b.startMonth || '').localeCompare(String(a.startMonth || ''));
+    });
+    breaks = rawBreaks;
+    render();
+  }
+
+  async function load({ forceRefresh = false, deltaRefresh = false, background = false } = {}) {
     loadError = null;
+    if (!forceRefresh && !deltaRefresh) {
+      const cachedDs = getCachedKidsDataset();
+      if (cachedDs) {
+        applyDataset(cachedDs);
+        if (!background && isCacheStale(cachedDs)) {
+          load({ deltaRefresh: true, background: true }).catch(() => {});
+        }
+        return;
+      }
+    }
+
+    const skelTask = (!background && !breaks.length)
+      ? scheduleDelayedSkeleton(() => {
+        if (alive && !breaks.length) setLoading(true);
+      }, 300)
+      : null;
+
     try {
-      const [bSnap, sSnap] = await Promise.all([
-        getDocs(collection(db, BREAKS_COL)),
-        getDocs(query(collection(db, COL), where('ctx', '==', 'school')))
-      ]);
-      students = sSnap.docs.map((d) => Object.assign({ id: d.id }, d.data()));
-      const rawBreaks = bSnap.docs
-        .map((d) => Object.assign({ id: d.id }, d.data()))
-        .filter((b) => !b.ctx || b.ctx === 'school');
-
-      // Include any student still marked status='break' who lacks a doc in `breaks` (legacy draft records).
-      const hasActiveBreakDoc = new Set();
-      rawBreaks.forEach((b) => {
-        if (isOngoingBreak(b)) {
-          if (b.studentId) hasActiveBreakDoc.add(b.studentId);
-          if (b.studentCode) hasActiveBreakDoc.add(b.studentCode);
-        }
-      });
-      students.forEach((s) => {
-        if ((s.status || '').toLowerCase() === 'break' && !hasActiveBreakDoc.has(s.id) && !hasActiveBreakDoc.has(s.studentId)) {
-          rawBreaks.push({
-            id: 'legacy-' + s.id,
-            ctx: 'school',
-            studentId: s.id,
-            studentCode: s.studentId || '',
-            studentName: s.name || '',
-            startMonth: s.breakFrom || '',
-            endMonth: s.breakTo || '',
-            plannedEndMonth: s.breakTo || '',
-            reason: s.breakReason || 'Student break',
-            status: 'active',
-            startedBy: s.breakStartedBy || '',
-            _synthetic: true
-          });
-        }
-      });
-
-      rawBreaks.sort((a, b) => {
-        const ao = isOngoingBreak(a) ? 0 : 1;
-        const bo = isOngoingBreak(b) ? 0 : 1;
-        if (ao !== bo) return ao - bo;
-        return String(b.startMonth || '').localeCompare(String(a.startMonth || ''));
-      });
-      breaks = rawBreaks;
-      render();
+      const dataset = deltaRefresh
+        ? await syncKidsDatasetDelta({ profile })
+        : await ensureKidsDataset({ profile, forceRefresh });
+      if (skelTask) skelTask.cancel();
+      if (!alive) return;
+      if (!background || !deltaRefresh || !dataset.deltaUsed || dataset.changedCount !== 0) {
+        applyDataset(dataset);
+      }
     } catch (e) {
-      console.error('[school-break] load failed', e);
-      setError('Could not load breaks (' + (e.code || 'error') + ').');
+      if (skelTask) skelTask.cancel();
+      if (!background && alive) {
+        console.error('[school-break] load failed', e);
+        setError('Could not load breaks (' + (e.code || 'error') + ').');
+      }
     }
   }
+
+  const onMutated = () => { if (alive) load({ forceRefresh: false }); };
+  window.addEventListener('uic:data-mutated', onMutated);
+  cleanupPage = () => {
+    alive = false;
+    window.removeEventListener('uic:data-mutated', onMutated);
+  };
 
   function render() {
     if (!rowsHost) return;

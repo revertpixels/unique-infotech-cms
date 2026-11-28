@@ -24,6 +24,7 @@ import {
   loadYouthPendingReport,
   getCachedYouthPending,
   loadKidsPendingReport,
+  getCachedKidsPending,
   refreshSingleYouthPendingStudent,
   loadStudentPhotos,
   getCachedStudentPhoto,
@@ -427,6 +428,27 @@ function pendingSignature(rep) {
 async function bootstrapData({ forceRefresh = false, deltaRefresh = false, background = false } = {}) {
   if (!state || state.destroyed) return;
 
+  if (!forceRefresh && !deltaRefresh && state.ctx === 'school') {
+    const cachedMeta = getCachedReferenceData(state.profile);
+    const cachedReport = getCachedKidsPending();
+    if (cachedMeta && cachedReport) {
+      state.meta = cachedMeta;
+      state.sessions = [];
+      state.activeSession = null;
+      updateSubtitle(null);
+      populateCourseOptions();
+      syncBranchBatchContext();
+      state.report = cachedReport;
+      hideSkeleton();
+      toggleNoSessionState(false);
+      applyFiltersAndRender();
+      if (!background && (isCacheStale(cachedMeta) || isCacheStale(cachedReport))) {
+        bootstrapData({ forceRefresh: false, deltaRefresh: true, background: true }).catch(() => {});
+      }
+      return;
+    }
+  }
+
   if (!forceRefresh && !deltaRefresh && state.ctx === 'youth') {
     const cachedMeta = getCachedReferenceData(state.profile);
     const cachedSessions = getCachedSessions('youth');
@@ -465,7 +487,7 @@ async function bootstrapData({ forceRefresh = false, deltaRefresh = false, backg
   const skelTask = (!state.report && !background)
     ? scheduleDelayedSkeleton(() => {
       if (state && !state.destroyed && !state.report) showSkeleton();
-    }, 250)
+    }, state.ctx === 'school' ? 300 : 250)
     : null;
 
   try {
@@ -542,14 +564,14 @@ async function loadActiveReport({ forceRefresh = false, deltaRefresh = false, ba
   const ownSkel = (!skelTask && !state.report && !background)
     ? scheduleDelayedSkeleton(() => {
       if (state && !state.destroyed && !state.report) showSkeleton();
-    }, 250)
+    }, state.ctx === 'school' ? 300 : 250)
     : null;
   const activeSkel = skelTask || ownSkel;
   const prevSig = pendingSignature(state.report);
 
   try {
     const nextReport = state.ctx === 'school'
-      ? await loadKidsPendingReport({ profile: state.profile, forceRefresh })
+      ? await loadKidsPendingReport({ profile: state.profile, forceRefresh, deltaRefresh })
       : await loadYouthPendingReport({
         profile: state.profile,
         session: state.activeSession,

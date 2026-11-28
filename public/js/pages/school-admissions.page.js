@@ -16,7 +16,7 @@ import { createSelect } from '../components/ui-select.js?v=1.8.196';
 import { createBranchBatchFilter } from '../components/branch-batch-filter.js?v=1.8.196';
 import { openMenu } from '../components/ui-menu.js?v=1.8.196';
 import { openPopup } from '../components/modal.js?v=1.8.196';
-import { createDatePicker, createMonthPicker } from '../components/ui-datepicker.js?v=1.8.196';
+import { createDatePicker } from '../components/ui-datepicker.js?v=1.8.196';
 import { confirmDialog } from '../components/ui-confirm.js?v=1.8.196';
 import { formatINR, formatDateIN, initials } from '../utils/formatter.js?v=1.8.196';
 import { validatePhone, validateEmail, validateDOB, validateName, validateRequired } from '../utils/validator.js?v=1.8.196';
@@ -37,6 +37,16 @@ import {
 } from '../utils/school-break-modals.js?v=1.8.196';
 import { playPaymentSuccessSound } from '../utils/sound.js?v=1.8.196';
 import { getRoleTitle } from '../services/user-directory.service.js?v=1.8.196';
+import {
+  ensureReferenceData,
+  getCachedReferenceData,
+  scopeReferenceDataByCtx,
+  ensureKidsDataset,
+  getCachedKidsDataset,
+  syncKidsDatasetDelta,
+  isCacheStale,
+  scheduleDelayedSkeleton
+} from '../services/report.service.js?v=1.8.196';
 
 const COL = 'students';
 const GENDERS = [
@@ -207,7 +217,7 @@ export async function mount({ container, profile, ctx }) {
     placeholder: 'Search name, student ID or parent phone',
     filters: tbFilters,
     onChange: () => { page = 1; render(); },
-    onRefresh: () => load(),
+    onRefresh: () => load({ forceRefresh: true }),
     rowLayout: true
   });
   let bbFilter = null;
@@ -339,6 +349,7 @@ export async function mount({ container, profile, ctx }) {
     mode: 'admission',
     anchorDate: localToday(),
     monthlyFee: 0,
+    paymentMode: 'full',
     ariaLabel: 'First monthly billing month',
     onChange: () => {
       if (!hydrating) { touched = true; refresh(); }
@@ -350,8 +361,73 @@ export async function mount({ container, profile, ctx }) {
   function isActive(c) { return isCourseActive(c); }
 
   // ---------- document state ----------
-  cleanupPage=()=>{closeReasonMenu();alive=false;DOC_KEYS.forEach(k=>uploadVersions[k]++);};
   const docFiles = {}; // key -> { file, compressedBlob, dataUrl }
+
+  function applyLoadedData(meta, dataset) {
+    const scoped = scopeReferenceDataByCtx(meta || {}, 'school');
+    students = (dataset?.studentsList || []).slice();
+    levels = (scoped.coursesList || []).filter((c) => (c.status || 'active') === 'active');
+    coursesById = {};
+    levels.forEach((c) => { coursesById[c.id] = c; });
+    batches = (scoped.batchesList || []).filter((b) => (b.status || 'active') === 'active');
+    tb.setFilterOptions('level', [{ value: 'all', label: 'All levels' }].concat(levels.map((c) => ({ value: c.id, label: c.name || c.id, icon: 'book-open' }))));
+    levelSel.setOptions([{ value: '', label: 'Select a level', icon: 'book-open' }].concat(levels.map((c) => ({ value: c.id, label: c.name || c.id, icon: 'book-open' }))));
+    if (bbFilter) bbFilter.updateData({ ctx: 'school', batches, courses: levels });
+    render();
+  }
+
+  // ---------- load ----------
+  async function load({ forceRefresh = false, deltaRefresh = false, background = false } = {}) {
+    loadError = null;
+    if (!forceRefresh && !deltaRefresh) {
+      const cachedMeta = getCachedReferenceData(profile);
+      const cachedDs = getCachedKidsDataset();
+      if (cachedMeta && cachedDs) {
+        applyLoadedData(cachedMeta, cachedDs);
+        if (!background && (isCacheStale(cachedMeta) || isCacheStale(cachedDs))) {
+          load({ deltaRefresh: true, background: true }).catch(() => {});
+        }
+        return;
+      }
+    }
+
+    const skelTask = (!background && !students.length)
+      ? scheduleDelayedSkeleton(() => {
+        if (alive && !students.length) setLoading(true);
+      }, 300)
+      : null;
+
+    try {
+      const [meta, dataset] = await Promise.all([
+        ensureReferenceData({ forceRefresh: forceRefresh && !deltaRefresh, profile }),
+        deltaRefresh
+          ? syncKidsDatasetDelta({ profile, syncOpenBills: true })
+          : ensureKidsDataset({ profile, forceRefresh, syncOpenBills: true })
+      ]);
+      if (skelTask) skelTask.cancel();
+      if (!alive) return;
+      if (!background || !deltaRefresh || !dataset.deltaUsed || dataset.changedCount !== 0 || meta?.fromCache === false) {
+        applyLoadedData(meta, dataset);
+      }
+    } catch (e) {
+      if (skelTask) skelTask.cancel();
+      if (!background && alive) {
+        console.error('[school-admissions] load failed', e);
+        setError('Could not load admissions (' + (e.code || 'error') + ').');
+      }
+    }
+  }
+
+  const onMutated = () => { if (alive) load({ forceRefresh: false }); };
+  window.addEventListener('uic:data-mutated', onMutated);
+  window.addEventListener('uic:meta-mutated', onMutated);
+  cleanupPage = () => {
+    closeReasonMenu();
+    alive = false;
+    window.removeEventListener('uic:data-mutated', onMutated);
+    window.removeEventListener('uic:meta-mutated', onMutated);
+    DOC_KEYS.forEach((k) => uploadVersions[k]++);
+  };
 
   // ---------- state rendering ----------
   function setLoading(isLoading) {
@@ -604,48 +680,7 @@ export async function mount({ container, profile, ctx }) {
     }
   }
 
-  // ---------- load ----------
-  async function load() {
-    setLoading(true);
-    loadError = null;
-    try {
-      const [sSnap, cSnap, bSnap, brkSnap, billsSnap] = await Promise.all([
-        getDocs(query(collection(db, COL), where('ctx', '==', 'school'))),
-        getDocs(query(collection(db, 'courses'), where('ctx', '==', 'school'))),
-        getDocs(query(collection(db, 'batches'), where('ctx', '==', 'school'))),
-        getDocs(collection(db, 'breaks')).catch(() => null),
-        isSuper ? getDocs(collection(db, 'bills')).catch(() => null) : Promise.resolve(null)
-      ]);
-      students = sSnap.docs.map((d) => Object.assign({ id: d.id }, d.data()));
-      const allBreaks = brkSnap ? brkSnap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((b) => !b.ctx || b.ctx === 'school') : [];
-      const activeBreakBySid = new Map();
-      allBreaks.forEach((b) => {
-        if (['active', 'approved'].includes(String(b.status || '').toLowerCase()) && !b.actualReturnDate) {
-          if (b.studentId) activeBreakBySid.set(b.studentId, b);
-          if (b.studentCode) activeBreakBySid.set(b.studentCode, b);
-        }
-      });
-      students.forEach((s) => {
-        const ab = activeBreakBySid.get(s.id) || (s.studentId ? activeBreakBySid.get(s.studentId) : null);
-        if (ab && !s.breakFrom) s.breakFrom = ab.startMonth || '';
-        if (ab && !s.breakTo) s.breakTo = ab.plannedEndMonth || ab.endMonth || '';
-      });
-      if (isSuper && billsSnap) {
-        const allBills = billsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
-        syncOpenKidsBills(db, { students, bills: allBills, breaks: allBreaks }).catch(() => {});
-      }
-      levels = cSnap.docs.map((d) => Object.assign({ id: d.id }, d.data())).filter(c => (c.status || 'active') === 'active');
-      coursesById = {}; levels.forEach((c) => { coursesById[c.id] = c; });
-      batches = bSnap.docs.map((d) => Object.assign({ id: d.id }, d.data())).filter(b => (b.status || 'active') === 'active');
-      tb.setFilterOptions('level', [{ value: 'all', label: 'All levels' }].concat(levels.map((c) => ({ value: c.id, label: c.name || c.id, icon: 'book-open' }))));
-      levelSel.setOptions([{ value: '', label: 'Select a level', icon: 'book-open' }].concat(levels.map((c) => ({ value: c.id, label: c.name || c.id, icon: 'book-open' }))));
-      if (bbFilter) bbFilter.updateData({ ctx: 'school', batches, courses: levels });
-      render();
-    } catch (e) {
-      console.error('[school-admissions] load failed', e);
-      setError('Could not load admissions (' + (e.code || 'error') + ').');
-    }
-  }
+  // ---------- state & rendering ----------
 
   // ---------- form ----------
   async function openForm(r) {
@@ -695,6 +730,7 @@ export async function mount({ container, profile, ctx }) {
       billingStartSel.setConfig({
         anchorDate: v.admissionDate || localToday(),
         monthlyFee: r ? Number(r.monthlyFee || admCourse?.monthlyFee || 0) : 0,
+        paymentMode: r ? (r.paymentMode || 'full') : 'full',
         value: r ? (r.firstMonthlyMonth || firstMonthlyMonth(v.admissionDate)) : undefined,
         resetOverride: !r,
         isLocked: !!r
@@ -1432,6 +1468,7 @@ export async function mount({ container, profile, ctx }) {
       billingStartSel.setConfig({
         anchorDate: admDateVal,
         monthlyFee: feeNum,
+        paymentMode: editId ? (editRow.paymentMode || 'full') : paymentMode,
         ...(editId ? { value: editRow.firstMonthlyMonth || firstMonthlyMonth(editRow.admissionDate), isLocked: true } : { isLocked: false })
       });
     }
@@ -1558,7 +1595,7 @@ export async function mount({ container, profile, ctx }) {
     if (!Number.isFinite(amountDue) || amountDue < 0) e.paymentMode = 'Invalid configured admission fee.';
     const bSt = billingStartSel ? billingStartSel.getState() : null;
     if (!editId && (!bSt || !bSt.value)) e.firstMonthlyMonth = 'Select first monthly billing month.';
-    else if (!editId && bSt.needsEarlyConfirm && !bSt.earlyConfirmed) e.firstMonthlyMonth = 'Confirm starting monthly billing before the admission month.';
+    else if (!editId && Array.isArray(bSt.options) && !bSt.options.includes(bSt.value)) e.firstMonthlyMonth = 'Select next month or the month after next.';
     return e;
   }
 

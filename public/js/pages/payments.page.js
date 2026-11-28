@@ -23,6 +23,7 @@ import {
   loadYouthPaymentHistory,
   getCachedYouthHistory,
   loadKidsPaymentHistory,
+  getCachedKidsHistory,
   loadStudentPhotos,
   getCachedStudentPhoto,
   getCachedBillForEntry,
@@ -440,6 +441,32 @@ function historySignature(res) {
 async function bootstrapData({ forceRefresh = false, deltaRefresh = false, background = false } = {}) {
   if (!state || state.destroyed) return;
 
+  if (!forceRefresh && !deltaRefresh && state.ctx === 'school') {
+    const cachedMeta = getCachedReferenceData(state.profile);
+    const { dateFrom, dateTo } = state.filters;
+    const cachedHist = getCachedKidsHistory({ dateFrom, dateTo });
+    if (cachedMeta && cachedHist) {
+      state.meta = cachedMeta;
+      state.sessions = [];
+      state.activeSession = null;
+      updateHeaderText();
+      populateCourseOptions();
+      syncBranchBatchContext();
+      state.kidsResult = cachedHist;
+      state.youthResult = null;
+      state.totalReadCount = 0;
+      hideSkeleton();
+      toggleNoSessionState(false);
+      rebuildMergedAndCollectorOptions();
+      updateLoadMoreUi();
+      applyFiltersAndRender();
+      if (!background && (isCacheStale(cachedMeta) || isCacheStale(cachedHist))) {
+        bootstrapData({ forceRefresh: false, deltaRefresh: true, background: true }).catch(() => {});
+      }
+      return;
+    }
+  }
+
   if (!forceRefresh && !deltaRefresh && state.ctx === 'youth') {
     const cachedMeta = getCachedReferenceData(state.profile);
     const cachedSessions = getCachedSessions('youth');
@@ -488,7 +515,7 @@ async function bootstrapData({ forceRefresh = false, deltaRefresh = false, backg
   const skelTask = (!state.youthResult && !state.kidsResult && !background)
     ? scheduleDelayedSkeleton(() => {
       if (state && !state.destroyed && !state.youthResult && !state.kidsResult) showSkeleton();
-    }, 250)
+    }, state.ctx === 'school' ? 300 : 250)
     : null;
 
   try {
@@ -561,7 +588,7 @@ async function loadHistory({ forceRefresh = false, deltaRefresh = false, backgro
   const ownSkel = (!skelTask && !state.youthResult && !state.kidsResult && !background)
     ? scheduleDelayedSkeleton(() => {
       if (state && !state.destroyed && !state.youthResult && !state.kidsResult) showSkeleton();
-    }, 250)
+    }, state.ctx === 'school' ? 300 : 250)
     : null;
   const activeSkel = skelTask || ownSkel;
   const prevSig = historySignature(state.ctx === 'school' ? state.kidsResult : state.youthResult);
@@ -600,7 +627,8 @@ async function loadHistory({ forceRefresh = false, deltaRefresh = false, backgro
         profile: state.profile,
         dateFrom,
         dateTo,
-        forceRefresh
+        forceRefresh,
+        deltaRefresh
       });
       if (!state || state.destroyed) return;
       if (activeSkel) activeSkel.cancel();

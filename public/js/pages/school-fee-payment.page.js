@@ -86,6 +86,7 @@ export async function mount({ container, profile, ctx, billId }) {
         receivedByDesignation: disp.designation || profile?.designation || '',
         allocation: 'auto'
       });
+      window.dispatchEvent(new CustomEvent('uic:data-mutated', { detail: { reason: 'kids:payment' } }));
       await load(); // refresh bill status
       playPaymentSuccessSound();
       showToast({ type: 'success', message: 'Payment of ' + formatINR(amount) + ' recorded.' });

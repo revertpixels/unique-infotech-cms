@@ -37,6 +37,11 @@ import {
   loadYouthPendingReport,
   getCachedYouthPending,
   loadKidsPaymentHistory,
+  getCachedKidsHistory,
+  ensureKidsDataset,
+  syncKidsDatasetDelta,
+  getCachedKidsDataset,
+  loadKidsDashboardServerAggregates,
   loadStudentPhotos,
   getCachedStudentPhoto,
   isCacheStale,
@@ -1055,108 +1060,158 @@ export function mount({ profile, ctx } = {}) {
     if (overdueCard) overdueCard.onclick = () => { location.hash = '#/school-break?filter=overdue'; };
 
     const isSuper = profile?.role === 'superadmin';
-    async function loadKidsDashboard() {
-      if (kidsDashDestroyed) return;
-      try {
-        const today = localToday();
-        const [stSnap, billsSnap, brkSnap, histRes] = await Promise.all([
-          getDocs(query(collection(db, 'students'), where('ctx', '==', 'school'))),
-          getDocs(collection(db, 'bills')),
-          getDocs(collection(db, 'breaks')),
-          loadKidsPaymentHistory({ profile, forceRefresh: false }).catch(() => null)
-        ]);
-        if (kidsDashDestroyed) return;
+    const setTxtEl = (id, txt) => { const el = $(id); if (el) el.textContent = txt; };
 
-        const students = stSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
-        let bills = billsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
-        const breaks = brkSnap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((b) => !b.ctx || b.ctx === 'school');
+    function paintKidsAggregates(agg) {
+      if (!agg || kidsDashDestroyed) return;
+      setTxtEl('dash-kids-students', String(agg.activeCount));
+      setTxtEl('dash-kids-students-sub', `${agg.totalCount} total records`);
+      setTxtEl('dash-kids-break', String(agg.onBreakCount));
+      setTxtEl('dash-kids-break-sub', agg.onBreakCount ? `${agg.onBreakCount} paused (₹0 bills)` : 'None on break');
+    }
 
-        if (isSuper) {
-          const newBills = await syncOpenKidsBills(db, { students, bills, breaks, asOfDate: today }).catch(() => []);
-          if (newBills && newBills.length) bills = bills.concat(newBills);
+    function paintKidsDashboardView({ dataset, histRes, today }) {
+      if (kidsDashDestroyed || !dataset) return;
+      const students = dataset.studentsList || [];
+      const bills = dataset.bills || [];
+      const breaks = dataset.breaks || [];
+
+      // Exclude on-break, completed, ended, dropped from Active count (Rule 6)
+      const activeKids = students.filter((s) => (s.status || 'active') === 'active');
+      const onBreakKids = students.filter((s) => (s.status || 'active') === 'break');
+      const ongoingBreakBySid = new Map();
+      breaks.forEach((b) => {
+        const st = String(b.status || '').toLowerCase();
+        if ((st === 'active' || st === 'approved') && !b.actualReturnDate && !b.actualReturnMonth) {
+          if (b.studentId) ongoingBreakBySid.set(b.studentId, b);
+          if (b.studentCode) ongoingBreakBySid.set(b.studentCode, b);
         }
-        if (kidsDashDestroyed) return;
+      });
 
-        // Exclude on-break, completed, ended, dropped from Active count (Rule 6)
-        const activeKids = students.filter((s) => (s.status || 'active') === 'active');
-        const onBreakKids = students.filter((s) => (s.status || 'active') === 'break');
-        const ongoingBreakBySid = new Map();
-        breaks.forEach((b) => {
-          const st = String(b.status || '').toLowerCase();
-          if ((st === 'active' || st === 'approved') && !b.actualReturnDate && !b.actualReturnMonth) {
-            if (b.studentId) ongoingBreakBySid.set(b.studentId, b);
-            if (b.studentCode) ongoingBreakBySid.set(b.studentCode, b);
-          }
-        });
+      const breakRows = onBreakKids.map((s) => {
+        const ab = ongoingBreakBySid.get(s.id) || (s.studentId ? ongoingBreakBySid.get(s.studentId) : null) || null;
+        const startMonth = ab?.startMonth || s.breakFrom || '';
+        const plannedEnd = ab?.plannedEndMonth || ab?.endMonth || s.breakTo || '';
+        const overdue = isBreakOverdueReturn(ab || s, today);
+        return { student: s, breakDoc: ab, startMonth, plannedEnd, reason: ab?.reason || s.breakReason || '-', overdue };
+      }).sort((a, b) => (a.overdue === b.overdue ? String(a.plannedEnd).localeCompare(String(b.plannedEnd)) : (a.overdue ? -1 : 1)));
 
-        const breakRows = onBreakKids.map((s) => {
-          const ab = ongoingBreakBySid.get(s.id) || (s.studentId ? ongoingBreakBySid.get(s.studentId) : null) || null;
-          const startMonth = ab?.startMonth || s.breakFrom || '';
-          const plannedEnd = ab?.plannedEndMonth || ab?.endMonth || s.breakTo || '';
-          const overdue = isBreakOverdueReturn(ab || s, today);
-          return { student: s, breakDoc: ab, startMonth, plannedEnd, reason: ab?.reason || s.breakReason || '-', overdue };
-        }).sort((a, b) => (a.overdue === b.overdue ? String(a.plannedEnd).localeCompare(String(b.plannedEnd)) : (a.overdue ? -1 : 1)));
+      const overdueCount = breakRows.filter((r) => r.overdue).length;
+      const collectedTotal = (histRes?.entries || []).reduce((a, e) => a + Number(e.totalReceived || 0), 0);
+      const pendingItems = evaluateKidsPendingBills({ students, bills, breaks, asOfDate: today })
+        .filter((it) => it.status === 'due' || it.status === 'overdue');
+      const pendingTotal = pendingItems.reduce((a, it) => a + Number(it.totalPayable || 0), 0);
+      const overdueTotal = pendingItems.filter((it) => it.status === 'overdue').reduce((a, it) => a + Number(it.totalPayable || 0), 0);
 
-        const overdueCount = breakRows.filter((r) => r.overdue).length;
-        const collectedTotal = (histRes?.entries || []).reduce((a, e) => a + Number(e.totalReceived || 0), 0);
-        const pendingItems = evaluateKidsPendingBills({ students, bills, breaks, asOfDate: today })
-          .filter((it) => it.status === 'due' || it.status === 'overdue');
-        const pendingTotal = pendingItems.reduce((a, it) => a + Number(it.totalPayable || 0), 0);
-        const overdueTotal = pendingItems.filter((it) => it.status === 'overdue').reduce((a, it) => a + Number(it.totalPayable || 0), 0);
+      setTxtEl('dash-kids-students', String(activeKids.length));
+      setTxtEl('dash-kids-students-sub', `${students.length} total records`);
+      setTxtEl('dash-kids-break', String(onBreakKids.length));
+      setTxtEl('dash-kids-break-sub', onBreakKids.length ? `${onBreakKids.length} paused (₹0 bills)` : 'None on break');
+      setTxtEl('dash-kids-break-overdue', String(overdueCount));
+      if (histRes) setTxtEl('dash-kids-collected', formatINR(collectedTotal));
+      setTxtEl('dash-kids-dues', formatINR(pendingTotal));
+      setTxtEl('dash-kids-overdue', formatINR(overdueTotal));
 
-        const setTxtEl = (id, txt) => { const el = $(id); if (el) el.textContent = txt; };
-        setTxtEl('dash-kids-students', String(activeKids.length));
-        setTxtEl('dash-kids-students-sub', `${students.length} total records`);
-        setTxtEl('dash-kids-break', String(onBreakKids.length));
-        setTxtEl('dash-kids-break-sub', onBreakKids.length ? `${onBreakKids.length} paused (₹0 bills)` : 'None on break');
-        setTxtEl('dash-kids-break-overdue', String(overdueCount));
-        setTxtEl('dash-kids-collected', formatINR(collectedTotal));
-        setTxtEl('dash-kids-dues', formatINR(pendingTotal));
-        setTxtEl('dash-kids-overdue', formatINR(overdueTotal));
-
-        const bodyEl = $('dash-kids-breaks-body');
-        if (bodyEl) {
-          if (!breakRows.length) {
-            bodyEl.innerHTML = '<div class="empty-state"><i data-lucide="check-circle"></i><h3>No students currently on break</h3><p>All active Unique Kids students are following normal monthly billing.</p></div>';
-          } else {
-            const escK = (x) => String(x == null ? '' : x).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
-            let html = '<div class="lp-scroll"><table class="lp-table"><thead><tr><th>Student ID</th><th>Student</th><th>Break Period</th><th>Status</th><th>Reason</th><th class="act">Action</th></tr></thead><tbody>';
-            breakRows.forEach((r) => {
-              const s = r.student;
-              const period = formatBreakPeriod(r.startMonth, r.plannedEnd);
-              const badge = r.overdue
-                ? `<span class="adm-pill break-overdue">Ended - not rejoined (${escK(formatShortMonthYear(r.plannedEnd))})</span>`
-                : `<span class="adm-pill break">On Break</span>`;
-              html += `<tr><td><b>${escK(s.studentId || '-')}</b></td><td><a href="#/students/${encodeURIComponent(s.id)}">${escK(formatPersonName(s.name || '') || '-')}</a></td><td><strong>${escK(period)}</strong></td><td>${badge}</td><td>${escK(r.reason)}</td><td class="act">${isSuper ? `<button type="button" class="ui-btn ghost sm dk-resume-btn" data-sid="${escK(s.id)}"><i data-lucide="play-circle"></i><span>Resume</span></button>` : `<a class="ui-btn ghost sm" href="#/students/${encodeURIComponent(s.id)}">Profile</a>`}</td></tr>`;
-            });
-            html += '</tbody></table></div>';
-            bodyEl.innerHTML = html;
-            if (isSuper) {
-              bodyEl.querySelectorAll('.dk-resume-btn').forEach((btn) => {
-                btn.addEventListener('click', () => {
-                  const row = breakRows.find((x) => x.student.id === btn.dataset.sid);
-                  if (!row) return;
-                  openKidsResumeBreakModal({
-                    student: row.student,
-                    breakDoc: row.breakDoc,
-                    profile,
-                    onSuccess: () => {
-                      window.dispatchEvent(new CustomEvent('uic:data-mutated', { detail: { reason: 'break:resume' } }));
-                      return loadKidsDashboard();
-                    }
-                  });
+      const bodyEl = $('dash-kids-breaks-body');
+      if (bodyEl) {
+        if (!breakRows.length) {
+          bodyEl.innerHTML = '<div class="empty-state"><i data-lucide="check-circle"></i><h3>No students currently on break</h3><p>All active Unique Kids students are following normal monthly billing.</p></div>';
+        } else {
+          const escK = (x) => String(x == null ? '' : x).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+          let html = '<div class="lp-scroll"><table class="lp-table"><thead><tr><th>Student ID</th><th>Student</th><th>Break Period</th><th>Status</th><th>Reason</th><th class="act">Action</th></tr></thead><tbody>';
+          breakRows.forEach((r) => {
+            const s = r.student;
+            const period = formatBreakPeriod(r.startMonth, r.plannedEnd);
+            const badge = r.overdue
+              ? `<span class="adm-pill break-overdue">Ended - not rejoined (${escK(formatShortMonthYear(r.plannedEnd))})</span>`
+              : `<span class="adm-pill break">On Break</span>`;
+            html += `<tr><td><b>${escK(s.studentId || '-')}</b></td><td><a href="#/students/${encodeURIComponent(s.id)}">${escK(formatPersonName(s.name || '') || '-')}</a></td><td><strong>${escK(period)}</strong></td><td>${badge}</td><td>${escK(r.reason)}</td><td class="act">${isSuper ? `<button type="button" class="ui-btn ghost sm dk-resume-btn" data-sid="${escK(s.id)}"><i data-lucide="play-circle"></i><span>Resume</span></button>` : `<a class="ui-btn ghost sm" href="#/students/${encodeURIComponent(s.id)}">Profile</a>`}</td></tr>`;
+          });
+          html += '</tbody></table></div>';
+          bodyEl.innerHTML = html;
+          if (isSuper) {
+            bodyEl.querySelectorAll('.dk-resume-btn').forEach((btn) => {
+              btn.addEventListener('click', () => {
+                const row = breakRows.find((x) => x.student.id === btn.dataset.sid);
+                if (!row) return;
+                openKidsResumeBreakModal({
+                  student: row.student,
+                  breakDoc: row.breakDoc,
+                  profile,
+                  onSuccess: () => {
+                    window.dispatchEvent(new CustomEvent('uic:data-mutated', { detail: { reason: 'break:resume' } }));
+                    return loadKidsDashboard({ forceRefresh: false });
+                  }
                 });
               });
-            }
+            });
           }
-          if (typeof lucide !== 'undefined') lucide.createIcons();
         }
-      } catch (err) {
-        console.warn('[dashboard-kids] load failed:', err);
+        if (typeof lucide !== 'undefined') lucide.createIcons();
       }
     }
 
-    kidsDataMutatedListener = () => { if (!kidsDashDestroyed) loadKidsDashboard(); };
+    let kidsFullPainted = false;
+    async function loadKidsDashboard({ forceRefresh = false, deltaRefresh = false, background = false } = {}) {
+      if (kidsDashDestroyed) return;
+      const today = localToday();
+      const bodyEl = $('dash-kids-breaks-body');
+
+      if (!forceRefresh && !deltaRefresh && !background) {
+        const cachedDs = getCachedKidsDataset();
+        const cachedHist = getCachedKidsHistory();
+        if (cachedDs && cachedHist) {
+          kidsFullPainted = true;
+          paintKidsDashboardView({ dataset: cachedDs, histRes: cachedHist, today });
+          if (isCacheStale(cachedDs) || isCacheStale(cachedHist) || cachedDs.billsSyncedAsOf !== today) {
+            loadKidsDashboard({ deltaRefresh: true, background: true }).catch(() => {});
+          }
+          return;
+        }
+        if (cachedDs) {
+          paintKidsDashboardView({ dataset: cachedDs, histRes: null, today });
+        } else if (bodyEl) {
+          bodyEl.innerHTML = '';
+        }
+      }
+
+      let skelTask = null;
+      if (!background && !kidsFullPainted && !getCachedKidsDataset()) {
+        skelTask = scheduleDelayedSkeleton(() => {
+          if (!kidsDashDestroyed && !kidsFullPainted && bodyEl) {
+            bodyEl.innerHTML = '<div class="empty-state"><i data-lucide="loader"></i><h3>Loading Unique Kids overview...</h3></div>';
+            if (typeof lucide !== 'undefined') lucide.createIcons();
+          }
+        }, 300);
+      }
+
+      try {
+        if (!background && !kidsFullPainted && !getCachedKidsDataset()) {
+          loadKidsDashboardServerAggregates({ profile }).then((agg) => {
+            if (!kidsDashDestroyed && agg && !kidsFullPainted) paintKidsAggregates(agg);
+          }).catch(() => {});
+        }
+
+        const [dataset, histRes] = await Promise.all([
+          deltaRefresh
+            ? syncKidsDatasetDelta({ profile, syncOpenBills: true })
+            : ensureKidsDataset({ profile, forceRefresh, syncOpenBills: true }),
+          loadKidsPaymentHistory({ profile, forceRefresh, deltaRefresh }).catch(() => null)
+        ]);
+        if (skelTask) skelTask.cancel();
+        if (kidsDashDestroyed) return;
+
+        kidsFullPainted = true;
+        paintKidsDashboardView({ dataset, histRes, today });
+      } catch (err) {
+        if (skelTask) skelTask.cancel();
+        if (!background) console.warn('[dashboard-kids] load failed:', err);
+      }
+    }
+
+    kidsDataMutatedListener = () => {
+      if (!kidsDashDestroyed) loadKidsDashboard({ forceRefresh: false });
+    };
     window.addEventListener('uic:data-mutated', kidsDataMutatedListener);
     loadKidsDashboard();
     paint();

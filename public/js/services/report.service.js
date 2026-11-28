@@ -56,6 +56,8 @@ const inflightStudents = new Map();
 const inflightSessionDatasets = new Map();
 const inflightPending = new Map();
 const inflightHistory = new Map();
+let inflightKidsDataset = null;
+let inflightKidsDelta = null;
 
 let serverAggregationDisabledForSession = false;
 let serverAggregationWarnedForSession = false;
@@ -88,6 +90,8 @@ function ensureCacheRoot() {
         studentsById: new Map(),
         studentsLists: new Map(),
         youthSessionDatasets: new Map(),
+        kidsDataset: null,
+        kidsAdmissionReceipts: new Map(),
         photos: new Map(),
         youthPending: new Map(),
         kidsPending: null,
@@ -106,6 +110,8 @@ function ensureCacheRoot() {
       studentsById: new Map(),
       studentsLists: new Map(),
       youthSessionDatasets: new Map(),
+      kidsDataset: null,
+      kidsAdmissionReceipts: new Map(),
       photos: new Map(),
       youthPending: new Map(),
       kidsPending: null,
@@ -118,6 +124,7 @@ function ensureCacheRoot() {
   const root = window.APP_CACHE[CACHE_KEY];
   if (!root.studentsLists) root.studentsLists = new Map();
   if (!root.youthSessionDatasets) root.youthSessionDatasets = new Map();
+  if (!root.kidsAdmissionReceipts) root.kidsAdmissionReceipts = new Map();
   return root;
 }
 
@@ -151,6 +158,8 @@ export function invalidateFinancialCache({ clearMeta = false } = {}) {
   }
   root.studentsLists.clear();
   root.youthSessionDatasets.clear();
+  root.kidsDataset = null;
+  root.kidsAdmissionReceipts.clear();
   root.youthPending.clear();
   root.kidsPending = null;
   root.youthHistory.clear();
@@ -168,6 +177,8 @@ export function clearAllReportCaches() {
   inflightSessionDatasets.clear();
   inflightPending.clear();
   inflightHistory.clear();
+  inflightKidsDataset = null;
+  inflightKidsDelta = null;
   serverAggregationDisabledForSession = false;
   serverAggregationWarnedForSession = false;
 }
@@ -1552,47 +1563,379 @@ export async function refreshSingleYouthPendingStudent({
   return existing;
 }
 
+function decorateKidsStudentsWithActiveBreaks(students = [], breaks = []) {
+  const activeBreakBySid = new Map();
+  (breaks || []).forEach((b) => {
+    const st = String(b?.status || '').toLowerCase();
+    if ((st === 'active' || st === 'approved') && !b.actualReturnDate && !b.actualReturnMonth) {
+      if (b.studentId) activeBreakBySid.set(b.studentId, b);
+      if (b.studentCode) activeBreakBySid.set(b.studentCode, b);
+    }
+  });
+  return (students || []).map((orig) => {
+    const s = { ...orig };
+    const ab = activeBreakBySid.get(s.id) || (s.studentId ? activeBreakBySid.get(s.studentId) : null);
+    if (ab && !s.breakFrom) s.breakFrom = ab.startMonth || '';
+    if (ab && !s.breakTo) s.breakTo = ab.plannedEndMonth || ab.endMonth || '';
+    if (ab && !s.breakReason) s.breakReason = ab.reason || '';
+    return s;
+  });
+}
+
+export function getCachedKidsDataset() {
+  return ensureCacheRoot().kidsDataset || null;
+}
+
 /**
- * Loads Pending & Overdue dues for Unique Kids (active students + unpaid/partial bills + approved breaks).
+ * Loads and caches the shared Unique Kids dataset (`students` where ctx=='school',
+ * `bills`, and `breaks`) so Dashboard, Students, Break Management, Collect Fees,
+ * Pending & Overdue, Payment History, and Profiles share zero-duplicate reads.
+ */
+export async function ensureKidsDataset({
+  profile = null,
+  forceRefresh = false,
+  syncOpenBills = false
+} = {}) {
+  const root = ensureCacheRoot();
+  const isSuper = profile?.role === 'superadmin';
+  const today = todayISO();
+
+  if (!forceRefresh && root.kidsDataset) {
+    if (syncOpenBills && isSuper && root.kidsDataset.billsSyncedAsOf !== today) {
+      const createdBills = await syncOpenKidsBills(db, {
+        students: root.kidsDataset.studentsList,
+        bills: root.kidsDataset.bills,
+        breaks: root.kidsDataset.breaks,
+        asOfDate: today
+      }).catch(() => []);
+      if (createdBills && createdBills.length > 0) {
+        const nextBills = root.kidsDataset.bills.concat(createdBills);
+        createdBills.forEach((b) => { if (b?.id) root.billsById.set(b.id, b); });
+        root.kidsDataset = {
+          ...root.kidsDataset,
+          bills: nextBills,
+          billsSyncedAsOf: today,
+          fetchedAt: Date.now(),
+          syncedAtMs: Date.now() - 2000
+        };
+      } else {
+        root.kidsDataset = { ...root.kidsDataset, billsSyncedAsOf: today };
+      }
+    }
+    return { ...root.kidsDataset, readCount: 0, fromCache: true };
+  }
+
+  if (!forceRefresh && inflightKidsDataset) {
+    return inflightKidsDataset;
+  }
+
+  const task = (async () => {
+    const nextSyncAtMs = Date.now() - 2000;
+    const [stSnap, billsSnap, brkSnap] = await Promise.all([
+      getDocs(query(collection(db, 'students'), where('ctx', '==', 'school'))),
+      getDocs(collection(db, 'bills')),
+      getDocs(collection(db, 'breaks')).catch(() => null)
+    ]);
+
+    const readCount = stSnap.size + billsSnap.size + (brkSnap ? brkSnap.size : 0);
+    const rawStudents = stSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    let bills = billsSnap.docs.map((d) => {
+      const b = { id: d.id, ...d.data() };
+      root.billsById.set(b.id, b);
+      return b;
+    });
+    const breaks = brkSnap
+      ? brkSnap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((b) => !b.ctx || b.ctx === 'school')
+      : [];
+
+    const studentsList = decorateKidsStudentsWithActiveBreaks(rawStudents, breaks);
+    const studentsById = {};
+    studentsList.forEach((s) => {
+      studentsById[s.id] = s;
+      root.studentsById.set(s.id, s);
+    });
+
+    if (syncOpenBills && isSuper) {
+      const createdBills = await syncOpenKidsBills(db, {
+        students: studentsList,
+        bills,
+        breaks,
+        asOfDate: today
+      }).catch(() => []);
+      if (createdBills && createdBills.length > 0) {
+        bills = bills.concat(createdBills);
+        createdBills.forEach((b) => { if (b?.id) root.billsById.set(b.id, b); });
+      }
+    }
+
+    const entry = {
+      ctx: 'school',
+      studentsList,
+      studentsById,
+      bills,
+      breaks,
+      billsSyncedAsOf: (syncOpenBills && isSuper) ? today : '',
+      fetchedAt: Date.now(),
+      syncedAtMs: nextSyncAtMs,
+      readCount,
+      fromCache: false
+    };
+    root.kidsDataset = entry;
+    return entry;
+  })().finally(() => {
+    inflightKidsDataset = null;
+  });
+
+  inflightKidsDataset = task;
+  return task;
+}
+
+/**
+ * Incrementally checks for Unique Kids changes since the last full load
+ * (`updatedAt > syncedAtMs` + `getCountFromServer`), avoiding full collection scans.
+ */
+export async function syncKidsDatasetDelta({
+  profile = null,
+  syncOpenBills = false
+} = {}) {
+  const root = ensureCacheRoot();
+  const existing = root.kidsDataset;
+  if (!existing || !existing.syncedAtMs) {
+    const full = await ensureKidsDataset({ profile, forceRefresh: true, syncOpenBills });
+    return { ...full, changedCount: full.studentsList?.length || 0, deltaUsed: false };
+  }
+  if (inflightKidsDelta) return inflightKidsDelta;
+
+  const task = (async () => {
+    const missingUpdatedIds = existing.studentsList
+      .filter((s) => s && s.status !== 'deleted' && !s.updatedAt)
+      .map((s) => s.id);
+    if (missingUpdatedIds.length > 25) {
+      const full = await ensureKidsDataset({ profile, forceRefresh: true, syncOpenBills });
+      return { ...full, changedCount: full.studentsList?.length || 0, deltaUsed: false };
+    }
+
+    const nextSyncAtMs = Date.now() - 2000;
+    const sinceTs = typeof Timestamp?.fromMillis === 'function'
+      ? Timestamp.fromMillis(existing.syncedAtMs)
+      : new Date(existing.syncedAtMs);
+
+    const [stCountSnap, stDeltaSnap, billsCountSnap, billsDeltaSnap, brkCountSnap, brkDeltaSnap] = await Promise.all([
+      getCountFromServer(query(collection(db, 'students'), where('ctx', '==', 'school'))),
+      getDocs(query(collection(db, 'students'), where('ctx', '==', 'school'), where('updatedAt', '>', sinceTs))),
+      getCountFromServer(collection(db, 'bills')).catch(() => null),
+      getDocs(query(collection(db, 'bills'), where('updatedAt', '>', sinceTs))).catch(() => null),
+      getCountFromServer(collection(db, 'breaks')).catch(() => null),
+      getDocs(query(collection(db, 'breaks'), where('updatedAt', '>', sinceTs))).catch(() => null)
+    ]);
+
+    const stServerTotal = Number(stCountSnap?.data?.()?.count ?? existing.studentsList.length);
+    const billsServerTotal = billsCountSnap && typeof billsCountSnap.data === 'function'
+      ? Number(billsCountSnap.data().count ?? existing.bills.length)
+      : existing.bills.length;
+    const brkServerTotal = brkCountSnap && typeof brkCountSnap.data === 'function'
+      ? Number(brkCountSnap.data().count ?? existing.breaks.length)
+      : existing.breaks.length;
+
+    const readCount = 1 + stDeltaSnap.size
+      + (billsCountSnap ? 1 : 0) + (billsDeltaSnap ? billsDeltaSnap.size : 0)
+      + (brkCountSnap ? 1 : 0) + (brkDeltaSnap ? brkDeltaSnap.size : 0);
+
+    if (stServerTotal < existing.studentsList.length || billsServerTotal < existing.bills.length) {
+      const full = await ensureKidsDataset({ profile, forceRefresh: true, syncOpenBills });
+      return { ...full, changedCount: full.studentsList?.length || 0, deltaUsed: false, readCount: (full.readCount || 0) + readCount };
+    }
+
+    let extraReads = 0;
+    const deltaIds = new Set(stDeltaSnap.docs.map((d) => d.id));
+    const fetchMissingIds = missingUpdatedIds.filter((id) => !deltaIds.has(id));
+    const extraStSnaps = fetchMissingIds.length
+      ? await Promise.all(fetchMissingIds.map((id) => getDoc(doc(db, 'students', id)).catch(() => null)))
+      : [];
+    extraReads += fetchMissingIds.length;
+
+    let changedCount = stDeltaSnap.size + (billsDeltaSnap ? billsDeltaSnap.size : 0) + (brkDeltaSnap ? brkDeltaSnap.size : 0);
+    const needFullBillsBecauseMissingTs = billsServerTotal > existing.bills.length && (!billsDeltaSnap || billsDeltaSnap.size === 0);
+    const needFullBrkBecauseMissingTs = brkServerTotal > existing.breaks.length && (!brkDeltaSnap || brkDeltaSnap.size === 0);
+    const needFullStBecauseMissingTs = stServerTotal > existing.studentsList.length && stDeltaSnap.size === 0;
+    if (needFullBillsBecauseMissingTs || needFullBrkBecauseMissingTs || needFullStBecauseMissingTs) {
+      const full = await ensureKidsDataset({ profile, forceRefresh: true, syncOpenBills });
+      return { ...full, changedCount: full.studentsList?.length || 0, deltaUsed: false, readCount: (full.readCount || 0) + readCount + extraReads };
+    }
+
+    let nextRawStudents = existing.studentsList.slice();
+    if (stDeltaSnap.size > 0 || extraStSnaps.length > 0) {
+      const stIdx = new Map();
+      nextRawStudents.forEach((s, i) => { if (s?.id) stIdx.set(s.id, i); });
+      const mergeSt = (d) => {
+        if (!d || (typeof d.exists === 'function' && !d.exists())) return;
+        const st = { id: d.id, ...d.data() };
+        changedCount += 1;
+        if (stIdx.has(st.id)) nextRawStudents[stIdx.get(st.id)] = st;
+        else {
+          stIdx.set(st.id, nextRawStudents.length);
+          nextRawStudents.push(st);
+        }
+      };
+      stDeltaSnap.docs.forEach(mergeSt);
+      extraStSnaps.forEach(mergeSt);
+    }
+
+    let nextBills = existing.bills.slice();
+    if (billsDeltaSnap && billsDeltaSnap.size > 0) {
+      const bIdx = new Map();
+      nextBills.forEach((b, i) => { if (b?.id) bIdx.set(b.id, i); });
+      billsDeltaSnap.docs.forEach((d) => {
+        const b = { id: d.id, ...d.data() };
+        root.billsById.set(b.id, b);
+        if (bIdx.has(b.id)) nextBills[bIdx.get(b.id)] = b;
+        else {
+          bIdx.set(b.id, nextBills.length);
+          nextBills.push(b);
+        }
+      });
+    }
+
+    let nextBreaks = existing.breaks.slice();
+    if (brkDeltaSnap && brkDeltaSnap.size > 0) {
+      const brIdx = new Map();
+      nextBreaks.forEach((b, i) => { if (b?.id) brIdx.set(b.id, i); });
+      brkDeltaSnap.docs.forEach((d) => {
+        const b = { id: d.id, ...d.data() };
+        if (b.ctx && b.ctx !== 'school') return;
+        if (brIdx.has(b.id)) nextBreaks[brIdx.get(b.id)] = b;
+        else {
+          brIdx.set(b.id, nextBreaks.length);
+          nextBreaks.push(b);
+        }
+      });
+    }
+
+    const today = todayISO();
+    const isSuper = profile?.role === 'superadmin';
+    let billsSyncedAsOf = existing.billsSyncedAsOf || '';
+    const nextStudentsList = decorateKidsStudentsWithActiveBreaks(nextRawStudents, nextBreaks);
+    const nextStudentsById = {};
+    nextStudentsList.forEach((s) => {
+      nextStudentsById[s.id] = s;
+      root.studentsById.set(s.id, s);
+    });
+
+    if (syncOpenBills && isSuper && billsSyncedAsOf !== today) {
+      const createdBills = await syncOpenKidsBills(db, {
+        students: nextStudentsList,
+        bills: nextBills,
+        breaks: nextBreaks,
+        asOfDate: today
+      }).catch(() => []);
+      if (createdBills && createdBills.length > 0) {
+        nextBills = nextBills.concat(createdBills);
+        createdBills.forEach((b) => { if (b?.id) root.billsById.set(b.id, b); });
+        changedCount += createdBills.length;
+      }
+      billsSyncedAsOf = today;
+    }
+
+    const updated = {
+      ...existing,
+      studentsList: nextStudentsList,
+      studentsById: nextStudentsById,
+      bills: nextBills,
+      breaks: nextBreaks,
+      billsSyncedAsOf,
+      fetchedAt: Date.now(),
+      syncedAtMs: nextSyncAtMs,
+      readCount: readCount + extraReads,
+      fromCache: false,
+      changedCount,
+      deltaUsed: true
+    };
+    root.kidsDataset = updated;
+    if (changedCount > 0) {
+      root.kidsPending = null;
+      root.kidsHistory = null;
+    }
+    return updated;
+  })().finally(() => {
+    inflightKidsDelta = null;
+  });
+
+  inflightKidsDelta = task;
+  return task;
+}
+
+/**
+ * Lightweight server-side count/sum aggregates for the Unique Kids Dashboard
+ * with silent one-time console.warn fallback if a composite index is missing.
+ */
+export async function loadKidsDashboardServerAggregates({ profile = null } = {}) {
+  if (serverAggregationDisabledForSession) return null;
+  const studentsCol = collection(db, 'students');
+  const totalQ = query(studentsCol, where('ctx', '==', 'school'));
+  const activeQ = query(studentsCol, where('ctx', '==', 'school'), where('status', '==', 'active'));
+  const breakQ = query(studentsCol, where('ctx', '==', 'school'), where('status', '==', 'break'));
+  try {
+    const [totalSnap, activeSnap, breakSnap] = await Promise.all([
+      getCountFromServer(totalQ),
+      getCountFromServer(activeQ),
+      getCountFromServer(breakQ)
+    ]);
+    return {
+      totalCount: Number(totalSnap?.data?.()?.count || 0),
+      activeCount: Number(activeSnap?.data?.()?.count || 0),
+      onBreakCount: Number(breakSnap?.data?.()?.count || 0),
+      readCount: 3,
+      profileRole: profile?.role || ''
+    };
+  } catch (err) {
+    if (isFailedPreconditionError(err)) {
+      disableServerAggregationForSession(err);
+    }
+    return null;
+  }
+}
+
+export function getCachedKidsPending({ asOfDate = todayISO() } = {}) {
+  const entry = ensureCacheRoot().kidsPending;
+  if (!entry || entry.asOfDate !== asOfDate) return null;
+  return entry;
+}
+
+/**
+ * Loads Pending & Overdue dues for Unique Kids (active students + unpaid/partial bills + approved breaks),
+ * reusing `ensureKidsDataset` / `syncKidsDatasetDelta` to eliminate duplicate collection reads.
  */
 export async function loadKidsPendingReport({
   profile = null,
   forceRefresh = false,
+  deltaRefresh = false,
   asOfDate = todayISO()
 } = {}) {
-  const meta = await ensureReferenceData({ forceRefresh, profile });
-  let readCount = meta.readCount || 0;
-
   const root = ensureCacheRoot();
-  if (!forceRefresh && root.kidsPending && root.kidsPending.asOfDate === asOfDate) {
-    return { ...root.kidsPending, readCount, fromCache: true };
+  if (!forceRefresh && !deltaRefresh && root.kidsPending && root.kidsPending.asOfDate === asOfDate) {
+    return { ...root.kidsPending, readCount: 0, fromCache: true };
   }
 
-  const [stSnap, billsSnap, brkSnap] = await Promise.all([
-    getDocs(query(collection(db, 'students'), where('ctx', '==', 'school'))),
-    getDocs(collection(db, 'bills')),
-    getDocs(collection(db, 'breaks'))
+  const existingCached = !forceRefresh ? root.kidsPending : null;
+  const [meta, dataset] = await Promise.all([
+    ensureReferenceData({ forceRefresh: forceRefresh && !deltaRefresh, profile }),
+    (!forceRefresh && deltaRefresh)
+      ? syncKidsDatasetDelta({ profile, syncOpenBills: true })
+      : ensureKidsDataset({ profile, forceRefresh, syncOpenBills: true })
   ]);
+  const readCount = (meta.fromCache ? 0 : (meta.readCount || 0))
+    + (dataset.fromCache ? 0 : (dataset.readCount || 0));
 
-  readCount += stSnap.size + billsSnap.size + brkSnap.size;
-
-  const students = stSnap.docs.map((d) => {
-    const s = { id: d.id, ...d.data() };
-    root.studentsById.set(s.id, s);
-    return s;
-  });
-  const studentsById = {};
-  students.forEach((s) => { studentsById[s.id] = s; });
-
-  let bills = billsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
-  const breaks = brkSnap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((b) => !b.ctx || b.ctx === 'school');
-
-  if (profile?.role === 'superadmin') {
-    const createdBills = await syncOpenKidsBills(db, { students, bills, breaks, asOfDate }).catch(() => []);
-    if (createdBills && createdBills.length > 0) {
-      bills = bills.concat(createdBills);
-    }
+  if (!forceRefresh && deltaRefresh && dataset.deltaUsed && dataset.changedCount === 0 && existingCached && existingCached.asOfDate === asOfDate) {
+    const untouched = { ...existingCached, fetchedAt: Date.now(), readCount, fromCache: false };
+    root.kidsPending = untouched;
+    return untouched;
   }
+
+  const students = dataset.studentsList || [];
+  const studentsById = dataset.studentsById || {};
+  const bills = dataset.bills || [];
+  const breaks = dataset.breaks || [];
 
   const rawItems = filterOverdueItems(
     evaluateKidsPendingBills({ students, bills, breaks, asOfDate }),
@@ -1655,6 +1998,7 @@ export async function loadKidsPendingReport({
     summary: summarizePendingItems(items, asOfDate),
     readCount,
     asOfDate,
+    fetchedAt: dataset.fetchedAt || Date.now(),
     fromCache: false
   };
   root.kidsPending = payload;
@@ -1953,58 +2297,139 @@ export async function loadYouthPaymentHistory({
 /**
  * Loads Unique Kids Payment History (admission receipts + monthly payments + waivers).
  */
+export function getCachedKidsHistory({ dateFrom = '', dateTo = '' } = {}) {
+  const entry = ensureCacheRoot().kidsHistory;
+  if (!entry) return null;
+  return {
+    ...entry,
+    entries: filterEntriesByDate(entry.entries, dateFrom, dateTo),
+    allEntriesCount: entry.entries.length
+  };
+}
+
+/**
+ * Loads Unique Kids Payment History reusing the shared `kidsDataset` and reading
+ * admission payments directly from student docs (only querying `payment/payment`
+ * subcollection for rare legacy docs missing inline fee fields).
+ */
 export async function loadKidsPaymentHistory({
   profile = null,
   dateFrom = '',
   dateTo = '',
-  forceRefresh = false
+  forceRefresh = false,
+  deltaRefresh = false
 } = {}) {
-  const meta = await ensureReferenceData({ forceRefresh, profile });
-  let readCount = meta.readCount || 0;
   const root = ensureCacheRoot();
 
-  if (!forceRefresh && root.kidsHistory) {
+  if (!forceRefresh && !deltaRefresh && root.kidsHistory) {
     const filtered = filterEntriesByDate(root.kidsHistory.entries, dateFrom, dateTo);
     return {
       ...root.kidsHistory,
       entries: filtered,
       allEntriesCount: root.kidsHistory.entries.length,
-      readCount,
+      readCount: 0,
       fromCache: true
     };
   }
 
-  const [stSnap, paySnap, wavSnap] = await Promise.all([
-    getDocs(query(collection(db, 'students'), where('ctx', '==', 'school'))),
+  const existingHistory = !forceRefresh ? root.kidsHistory : null;
+  const [meta, dataset] = await Promise.all([
+    ensureReferenceData({ forceRefresh: forceRefresh && !deltaRefresh, profile }),
+    (!forceRefresh && deltaRefresh)
+      ? syncKidsDatasetDelta({ profile })
+      : ensureKidsDataset({ profile, forceRefresh })
+  ]);
+  let readCount = (meta.fromCache ? 0 : (meta.readCount || 0))
+    + (dataset.fromCache ? 0 : (dataset.readCount || 0));
+
+  if (!forceRefresh && deltaRefresh && existingHistory && dataset.deltaUsed) {
+    const [payCountSnap, wavCountSnap] = await Promise.all([
+      getCountFromServer(collection(db, 'payments')).catch(() => null),
+      getCountFromServer(collection(db, 'waivers')).catch(() => null)
+    ]);
+    const payTotal = payCountSnap && typeof payCountSnap.data === 'function' ? Number(payCountSnap.data().count ?? -1) : -1;
+    const wavTotal = wavCountSnap && typeof wavCountSnap.data === 'function' ? Number(wavCountSnap.data().count ?? -1) : -1;
+    readCount += (payCountSnap ? 1 : 0) + (wavCountSnap ? 1 : 0);
+    if (dataset.changedCount === 0 && payTotal === existingHistory.rawPaymentsCount && wavTotal === existingHistory.rawWaiversCount) {
+      const untouched = { ...existingHistory, fetchedAt: Date.now() };
+      root.kidsHistory = untouched;
+      return {
+        ...untouched,
+        entries: filterEntriesByDate(untouched.entries, dateFrom, dateTo),
+        allEntriesCount: untouched.entries.length,
+        readCount,
+        fromCache: false
+      };
+    }
+  }
+
+  const [paySnap, wavSnap] = await Promise.all([
     getDocs(collection(db, 'payments')),
     getDocs(collection(db, 'waivers'))
   ]);
-  readCount += stSnap.size + paySnap.size + wavSnap.size;
+  readCount += paySnap.size + wavSnap.size;
 
-  const students = stSnap.docs.map((d) => {
-    const s = { id: d.id, ...d.data() };
-    root.studentsById.set(s.id, s);
-    return s;
-  });
-  const studentsById = {};
-  students.forEach((s) => { studentsById[s.id] = s; });
+  const students = dataset.studentsList || [];
+  const studentsById = dataset.studentsById || {};
 
   const paymentsDocs = paySnap.docs.map((d) => ({ id: d.id, ...d.data() }));
   const waiversDocs = wavSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
 
-  // Kids admission receipts live at students/{id}/payment/payment (1 doc per admitted student).
+  // Build admission payment records from inline student doc fields to eliminate N+1 subcollection reads;
+  // fall back to `students/{id}/payment/payment` only for legacy docs missing fee/receipt fields.
   const admissionPayments = [];
-  await runInChunks(students, 10, async (s) => {
-    try {
-      const snap = await getDoc(doc(db, 'students', s.id, 'payment', 'payment'));
-      readCount += 1;
-      if (snap.exists()) {
-        admissionPayments.push({ id: snap.id, studentDocId: s.id, ...snap.data() });
+  const legacyFallbackStudents = [];
+  students.forEach((s) => {
+    const hasInlineFee = s.actualAmountReceived != null || s.admissionFee != null;
+    if (hasInlineFee) {
+      const amt = Number(s.actualAmountReceived ?? s.receivedTotal ?? s.admissionFee ?? 0);
+      if (amt <= 0) return;
+      if (s.receiptNo || s.paymentMode) {
+        admissionPayments.push({
+          id: 'payment',
+          studentDocId: s.id,
+          studentId: s.studentId || s.id,
+          receiptNo: s.receiptNo || '',
+          admissionFee: Number(s.admissionFee ?? amt),
+          configuredAdmissionFee: Number(s.configuredAdmissionFee ?? s.admissionFee ?? amt),
+          actualAmountReceived: amt,
+          paymentMode: s.paymentMode || 'full',
+          txnId: s.txnId || '',
+          admissionDate: s.admissionDate || '',
+          createdBy: s.createdBy || '',
+          recordedByRole: s.recordedByRole || '',
+          receivedByName: s.receivedByName || s.recordedByName || '',
+          recordedByDesignation: s.recordedByDesignation || '',
+          createdAt: s.createdAt || null
+        });
+        return;
       }
-    } catch (_) {
-      // Ignore missing permission/doc
     }
+    if (root.kidsAdmissionReceipts.has(s.id)) {
+      const cachedAp = root.kidsAdmissionReceipts.get(s.id);
+      if (cachedAp) admissionPayments.push(cachedAp);
+      return;
+    }
+    legacyFallbackStudents.push(s);
   });
+
+  if (legacyFallbackStudents.length > 0) {
+    await runInChunks(legacyFallbackStudents, 10, async (s) => {
+      try {
+        const snap = await getDoc(doc(db, 'students', s.id, 'payment', 'payment'));
+        readCount += 1;
+        if (snap.exists()) {
+          const ap = { id: snap.id, studentDocId: s.id, ...snap.data() };
+          root.kidsAdmissionReceipts.set(s.id, ap);
+          admissionPayments.push(ap);
+        } else {
+          root.kidsAdmissionReceipts.set(s.id, null);
+        }
+      } catch (_) {
+        // Ignore missing permission/doc
+      }
+    });
+  }
 
   const rawEntries = buildKidsPaymentLedger({
     students,
@@ -2026,9 +2451,12 @@ export async function loadKidsPaymentHistory({
   const cached = {
     org: 'school',
     entries,
+    rawPaymentsCount: paymentsDocs.length,
+    rawWaiversCount: waiversDocs.length,
     hasMore: false,
     lastCursor: null,
     readCount,
+    fetchedAt: Date.now(),
     fromCache: false
   };
   root.kidsHistory = cached;

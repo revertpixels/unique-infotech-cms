@@ -39,6 +39,37 @@
 
 ---
 
+### [2026-11-28 13:50] Version 1.8.196 — 2-Option Billing Start, 8-Page Unique Kids Speed Optimization & Reviewer Reports (Pending Deploy Approval)
+
+**What was built:**
+- **2-Option First Monthly Billing Month Dropdown (`public/js/utils/school-billing.js`, `public/js/utils/school-break-modals.js`, `public/js/pages/school-admissions.page.js`)**:
+  - Replaced the multi-month datepicker in `createBillingStartSelector` with a strict 2-option `createSelect` dropdown containing only next month (`+1`) and month after next (`+2`).
+  - Wired `paymentMode` (`full` / `difference` -> default `+2` month after next; `none` -> default `+1` next month) into both `school-admissions.page.js` (including `createBillingStartSelector`, `openForm`, `refreshFeePreview`, and `validate`) and `openKidsUpgradePackageModal`, resetting the dropdown cleanly whenever `paymentMode` changes while allowing manual selection of the other allowed option.
+- **All 8 Unique Kids Pages Fast + `>= 300ms` Delayed Skeletons (`public/js/services/report.service.js`, `public/js/pages/*`, `firestore.indexes.json`)**:
+  - Added shared Unique Kids caching and delta synchronization in `report.service.js`: `getCachedKidsDataset`, `ensureKidsDataset`, `syncKidsDatasetDelta` (`getCountFromServer` + `updatedAt > sinceTs`), `loadKidsDashboardServerAggregates` (with silent 1-time `console.warn` fallback on `failed-precondition`), `getCachedKidsPending`, and `getCachedKidsHistory`.
+  - Refactored `loadKidsPendingReport` to reuse `ensureKidsDataset` / `syncKidsDatasetDelta`, and refactored `loadKidsPaymentHistory` to eliminate N+1 `students/{id}/payment/payment` subcollection reads by building admission entries from inline student document fields (with lazy memoized fallback only for legacy docs missing inline fee/receipt fields).
+  - Updated all 8 Unique Kids page flows (`dashboard.page.js` Kids section, `school-admissions.page.js`, `school-break.page.js`, `school-fees.page.js` + `school-fee-payment.page.js`, `pending.page.js` Kids branch, `payments.page.js` Kids branch, `courses.page.js` `mode === 'school'` skipping Youth `sessions`, and `student-profile.page.js` Kids flow) to paint cached data in `0ms` without flashing skeletons, background-refresh stale caches, dispatch `uic:data-mutated` on bill payments, and delay skeletons `>= 300ms` via `scheduleDelayedSkeleton`.
+  - Added `students` `[ctx ASC, status ASC]` and `bills` `[ctx ASC, status ASC, monthlyFee ASC]` to `firestore.indexes.json` (`32` composite indexes + `1` override total; pending deploy).
+- **Reviewer Reports**:
+  - Generated `docs/reports/v1.8.196-report.md` and `docs/reports/v1.8.196-changes.diff`.
+
+**Why:**
+- Enforce the exact 2-option billing-start rule without accidental past/far-future months, bring the Youth Centre caching/delta/no-flicker architecture to every Unique Kids page while keeping Youth Centre 100% isolated, and document all `v1.8.196` changes for review.
+
+**Files touched:**
+- CREATED: `docs/reports/v1.8.196-report.md`, `docs/reports/v1.8.196-changes.diff`
+- MODIFIED: `firestore.indexes.json`, `public/js/utils/school-billing.js`, `public/js/utils/school-break-modals.js`, `public/js/services/report.service.js`, `public/js/pages/dashboard.page.js`, `public/js/pages/school-admissions.page.js`, `public/js/pages/school-break.page.js`, `public/js/pages/school-fees.page.js`, `public/js/pages/school-fee-payment.page.js`, `public/js/pages/pending.page.js`, `public/js/pages/payments.page.js`, `public/js/pages/courses.page.js`, `public/js/pages/student-profile.page.js`, `docs/02-PROGRESS-LOG.md`
+
+**Firestore changes:**
+- `firestore.indexes.json`: Added `students` `[ctx ASC, status ASC]` and `bills` `[ctx ASC, status ASC, monthlyFee ASC]` (32 composite indexes + 1 override total; pending deploy).
+
+**Tested on (post-final-edit):**
+- `node tools/check-imports.js` (`115` files, `453` imports, `396` exports, `0` errors) + `JSON.parse('firestore.indexes.json')`: ✅
+- `verify-kids-break-v196.mjs` (unit tests + Firebase Auth/Firestore Emulators + headless Chrome): ✅ verified 2-option billing-start dropdown + mode resets on Admissions & Upgrade, Start Break, Early Resume, Overdue Return & Late Resume, `school_head` read-only + Firestore `permission-denied`, Youth isolation, and all 8 Kids pages fast load (`3ms–170ms`, zero skeleton flicker, zero console errors).
+- `scratch/run-tests.mjs`, `verify-router-regression.mjs`, `verify-dashboard.mjs`, `verify-reports.mjs`, `verify-archives.mjs`, `verify-auth-profile.mjs`: ✅ all passed cleanly (0 errors).
+
+---
+
 ### [2026-11-28 13:30] Version 1.8.196 — Unique Kids Break Management & Selectable First Monthly Billing Month (Pushed to main, Pending Deploy Approval)
 
 **What was built:**

@@ -52,6 +52,15 @@ import {
   openKidsUpgradePackageModal
 } from '../utils/school-break-modals.js?v=1.8.196';
 import { firstMonthlyMonth } from '../utils/school-receipt.js?v=1.8.196';
+import {
+  ensureReferenceData,
+  getCachedReferenceData,
+  ensureKidsDataset,
+  getCachedKidsDataset,
+  getCachedKidsHistory,
+  isCacheStale,
+  scheduleDelayedSkeleton
+} from '../services/report.service.js?v=1.8.196';
 
 const COL = 'students';
 const QUALIFICATIONS = ['VIII Pass', 'Secondary (X) Pass', 'Higher Secondary (XII) Pass', 'ITI', 'Diploma', 'Undergraduate (Graduate)', 'Postgraduate', 'Other'];
@@ -77,6 +86,83 @@ let coursesCache = null;
 let sessionsCache = null;
 let batchesCache = null;
 let unregisterDirtyFn = null;
+let spMountSeq = 0;
+
+function hydrateMetaFromReportCache(meta) {
+  if (!meta) return;
+  branchesCache = meta.branchesById || {};
+  coursesCache = { byId: {}, byCode: {} };
+  Object.entries(meta.coursesById || {}).forEach(([id, c]) => {
+    coursesCache.byId[id] = c;
+    const code = String(c.code || c.courseCode || '').toUpperCase().trim();
+    if (code) coursesCache.byCode[code] = c;
+  });
+  batchesCache = { byId: {}, ...(meta.batchesById || {}) };
+  batchesCache.byId = meta.batchesById || {};
+  if (!sessionsCache) sessionsCache = { byId: {}, byName: {} };
+  const byEmail = meta.usersByEmail || {};
+  const byBranch = {};
+  Object.values(byEmail).forEach((u) => {
+    if (u?.branchId && (u.role === 'branch_head' || !byBranch[u.branchId])) byBranch[u.branchId] = u;
+  });
+  usersCache = { byEmail, byBranch };
+}
+
+function findCachedKidsStudent(param) {
+  if (!param) return null;
+  const kidsDs = getCachedKidsDataset();
+  if (kidsDs?.studentsById?.[param]) return kidsDs.studentsById[param];
+  const listMatch = kidsDs?.studentsList?.find((s) => s.id === param || s.studentId === param);
+  if (listMatch) return listMatch;
+  const cachedById = typeof window !== 'undefined' ? window.APP_CACHE?.financialReports?.studentsById : null;
+  if (cachedById?.has?.(param)) {
+    const st = cachedById.get(param);
+    if (st?.ctx === 'school') return st;
+  }
+  return null;
+}
+
+function hydrateKidsCachesFromMemory(student) {
+  const kidsDs = getCachedKidsDataset();
+  if (!kidsDs || !student) return false;
+  const keys = new Set([student.id, student.studentId].filter(Boolean));
+  kidsBillsCache = (kidsDs.bills || [])
+    .filter((b) => keys.has(b.studentId))
+    .map((b) => ({ ...b }));
+  kidsBreaksCache = (kidsDs.breaks || [])
+    .filter((b) => keys.has(b.studentId) || (b.studentCode && keys.has(b.studentCode)))
+    .map((b) => ({ ...b }));
+  const activeBr = getActiveKidsBreak(kidsBreaksCache);
+  if (activeBr) {
+    student.breakFrom = student.breakFrom || activeBr.startMonth;
+    student.breakTo = student.breakTo || activeBr.plannedEndMonth || activeBr.endMonth;
+    student.breakReason = student.breakReason || activeBr.reason;
+  }
+  const hist = getCachedKidsHistory();
+  if (hist?.entries) {
+    paymentsCache = hist.entries
+      .filter((e) => e.studentDocId === student.id || (student.studentId && e.studentId === student.studentId))
+      .map((e) => ({
+        id: e.id,
+        studentDocId: e.studentDocId,
+        studentId: e.studentId,
+        billId: e.billId || '',
+        month: e.month || '',
+        receiptNo: e.receiptNo || '',
+        date: e.date || '',
+        receivedDate: e.date || '',
+        amount: e.amount || 0,
+        actualAmountReceived: e.totalReceived ?? e.amount ?? 0,
+        receivedTotal: e.totalReceived ?? e.amount ?? 0,
+        lateFeeCovered: e.lateFeePaid || 0,
+        feeCovered: e.amount || 0,
+        paymentMode: e.mode || 'cash',
+        recordedByName: e.recordedByName || '',
+        recordedByDesignation: e.recordedByDesignation || ''
+      }));
+  }
+  return true;
+}
 
 async function getMyBranchId() {
   if (currentUserProfile && currentUserProfile.branchId) {
@@ -98,8 +184,18 @@ async function getMyBranchId() {
   return null;
 }
 
-async function ensureMetadataCache() {
-  if (branchesCache && usersCache && coursesCache && sessionsCache && batchesCache) return;
+async function ensureMetadataCache({ forceRefresh = false } = {}) {
+  if (currentCtx === 'school' || currentUserProfile?.role === 'school_head' || currentStudent?.ctx === 'school') {
+    const cached = !forceRefresh ? getCachedReferenceData(currentUserProfile) : null;
+    if (cached) {
+      hydrateMetaFromReportCache(cached);
+      return;
+    }
+    const meta = await ensureReferenceData({ forceRefresh, profile: currentUserProfile });
+    hydrateMetaFromReportCache(meta);
+    return;
+  }
+  if (!forceRefresh && branchesCache && usersCache && coursesCache && sessionsCache && batchesCache) return;
   try {
     const isSuper = currentUserProfile && currentUserProfile.role === 'superadmin';
     const isHead = currentUserProfile && currentUserProfile.role === 'branch_head';
@@ -258,10 +354,12 @@ async function reloadKidsStudentProfile() {
   if (freshSnap.exists()) {
     currentStudent = Object.assign({ id: freshSnap.id }, freshSnap.data());
   }
-  await renderProfile(activeTab);
+  await renderProfile(activeTab, { forceFreshPayments: true });
 }
 
 export async function mount({ container, profile, ctx }) {
+  spMountSeq += 1;
+  const mySeq = spMountSeq;
   currentUserProfile = profile || {};
   currentCtx = ctx || 'youth';
 
@@ -284,12 +382,124 @@ export async function mount({ container, profile, ctx }) {
     return;
   }
 
+  const cachedStu = findCachedKidsStudent(routeParam);
+  const isSchoolFlow = currentCtx === 'school' || isSchoolHeadInit || cachedStu?.ctx === 'school';
+
+  if (isSchoolFlow) {
+    let spSettled = false;
+    showLoading(false);
+    initTabListeners();
+
+    const cachedMeta = getCachedReferenceData(currentUserProfile);
+    if (cachedMeta) hydrateMetaFromReportCache(cachedMeta);
+
+    const kidsDs = getCachedKidsDataset();
+    if (cachedStu && kidsDs && cachedMeta) {
+      currentStudent = { ...cachedStu };
+      sessionDocsList = [currentStudent];
+      const backHref = '#/school-students';
+      const backBtn = $('sp-back-btn');
+      if (backBtn) backBtn.href = backHref;
+      const errBackLink = document.querySelector('#sp-error a');
+      if (errBackLink) errBackLink.href = backHref;
+      const crumbsEl = document.querySelector('.pg-crumbs');
+      if (crumbsEl) crumbsEl.innerHTML = 'Unique Kids / Students / <span>Student Profile</span>';
+
+      hydrateKidsCachesFromMemory(currentStudent);
+      spSettled = true;
+      renderHeader();
+      renderMetrics();
+      const canEdit = canEditCurrentStudent();
+      ['sp-edit-personal', 'sp-edit-contact', 'sp-edit-guardian'].forEach((id) => {
+        const btn = $(id);
+        if (btn) btn.hidden = !canEdit;
+      });
+      await switchTab(initialTab || 'personal');
+      const content = $('sp-content');
+      if (content) content.hidden = false;
+
+      // Refresh docs (avatar/uploads) and payments/bills quietly without blocking the initial paint.
+      Promise.all([
+        loadDocs(),
+        loadPayments({ forceFresh: isCacheStale(kidsDs) })
+      ]).then(() => {
+        if (mySeq !== spMountSeq || !currentStudent) return;
+        renderHeader();
+        renderMetrics();
+        if (activeTab === 'documents') renderDocumentsTab();
+        else if (activeTab === 'payments') renderKidsPaymentsTab();
+        else if (activeTab === 'course') renderCourseTab();
+      }).catch(() => {});
+      return;
+    }
+
+    const spSkelTask = scheduleDelayedSkeleton(() => {
+      if (!spSettled && mySeq === spMountSeq && !currentStudent) showLoading(true);
+    }, 300);
+
+    try {
+      await ensureMetadataCache();
+      const student = cachedStu ? { ...cachedStu } : await resolveStudent(routeParam);
+      if (mySeq !== spMountSeq) return;
+      if (!student) {
+        spSettled = true;
+        if (spSkelTask) spSkelTask.cancel();
+        showError('Student not found', 'Could not locate any student with identifier: ' + routeParam);
+        return;
+      }
+
+      const isSuper = currentUserProfile.role === 'superadmin';
+      const isSchoolHead = currentUserProfile.role === 'school_head';
+      if (!isSuper && !isSchoolHead) {
+        spSettled = true;
+        if (spSkelTask) spSkelTask.cancel();
+        showError('Access restricted', 'You do not have permission to view student profiles.');
+        return;
+      }
+
+      const backHref = student.ctx === 'school' ? '#/school-students' : '#/students';
+      const backBtn = $('sp-back-btn');
+      if (backBtn) backBtn.href = backHref;
+      const errBackLink = document.querySelector('#sp-error a');
+      if (errBackLink) errBackLink.href = backHref;
+      const crumbsEl = document.querySelector('.pg-crumbs');
+      if (crumbsEl) {
+        crumbsEl.innerHTML = student.ctx === 'school'
+          ? 'Unique Kids / Students / <span>Student Profile</span>'
+          : 'Students / <span>Student Profile</span>';
+      }
+
+      currentStudent = student;
+      if (!sessionDocsList.length) sessionDocsList = [currentStudent];
+      await renderProfile(initialTab, {
+        forceFreshPayments: false,
+        onBeforeShow: () => {
+          spSettled = true;
+          if (spSkelTask) spSkelTask.cancel();
+        }
+      });
+    } catch (err) {
+      spSettled = true;
+      if (spSkelTask) spSkelTask.cancel();
+      if (mySeq === spMountSeq) {
+        console.error('[student-profile] mount failed', err);
+        showError('Error loading student', err.message || 'An unexpected error occurred.');
+      }
+    } finally {
+      spSettled = true;
+      if (spSkelTask) spSkelTask.cancel();
+      showLoading(false);
+    }
+    return;
+  }
+
   showLoading(true);
   initTabListeners();
   await ensureMetadataCache();
 
   try {
     const student = await resolveStudent(routeParam);
+    if (mySeq !== spMountSeq) return;
     if (!student) {
       showError('Student not found', 'Could not locate any student with identifier: ' + routeParam);
       return;
@@ -339,6 +549,7 @@ export async function mount({ container, profile, ctx }) {
 }
 
 export function unmount() {
+  spMountSeq += 1;
   if (unregisterDirtyFn) {
     unregisterDirtyFn();
     unregisterDirtyFn = null;
@@ -399,7 +610,9 @@ async function resolveStudent(param) {
       if (isHead && (data.ctx === 'school' || (bId && data.branchId && data.branchId !== bId))) {
         return null;
       }
-      if (data.studentId) {
+      if (data.ctx === 'school') {
+        sessionDocsList = [data];
+      } else if (data.studentId) {
         await loadSessionDocs(data.studentId, data.ctx);
       }
       return data;
@@ -469,14 +682,15 @@ async function loadSessionDocs(studentId, studentCtx) {
 /**
  * Main Profile Render
  */
-async function renderProfile(tabName) {
+async function renderProfile(tabName, { forceFreshPayments = false, onBeforeShow = null } = {}) {
   const content = $('sp-content');
 
   await Promise.all([
     loadDocs(),
-    loadPayments()
+    loadPayments({ forceFresh: forceFreshPayments })
   ]);
 
+  if (typeof onBeforeShow === 'function') onBeforeShow();
   renderHeader();
   renderMetrics();
   // Keep Personal edit buttons synced even when opening on another ?tab=
@@ -2450,10 +2664,71 @@ async function renderCourseTab() {
 /**
  * TAB 4: Payment History
  */
-async function loadPayments() {
+async function loadPayments({ forceFresh = false } = {}) {
   if (!currentStudent) return;
   if (currentStudent.ctx === 'school') {
     const keys = [...new Set([currentStudent.id, currentStudent.studentId].filter(Boolean))];
+    const cachedDs = !forceFresh ? getCachedKidsDataset() : null;
+    if (cachedDs && !isCacheStale(cachedDs)) {
+      const bills = (cachedDs.bills || []).filter((b) => keys.includes(b.studentId)).map((b) => ({ ...b }));
+      const breaks = (cachedDs.breaks || []).filter((b) => keys.includes(b.studentId) || (b.studentCode && keys.includes(b.studentCode))).map((b) => ({ ...b }));
+      const payments = [];
+      const fetchPaymentsOnly = async () => {
+        for (const k of keys) {
+          const pSnap = await getDocs(query(collection(db, 'payments'), where('studentId', '==', k))).catch(() => null);
+          if (pSnap) pSnap.docs.forEach((d) => { if (!payments.some((x) => x.id === d.id)) payments.push({ id: d.id, ...d.data() }); });
+        }
+      };
+      const hasInlineAdm = currentStudent.actualAmountReceived != null || currentStudent.admissionFee != null;
+      await Promise.all([
+        fetchPaymentsOnly(),
+        hasInlineAdm
+          ? Promise.resolve().then(() => {
+            const amt = Number(currentStudent.actualAmountReceived ?? currentStudent.admissionFee ?? 0);
+            paymentsCache = amt > 0 ? [{
+              id: 'payment',
+              studentDocId: currentStudent.id,
+              studentId: currentStudent.studentId || currentStudent.id,
+              receiptNo: currentStudent.receiptNo || '',
+              admissionFee: Number(currentStudent.admissionFee ?? amt),
+              configuredAdmissionFee: Number(currentStudent.configuredAdmissionFee ?? currentStudent.admissionFee ?? amt),
+              actualAmountReceived: amt,
+              paymentMode: currentStudent.paymentMode || 'full',
+              admissionDate: currentStudent.admissionDate || '',
+              createdBy: currentStudent.createdBy || '',
+              createdAt: currentStudent.createdAt || null
+            }] : [];
+          })
+          : fetchStudentPayments(currentStudent.id).then((res) => { paymentsCache = res || []; }).catch(() => { paymentsCache = []; }),
+        ensureMetadataCache()
+      ]);
+      payments.forEach((p) => { if (!paymentsCache.some((x) => x.id === p.id)) paymentsCache.push(p); });
+
+      if (currentUserProfile?.role === 'superadmin' && String(currentStudent.status || 'active').toLowerCase() === 'active' && cachedDs.billsSyncedAsOf !== todayISO()) {
+        try {
+          const created = await syncOpenKidsBills(db, {
+            students: [currentStudent],
+            bills,
+            breaks
+          });
+          if (created && created.length) bills.push(...created);
+        } catch (err) {
+          console.warn('[student-profile] syncOpenKidsBills skipped:', err);
+        }
+      }
+
+      const activeBr = getActiveKidsBreak(breaks);
+      if (activeBr) {
+        currentStudent.breakFrom = currentStudent.breakFrom || activeBr.startMonth;
+        currentStudent.breakTo = currentStudent.breakTo || activeBr.plannedEndMonth || activeBr.endMonth;
+        currentStudent.breakReason = currentStudent.breakReason || activeBr.reason;
+      }
+
+      kidsBillsCache = bills;
+      kidsBreaksCache = breaks;
+      return;
+    }
+
     const bills = [];
     const breaks = [];
     const payments = [];

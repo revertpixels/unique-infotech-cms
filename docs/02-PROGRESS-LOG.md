@@ -39,7 +39,7 @@
 
 ---
 
-### [2026-11-28 12:06] Version 1.8.195 — Firestore Aggregation & Composite Indexes + Silent Fallback (Local Only)
+### [2026-11-28 12:35] Version 1.8.195 — Firestore Aggregation & Composite Indexes + Silent Fallback (Deployed Live)
 
 **What was built:**
 - **Missing composite & aggregation indexes (`firestore.indexes.json`)**:
@@ -51,18 +51,20 @@
 **Why:**
 - Eliminate live `RunAggregationQuery failed-precondition (400)` errors on Dashboard KPIs where Firestore Emulators do not enforce composite indexes, close every un-indexed multi-`where()` query gap across the codebase, and prevent repeated HTTP 400 console noise while indexes are missing or building.
 
-**Files touched (committed locally only, NOT deployed or pushed):**
+**Files touched (committed and pushed to `origin/main`):**
 - MODIFIED: `firestore.indexes.json`, `public/js/services/report.service.js`, `docs/02-PROGRESS-LOG.md` (+ `bump-version.js 1.8.195` across `54` app assets).
 
 **Firestore changes:**
-- Prepared in `firestore.indexes.json` (`12` new composite indexes added locally; **NOT deployed yet** — requires `firebase deploy --only firestore:indexes --project unique-infotech-cms` after green flag).
+- Deployed `firestore.indexes.json` (`27` composite indexes + `1` `payment.date` collection-group override, all `[READY]`) and `firestore.rules` to `unique-infotech-cms`.
+- Deployed Firebase Hosting `v1.8.195` (`https://unique-infotech-cms.web.app`).
 
 **Tested on (post-bump `1.8.195`):**
 - `node tools/check-imports.js` (`114` files, `424` imports, `369` exports, `0` errors) + `JSON.parse('firestore.indexes.json')`: ✅
 - `scratch/run-tests.mjs` (financial/ledger, filter architecture, 1,200-student pagination parity, plus `failed-precondition` circuit-breaker unit checks verifying `1` `console.warn`, `0` `console.error`, `0` retries on both primary & `dropQ` queries): ✅
 - Chrome E2E (`verify-router-regression.mjs`, `verify-dashboard.mjs`, `verify-reports.mjs`, `verify-archives.mjs`, `verify-auth-profile.mjs`, `verify-qa-189.mjs`, `bench-perf.mjs`): ✅
 - Firebase Auth + Firestore Emulators (`verify-backfill-backup-v194.mjs`, `verify-backfill-emulator.mjs`, `verify-emulator-runner.mjs`, `verify-multitab-logout.mjs` with updated `firestore.indexes.json` & `firestore.rules`): ✅
-- Deployed: ❌ NO (local commit only; wait for green flag).
+- Live site (`https://unique-infotech-cms.web.app`, verified by user after Hosting deploy): ✅ login, Dashboard totals, session switching, Students list, Pay Fees flow, and clean console (0 index/aggregation/permission errors).
+- Deployed: ✅ YES (`firestore:indexes`, `firestore:rules`, `hosting`).
 
 ---
 

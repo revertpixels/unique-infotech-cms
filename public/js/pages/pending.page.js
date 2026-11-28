@@ -1,18 +1,18 @@
 // pending.page.js — Shared Overdue Payments view for Youth Centre (#/pending) & Unique Kids (#/school-pending).
 // Matches payments.page.js layout (no inner scroll, shared 10-row pager, short codes, icon actions, details popup).
 
-import { createSelect } from '../components/ui-select.js?v=1.8.196';
-import { createBranchBatchFilter, clearPersistedBranchBatchFilters } from '../components/branch-batch-filter.js?v=1.8.196';
-import { openPopup } from '../components/modal.js?v=1.8.196';
-import { showToast } from '../components/toast.js?v=1.8.196';
-import { renderPager, renderEmptyTableState, PAGE_SIZE } from '../components/list-page.js?v=1.8.196';
-import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.196';
+import { createSelect } from '../components/ui-select.js?v=1.8.197';
+import { createBranchBatchFilter, clearPersistedBranchBatchFilters } from '../components/branch-batch-filter.js?v=1.8.197';
+import { openPopup } from '../components/modal.js?v=1.8.197';
+import { showToast } from '../components/toast.js?v=1.8.197';
+import { renderPager, renderEmptyTableState, PAGE_SIZE } from '../components/list-page.js?v=1.8.197';
+import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.197';
 import {
   getCachedSessions,
   loadSessions,
   getSelectedSession,
   hasFreshSessionsCache
-} from '../core/sessions.js?v=1.8.196';
+} from '../core/sessions.js?v=1.8.197';
 import {
   ensureReferenceData,
   getCachedReferenceData,
@@ -39,8 +39,8 @@ import {
   formatINR,
   fmtDate,
   todayISO
-} from '../services/report.service.js?v=1.8.196';
-import { initials } from '../utils/formatter.js?v=1.8.196';
+} from '../services/report.service.js?v=1.8.197';
+import { initials } from '../utils/formatter.js?v=1.8.197';
 
 let state = null;
 let sessionListener = null;
@@ -954,10 +954,7 @@ function buildPendingRow(item) {
     if (isSchool) {
       walletBtn.title = 'Collect fee';
       walletBtn.setAttribute('aria-label', `Collect fee for ${displayName}`);
-      walletBtn.addEventListener('click', () => {
-        if (item.billId) location.hash = `#/school-fees/pay/${encodeURIComponent(item.billId)}`;
-        else location.hash = '#/school-fees';
-      });
+      walletBtn.addEventListener('click', () => handleKidsCollect(item));
       actions.appendChild(walletBtn);
     } else if (item.canCollect) {
       walletBtn.title = 'Collect fee';
@@ -1175,6 +1172,27 @@ function openOverdueDetailsPopup(item) {
   stack.appendChild(grid);
   popup.container.appendChild(stack);
   if (typeof lucide !== 'undefined') lucide.createIcons();
+}
+
+function handleKidsCollect(item) {
+  if (!item) return;
+  const student = state.report?.studentsById?.[item.studentDocId] || {
+    id: item.studentDocId,
+    studentId: item.studentId,
+    name: item.studentName,
+    courseId: item.courseId || '',
+    courseName: item.courseName || '',
+    ctx: 'school'
+  };
+  openPaymentPopup({
+    student: { ...student, ctx: 'school' },
+    profile: state.profile,
+    preselectedBillId: item.billId || '',
+    from: 'school-pending',
+    onSuccess: async () => {
+      await bootstrapData({ forceRefresh: false, deltaRefresh: true });
+    }
+  });
 }
 
 function handleYouthCollect(item) {

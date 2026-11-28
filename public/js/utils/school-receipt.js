@@ -1,8 +1,8 @@
 // school-receipt.js � pure view-model builders for the Kids admission receipt.
 // No Firebase, no DOM. Safe to unit-test in plain Node.
 
-import { formatDateIN, formatPersonName, formatGenderDisplay } from './formatter.js?v=1.8.196';
-import { getStudentPhotoSrc, getStudentDocSrc } from './student-media.js?v=1.8.196';
+import { formatDateIN, formatPersonName, formatGenderDisplay } from './formatter.js?v=1.8.197';
+import { getStudentPhotoSrc, getStudentDocSrc } from './student-media.js?v=1.8.197';
 
 const MONTH_NAMES = [
   'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
@@ -145,6 +145,16 @@ export function buildSchoolReceiptData({ admission, photo, signature, org, payme
   const paymentMode = (p && p.paymentMode) || a.paymentMode || 'full';
   const noPaymentReason = (p && p.noPaymentReason) || a.noPaymentReason || '';
   const noPaymentOther = (p && p.noPaymentOther) || a.noPaymentOther || '';
+  const rawMethod = String(
+    (p && (p.mode || p.paymentMethod))
+    || a.mode
+    || a.paymentMethod
+    || (receivedAmount > 0 ? 'cash' : '')
+  ).toLowerCase().trim();
+  const methodLabels = { cash: 'Cash', upi: 'UPI', card: 'Card', bank: 'Bank Transfer', cheque: 'Cheque' };
+  const paymentMethodLabel = rawMethod ? (methodLabels[rawMethod] || rawMethod.toUpperCase()) : '—';
+  const txnId = String((p && p.txnId) || a.txnId || '').trim();
+  const paymentRemarks = String((p && (p.paymentRemarks || p.remarks)) || a.paymentRemarks || '').trim();
 
   return {
     studentName: formatPersonName(a.name || '') || '-',
@@ -174,6 +184,10 @@ export function buildSchoolReceiptData({ admission, photo, signature, org, payme
     monthlyFee: monthlyFeeVal,
     feeReceived: p.feeReceived != null ? Boolean(p.feeReceived) : (receivedAmount > 0),
     paymentMode,
+    paymentMethod: rawMethod,
+    paymentMethodLabel,
+    txnId,
+    paymentRemarks,
     noPaymentReason,
     noPaymentOther,
     noPaymentReasonFormatted: formatNoPaymentReason(noPaymentReason, noPaymentOther),

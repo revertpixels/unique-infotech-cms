@@ -3,12 +3,12 @@
 // Scope: Super Admin.
 import { db } from '../config/firebase-config.js';
 import { doc, getDoc, getDocs, collection, query, where } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.196';
-import { createSelect } from '../components/ui-select.js?v=1.8.196';
-import { formatDateIN } from '../utils/formatter.js?v=1.8.196';
-import { buildSchoolReceiptData, fmtRs } from '../utils/school-receipt.js?v=1.8.196';
-import { downloadSchoolReceiptPdf } from '../utils/school-receipt-pdf.js?v=1.8.196';
-import { getStudentDocRecord } from '../utils/student-media.js?v=1.8.196';
+import { showToast } from '../components/toast.js?v=1.8.197';
+import { createSelect } from '../components/ui-select.js?v=1.8.197';
+import { formatDateIN } from '../utils/formatter.js?v=1.8.197';
+import { buildSchoolReceiptData, fmtRs } from '../utils/school-receipt.js?v=1.8.197';
+import { downloadSchoolReceiptPdf } from '../utils/school-receipt-pdf.js?v=1.8.197';
+import { getStudentDocRecord } from '../utils/student-media.js?v=1.8.197';
 
 const COL = 'students';
 let studentDocId = '';
@@ -137,9 +137,9 @@ export async function mount({ container, profile, ctx }) {
 
   // Setup Toolbar buttons
   const backBtn = $('uk-back');
-  if (backBtn) backBtn.onclick = () => { location.hash = '#/school-admissions'; };
+  if (backBtn) backBtn.onclick = () => { location.hash = '#/school-students'; };
   const nfBackBtn = $('uk-nf-back');
-  if (nfBackBtn) nfBackBtn.onclick = () => { location.hash = '#/school-admissions'; };
+  if (nfBackBtn) nfBackBtn.onclick = () => { location.hash = '#/school-students'; };
   const printBtn = $('uk-print');
   if (printBtn) printBtn.onclick = () => { window.print(); };
   const dlBtn = $('uk-download');
@@ -148,12 +148,16 @@ export async function mount({ container, profile, ctx }) {
   const profBtn = $('uk-profile-btn');
   if (profBtn) {
     profBtn.onclick = () => {
-      showToast({ type: 'info', message: 'Student profile page is coming next' });
+      location.hash = '#/students/' + encodeURIComponent(studentDocId);
     };
   }
 
   // Course dropdown: load sibling course admissions for this child
   await setupCourseSelect(admission);
+  if (/[?&]print=1\b/.test(location.hash)) {
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    window.print();
+  }
 }
 
 async function setupCourseSelect(admission) {
@@ -517,6 +521,7 @@ function renderReceipt(container, d) {
       <thead><tr><th>Description</th><th>Status</th><th>Amount</th></tr></thead>
       <tbody>
         ${paymentRows}
+        ${d.actualAmountReceived > 0 ? `<tr><td>Payment mode</td><td><span class="uk-pill">${escapeHtml(d.paymentMethodLabel || 'Cash')}</span></td><td>${d.txnId ? 'TXN: ' + escapeHtml(d.txnId) : '—'}</td></tr>` : ''}
       </tbody>
     </table>
     <div class="uk-pbox">

@@ -3,19 +3,17 @@
 // payments. Kids billing is session-independent: monthly bills open on the 1st, due by the
 // 10th, late fine Rs 1/day from the 11th.
 import { db } from '../config/firebase-config.js';
-import { collection, getDocs, query, where, doc, getDoc, updateDoc, runTransaction, serverTimestamp } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.196';
-import { registerDirty, confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.196';
-import { PAGE_SIZE, buildStats, buildToolbar, renderPager } from '../components/list-page.js?v=1.8.196';
-import { createSelect } from '../components/ui-select.js?v=1.8.196';
-import { openMenu } from '../components/ui-menu.js?v=1.8.196';
-import { confirmDialog } from '../components/ui-confirm.js?v=1.8.196';
-import { formatINR, formatDateIN, formatPersonName } from '../utils/formatter.js?v=1.8.196';
-import { resolveUserDisplay, getRoleTitle } from '../services/user-directory.service.js?v=1.8.196';
-import { isCourseActive } from '../utils/session-rules.js?v=1.8.196';
-import { localToday, monthSeq, nextMonth } from '../utils/school-lifecycle.js?v=1.8.196';
-import { playPaymentSuccessSound } from '../utils/sound.js?v=1.8.196';
-import { daysLate, computeLateFee, syncOpenKidsBills } from '../utils/school-billing.js?v=1.8.196';
+import { collection, getDocs, query, where } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
+import { showToast } from '../components/toast.js?v=1.8.197';
+import { PAGE_SIZE, buildStats, buildToolbar, renderPager } from '../components/list-page.js?v=1.8.197';
+import { createSelect } from '../components/ui-select.js?v=1.8.197';
+import { openMenu } from '../components/ui-menu.js?v=1.8.197';
+import { formatINR, formatDateIN, formatPersonName } from '../utils/formatter.js?v=1.8.197';
+import { getRoleTitle } from '../services/user-directory.service.js?v=1.8.197';
+import { isCourseActive } from '../utils/session-rules.js?v=1.8.197';
+import { localToday, monthSeq, nextMonth } from '../utils/school-lifecycle.js?v=1.8.197';
+import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.197';
+import { daysLate, computeLateFee, syncOpenKidsBills } from '../utils/school-billing.js?v=1.8.197';
 import {
   ensureReferenceData,
   getCachedReferenceData,
@@ -25,7 +23,7 @@ import {
   syncKidsDatasetDelta,
   isCacheStale,
   scheduleDelayedSkeleton
-} from '../services/report.service.js?v=1.8.196';
+} from '../services/report.service.js?v=1.8.197';
 
 const COL = 'students';
 const BILLS_COL = 'bills';
@@ -305,67 +303,26 @@ export async function mount({ container, profile, ctx }) {
       });
     }
 
-    // row actions: payment
+    // row actions: open shared payment popup
     rowsHost.querySelectorAll('.pay').forEach(b => {
-      b.addEventListener('click', () => { location.hash = '#/school-fees/pay/' + b.dataset.id; });
-    });
-  }
-
-  // ---------- payment recording ----------
-  async function recordPaymentForBill(billId, amount, receivedDate, receivedBy) {
-    const bill = bills.find(b => b.id === billId);
-    if (!bill) { showToast({ type: 'error', message: 'Bill not found.' }); return; }
-    const paid = rupees(amount);
-    if (!Number.isFinite(paid) || paid <= 0) { showToast({ type: 'error', message: 'Enter a valid amount.' }); return; }
-    if (!receivedDate) { showToast({ type: 'error', message: 'Enter the received date.' }); return; }
-    try {
-      const who = (profile && profile.email) || '';
-      const recDisp = resolveUserDisplay(who, profile?.name, profile?.designation);
-      // Read unpaid bills outside the transaction; only writes run inside it.
-      const unpaidSnap = await getDocs(query(collection(db, BILLS_COL),
-        where('studentId', '==', bill.studentId), where('status', 'in', ['unpaid', 'partial'])));
-      const targets = unpaidSnap.docs.map(d => Object.assign({ id: d.id }, d.data()))
-        .sort((a, b) => monthSeq(a.month) - monthSeq(b.month));
-      await runTransaction(db, async (tx) => {
-        let remaining = paid;
-        for (const b of targets) {
-          if (remaining <= 0) break;
-          const billLate = computeLateFee(b);
-          const billDue = rupees(b.monthlyFee || 0) + billLate;
-          const billRemaining = billDue - rupees(b.paidAmount || 0);
-          if (billRemaining <= 0) continue;
-          const payThis = Math.min(remaining, billRemaining);
-          const allocRef = doc(collection(db, PAYMENTS_COL));
-          tx.set(allocRef, {
-            id: allocRef.id, studentId: b.studentId, billId: b.id, month: b.month,
-            amount: rupees(payThis), lateFeeCovered: 0, feeCovered: rupees(payThis),
-            receivedDate, receivedBy: who,
-            ...(recDisp.name ? { receivedByName: recDisp.name } : {}),
-            ...(recDisp.designation ? { recordedByDesignation: recDisp.designation } : {}),
-            createdAt: serverTimestamp()
-          });
-          const newPaid = rupees(b.paidAmount || 0) + payThis;
-          tx.update(doc(db, BILLS_COL, b.id), {
-            paidAmount: rupees(newPaid), status: newPaid >= billDue ? 'paid' : 'partial', updatedAt: serverTimestamp()
-          });
-          remaining = rupees(remaining - payThis);
-        }
-        const payRef = doc(collection(db, PAYMENTS_COL));
-        tx.set(payRef, {
-          id: payRef.id, studentId: bill.studentId, totalAmount: paid, receivedDate, receivedBy: who,
-          ...(recDisp.name ? { receivedByName: recDisp.name } : {}),
-          ...(recDisp.designation ? { recordedByDesignation: recDisp.designation } : {}),
-          allocations: [], createdAt: serverTimestamp()
+      b.addEventListener('click', () => {
+        const bill = bills.find(x => x.id === b.dataset.id);
+        if (!bill) return;
+        const matchedStu = students.find(x => x.id === bill.studentId || (bill.studentCode && x.studentId === bill.studentCode) || x.studentId === bill.studentId);
+        const stuObj = matchedStu
+          ? { ...matchedStu, ctx: 'school' }
+          : { id: bill.studentId, studentId: bill.studentCode || bill.studentId, name: bill.studentName || 'Student', ctx: 'school', courseId: bill.courseId || '', courseName: bill.courseName || '' };
+        const stuBills = bills.filter(x => x.studentId === bill.studentId || (stuObj.studentId && x.studentId === stuObj.studentId));
+        openPaymentPopup({
+          student: stuObj,
+          profile,
+          preselectedBillId: bill.id,
+          bills: stuBills,
+          from: 'school-fees',
+          onSuccess: () => load({ forceRefresh: false })
         });
       });
-      window.dispatchEvent(new CustomEvent('uic:data-mutated', { detail: { reason: 'kids:payment' } }));
-      await load({ forceRefresh: true });
-      playPaymentSuccessSound();
-      showToast({ type: 'success', message: 'Payment of ' + formatINR(paid) + ' recorded.' });
-    } catch (e) {
-      console.error('[school-fees] payment failed', e);
-      showToast({ type: 'error', message: 'Payment failed (' + (e.code || 'error') + ').' });
-    }
+    });
   }
 
   $('sf-load-error-retry').addEventListener('click', () => { load(); });

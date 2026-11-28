@@ -11,10 +11,11 @@ import {
   collection, getDocs, query, where, doc, getDoc, addDoc, updateDoc, serverTimestamp,
   runTransaction, writeBatch, arrayUnion
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.196';
-import { localToday, monthSeq, nextMonth, previousMonth } from './school-lifecycle.js?v=1.8.196';
-import { firstMonthlyMonth } from './school-receipt.js?v=1.8.196';
-import { fineFor } from './session-rules.js?v=1.8.196';
+import { showToast } from '../components/toast.js?v=1.8.197';
+import { localToday, monthSeq, nextMonth, previousMonth } from './school-lifecycle.js?v=1.8.197';
+import { firstMonthlyMonth } from './school-receipt.js?v=1.8.197';
+import { fineFor } from './session-rules.js?v=1.8.197';
+import { readReceiptNo, writeCounter } from '../services/admission.service.js?v=1.8.197';
 
 const BILLS_COL = 'bills';
 const PAYMENTS_COL = 'payments';
@@ -231,9 +232,13 @@ export function computeLateFee(bill, asOfDate) {
 // Record a payment against a bill. Handles allocation (bill first, then oldest unpaid).
 // Returns { paymentId, allocations: [{billId, amount, lateFeeCovered}] }.
 export async function recordPayment(tx, {
-  studentId, amount, receivedDate, receivedBy, receivedByName = '', receivedByDesignation = '', allocation = 'auto'
+  studentId, amount, receivedDate, receivedBy, receivedByName = '', receivedByDesignation = '',
+  mode = 'cash', txnId = '', remarks = '', allocation = 'auto'
 }) {
   amount = rupees(amount);
+  const cleanMode = String(mode || 'cash').toLowerCase().trim() || 'cash';
+  const cleanTxn = cleanMode !== 'cash' ? String(txnId || '').trim() : '';
+  const cleanRemarks = String(remarks || '').trim();
   let remaining = amount;
   const allocations = [];
 
@@ -247,7 +252,7 @@ export async function recordPayment(tx, {
   for (const bill of bills) {
     if (remaining <= 0) break;
     const billLate = computeLateFee(bill);
-    const billDue = rupees(bill.monthlyFee) + billLate;
+    const billDue = Math.max(0, rupees(bill.monthlyFee) + billLate - rupees(bill.waivedAmount || 0));
     const billRemaining = rupees(billDue) - rupees(bill.paidAmount || 0);
     if (billRemaining <= 0) continue;
     const payThis = Math.min(remaining, billRemaining);
@@ -256,18 +261,23 @@ export async function recordPayment(tx, {
 
     const allocRef = doc(collection(db, PAYMENTS_COL));
     tx.set(allocRef, {
-      id: allocRef.id, studentId, billId: bill.id, month: bill.month,
+      id: allocRef.id, ctx: 'school', studentId, billId: bill.id, month: bill.month,
       amount: rupees(payThis), lateFeeCovered: rupees(lateCovered),
-      feeCovered: rupees(feeCovered), receivedDate, receivedBy,
+      feeCovered: rupees(feeCovered), mode: cleanMode,
+      ...(cleanTxn ? { txnId: cleanTxn } : { txnId: '' }),
+      ...(cleanRemarks ? { remarks: cleanRemarks } : {}),
+      receivedDate, receivedBy,
       ...(receivedByName ? { receivedByName } : {}),
       ...(receivedByDesignation ? { recordedByDesignation: receivedByDesignation } : {}),
       createdAt: serverTimestamp()
     });
 
     const newPaid = rupees(bill.paidAmount || 0) + payThis;
-    const newStatus = newPaid >= rupees(bill.monthlyFee) + billLate ? 'paid' : 'partial';
+    const newStatus = newPaid >= billDue ? 'paid' : 'partial';
     tx.update(doc(db, BILLS_COL, bill.id), {
-      paidAmount: rupees(newPaid), status: newStatus, updatedAt: serverTimestamp()
+      paidAmount: rupees(newPaid), status: newStatus, paymentMode: cleanMode,
+      ...(cleanTxn ? { txnId: cleanTxn } : {}),
+      updatedAt: serverTimestamp()
     });
 
     allocations.push({ billId: bill.id, month: bill.month, amount: rupees(payThis),
@@ -277,7 +287,8 @@ export async function recordPayment(tx, {
 
   const payRef = doc(collection(db, PAYMENTS_COL));
   tx.set(payRef, {
-    id: payRef.id, studentId, totalAmount: amount, receivedDate, receivedBy,
+    id: payRef.id, ctx: 'school', studentId, totalAmount: amount, receivedDate, receivedBy,
+    mode: cleanMode, txnId: cleanTxn, ...(cleanRemarks ? { remarks: cleanRemarks } : {}),
     ...(receivedByName ? { receivedByName } : {}),
     ...(receivedByDesignation ? { recordedByDesignation: receivedByDesignation } : {}),
     allocations: allocations.map(a => ({ billId: a.billId, amount: a.amount })),
@@ -285,6 +296,168 @@ export async function recordPayment(tx, {
   });
 
   return { paymentId: payRef.id, allocations, remaining: rupees(remaining) };
+}
+
+/**
+ * Fetches unpaid/partial Unique Kids monthly bills for a student sorted oldest first.
+ */
+export async function fetchOpenKidsBillsForStudent(student) {
+  if (!student) return [];
+  const keys = [...new Set([student.id, student.studentId].filter(Boolean))];
+  const bills = [];
+  for (const k of keys) {
+    const snap = await getDocs(query(
+      collection(db, BILLS_COL),
+      where('studentId', '==', k),
+      where('status', 'in', ['unpaid', 'partial'])
+    )).catch(() => null);
+    if (snap) {
+      snap.docs.forEach((d) => {
+        if (!bills.some((x) => x.id === d.id)) bills.push({ id: d.id, ...d.data() });
+      });
+    }
+  }
+  return bills.sort((a, b) => monthSeq(a.month) - monthSeq(b.month));
+}
+
+/**
+ * Atomically records payment for a specific Unique Kids monthly bill inside a Firestore transaction,
+ * generating a sequential Kids receipt number (`UK<YY>MN-<CENTRE>-<NNNN>`), saving payment mode +
+ * transaction ID, handling optional Super Admin late-fine waiver, and updating bill status.
+ */
+export async function recordKidsBillPayment({
+  studentDoc,
+  bill,
+  mode = 'cash',
+  txnId = '',
+  remarks = '',
+  waived = false,
+  waiverReason = '',
+  paymentDate,
+  userEmail = '',
+  userName = '',
+  userDesignation = '',
+  userRole = ''
+} = {}) {
+  if (!studentDoc || !studentDoc.id) throw new Error('Student record is required.');
+  if (!bill || !bill.id) throw new Error('Select a monthly bill to pay.');
+
+  const payDate = paymentDate || localToday();
+  const cleanMode = String(mode || 'cash').toLowerCase().trim() || 'cash';
+  const cleanTxn = cleanMode !== 'cash' ? String(txnId || '').trim() : '';
+  const cleanRemarks = String(remarks || '').trim();
+  const cleanEmail = String(userEmail || '').toLowerCase().trim();
+  const cleanWaiverReason = waived ? String(waiverReason || '').trim() : '';
+  if (waived && !cleanWaiverReason) throw new Error('Waiver reason is required to waive late fine.');
+
+  return runTransaction(db, async (tx) => {
+    const billRef = doc(db, BILLS_COL, bill.id);
+    const orgRef = doc(db, 'settings', 'org_config');
+    const orgSnap = await tx.get(orgRef);
+    const liveBillSnap = await tx.get(billRef);
+    if (!liveBillSnap.exists()) throw new Error('Monthly bill no longer exists.');
+    const liveBill = { id: liveBillSnap.id, ...liveBillSnap.data() };
+    const st = String(liveBill.status || 'unpaid').toLowerCase();
+    if (st !== 'unpaid' && st !== 'partial') {
+      throw new Error('This monthly bill has already been settled.');
+    }
+
+    const configuredCode = String(orgSnap.exists() ? orgSnap.data().receiptCode || '' : '').trim().toUpperCase();
+    const centreCode = /^[A-Z0-9]{2,12}$/.test(configuredCode) ? configuredCode : (studentDoc.receiptCentreCode || 'HO');
+    const rc = await readReceiptNo(tx, { org: 'school', type: 'MN', branchCode: centreCode, date: payDate });
+
+    const monthlyFee = rupees(liveBill.monthlyFee || 0);
+    const priorPaid = rupees(liveBill.paidAmount || 0);
+    const priorWaived = rupees(liveBill.waivedAmount || 0);
+    const baseRemaining = Math.max(0, rupees(monthlyFee - priorPaid - priorWaived));
+    const computedLate = computeLateFee(liveBill, payDate);
+    const waivedAmt = (waived && computedLate > 0) ? rupees(computedLate) : 0;
+    const latePaid = (waived && computedLate > 0) ? 0 : rupees(computedLate);
+    const totalPaid = rupees(baseRemaining + latePaid);
+    if (totalPaid <= 0 && waivedAmt <= 0) {
+      throw new Error('Nothing due for this monthly bill.');
+    }
+
+    const allocRef = doc(collection(db, PAYMENTS_COL));
+    writeCounter(tx, rc.ref, rc.next, { org: 'school', type: 'MN', branchCode: centreCode, date: payDate });
+
+    tx.set(allocRef, {
+      id: allocRef.id,
+      ctx: 'school',
+      type: 'KIDS_MONTHLY',
+      studentId: studentDoc.id,
+      studentDocId: studentDoc.id,
+      ...(studentDoc.studentId ? { studentCode: studentDoc.studentId } : {}),
+      billId: liveBill.id,
+      month: liveBill.month || '',
+      receiptNo: rc.receiptNo,
+      receiptCentreCode: centreCode,
+      amount: totalPaid,
+      feeCovered: baseRemaining,
+      lateFeeCovered: latePaid,
+      lateFeeWaived: waivedAmt,
+      waived: waivedAmt > 0,
+      waiverReason: cleanWaiverReason,
+      mode: cleanMode,
+      txnId: cleanTxn,
+      remarks: cleanRemarks || (liveBill.month ? `Monthly fee (${liveBill.month})` : 'Monthly fee'),
+      receivedDate: payDate,
+      receivedBy: cleanEmail,
+      ...(userName ? { receivedByName: userName } : {}),
+      ...(userDesignation ? { recordedByDesignation: userDesignation } : {}),
+      ...(userRole ? { receivedByRole: userRole } : {}),
+      createdAt: serverTimestamp()
+    });
+
+    tx.update(billRef, {
+      ctx: 'school',
+      paidAmount: rupees(priorPaid + totalPaid),
+      lateFee: rupees(latePaid),
+      ...(waivedAmt > 0 ? { lateFeeWaived: rupees((liveBill.lateFeeWaived || 0) + waivedAmt), waived: true, waiverReason: cleanWaiverReason } : {}),
+      status: 'paid',
+      receiptNo: rc.receiptNo,
+      lastPaymentId: allocRef.id,
+      paymentMode: cleanMode,
+      txnId: cleanTxn,
+      updatedAt: serverTimestamp(),
+      updatedBy: cleanEmail
+    });
+
+    if (waivedAmt > 0) {
+      const waiverRef = doc(collection(db, WAIVERS_COL));
+      tx.set(waiverRef, {
+        id: waiverRef.id,
+        ctx: 'school',
+        studentId: studentDoc.id,
+        ...(studentDoc.studentId ? { studentCode: studentDoc.studentId } : {}),
+        billId: liveBill.id,
+        month: liveBill.month || '',
+        amount: waivedAmt,
+        reason: cleanWaiverReason,
+        receiptNo: rc.receiptNo,
+        waivedBy: cleanEmail,
+        ...(userName ? { waivedByName: userName } : {}),
+        ...(userDesignation ? { waivedByDesignation: userDesignation } : {}),
+        ...(userRole ? { waivedByRole: userRole } : {}),
+        waivedAt: payDate,
+        createdAt: serverTimestamp()
+      });
+    }
+
+    return {
+      studentDocId: studentDoc.id,
+      paymentId: allocRef.id,
+      billId: liveBill.id,
+      month: liveBill.month || '',
+      receiptNo: rc.receiptNo,
+      feeCovered: baseRemaining,
+      lateFeePaid: latePaid,
+      lateFeeWaived: waivedAmt,
+      totalPaid,
+      mode: cleanMode,
+      txnId: cleanTxn
+    };
+  });
 }
 
 // ---------- overdue listing ----------
@@ -1150,7 +1323,7 @@ export function buildKidsPaymentLedger({ students = [], admissionPayments = [], 
       courseName: s.courseLevelName || s.courseName || '',
       type: 'AD',
       typeLabel: 'Kids admission',
-      mode: (ap.paymentMode === 'full' || ap.paymentMode === 'difference') ? 'cash' : (ap.paymentMode || 'cash'),
+      mode: String(ap.mode || ap.paymentMethod || ((ap.paymentMode === 'full' || ap.paymentMode === 'difference') ? 'cash' : (ap.paymentMode || 'cash'))).toLowerCase(),
       txnId: ap.txnId || '',
       amount: amt,
       lateFeePaid: 0,
@@ -1160,7 +1333,7 @@ export function buildKidsPaymentLedger({ students = [], admissionPayments = [], 
       recordedBy: (ap.createdBy || s.createdBy || '').toLowerCase(),
       recordedByName: ap.receivedByName || ap.recordedByName || '',
       recordedByDesignation: ap.recordedByDesignation || '',
-      remarks: ap.paymentMode === 'difference' ? 'Upgrade difference admission fee' : 'Admission fee',
+      remarks: ap.paymentRemarks || ap.remarks || (ap.paymentMode === 'difference' ? 'Upgrade difference admission fee' : 'Admission fee'),
       receiptRoute: `#/school-admissions/${encodeURIComponent(s.id)}/receipt`,
       createdAtSec: toSec(ap.createdAt)
     });
@@ -1221,7 +1394,7 @@ export function buildKidsPaymentLedger({ students = [], admissionPayments = [], 
       recordedByName: a.receivedByName || a.recordedByName || '',
       recordedByDesignation: a.recordedByDesignation || '',
       remarks: a.remarks || (a.month ? `Month ${a.month}` : ''),
-      receiptRoute: `#/students/${encodeURIComponent(s.id)}?tab=payments`,
+      receiptRoute: a.id ? `#/payments/${encodeURIComponent(s.id)}/${encodeURIComponent(a.id)}/receipt?from=school-payments` : `#/students/${encodeURIComponent(s.id)}?tab=payments`,
       createdAtSec: toSec(a.createdAt)
     });
   }

@@ -39,6 +39,38 @@
 
 ---
 
+### [2026-11-28 14:25] Version 1.8.197 — Unique Kids Shared Payment Popup, Mode/TXN Receipts & Profile Ledger (Pushed to main, Pending Deploy Approval)
+
+**What was built:**
+- **Kids Admission Shared Payment Popup (`public/pages/school-admissions.html`, `public/js/pages/school-admissions.page.js`)**:
+  - Removed the old `"I confirm received"` checkbox (`#adm-confirm-received-wrap`, `#adm-confirmReceived`) and wired new admissions (`Full` / `Difference` with charge `> 0`) to open `openPaymentPopup` before writing to Firestore. Cancelling preserves the filled form with nothing saved; `No payment` (`charge === 0`) skips the popup cleanly. Added Youth-parity active duplicate phone+level confirmation and saved `mode`, `paymentMethod`, `txnId`, `paymentRemarks`, `paymentDate`.
+- **Kids Monthly Fees Popup & Atomic Billing (`public/js/components/payment-popup.js`, `public/js/utils/school-billing.js`, `public/js/pages/school-fees.page.js`, `public/js/pages/school-fee-payment.page.js`, `public/js/pages/pending.page.js`)**:
+  - Added `fetchOpenKidsBillsForStudent` and atomic `recordKidsBillPayment` (`UK<YY>MN-<CENTRE>-<NNNN>` sequential receipt counter, `payments`, `bills`, optional `waivers`, `mode`, `txnId`, `remarks`), wired `openPaymentPopup` across `#/school-fees`, `#/school-fee-payment` (fixing `#sf-pay-form` bug & formatted amount input), `#/school-pending` (`handleKidsCollect`), and Student Profile; fixed `waivedAmount` subtraction in legacy `recordPayment`.
+- **Mode & Transaction ID in Receipts, History & Profile (`public/js/utils/school-receipt.js`, `public/js/pages/school-admission-receipt.page.js`, `public/js/utils/school-receipt-pdf.js`, `public/js/pages/payment-receipt.page.js`, `public/js/services/report.service.js`, `public/pages/student-profile.html`, `public/js/pages/student-profile.page.js`)**:
+  - Added Payment Mode & TXN ID to Kids Admission Receipt HTML & PDF; fixed `#uk-back` (`#/school-students`), `#uk-profile-btn` (`#/students/<id>`), and `?print=1` auto-print.
+  - Added `ctx === 'school'` Kids Monthly / Upgrade receipt support (`renderKidsReceiptHTML`) + `school_head` read-only view to `payment-receipt.page.js` (Youth `renderReceiptHTML` untouched).
+  - Updated `buildKidsPaymentLedger` and `loadKidsPaymentHistory` to preserve actual saved `mode`/`paymentMethod` and `txnId` instead of defaulting to `'cash'`.
+  - Added `#sp-kids-btn-record-payment`, inline `Collect` / `Receipt` buttons (replacing broken `#/school-fee-payment` links), Course tab `Payment Method`, and 9-column **Chronological Payment Transactions** (`#sp-kids-txns-tbody`) to Kids Student Profile with `kidsPaymentsHydrated` guard.
+- **Reports, Versioning & Diff**:
+  - Bumped `?v=` / `APP_VERSION` to `1.8.197` across `55` files (`tools/bump-version.js`), documented Kids vs Youth parity table and small/big gaps in `docs/reports/v1.8.197-report.md`, and generated `docs/reports/v1.8.197-changes.diff`.
+
+**Why:**
+- Unify Unique Kids admission and monthly fee collection behind Youth Centre's shared payment popup UX, record and surface accurate Payment Mode + TXN ID across all Kids receipts, Payment History, and Student Profiles, and keep Youth Centre isolated.
+
+**Files touched:**
+- CREATED: `docs/reports/v1.8.197-report.md`, `docs/reports/v1.8.197-changes.diff`
+- MODIFIED: `public/pages/school-admissions.html`, `public/js/pages/school-admissions.page.js`, `public/js/components/payment-popup.js`, `public/js/utils/school-billing.js`, `public/js/services/report.service.js`, `public/js/utils/school-receipt.js`, `public/js/pages/school-admission-receipt.page.js`, `public/js/utils/school-receipt-pdf.js`, `public/js/pages/school-fees.page.js`, `public/js/pages/school-fee-payment.page.js`, `public/js/pages/pending.page.js`, `public/js/pages/payment-receipt.page.js`, `public/pages/student-profile.html`, `public/js/pages/student-profile.page.js`, `docs/02-PROGRESS-LOG.md` (+ `bump-version.js 1.8.197` across `public/`)
+
+**Firestore changes:**
+- None (existing `firestore.rules` and `firestore.indexes.json` cover root `payments`, `bills`, `waivers`, and `counters`; `v1.8.196` index additions remain pending deploy).
+
+**Tested on (post-final-edit):**
+- `node tools/check-imports.js`: ✅ (`115` files, `454` imports, `398` exports, `0` errors)
+- `verify-kids-break-v196.mjs` on Firebase Emulators + Chrome: ✅ Full admission popup (`Cancel` + `UPI` `UPI-ADM-998877` + Receipt), `No payment` direct save, Monthly fee popup (`#/school-fees`, Student Profile `Collect`/`Record Payment`, `#/school-pending`), Kids Monthly Receipt, Profile Ledger (`#sp-kids-txns-tbody`), Payment History Mode/Details modal, `school_head` read-only + Firestore denials, Youth isolation, and 8 Kids pages (`3ms–173ms`), `0` errors.
+- `run-tests.mjs`, `verify-router-regression.mjs`, `verify-dashboard.mjs`, `verify-reports.mjs`, `verify-archives.mjs`, `verify-auth-profile.mjs`: ✅ all passed cleanly.
+
+---
+
 ### [2026-11-28 13:50] Version 1.8.196 — 2-Option Billing Start, 8-Page Unique Kids Speed Optimization & Reviewer Reports (Pending Deploy Approval)
 
 **What was built:**

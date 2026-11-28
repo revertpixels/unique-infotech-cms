@@ -11,20 +11,20 @@ import {
   serverTimestamp,
   runTransaction
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.196';
-import { openPopup } from '../components/modal.js?v=1.8.196';
-import { createSelect } from '../components/ui-select.js?v=1.8.196';
-import { confirmDialog } from '../components/ui-confirm.js?v=1.8.196';
-import { openMenu } from '../components/ui-menu.js?v=1.8.196';
-import { formatINR, formatDateIN, formatPersonName, formatGenderDisplay, initials } from '../utils/formatter.js?v=1.8.196';
-import { validatePhone, validateEmail, validateDOB, validateName } from '../utils/validator.js?v=1.8.196';
-import { registerDirty } from '../utils/unsaved-guard.js?v=1.8.196';
-import { resolveUserDisplay, getRoleTitle, loadUsersDirectory } from '../services/user-directory.service.js?v=1.8.196';
-import { compressTo100KB, blobToDataURL, isImageFile, formatBytes } from '../utils/image-compress.js?v=1.8.196';
-import { getStudentPhotoSrc, getStudentDocRecord, getStudentDocSrc, getStudentDocMime } from '../utils/student-media.js?v=1.8.196';
-import { todayISO } from '../utils/session-rules.js?v=1.8.196';
-import { getSelectedSessionId } from '../core/sessions.js?v=1.8.196';
-import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.196';
+import { showToast } from '../components/toast.js?v=1.8.197';
+import { openPopup } from '../components/modal.js?v=1.8.197';
+import { createSelect } from '../components/ui-select.js?v=1.8.197';
+import { confirmDialog } from '../components/ui-confirm.js?v=1.8.197';
+import { openMenu } from '../components/ui-menu.js?v=1.8.197';
+import { formatINR, formatDateIN, formatPersonName, formatGenderDisplay, initials } from '../utils/formatter.js?v=1.8.197';
+import { validatePhone, validateEmail, validateDOB, validateName } from '../utils/validator.js?v=1.8.197';
+import { registerDirty } from '../utils/unsaved-guard.js?v=1.8.197';
+import { resolveUserDisplay, getRoleTitle, loadUsersDirectory } from '../services/user-directory.service.js?v=1.8.197';
+import { compressTo100KB, blobToDataURL, isImageFile, formatBytes } from '../utils/image-compress.js?v=1.8.197';
+import { getStudentPhotoSrc, getStudentDocRecord, getStudentDocSrc, getStudentDocMime } from '../utils/student-media.js?v=1.8.197';
+import { todayISO } from '../utils/session-rules.js?v=1.8.197';
+import { getSelectedSessionId } from '../core/sessions.js?v=1.8.197';
+import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.197';
 import {
   fetchStudentPayments,
   recordPaymentTx,
@@ -35,8 +35,8 @@ import {
   calculateStudentFinancials,
   buildReceiptMenuItems,
   repairStudentAdmissionPayment
-} from '../services/payment.service.js?v=1.8.196';
-import { courseFeeOf, discountOf } from '../utils/fees.js?v=1.8.196';
+} from '../services/payment.service.js?v=1.8.197';
+import { courseFeeOf, discountOf } from '../utils/fees.js?v=1.8.197';
 import {
   isBreakOverdueReturn,
   formatBreakStatusText,
@@ -45,13 +45,13 @@ import {
   computeKidsStudentDues,
   computeLateFee,
   syncOpenKidsBills
-} from '../utils/school-billing.js?v=1.8.196';
+} from '../utils/school-billing.js?v=1.8.197';
 import {
   openKidsStartBreakModal,
   openKidsResumeBreakModal,
   openKidsUpgradePackageModal
-} from '../utils/school-break-modals.js?v=1.8.196';
-import { firstMonthlyMonth } from '../utils/school-receipt.js?v=1.8.196';
+} from '../utils/school-break-modals.js?v=1.8.197';
+import { firstMonthlyMonth } from '../utils/school-receipt.js?v=1.8.197';
 import {
   ensureReferenceData,
   getCachedReferenceData,
@@ -60,7 +60,7 @@ import {
   getCachedKidsHistory,
   isCacheStale,
   scheduleDelayedSkeleton
-} from '../services/report.service.js?v=1.8.196';
+} from '../services/report.service.js?v=1.8.197';
 
 const COL = 'students';
 const QUALIFICATIONS = ['VIII Pass', 'Secondary (X) Pass', 'Higher Secondary (XII) Pass', 'ITI', 'Diploma', 'Undergraduate (Graduate)', 'Postgraduate', 'Other'];
@@ -80,6 +80,8 @@ let docsCache = {};
 let paymentsCache = [];
 let kidsBillsCache = [];
 let kidsBreaksCache = [];
+let kidsWaiversCache = [];
+let kidsPaymentsHydrated = false;
 let branchesCache = null;
 let usersCache = null;
 let coursesCache = null;
@@ -140,10 +142,13 @@ function hydrateKidsCachesFromMemory(student) {
   }
   const hist = getCachedKidsHistory();
   if (hist?.entries) {
-    paymentsCache = hist.entries
-      .filter((e) => e.studentDocId === student.id || (student.studentId && e.studentId === student.studentId))
+    kidsPaymentsHydrated = true;
+    const mine = hist.entries.filter((e) => e.studentDocId === student.id || (student.studentId && e.studentId === student.studentId));
+    paymentsCache = mine
+      .filter((e) => !e.isPureWaiver)
       .map((e) => ({
         id: e.id,
+        type: e.type || 'KIDS_MONTHLY',
         studentDocId: e.studentDocId,
         studentId: e.studentId,
         billId: e.billId || '',
@@ -156,10 +161,31 @@ function hydrateKidsCachesFromMemory(student) {
         receivedTotal: e.totalReceived ?? e.amount ?? 0,
         lateFeeCovered: e.lateFeePaid || 0,
         feeCovered: e.amount || 0,
-        paymentMode: e.mode || 'cash',
+        mode: e.mode || e.paymentMode || 'cash',
+        paymentMode: e.paymentMode || e.mode || 'cash',
+        txnId: e.txnId || '',
+        remarks: e.remarks || '',
+        receivedBy: e.recordedBy || '',
+        recordedBy: e.recordedBy || '',
         recordedByName: e.recordedByName || '',
         recordedByDesignation: e.recordedByDesignation || ''
       }));
+    kidsWaiversCache = mine
+      .filter((e) => e.isPureWaiver)
+      .map((e) => ({
+        id: String(e.id || '').replace(/^waiv-/, ''),
+        studentId: e.studentDocId || e.studentId,
+        billId: e.billId || '',
+        month: e.month || '',
+        amount: e.lateFeeWaived || 0,
+        reason: e.waiverReason || e.remarks || 'Fee waiver',
+        waivedAt: e.date || '',
+        waivedBy: e.recordedBy || '',
+        waivedByName: e.recordedByName || '',
+        waivedByDesignation: e.recordedByDesignation || ''
+      }));
+  } else {
+    kidsPaymentsHydrated = false;
   }
   return true;
 }
@@ -560,6 +586,8 @@ export function unmount() {
   paymentsCache = [];
   kidsBillsCache = [];
   kidsBreaksCache = [];
+  kidsWaiversCache = [];
+  kidsPaymentsHydrated = false;
 }
 
 function showLoading(show) {
@@ -2294,10 +2322,16 @@ async function renderKidsCourseTab(s, course, batch) {
     const configuredAdm = Number(s.configuredAdmissionFee ?? s.admissionFee ?? 0);
     const paidAdm = Number(s.actualAmountReceived ?? s.admissionFee ?? 0);
     const monthlyFee = Number(s.monthlyFee || 0);
+    const payMethodCode = String(s.mode || s.paymentMethod || (paidAdm > 0 ? 'cash' : '')).toLowerCase().trim();
+    const PAY_METHOD_LABELS = { cash: 'Cash', upi: 'UPI', card: 'Card', bank: 'Bank Transfer', cheque: 'Cheque' };
+    const payMethodDisplay = payMethodCode
+      ? `${PAY_METHOD_LABELS[payMethodCode] || payMethodCode.toUpperCase()}${s.txnId ? ' (TXN: ' + s.txnId + ')' : ''}`
+      : '—';
     const rows = [
       { label: 'Configured Admission Fee', val: formatINR(configuredAdm), cls: 'num font-semibold' },
       { label: 'Admission Payment Mode', val: modeLabels[s.paymentMode || 'full'] || (s.paymentMode || 'Full'), cls: 'num' },
       { label: 'Admission Fee Paid', val: formatINR(paidAdm), cls: 'num font-bold text-success' },
+      { label: 'Payment Method', val: payMethodDisplay, cls: 'num' },
       { label: 'Monthly Tuition Fee', val: formatINR(monthlyFee) + '/mo', cls: 'num font-bold' },
       { label: 'First Monthly Billing Month', val: firstLabel, cls: 'num font-semibold' }
     ];
@@ -2673,20 +2707,26 @@ async function loadPayments({ forceFresh = false } = {}) {
       const bills = (cachedDs.bills || []).filter((b) => keys.includes(b.studentId)).map((b) => ({ ...b }));
       const breaks = (cachedDs.breaks || []).filter((b) => keys.includes(b.studentId) || (b.studentCode && keys.includes(b.studentCode))).map((b) => ({ ...b }));
       const payments = [];
-      const fetchPaymentsOnly = async () => {
+      const waivers = [];
+      const fetchPaymentsAndWaiversOnly = async () => {
         for (const k of keys) {
-          const pSnap = await getDocs(query(collection(db, 'payments'), where('studentId', '==', k))).catch(() => null);
+          const [pSnap, wSnap] = await Promise.all([
+            getDocs(query(collection(db, 'payments'), where('studentId', '==', k))).catch(() => null),
+            getDocs(query(collection(db, 'waivers'), where('studentId', '==', k))).catch(() => null)
+          ]);
           if (pSnap) pSnap.docs.forEach((d) => { if (!payments.some((x) => x.id === d.id)) payments.push({ id: d.id, ...d.data() }); });
+          if (wSnap) wSnap.docs.forEach((d) => { if (!waivers.some((x) => x.id === d.id)) waivers.push({ id: d.id, ...d.data() }); });
         }
       };
       const hasInlineAdm = currentStudent.actualAmountReceived != null || currentStudent.admissionFee != null;
       await Promise.all([
-        fetchPaymentsOnly(),
+        fetchPaymentsAndWaiversOnly(),
         hasInlineAdm
           ? Promise.resolve().then(() => {
             const amt = Number(currentStudent.actualAmountReceived ?? currentStudent.admissionFee ?? 0);
             paymentsCache = amt > 0 ? [{
               id: 'payment',
+              type: 'AD',
               studentDocId: currentStudent.id,
               studentId: currentStudent.studentId || currentStudent.id,
               receiptNo: currentStudent.receiptNo || '',
@@ -2694,8 +2734,16 @@ async function loadPayments({ forceFresh = false } = {}) {
               configuredAdmissionFee: Number(currentStudent.configuredAdmissionFee ?? currentStudent.admissionFee ?? amt),
               actualAmountReceived: amt,
               paymentMode: currentStudent.paymentMode || 'full',
+              mode: currentStudent.mode || currentStudent.paymentMethod || 'cash',
+              paymentMethod: currentStudent.paymentMethod || currentStudent.mode || 'cash',
+              txnId: currentStudent.txnId || '',
+              paymentRemarks: currentStudent.paymentRemarks || '',
               admissionDate: currentStudent.admissionDate || '',
+              date: currentStudent.paymentDate || currentStudent.admissionDate || '',
               createdBy: currentStudent.createdBy || '',
+              recordedBy: currentStudent.createdBy || '',
+              recordedByName: currentStudent.createdByName || '',
+              recordedByDesignation: currentStudent.createdByDesignation || '',
               createdAt: currentStudent.createdAt || null
             }] : [];
           })
@@ -2726,22 +2774,27 @@ async function loadPayments({ forceFresh = false } = {}) {
 
       kidsBillsCache = bills;
       kidsBreaksCache = breaks;
+      kidsWaiversCache = waivers;
+      kidsPaymentsHydrated = true;
       return;
     }
 
     const bills = [];
     const breaks = [];
     const payments = [];
+    const waivers = [];
     const fetchKeys = async () => {
       for (const k of keys) {
-        const [bSnap, brSnap, pSnap] = await Promise.all([
+        const [bSnap, brSnap, pSnap, wSnap] = await Promise.all([
           getDocs(query(collection(db, 'bills'), where('studentId', '==', k))).catch(() => null),
           getDocs(query(collection(db, 'breaks'), where('studentId', '==', k))).catch(() => null),
-          getDocs(query(collection(db, 'payments'), where('studentId', '==', k))).catch(() => null)
+          getDocs(query(collection(db, 'payments'), where('studentId', '==', k))).catch(() => null),
+          getDocs(query(collection(db, 'waivers'), where('studentId', '==', k))).catch(() => null)
         ]);
         if (bSnap) bSnap.docs.forEach((d) => { if (!bills.some((x) => x.id === d.id)) bills.push({ id: d.id, ...d.data() }); });
         if (brSnap) brSnap.docs.forEach((d) => { if (!breaks.some((x) => x.id === d.id)) breaks.push({ id: d.id, ...d.data() }); });
         if (pSnap) pSnap.docs.forEach((d) => { if (!payments.some((x) => x.id === d.id)) payments.push({ id: d.id, ...d.data() }); });
+        if (wSnap) wSnap.docs.forEach((d) => { if (!waivers.some((x) => x.id === d.id)) waivers.push({ id: d.id, ...d.data() }); });
       }
     };
     await Promise.all([
@@ -2773,6 +2826,8 @@ async function loadPayments({ forceFresh = false } = {}) {
 
     kidsBillsCache = bills;
     kidsBreaksCache = breaks;
+    kidsWaiversCache = waivers;
+    kidsPaymentsHydrated = true;
     return;
   }
 
@@ -3376,12 +3431,38 @@ async function renderKidsPaymentsTab() {
       }
     }
 
+    const isSuper = currentUserProfile?.role === 'superadmin';
+    const payableBillsAsc = bills
+      .filter((b) => {
+        const st = String(b.status || 'unpaid').toLowerCase();
+        return st === 'unpaid' || st === 'partial';
+      })
+      .sort((a, b) => (a.month || '').localeCompare(b.month || ''));
+
+    const recBtn = $('sp-kids-btn-record-payment');
+    if (recBtn) {
+      recBtn.hidden = !(isSuper && payableBillsAsc.length > 0);
+      recBtn.onclick = () => {
+        if (!payableBillsAsc.length) return;
+        openPaymentPopup({
+          student: currentStudent,
+          profile: currentUserProfile,
+          preselectedBillId: payableBillsAsc[0].id,
+          bills: payableBillsAsc,
+          from: 'profile',
+          onSuccess: reloadKidsStudentProfile
+        });
+      };
+    }
+
     if (!bills.length) {
       const tr = mk('tr');
       const td = mk('td', 'text-mute text-center', 'No monthly bills generated for this student yet.');
       td.colSpan = 7;
       tr.appendChild(td);
       tbody.appendChild(tr);
+      renderKidsTransactionsLedger();
+      if (typeof lucide !== 'undefined') lucide.createIcons();
       return;
     }
 
@@ -3427,10 +3508,37 @@ async function renderKidsPaymentsTab() {
       statusTd.appendChild(mk('span', 'ar-pill ' + pillCls, pillText));
 
       const actionTd = mk('td', 'act');
-      if (isPayable && currentUserProfile?.role === 'superadmin') {
-        const payBtn = mk('a', 'ar-btn primary sm', 'Pay Bill');
-        payBtn.href = '#/school-fee-payment?billId=' + b.id;
+      if (isPayable && isSuper) {
+        const payBtn = mk('button', 'ui-btn primary sm pf-btn-collect sp-table-action-btn');
+        payBtn.type = 'button';
+        payBtn.title = `Collect fee for ${b.month ? formatShortMonthYear(b.month) : 'month'}`;
+        payBtn.innerHTML = '<i data-lucide="wallet"></i><span>Collect</span>';
+        payBtn.onclick = () => {
+          openPaymentPopup({
+            student: currentStudent,
+            profile: currentUserProfile,
+            preselectedBillId: b.id,
+            bills: payableBillsAsc,
+            from: 'profile',
+            onSuccess: reloadKidsStudentProfile
+          });
+        };
         actionTd.appendChild(payBtn);
+      } else if (isPaid) {
+        const matchedPay = paymentsCache.find((p) => p.billId === b.id || (b.receiptNo && p.receiptNo === b.receiptNo));
+        const payDocId = b.lastPaymentId || (matchedPay && matchedPay.id) || '';
+        if (payDocId) {
+          const rcptBtn = mk('button', 'ui-btn ghost sm sp-table-action-btn');
+          rcptBtn.type = 'button';
+          rcptBtn.title = `View receipt for ${b.month ? formatShortMonthYear(b.month) : 'month'}`;
+          rcptBtn.innerHTML = '<i data-lucide="receipt"></i><span>Receipt</span>';
+          rcptBtn.onclick = () => {
+            location.hash = `#/payments/${encodeURIComponent(currentStudent.id)}/${encodeURIComponent(payDocId)}/receipt?from=profile`;
+          };
+          actionTd.appendChild(rcptBtn);
+        } else {
+          actionTd.textContent = '—';
+        }
       } else {
         actionTd.textContent = '—';
       }
@@ -3438,9 +3546,214 @@ async function renderKidsPaymentsTab() {
       tr.append(monthTd, dueTd, feeTd, lateTd, paidTd, statusTd, actionTd);
       tbody.appendChild(tr);
     });
+
+    renderKidsTransactionsLedger();
+    if (typeof lucide !== 'undefined') lucide.createIcons();
   } catch (e) {
     console.error('[student-profile] renderKidsPaymentsTab error', e);
   }
+}
+
+function renderKidsTransactionsLedger() {
+  const tbody = $('sp-kids-txns-tbody');
+  if (!tbody) return;
+  tbody.textContent = '';
+
+  const s = currentStudent;
+  if (!s) return;
+
+  if (!kidsPaymentsHydrated) {
+    const tr = mk('tr');
+    const td = mk('td', 'text-mute text-center', 'Loading payment transactions…');
+    td.colSpan = 9;
+    tr.appendChild(td);
+    tbody.appendChild(tr);
+    return;
+  }
+
+  const txns = [];
+  const admDoc = paymentsCache.find((p) => {
+    const t = String(p.type || '').toUpperCase();
+    return p.id === 'payment' || t === 'AD' || t === 'FULL';
+  });
+  const admAmt = admDoc
+    ? Number(admDoc.actualAmountReceived ?? admDoc.receivedTotal ?? admDoc.amount ?? admDoc.admissionFee ?? 0)
+    : Number(s.actualAmountReceived ?? s.admissionFee ?? 0);
+
+  if ((admDoc && admAmt > 0) || (admAmt > 0 && s.receiptNo && s.paymentMode !== 'none')) {
+    const modeRaw = (admDoc && (admDoc.mode || admDoc.paymentMethod)) || s.mode || s.paymentMethod || 'cash';
+    txns.push({
+      id: admDoc?.id || 'payment',
+      date: (admDoc && (admDoc.date || admDoc.paymentDate || admDoc.admissionDate)) || s.paymentDate || s.admissionDate || '',
+      receiptNo: (admDoc && admDoc.receiptNo) || s.receiptNo || '—',
+      type: 'AD',
+      typeLabel: (s.paymentMode === 'difference') ? 'Upgrade difference' : 'Admission fee',
+      amount: admAmt,
+      lateFeeAmount: 0,
+      mode: String(modeRaw || 'cash').toLowerCase(),
+      txnId: String((admDoc && admDoc.txnId) || s.txnId || '').trim(),
+      recordedBy: (admDoc && (admDoc.receivedBy || admDoc.recordedBy || admDoc.createdBy)) || s.createdBy || '-',
+      recordedByName: (admDoc && (admDoc.recordedByName || admDoc.receivedByName)) || s.createdByName || '',
+      recordedByDesignation: (admDoc && admDoc.recordedByDesignation) || s.createdByDesignation || '',
+      remarks: (admDoc && (admDoc.paymentRemarks || admDoc.remarks)) || s.paymentRemarks || ((s.paymentMode === 'difference') ? 'Upgrade difference payment' : 'Admission payment'),
+      waived: false,
+      isAdmission: true
+    });
+  }
+
+  const rootDocs = paymentsCache.filter((p) => {
+    const t = String(p.type || '').toUpperCase();
+    return p.id !== 'payment' && t !== 'AD' && t !== 'FULL';
+  });
+  const allocs = [];
+  const summaries = [];
+  rootDocs.forEach((p) => {
+    if (p.billId || p.month || String(p.type || '').toUpperCase() === 'KIDS_MONTHLY') allocs.push(p);
+    else summaries.push(p);
+  });
+  const allocKeys = new Set(allocs.map((a) => `${a.studentId || ''}|${a.receivedDate || a.date || ''}`));
+
+  allocs.forEach((a) => {
+    const lf = Number(a.lateFeeCovered || 0);
+    const totalAmt = Number(a.amount ?? a.actualAmountReceived ?? a.receivedTotal ?? 0);
+    const feePart = a.feeCovered != null ? Number(a.feeCovered) : Math.max(0, totalAmt - lf);
+    txns.push({
+      id: a.id,
+      date: a.receivedDate || a.date || '',
+      receiptNo: a.receiptNo || '—',
+      type: 'KIDS_MONTHLY',
+      typeLabel: a.month ? `Monthly Fee (${formatShortMonthYear(a.month)})` : 'Monthly Fee',
+      amount: feePart,
+      lateFeeAmount: lf,
+      mode: String(a.mode || a.paymentMode || 'cash').toLowerCase(),
+      txnId: String(a.txnId || '').trim(),
+      recordedBy: a.receivedBy || a.recordedBy || '-',
+      recordedByName: a.receivedByName || a.recordedByName || '',
+      recordedByDesignation: a.recordedByDesignation || '',
+      remarks: a.remarks || (a.month ? `Monthly fee (${a.month})` : 'Monthly fee'),
+      waived: false
+    });
+  });
+
+  summaries.forEach((p) => {
+    const pType = String(p.type || '').toUpperCase();
+    if (pType !== 'UPGRADE' && allocKeys.has(`${p.studentId || ''}|${p.receivedDate || p.date || ''}`)) return;
+    const amt = Number(p.totalAmount ?? p.amount ?? 0);
+    if (amt <= 0) return;
+    txns.push({
+      id: p.id,
+      date: p.receivedDate || p.date || '',
+      receiptNo: p.receiptNo || '—',
+      type: pType === 'UPGRADE' ? 'UPGRADE' : 'KIDS_MONTHLY',
+      typeLabel: pType === 'UPGRADE' ? 'Level upgrade' : 'Monthly Fee',
+      amount: amt,
+      lateFeeAmount: 0,
+      mode: String(p.mode || p.paymentMode || 'cash').toLowerCase(),
+      txnId: String(p.txnId || '').trim(),
+      recordedBy: p.receivedBy || p.recordedBy || '-',
+      recordedByName: p.receivedByName || p.recordedByName || '',
+      recordedByDesignation: p.recordedByDesignation || '',
+      remarks: p.remarks || (pType === 'UPGRADE' ? 'Upgrade difference' : '—'),
+      waived: false
+    });
+  });
+
+  (kidsWaiversCache || []).forEach((w) => {
+    txns.push({
+      id: w.id,
+      date: w.waivedAt || '',
+      receiptNo: w.receiptNo || 'WAIVER',
+      type: 'WA',
+      typeLabel: w.month ? `Late Fine Waiver (${formatShortMonthYear(w.month)})` : 'Fee Waiver',
+      amount: Number(w.amount || 0),
+      lateFeeAmount: 0,
+      mode: 'waiver',
+      txnId: '',
+      recordedBy: w.waivedBy || '-',
+      recordedByName: w.waivedByName || '',
+      recordedByDesignation: w.waivedByDesignation || '',
+      remarks: w.reason || 'Fee waiver',
+      waived: true
+    });
+  });
+
+  txns.sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+
+  if (!txns.length) {
+    const tr = mk('tr');
+    const td = mk('td', 'text-mute text-center', 'No payment transactions recorded yet.');
+    td.colSpan = 9;
+    tr.appendChild(td);
+    tbody.appendChild(tr);
+    return;
+  }
+
+  txns.forEach((t) => {
+    const tr = mk('tr');
+    const dateTd = mk('td', '', formatDateIN(t.date));
+    const rcptTd = mk('td', 'font-semibold font-mono', t.receiptNo || '—');
+
+    const typeTd = mk('td');
+    const pillCls = t.waived ? 'neutral' : (t.type === 'AD' || t.type === 'UPGRADE' ? 'sky' : 'up');
+    typeTd.appendChild(mk('span', 'pill ' + pillCls, t.waived ? `${t.typeLabel} [Waived]` : t.typeLabel));
+
+    const amountText = t.waived
+      ? `${formatINR(t.amount || 0)} [Waived]`
+      : `${formatINR(t.amount || 0)}${t.lateFeeAmount > 0 ? ` (+ ₹${t.lateFeeAmount} fine)` : ''}`;
+    const amtTd = mk('td', t.waived ? 'num text-mute' : 'num font-semibold text-success', amountText);
+
+    const modeTd = mk('td');
+    const modeCode = String(t.mode || 'cash').toLowerCase();
+    modeTd.appendChild(mk('span', 'la-mode ' + modeCode, modeCode.toUpperCase()));
+
+    const txnTd = mk('td', 'font-mono text-mute', t.txnId || '—');
+
+    const emailNorm = String(t.recordedBy || '-').toLowerCase().trim();
+    const dirDisp = emailNorm && emailNorm !== '-'
+      ? resolveUserDisplay(emailNorm, t.recordedByName, t.recordedByDesignation)
+      : { found: false, name: '', designation: '' };
+    let headName = (dirDisp.found && dirDisp.name) || t.recordedByName || '';
+    if (!headName && emailNorm && currentUserProfile?.email && emailNorm === currentUserProfile.email.toLowerCase()) {
+      headName = currentUserProfile.name || '';
+    }
+    headName = headName ? (formatPersonName(headName) || headName) : '';
+    const headDesig = (dirDisp.found && dirDisp.designation)
+      || (t.recordedByDesignation ? formatPersonName(t.recordedByDesignation) : '');
+
+    const collectorTd = mk('td', 'sp-collector-cell');
+    let collectorText = 'Head Office';
+    if (emailNorm && emailNorm !== '-') collectorText += ' - ' + emailNorm;
+    if (headName) collectorText += ' by ' + headName + (headDesig ? ' (' + headDesig + ')' : '');
+    collectorTd.textContent = collectorText;
+
+    const remarksTd = mk('td', '', t.remarks || '—');
+
+    const actionTd = mk('td', 'act');
+    if (t.isAdmission) {
+      const rcptBtn = mk('button', 'ui-btn ghost sm sp-table-action-btn');
+      rcptBtn.type = 'button';
+      rcptBtn.title = 'View Admission Receipt';
+      rcptBtn.innerHTML = '<i data-lucide="receipt"></i><span>Receipt</span>';
+      rcptBtn.onclick = () => {
+        location.hash = `#/school-admissions/${encodeURIComponent(s.id)}/receipt`;
+      };
+      actionTd.appendChild(rcptBtn);
+    } else if (!t.waived && t.id && t.id !== 'payment') {
+      const rcptBtn = mk('button', 'ui-btn ghost sm sp-table-action-btn');
+      rcptBtn.type = 'button';
+      rcptBtn.title = 'View Receipt';
+      rcptBtn.innerHTML = '<i data-lucide="receipt"></i><span>Receipt</span>';
+      rcptBtn.onclick = () => {
+        location.hash = `#/payments/${encodeURIComponent(s.id)}/${encodeURIComponent(t.id)}/receipt?from=profile`;
+      };
+      actionTd.appendChild(rcptBtn);
+    } else {
+      actionTd.textContent = '—';
+    }
+
+    tr.append(dateTd, rcptTd, typeTd, amtTd, modeTd, txnTd, collectorTd, remarksTd, actionTd);
+    tbody.appendChild(tr);
+  });
 }
 
 /**

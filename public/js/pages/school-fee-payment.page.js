@@ -1,19 +1,16 @@
-// school-fee-payment.page.js � Record a monthly fee payment for a specific bill.
-// Super Admin only. Shows bill details and accepts payment amount.
+// school-fee-payment.page.js — Record a monthly fee payment for a specific bill.
+// Super Admin only. Shows bill details and opens the shared payment modal.
 import { db } from '../config/firebase-config.js';
-import { doc, getDoc, updateDoc, serverTimestamp, runTransaction } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.196';
-import { formatINR, formatDateIN } from '../utils/formatter.js?v=1.8.196';
-import { computeLateFee, recordPayment } from '../utils/school-billing.js?v=1.8.196';
-import { localToday } from '../utils/school-lifecycle.js?v=1.8.196';
-import { playPaymentSuccessSound } from '../utils/sound.js?v=1.8.196';
-import { resolveUserDisplay, getRoleTitle } from '../services/user-directory.service.js?v=1.8.196';
+import { doc, getDoc } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
+import { showToast } from '../components/toast.js?v=1.8.197';
+import { formatINR } from '../utils/formatter.js?v=1.8.197';
+import { computeLateFee, fetchOpenKidsBillsForStudent } from '../utils/school-billing.js?v=1.8.197';
+import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.197';
+import { getRoleTitle } from '../services/user-directory.service.js?v=1.8.197';
 
 const BILLS_COL = 'bills';
-const PAYMENTS_COL = 'payments';
 
 function $(id) { const el = document.getElementById(id); if (!el) console.warn('[school-fee-payment] missing #' + id); return el; }
-function mk(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; }
 
 export async function mount({ container, profile, ctx, billId }) {
   const school = ctx === 'school';
@@ -27,12 +24,30 @@ export async function mount({ container, profile, ctx, billId }) {
     return;
   }
 
-  const form = $('sf-pay-form');
+  const form = $('sk-pay-form');
   const cancelBtn = $('sk-pay-cancel');
   const saveBtn = $('sk-pay-save');
   if (!form || !cancelBtn || !saveBtn) return;
 
-  let bill;
+  let bill = null;
+  let studentObj = null;
+  let openBills = [];
+
+  function rupees(n) { return Math.round(Number(n || 0) * 100) / 100; }
+
+  function openBillPaymentModal() {
+    if (!bill || !studentObj) return;
+    openPaymentPopup({
+      student: studentObj,
+      profile,
+      preselectedBillId: bill.id,
+      bills: openBills.length ? openBills : [bill],
+      from: 'school-fees',
+      onSuccess: () => {
+        location.hash = '#/school-fees';
+      }
+    });
+  }
 
   async function load() {
     try {
@@ -42,61 +57,44 @@ export async function mount({ container, profile, ctx, billId }) {
         return;
       }
       bill = Object.assign({ id: snap.id }, snap.data());
-      const student = await getDoc(doc(db, 'students', bill.studentId));
-      const sData = student.exists() ? student.data() : {};
+      const studentSnap = await getDoc(doc(db, 'students', bill.studentId));
+      const sData = studentSnap.exists() ? studentSnap.data() : {};
+      studentObj = {
+        id: studentSnap.exists() ? studentSnap.id : bill.studentId,
+        ...sData,
+        studentId: sData.studentId || bill.studentCode || bill.studentId,
+        name: sData.name || bill.studentName || 'Student',
+        ctx: 'school'
+      };
+      openBills = await fetchOpenKidsBillsForStudent(studentObj).catch(() => [bill]);
 
-      $('sk-pay-student-id').textContent = sData.studentId || '-';
-      $('sk-pay-student-name').textContent = sData.name || '-';
+      $('sk-pay-student-id').textContent = studentObj.studentId || '-';
+      $('sk-pay-student-name').textContent = studentObj.name || '-';
       $('sk-pay-month').textContent = bill.month || '-';
       $('sk-pay-monthly-fee').textContent = formatINR(bill.monthlyFee || 0);
       const late = computeLateFee(bill);
       $('sk-pay-late-fee').textContent = formatINR(late);
-      $('sk-pay-total-due').textContent = formatINR(rupees(bill.monthlyFee) + late);
-      const remaining = rupees(bill.monthlyFee) + late - rupees(bill.paidAmount || 0);
-      $('sk-pay-amount').value = formatINR(remaining);
-      $('sk-pay-amount').max = remaining;
+      const totalDue = Math.max(0, rupees(bill.monthlyFee) + late - rupees(bill.paidAmount || 0) - rupees(bill.waivedAmount || 0));
+      $('sk-pay-total-due').textContent = formatINR(totalDue);
+      const amtInput = $('sk-pay-amount');
+      if (amtInput) {
+        amtInput.value = String(totalDue);
+        amtInput.readOnly = true;
+      }
+      const st = String(bill.status || 'unpaid').toLowerCase();
+      if (st === 'paid' || st === 'break-waived' || st === 'stopped') {
+        saveBtn.disabled = true;
+        showToast({ type: 'info', message: 'This monthly bill is already settled.' });
+      }
     } catch (e) {
       console.error('[school-fee-payment] load failed', e);
       showToast({ type: 'error', message: 'Could not load bill (' + (e.code || 'error') + ').' });
     }
   }
 
-  function rupees(n) { return Math.round(Number(n || 0) * 100) / 100; }
-
-  form.addEventListener('submit', async ev => {
+  form.addEventListener('submit', (ev) => {
     ev.preventDefault();
-    const amountStr = $('sk-pay-amount').value.trim();
-    const amount = Number(amountStr.replace(/[?,]/g, ''));
-    if (!amount || amount <= 0) { showToast({ type: 'error', message: 'Enter a valid payment amount.' }); return; }
-    const late = computeLateFee(bill);
-    const totalDue = rupees(bill.monthlyFee) + late - rupees(bill.paidAmount || 0);
-    if (amount > totalDue) { showToast({ type: 'error', message: 'Amount exceeds outstanding balance.' }); return; }
-
-    saveBtn.disabled = true;
-    try {
-      const who = (profile && profile.email) || '';
-      const disp = resolveUserDisplay(who, profile?.name, profile?.designation);
-      const today = localToday();
-      const result = await recordPayment(db, {
-        studentId: bill.studentId,
-        amount,
-        receivedDate: today,
-        receivedBy: who,
-        receivedByName: disp.name || profile?.name || '',
-        receivedByDesignation: disp.designation || profile?.designation || '',
-        allocation: 'auto'
-      });
-      window.dispatchEvent(new CustomEvent('uic:data-mutated', { detail: { reason: 'kids:payment' } }));
-      await load(); // refresh bill status
-      playPaymentSuccessSound();
-      showToast({ type: 'success', message: 'Payment of ' + formatINR(amount) + ' recorded.' });
-      location.hash = '#/school-fees';
-    } catch (e) {
-      console.error('[school-fee-payment] payment failed', e);
-      showToast({ type: 'error', message: e.message || 'Payment failed.' });
-    } finally {
-      saveBtn.disabled = false;
-    }
+    openBillPaymentModal();
   });
 
   cancelBtn.addEventListener('click', () => {
@@ -107,4 +105,3 @@ export async function mount({ container, profile, ctx, billId }) {
     console.error('[school-fee-payment] init load', e);
   }
 }
-

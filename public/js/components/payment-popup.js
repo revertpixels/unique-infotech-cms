@@ -1,12 +1,12 @@
 // payment-popup.js — Single Shared Payment Popup for Student Profile and Pay Fees
 import { auth } from '../config/firebase-config.js';
-import { openPopup } from './modal.js?v=1.8.196';
-import { createSelect } from './ui-select.js?v=1.8.196';
-import { formatINR, formatDateIN } from '../utils/formatter.js?v=1.8.196';
-import { todayISO } from '../utils/session-rules.js?v=1.8.196';
-import { getRoleTitle, resolveUserDisplay } from '../services/user-directory.service.js?v=1.8.196';
-import { showToast } from './toast.js?v=1.8.196';
-import { playPaymentSuccessSound } from '../utils/sound.js?v=1.8.196';
+import { openPopup } from './modal.js?v=1.8.197';
+import { createSelect } from './ui-select.js?v=1.8.197';
+import { formatINR, formatDateIN } from '../utils/formatter.js?v=1.8.197';
+import { todayISO } from '../utils/session-rules.js?v=1.8.197';
+import { getRoleTitle, resolveUserDisplay } from '../services/user-directory.service.js?v=1.8.197';
+import { showToast } from './toast.js?v=1.8.197';
+import { playPaymentSuccessSound } from '../utils/sound.js?v=1.8.197';
 import {
   recordPayment,
   recordAdmissionWithPayment,
@@ -16,7 +16,13 @@ import {
   isAdmissionFeePaid,
   isMaterialFeePaid,
   isExamFeePaid
-} from '../services/payment.service.js?v=1.8.196';
+} from '../services/payment.service.js?v=1.8.197';
+import {
+  computeLateFee,
+  formatShortMonthYear,
+  fetchOpenKidsBillsForStudent,
+  recordKidsBillPayment
+} from '../utils/school-billing.js?v=1.8.197';
 
 function formatDateTime(d) {
   const dt = d instanceof Date ? d : new Date(d);
@@ -193,7 +199,9 @@ export function promptOpenReceipt({
   openBtn.innerHTML = '<i data-lucide="receipt"></i><span>Open Receipt</span>';
   openBtn.onclick = () => {
     close();
-    if (from === 'admissions') {
+    if (from === 'school-admissions') {
+      location.hash = `#/school-admissions/${studentDocId}/receipt`;
+    } else if (from === 'admissions') {
       location.hash = `#/admissions/${studentDocId}/receipt`;
     } else {
       location.hash = `#/payments/${studentDocId}/${paymentId}/receipt?from=${from}`;
@@ -207,7 +215,9 @@ export function promptOpenReceipt({
   printBtn.innerHTML = '<i data-lucide="printer"></i><span>Print</span>';
   printBtn.onclick = () => {
     close();
-    if (from === 'admissions') {
+    if (from === 'school-admissions') {
+      location.hash = `#/school-admissions/${studentDocId}/receipt?print=1`;
+    } else if (from === 'admissions') {
       location.hash = `#/admissions/${studentDocId}/receipt?print=1`;
     } else {
       location.hash = `#/payments/${studentDocId}/${paymentId}/receipt?from=${from}&print=1`;
@@ -252,6 +262,8 @@ export async function openPaymentPopup({
   isAdmission = false,
   profile,
   preselectedOption,
+  preselectedBillId = '',
+  bills: preloadedBills = null,
   sessionsCache,
   activeSession,
   payments,
@@ -261,6 +273,7 @@ export async function openPaymentPopup({
   const s = student;
   if (!s) return;
   const isSuper = profile?.role === 'superadmin';
+  const isKids = s.ctx === 'school' || pendingAdmission?.org === 'school';
   const sched = Array.isArray(s.feeSchedule) ? s.feeSchedule : [];
   const snap = s?.feeSnapshot || {};
   const admFee = Number(snap.admission ?? s?.admissionFee ?? s?.dueAtAdmission?.admission ?? 0);
@@ -272,7 +285,15 @@ export async function openPaymentPopup({
 
   if (isAdmission || pendingAdmission) {
     const pa = pendingAdmission || {};
-    if (pa.isFull || s.paymentPlan === 'full') {
+    if (isKids) {
+      const kAdmFee = Number(pa.admFee ?? admFee ?? 0);
+      const pmLabel = pa.paymentMode === 'difference' ? 'Difference Payment' : 'Full Payment';
+      typeOptions.push({
+        value: 'AD',
+        label: `Admission Fee (${pmLabel}) — ${formatINR(kAdmFee)}`,
+        icon: 'credit-card'
+      });
+    } else if (pa.isFull || s.paymentPlan === 'full') {
       const fullAmt = Number(pa.fullAmt || s.fullPaymentAmount || s.dueAtAdmission?.full || s.feeTotal || 0);
       const actualMatFee = Number(pa.matFee ?? s.dueAtAdmission?.material ?? matFee ?? 0);
       const totalFullCollection = fullAmt + actualMatFee;
@@ -291,6 +312,23 @@ export async function openPaymentPopup({
         icon: 'credit-card'
       });
     }
+  } else if (isKids) {
+    let openBills = Array.isArray(preloadedBills)
+      ? preloadedBills.filter((b) => ['unpaid', 'partial'].includes(String(b?.status || 'unpaid').toLowerCase()))
+      : null;
+    if (!openBills || !openBills.length) {
+      openBills = await fetchOpenKidsBillsForStudent(s);
+    }
+    openBills.slice().sort((a, b) => String(a.month || '').localeCompare(String(b.month || ''))).forEach((b) => {
+      const baseRem = Math.max(0, Math.round((Number(b.monthlyFee || 0) - Number(b.paidAmount || 0) - Number(b.waivedAmount || 0)) * 100) / 100);
+      const mLabel = formatShortMonthYear(b.month) || b.month || 'Bill';
+      typeOptions.push({
+        value: 'BILL_' + b.id,
+        label: `Monthly Fee (${mLabel}) — ${formatINR(baseRem)}`,
+        icon: 'calendar',
+        billObj: b
+      });
+    });
   } else {
     // Use provided payments or refresh fresh from Firestore
     let paymentsList = Array.isArray(payments) ? payments : [];
@@ -381,7 +419,10 @@ export async function openPaymentPopup({
   }
 
   let initialTypeVal = typeOptions[0]?.value;
-  if (preselectedOption) {
+  if (isKids && preselectedBillId) {
+    const foundBillOpt = typeOptions.find((o) => o.value === 'BILL_' + preselectedBillId);
+    if (foundBillOpt) initialTypeVal = foundBillOpt.value;
+  } else if (preselectedOption) {
     let targetVal = '';
     if (preselectedOption === 'FULL') targetVal = 'FULL';
     else if (preselectedOption === 'AD') targetVal = 'AD';
@@ -698,7 +739,10 @@ export async function openPaymentPopup({
 
     if (isAdmission || pendingAdmission) {
       const pa = pendingAdmission || {};
-      if (val === 'AD') {
+      if (isKids) {
+        baseAmt = Number(pa.admFee ?? admFee ?? 0);
+        fineAmt = 0;
+      } else if (val === 'AD') {
         baseAmt = Number(pa.admFee ?? admFee) + Number(pa.matFee ?? matFee);
         fineAmt = 0;
       } else if (val === 'FULL') {
@@ -707,6 +751,11 @@ export async function openPaymentPopup({
         baseAmt = fullAmt + actualMatFee;
         fineAmt = 0;
       }
+    } else if (val && val.startsWith('BILL_')) {
+      const billOpt = typeOptions.find((o) => o.value === val);
+      const b = billOpt?.billObj;
+      baseAmt = b ? Math.max(0, Math.round((Number(b.monthlyFee || 0) - Number(b.paidAmount || 0) - Number(b.waivedAmount || 0)) * 100) / 100) : 0;
+      fineAmt = b ? computeLateFee(b) : 0;
     } else if (val === 'AD') {
       baseAmt = admFee;
       fineAmt = 0;
@@ -832,6 +881,35 @@ export async function openPaymentPopup({
       try {
         const authEmail = auth?.currentUser?.email || profile?.email || '';
         const userDisp = resolveUserDisplay(authEmail, profile?.name, profile?.designation);
+        if (isKids && typeof pendingAdmission?.onConfirmPayment === 'function') {
+          const kidsRes = await pendingAdmission.onConfirmPayment({
+            mode: modeSel.value,
+            txnId: txnInput.value.trim(),
+            remarks: remInput.value.trim(),
+            paymentDate: todayISO()
+          });
+          showToast({ type: 'success', message: 'Admission & payment recorded! Student ID: ' + kidsRes.studentId + ' | Receipt No: ' + kidsRes.receiptNo });
+          playPaymentSuccessSound();
+          popup.close();
+          promptOpenReceipt({
+            studentDocId: kidsRes.id || kidsRes.studentDocId,
+            paymentId: 'payment',
+            receiptNo: kidsRes.receiptNo,
+            student: { name: s.name, studentId: kidsRes.studentId },
+            forText: 'Admission Fee (' + (pendingAdmission.paymentMode === 'difference' ? 'Difference' : 'Full Payment') + ')',
+            amount: baseAmount,
+            lateFee: 0,
+            totalPaid: baseAmount,
+            mode: modeSel.value,
+            txnId: txnInput.value.trim(),
+            date: new Date(),
+            from: 'school-admissions'
+          });
+          if (typeof onSuccess === 'function') {
+            await onSuccess({ ...kidsRes, mode: modeSel.value, txnId: txnInput.value.trim() });
+          }
+          return;
+        }
         const res = await recordAdmissionWithPayment({
           pendingAdmission,
           paymentParams: {
@@ -877,6 +955,62 @@ export async function openPaymentPopup({
       } catch (err) {
         console.error('[payment-popup] admission payment transaction failed', err);
         showToast({ type: 'error', message: 'Admission save failed: ' + (err.message || 'Transaction error') });
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Confirm & Record Payment';
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+      }
+      return;
+    }
+
+    if (isKids && val.startsWith('BILL_')) {
+      saveBtn.disabled = true;
+      saveBtn.innerHTML = '<i data-lucide="loader-2" class="spin"></i> Processing...';
+      if (typeof lucide !== 'undefined') lucide.createIcons();
+
+      try {
+        const billOpt = typeOptions.find((o) => o.value === val);
+        const authEmail = auth?.currentUser?.email || profile?.email || '';
+        const userDisp = resolveUserDisplay(authEmail, profile?.name, profile?.designation);
+        const kidsPayRes = await recordKidsBillPayment({
+          studentDoc: s,
+          bill: billOpt?.billObj,
+          mode: modeSel.value,
+          txnId: txnInput.value.trim(),
+          remarks: remInput.value.trim(),
+          waived,
+          waiverReason,
+          paymentDate: todayISO(),
+          userEmail: authEmail,
+          userName: userDisp.name || profile?.name || '',
+          userDesignation: userDisp.designation || profile?.designation || '',
+          userRole: profile?.role || ''
+        });
+        window.dispatchEvent(new CustomEvent('uic:data-mutated', { detail: { reason: 'kids:payment' } }));
+        showToast({ type: 'success', message: 'Payment recorded! Receipt No: ' + kidsPayRes.receiptNo });
+        playPaymentSuccessSound();
+        popup.close();
+
+        const mText = formatShortMonthYear(kidsPayRes.month) || kidsPayRes.month || 'Monthly Fee';
+        promptOpenReceipt({
+          studentDocId: kidsPayRes.studentDocId || s.id,
+          paymentId: kidsPayRes.paymentId,
+          receiptNo: kidsPayRes.receiptNo,
+          student: s,
+          forText: `Monthly Fee (${mText})`,
+          amount: kidsPayRes.feeCovered,
+          lateFee: kidsPayRes.lateFeePaid,
+          totalPaid: kidsPayRes.totalPaid,
+          mode: modeSel.value,
+          txnId: txnInput.value.trim(),
+          date: new Date(),
+          from
+        });
+        if (typeof onSuccess === 'function') {
+          await onSuccess(kidsPayRes);
+        }
+      } catch (err) {
+        console.error('[payment-popup] kids monthly payment failed', err);
+        showToast({ type: 'error', message: 'Payment failed: ' + (err.message || 'Transaction error') });
         saveBtn.disabled = false;
         saveBtn.textContent = 'Confirm & Record Payment';
         if (typeof lucide !== 'undefined') lucide.createIcons();

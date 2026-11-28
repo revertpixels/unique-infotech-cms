@@ -27,23 +27,23 @@ import {
   fetchStudentPayments,
   calculateStudentFinancials,
   isStudentEligibleForDues
-} from './payment.service.js?v=1.8.196';
+} from './payment.service.js?v=1.8.197';
 import {
   evaluateKidsPendingBills,
   buildKidsPaymentLedger,
   syncOpenKidsBills
-} from '../utils/school-billing.js?v=1.8.196';
-import { getStudentPhotoSrc } from '../utils/student-media.js?v=1.8.196';
+} from '../utils/school-billing.js?v=1.8.197';
+import { getStudentPhotoSrc } from '../utils/student-media.js?v=1.8.197';
 import {
   todayISO,
   fmtDate,
   getOrgTimezone
-} from '../utils/session-rules.js?v=1.8.196';
-import { formatINR } from '../utils/formatter.js?v=1.8.196';
-import { formatPersonName } from '../utils/formatter.js?v=1.8.196';
-import { resolveUserDisplay, loadUsersDirectory, getRoleTitle } from './user-directory.service.js?v=1.8.196';
-import { loadPdfMake, urlToDataUrl } from '../utils/admission-receipt-pdf.js?v=1.8.196';
-import { loadAllSessions, getAllCachedSessions, hasFreshSessionsCache } from '../core/sessions.js?v=1.8.196';
+} from '../utils/session-rules.js?v=1.8.197';
+import { formatINR } from '../utils/formatter.js?v=1.8.197';
+import { formatPersonName } from '../utils/formatter.js?v=1.8.197';
+import { resolveUserDisplay, loadUsersDirectory, getRoleTitle } from './user-directory.service.js?v=1.8.197';
+import { loadPdfMake, urlToDataUrl } from '../utils/admission-receipt-pdf.js?v=1.8.197';
+import { loadAllSessions, getAllCachedSessions, hasFreshSessionsCache } from '../core/sessions.js?v=1.8.197';
 
 const CACHE_KEY = 'financialReports';
 export const CACHE_STALE_MS = 30000;
@@ -2394,7 +2394,10 @@ export async function loadKidsPaymentHistory({
           configuredAdmissionFee: Number(s.configuredAdmissionFee ?? s.admissionFee ?? amt),
           actualAmountReceived: amt,
           paymentMode: s.paymentMode || 'full',
+          mode: s.mode || s.paymentMethod || '',
+          paymentMethod: s.paymentMethod || s.mode || '',
           txnId: s.txnId || '',
+          paymentRemarks: s.paymentRemarks || '',
           admissionDate: s.admissionDate || '',
           createdBy: s.createdBy || '',
           recordedByRole: s.recordedByRole || '',

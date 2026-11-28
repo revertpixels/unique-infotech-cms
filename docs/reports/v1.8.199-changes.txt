@@ -1,0 +1,2501 @@
+diff --git a/docs/02-PROGRESS-LOG.md b/docs/02-PROGRESS-LOG.md
+index 4fcfe55..fc2ac08 100644
+--- a/docs/02-PROGRESS-LOG.md
++++ b/docs/02-PROGRESS-LOG.md
+@@ -39,6 +39,42 @@
+ 
+ ---
+ 
++### [2026-11-28 20:40] Version 1.8.199 — Optional Non-Cash TXN ID, Two Kids Profile Docs & Unified Kids Admission Popups
++
++**What was built:**
++- **Transaction / Reference ID Optional Again (`public/js/components/payment-popup.js`, Youth + Kids)**:
++  - Restored Transaction / Reference ID to optional for all non-cash modes (`UPI`, `Card`, `Bank Transfer`, `Cheque`) with label `(Optional)`, `required = false`, and no empty validation block on save; kept `Cash` disabled (`(N/A for Cash)`).
++- **Kids Admission & Profile Documents Restricted to 2 (`public/pages/school-admissions.html`, `public/js/pages/student-profile.page.js`)**:
++  - Updated Kids admission form card labels to **Passport Photo** and **Student Signature** (no `dobProof`/`marksheet` inputs).
++  - Updated `renderMetrics()` and `renderDocumentsTab()` in `student-profile.page.js` so `ctx === 'school'` displays strictly `Passport Photo` and `Student Signature` only (leaving any legacy `dobProof`/`marksheet` Firestore docs untouched in DB). Youth Centre (`ctx === 'youth'`) still shows all 4 document slots unchanged.
++- **Kids No-Payment Confirm Popup, Unified `"Admission successful"` Popup & Slip Polish (`public/js/pages/school-admissions.page.js`, `public/js/components/payment-popup.js`, `public/css/pages/pay-fees.css`, `public/js/pages/school-admission-receipt.page.js`, `public/js/utils/school-receipt-pdf.js`)**:
++  - Added `"Confirm admission"` modal (`openKidsNoPaymentConfirmPopup`) on `#/school-students` for `No payment` (`charge === 0`) showing Student, Level, Batch, Admission Date, `Admission fee: ₹0 (No payment)`, Reason, Monthly Billing summary, and **Cancel** (closes without saving, keeps form filled) / **Confirm admission** buttons.
++  - Added shared `promptKidsAdmissionSuccess` (`"Admission successful"`, animated green checkmark draw + pop via `@keyframes pfSuccessPop` / `pfCheckDraw`, 4 buttons: **View admission slip**, **Print**, **Open profile**, **Admit another**) used by BOTH Paid (`!isUpgrade`) and No-payment Kids admissions (`openPaymentPopup` Upgrade & Monthly fees still use `"Payment Recorded!"` / `promptOpenReceipt`).
++  - Updated Kids No-payment Admission Slip (HTML & PDF) to show `"No payment – <reason>"` and `₹0` (HTML), and strictly omit Payment mode & TXN ID rows whenever `paymentMode === 'none'` or `actualAmountReceived <= 0`.
++- **Version Bump & Report**:
++  - Bumped `?v=` / `APP_VERSION` to `1.8.199` (`360` replacements across `55` files) and added `docs/reports/v1.8.199-report.md` and `docs/reports/v1.8.199-changes.txt` (plain `.txt` diff; no `.diff` files). **Not deployed yet** (awaiting user deploy go-ahead).
++
++**Why:**
++- Make TXN ID entry non-blocking when collecting UPI/Card/Bank/Cheque receipts, keep Kids records limited to Passport Photo & Student Signature only, prevent accidental one-click No-payment Kids admissions, and give both Paid and No-payment Kids admissions one consistent success experience with slip/print/profile/admit-another actions.
++
++**Files touched:**
++- CREATED: `docs/reports/v1.8.199-report.md`, `docs/reports/v1.8.199-changes.txt`
++- MODIFIED: `public/js/components/payment-popup.js`, `public/pages/school-admissions.html`, `public/js/pages/school-admissions.page.js`, `public/js/pages/student-profile.page.js`, `public/js/pages/school-admission-receipt.page.js`, `public/js/utils/school-receipt-pdf.js`, `public/css/pages/pay-fees.css`, `docs/02-PROGRESS-LOG.md` (+ `bump-version.js 1.8.199` across `55` files in `public/`)
++
++**Firestore changes:**
++- None (schema, rules, indexes, and existing Firestore documents untouched).
++
++**Tested on (post-final-edit, test data / emulators only):**
++- `node tools/check-imports.js`: ✅ (`115` files, `455` imports, `399` exports, `0` errors)
++- `scratch/run-tests.mjs`: ✅
++- `verify-kids-break-v196.mjs` (Auth + Firestore Emulators + Chrome): ✅ (`0` errors)
++- `verify-router-regression.mjs`, `verify-dashboard.mjs`, `verify-reports.mjs`, `verify-archives.mjs`, `verify-auth-profile.mjs`: ✅ all passed cleanly.
++
++**Next task:**
++- Await user confirmation to deploy `v1.8.199` (`firebase deploy --only hosting`) or next feature request.
++
++---
++
+ ### [2026-11-28 19:55] Version 1.8.198 — Kids Upgrade Payment Popup, Required Non-Cash TXN ID & Live Deploy
+ 
+ **What was built:**
+diff --git a/docs/reports/v1.8.199-report.md b/docs/reports/v1.8.199-report.md
+new file mode 100644
+index 0000000..d53a3d5
+--- /dev/null
++++ b/docs/reports/v1.8.199-report.md
+@@ -0,0 +1,106 @@
++# Release v1.8.199 Review Report — Optional TXN ID, Two Kids Profile Docs & Unified Kids Admission Popups
++
++**Scope:** Shared Payment Popup (`payment-popup.js` — optional TXN ID for both Youth & Kids; Kids Paid Admission success popup), Unique Kids Admissions (`school-admissions.html`, `school-admissions.page.js`), Unique Kids Student Profile Documents (`student-profile.page.js`), and Unique Kids Admission Slip (`school-admission-receipt.page.js`, `school-receipt-pdf.js`). Youth Centre forms, Student Profile docs (`4` slots), receipts, and Monthly/Upgrade payment success popups are unchanged.  
++**Base commit compared:** `68235b8` (`v1.8.198`)  
++**Plain text diff file:** `docs/reports/v1.8.199-changes.txt`  
++**Deploy status:** **Not deployed yet** — committed & pushed to `main`; tested strictly on local Firebase Emulators + synthetic test data.
++
++---
++
++## 1. What Changed (Plain English)
++
++1. **Transaction / Reference ID -> Optional Again (Youth & Kids)**
++   - Updated `public/js/components/payment-popup.js`:
++     - Non-cash modes (`UPI`, `Card`, `Bank Transfer`, `Cheque`) enable the Transaction / Reference ID field with label `(Optional)`, `required = false`, and never block saving if left empty.
++     - `Cash` stays disabled with `(N/A for Cash)`.
++     - Removed the required-field error check and inline invalid state from `saveBtn.onclick`.
++
++2. **Kids Documents -> Strictly "Passport Photo" & "Student Signature" Only**
++   - **Kids Admission Form (`public/pages/school-admissions.html`):** Relabeled the two upload boxes clearly as **Passport Photo** and **Student Signature** (no Date of Birth Proof or Academic Marksheet inputs exist or upload for Kids).
++   - **Kids Student Profile (`public/js/pages/student-profile.page.js`):**
++     - When viewing a Kids profile (`ctx === 'school'`), **Documents** tab description updates to `Passport photo & student signature` and `renderDocumentsTab()` renders only `Passport Photo` and `Student Signature` cards, skipping `dobProof`, `marksheet`, and extra docs in `docsCache`.
++     - Existing legacy `dobProof` / `marksheet` documents in Firestore are **left untouched** (not deleted, simply hidden from the Kids UI).
++     - Youth Centre profiles (`ctx === 'youth'`) still show all 4 document slots (`Date of Birth Proof`, `Academic Marksheet`, `Passport Photo`, `Student Signature`) and any extra docs unchanged.
++   - **Kids Admission Slip (`school-admission-receipt.page.js`, `school-receipt.js`, `school-receipt-pdf.js`):** Already only render Photo & Signature (no DOB proof / marksheet).
++
++3. **Kids "No payment" Confirm Popup + Unified "Admission successful" Popup + Admission Slip Polish**
++   - **Confirm admission popup (`public/js/pages/school-admissions.page.js`):** Clicking **Admit student** under `No payment` (or `₹0` admission charge) validates all inputs, uploads, and duplicate phone+level check first, then opens a **"Confirm admission"** popup showing: Student name, Level, Batch, Admission date, `Admission fee: ₹0 (No payment)`, the formatted exemption reason (`formatNoPaymentReason`), and `Monthly fee ₹X will be billed from <month>`.
++     - Clicking **Cancel** closes the popup cleanly, saves nothing to Firestore, and keeps the filled form open.
++     - Clicking **Confirm admission** writes the student, docs, Aadhaar, admission payment doc, and opens initial bills atomically, then opens the **"Admission successful"** popup.
++   - **Unified "Admission successful" popup (`public/js/components/payment-popup.js` + `public/css/pages/pay-fees.css`):**
++     - Exported `promptKidsAdmissionSuccess(...)` matching `.pf-success-modal`, with a CSS animated green checkmark (`@keyframes pfSuccessPop` & `pfCheckDraw`), title **"Admission successful"**, summary box, and **4 action buttons** in a responsive 2x2 grid:
++       1. **View admission slip** -> `#/school-admissions/<studentDocId>/receipt`
++       2. **Print** -> `#/school-admissions/<studentDocId>/receipt?print=1`
++       3. **Open profile** -> `#/students/<studentDocId>`
++       4. **Admit another** -> stays on `#/school-students` and opens a fresh blank form (`openForm(null)`)
++     - Both **Paid Kids admissions** (inside `payment-popup.js` when `!isUpgrade`) and **No-payment Kids admissions** (`school-admissions.page.js`) now open **"Admission successful"**. Monthly fee payments and Level Upgrades still use **"Payment Recorded!"** (`promptOpenReceipt`).
++   - **Kids No-payment Admission Slip (`public/js/pages/school-admission-receipt.page.js`, `public/js/utils/school-receipt-pdf.js`):**
++     - Shows `No payment – <reason>` (with en-dash `–`) and `₹0` on the HTML slip (`Rs. 0.00` in Roboto PDF), and omits any **Payment mode** or **TXN ID** rows when `d.paymentMode === 'none'` or `d.actualAmountReceived <= 0`.
++
++---
++
++## 2. Files Changed and Why
++
++| File | Why It Changed |
++| :--- | :--- |
++| `public/js/components/payment-popup.js` | Made non-cash TXN ID `(Optional)` again across Youth & Kids; added shared `promptKidsAdmissionSuccess` modal (4 action buttons + animated check); routed non-upgrade Kids admissions to `promptKidsAdmissionSuccess`. |
++| `public/css/pages/pay-fees.css` | Added `.pf-success-icon-wrap.is-animated` pop/check-draw keyframes and `.pf-success-modal.is-admission` / `.pf-success-actions.is-grid` responsive 2x2 button grid. |
++| `public/pages/school-admissions.html` | Updated document card labels to **Passport Photo** and **Student Signature**. |
++| `public/js/pages/school-admissions.page.js` | Added `openKidsNoPaymentConfirmPopup` (`Cancel` / `Confirm admission`) for `No payment`, wired both `No payment` and `Paid` (`pendingAdmission`) admissions to `"Admission successful"` + `"Admit another"` (`openForm(null)`). |
++| `public/js/pages/student-profile.page.js` | Restricted Kids Student Profile **Documents** tab (`ctx === 'school'`) to `Passport Photo` and `Student Signature` only (leaving legacy DB docs untouched) and updated Kids tab subtitle (`Passport photo & student signature`). |
++| `public/js/pages/school-admission-receipt.page.js` | Updated `No payment` slip HTML to render `No payment – <reason>` and `₹0`, omitting payment mode / TXN rows. |
++| `public/js/utils/school-receipt-pdf.js` | Updated PDF `No payment` line to `No payment – <reason>` and gated payment mode row with `d.paymentMode !== 'none' && Number(d.actualAmountReceived || 0) > 0`. |
++| `public/` `?v=` bump & `docs/` | Bumped `?v=` / `APP_VERSION` to `1.8.199` across `55` files (`tools/bump-version.js 1.8.199`), updated `docs/02-PROGRESS-LOG.md`, and saved `docs/reports/v1.8.199-report.md` + `docs/reports/v1.8.199-changes.txt`. |
++
++---
++
++## 3. Data Fields & Firestore Changes
++
++- **No schema, rule, or index changes.**
++- Legacy `students/{id}/docs/dobProof` and `students/{id}/docs/marksheet` documents on older Kids records remain untouched in Firestore; they simply are no longer displayed or uploadable for Kids.
++
++---
++
++## 4. Verification & Test Results (Pre-Deploy, Test Data Only)
++
++All checks ran cleanly **after the final code edit**:
++
++1. `node tools/bump-version.js 1.8.199`: `360` `?v=` replacements across `55` files (`APP_VERSION: 1.8.199`).
++2. `node tools/check-imports.js`: **PASSED** (`115` files, `455` imports, `399` exports, `0` errors).
++3. `scratch/run-tests.mjs`: **PASSED**.
++4. `firebase emulators:exec ... verify-kids-break-v196.mjs` (Auth + Firestore Emulators + Chrome, **exit code 0, 0 console/runtime errors**):
++   - **Optional TXN ID (Kids & Youth):** Verified `UPI`, `Card`, `Bank Transfer`, and `Cheque` show `(Optional)`, `required = false`, and `Cash` is disabled (`N/A for Cash`); completed a Youth `Cheque` payment with empty TXN ID without blocking.
++   - **Two Kids Profile Docs + Legacy Preservation:** Verified Kids admission form has strictly `Passport Photo` & `Student Signature` inputs; seeded legacy `dobProof` and `marksheet` docs on `stu-k-active`, confirmed Kids Profile Documents tab displays **only** `Passport Photo` & `Student Signature` (`2` cards), while `dobProof` & `marksheet` remained intact in Firestore; confirmed Youth Student Profile still shows all `4` document cards.
++   - **No-payment Confirm Popup + Admission successful Popup + Slip:** Verified clicking **Admit student** with `No payment` opens `"Confirm admission"` without writing to DB; clicking **Cancel** leaves the form open and filled with nothing saved; confirming saves the student & opens `"Admission successful"` with animated icon and all `4` buttons (`View admission slip`, `Print`, `Open profile`, `Admit another`); verified **Admit another** opens a fresh blank form on `#/school-students`; verified Admission Slip renders `No payment – Rejoining after course ended`, `₹0`, and omits `Payment mode` / `TXN:` rows.
++   - **Paid Kids Admission:** Verified Paid admission opens the same `"Admission successful"` modal (`4` buttons, `UPI-ADM-998877`) and `"View admission slip"` navigates cleanly to `#/school-admissions/<id>/receipt`.
++   - All existing Kids Break Management, 2-option billing start, Level Upgrade payment popup, `school_head` read-only / Firestore `permission-denied`, and 8-page speed (`2ms–173ms`) assertions passed.
++5. Browser regression suites: `verify-router-regression.mjs`, `verify-dashboard.mjs`, `verify-reports.mjs`, `verify-archives.mjs`, and `verify-auth-profile.mjs` **ALL PASSED** (`exit code 0`).
++
++---
++
++## 5. How to Test After Deploy
++
++1. Open **Collect Fees** / **Payment Popup** on Youth or Kids -> pick `UPI`, `Card`, `Bank Transfer`, or `Cheque` -> verify Transaction ID says `(Optional)` and saving with an empty ID succeeds; pick `Cash` -> verify Transaction ID is disabled (`N/A for Cash`).
++2. Open `#/school-students` -> click **New admission**:
++   - Confirm only **Passport Photo** and **Student Signature** upload cards appear.
++   - Try a **No payment** admission -> verify **"Confirm admission"** popup opens -> click **Cancel** (nothing saved, form stays filled) -> click **Admit student** again -> **Confirm admission** -> verify **"Admission successful"** popup with 4 buttons; click **View admission slip** and confirm `No payment – <reason>`, `₹0`, and no Payment mode / TXN row.
++   - Try a **Full payment** admission -> verify payment popup -> confirm -> verify **"Admission successful"** popup -> test **Admit another** opens a fresh form.
++3. Open an older Kids student's **Profile -> Documents** tab -> verify only **Passport Photo** & **Student Signature** appear; open a Youth student's **Profile -> Documents** tab -> confirm all 4 documents still appear.
++
++---
++
++## 6. Unique Kids vs Youth Centre — Parity Comparison
++
++| Feature / Area | Youth Centre | Unique Kids | Parity Status in `v1.8.199` |
++| :--- | :--- | :--- | :--- |
++| Payment mode TXN ID | Optional for non-cash (`(Optional)`), disabled for Cash | Optional for non-cash (`(Optional)`), disabled for Cash | **Matched (`v1.8.199`)** |
++| Admission payment confirmation | Opens `openPaymentPopup` on paid flow; direct confirm | Opens `openPaymentPopup` (Paid) or `"Confirm admission"` (`No payment`) | **Kids now has parity confirmation on No payment too** |
++| Post-admission success dialog | Opens `promptOpenReceipt` (`"Payment Recorded!"`) | Opens `"Admission successful"` (Slip, Print, Open profile, Admit another) | **Enhanced for Kids (`v1.8.199`); Youth left unchanged** |
++| Profile Documents tab | `4` docs (`DOB Proof`, `Marksheet`, `Photo`, `Signature`) + extras | Strictly `2` docs (`Passport Photo`, `Student Signature`) | **Intentional difference per Kids rule (`v1.8.199`)** |
++| Financial Reports & Offline Archives | `#/reports` & `#/archives` available | Not enabled for Kids (`youth` only in `router.js`) | **Missing in Kids (unchanged by design)** |
++| Dashboard charts & quick actions | Charts, collection feed, quick toolbar, server aggregates | Break KPIs, active/overdue break table, Kids cache | **Different workflows by design** |
++| Fee collection model | `#/pay-fees` search + fixed installment schedule | `#/school-fees` calendar monthly bills + Profile/Pending Collect | **Shared `openPaymentPopup`; different billing models** |
++| Course transfer / End course | Inline modals inside Student Profile | Dedicated `#/school-transfer` & `#/school-end` pages | **Missing inline profile modals in Kids** |
++
++**Known Gaps / Not Done Yet:**
++- Live Firebase Hosting deploy (`firebase deploy --only hosting`) has **not** been run yet (held for your approval).
+diff --git a/public/css/pages/pay-fees.css b/public/css/pages/pay-fees.css
+index 82d4464..76db5cf 100644
+--- a/public/css/pages/pay-fees.css
++++ b/public/css/pages/pay-fees.css
+@@ -1013,11 +1013,31 @@
+   margin: 0 auto 12px;
+   box-shadow: 0 0 0 6px #f0fdf4;
+ }
++.pf-success-icon-wrap.is-animated {
++  animation: pfSuccessPop .38s cubic-bezier(.22, 1, .36, 1) both;
++}
+ .pf-success-icon-wrap svg.lucide {
+   width: 28px;
+   height: 28px;
+   stroke-width: 2.5;
+ }
++.pf-success-icon-wrap.is-animated svg.lucide path,
++.pf-success-icon-wrap.is-animated svg.lucide polyline {
++  stroke-dasharray: 36;
++  stroke-dashoffset: 36;
++  animation: pfCheckDraw .35s cubic-bezier(.22, 1, .36, 1) .12s forwards;
++}
++@keyframes pfSuccessPop {
++  0% { transform: scale(.65); opacity: 0; }
++  70% { transform: scale(1.06); opacity: 1; }
++  100% { transform: scale(1); opacity: 1; }
++}
++@keyframes pfCheckDraw {
++  to { stroke-dashoffset: 0; }
++}
++.ui-modal.pf-success-modal.is-admission {
++  max-width: 500px !important;
++}
+ .pf-success-title {
+   font-size: 20px;
+   font-weight: 700;
+@@ -1075,6 +1095,16 @@
+   width: 100%;
+   box-sizing: border-box;
+ }
++.pf-success-actions.is-grid {
++  display: grid;
++  grid-template-columns: repeat(2, minmax(0, 1fr));
++  gap: 10px;
++}
++@media (max-width: 460px) {
++  .pf-success-actions.is-grid {
++    grid-template-columns: 1fr;
++  }
++}
+ .pf-success-actions .ui-btn {
+   justify-content: center;
+   white-space: nowrap;
+diff --git a/public/index.html b/public/index.html
+index 2465a3a..92f3927 100644
+--- a/public/index.html
++++ b/public/index.html
+@@ -9,10 +9,10 @@
+   <link rel="preconnect" href="https://fonts.googleapis.com">
+   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+   <link href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+-  <link rel="stylesheet" href="css/main.css?v=1.8.198">
+-  <link rel="stylesheet" href="css/components/multi-select.css?v=1.8.198">
+-  <link rel="stylesheet" href="css/pages/login.css?v=1.8.198">
+-  <script>window.__BUILD__ = '1.8.198';</script>
++  <link rel="stylesheet" href="css/main.css?v=1.8.199">
++  <link rel="stylesheet" href="css/components/multi-select.css?v=1.8.199">
++  <link rel="stylesheet" href="css/pages/login.css?v=1.8.199">
++  <script>window.__BUILD__ = '1.8.199';</script>
+   <style>
+     body.auth-pending {
+       visibility: hidden;
+@@ -31,18 +31,18 @@
+     </div>
+   </div>
+   <script type="module">
+-    import { getContext, setContext, loadSavedContext } from './js/core/app.js?v=1.8.198';
+-    import { tryRestoreSession, activateSession, stopInactivityTracking, setUnauthenticatedHandler, logout } from './js/core/guard.js?v=1.8.198';
+-    import { startRouter, stopRouter, prefetchMainPages } from './js/core/router.js?v=1.8.198';
+-    import { confirmLeave, clearDirty } from './js/utils/unsaved-guard.js?v=1.8.198';
+-    import { renderSidebar, setActiveRoute, setCollapsed, toggleDrawer, closeDrawer, initSidebar, destroySidebar } from './js/components/sidebar.js?v=1.8.198';
+-    import { renderTopbar, setPageTitle, setSwitcherActive } from './js/components/topbar.js?v=1.8.198';
+-    import { clearPersistedBranchBatchFilters } from './js/components/branch-batch-filter.js?v=1.8.198';
+-    import { initDatasetSession, stopDatasetSession } from './js/core/dataset-session.js?v=1.8.198';
+-    import { invalidateFinancialCache } from './js/services/report.service.js?v=1.8.198';
+-    import { loadUsersDirectory, clearUsersDirectoryCache, loadPublicBranding, syncPublicBranding } from './js/services/user-directory.service.js?v=1.8.198';
+-    import { renderLoginView } from './js/pages/login.page.js?v=1.8.198';
+-    import { playSwitchSound, preloadSwitchSound, preloadLogoutSound } from './js/utils/sound.js?v=1.8.198';
++    import { getContext, setContext, loadSavedContext } from './js/core/app.js?v=1.8.199';
++    import { tryRestoreSession, activateSession, stopInactivityTracking, setUnauthenticatedHandler, logout } from './js/core/guard.js?v=1.8.199';
++    import { startRouter, stopRouter, prefetchMainPages } from './js/core/router.js?v=1.8.199';
++    import { confirmLeave, clearDirty } from './js/utils/unsaved-guard.js?v=1.8.199';
++    import { renderSidebar, setActiveRoute, setCollapsed, toggleDrawer, closeDrawer, initSidebar, destroySidebar } from './js/components/sidebar.js?v=1.8.199';
++    import { renderTopbar, setPageTitle, setSwitcherActive } from './js/components/topbar.js?v=1.8.199';
++    import { clearPersistedBranchBatchFilters } from './js/components/branch-batch-filter.js?v=1.8.199';
++    import { initDatasetSession, stopDatasetSession } from './js/core/dataset-session.js?v=1.8.199';
++    import { invalidateFinancialCache } from './js/services/report.service.js?v=1.8.199';
++    import { loadUsersDirectory, clearUsersDirectoryCache, loadPublicBranding, syncPublicBranding } from './js/services/user-directory.service.js?v=1.8.199';
++    import { renderLoginView } from './js/pages/login.page.js?v=1.8.199';
++    import { playSwitchSound, preloadSwitchSound, preloadLogoutSound } from './js/utils/sound.js?v=1.8.199';
+     import { db } from './js/config/firebase-config.js';
+     import { doc, getDoc } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
+ 
+@@ -112,7 +112,7 @@
+         const pendingNotice = sessionStorage.getItem('pending_verification_notice');
+         if (pendingNotice) {
+           sessionStorage.removeItem('pending_verification_notice');
+-          import('./js/components/toast.js?v=1.8.198').then(({ showToast }) => {
++          import('./js/components/toast.js?v=1.8.199').then(({ showToast }) => {
+             showToast({
+               type: 'info',
+               title: 'Email Verification',
+@@ -296,6 +296,6 @@
+       }
+     })();
+   </script>
+-  <script type="module" src="js/core/app.js?v=1.8.198"></script>
++  <script type="module" src="js/core/app.js?v=1.8.199"></script>
+ </body>
+ </html>
+diff --git a/public/js/components/branch-batch-filter.js b/public/js/components/branch-batch-filter.js
+index 7e123af..f00788f 100644
+--- a/public/js/components/branch-batch-filter.js
++++ b/public/js/components/branch-batch-filter.js
+@@ -3,7 +3,7 @@
+ // locks branch for Branch Heads (and single-branch Kids mode), and locks Batch until a branch
+ // is chosen for Super Admin.
+ 
+-import { createSelect } from './ui-select.js?v=1.8.198';
++import { createSelect } from './ui-select.js?v=1.8.199';
+ 
+ const STORAGE_PREFIX = 'uicms.bb.';
+ 
+diff --git a/public/js/components/payment-details-modal.js b/public/js/components/payment-details-modal.js
+index 4d52b2b..a4b09ce 100644
+--- a/public/js/components/payment-details-modal.js
++++ b/public/js/components/payment-details-modal.js
+@@ -1,13 +1,13 @@
+ // payment-details-modal.js — Shared read-only Payment Details modal helper for Payment History & Dashboard.
+ 
+-import { openPopup } from './modal.js?v=1.8.198';
+-import { showToast } from './toast.js?v=1.8.198';
++import { openPopup } from './modal.js?v=1.8.199';
++import { showToast } from './toast.js?v=1.8.199';
+ import {
+   buildPaymentDetailsModel,
+   getCachedBillForEntry,
+   getCachedStudentPhoto
+-} from '../services/report.service.js?v=1.8.198';
+-import { formatPersonName } from '../utils/formatter.js?v=1.8.198';
++} from '../services/report.service.js?v=1.8.199';
++import { formatPersonName } from '../utils/formatter.js?v=1.8.199';
+ 
+ function mk(tag, cls, text) {
+   const el = document.createElement(tag);
+diff --git a/public/js/components/payment-popup.js b/public/js/components/payment-popup.js
+index 5ef0ebf..693ce6d 100644
+--- a/public/js/components/payment-popup.js
++++ b/public/js/components/payment-popup.js
+@@ -1,12 +1,12 @@
+ // payment-popup.js — Single Shared Payment Popup for Student Profile and Pay Fees
+ import { auth } from '../config/firebase-config.js';
+-import { openPopup } from './modal.js?v=1.8.198';
+-import { createSelect } from './ui-select.js?v=1.8.198';
+-import { formatINR, formatDateIN } from '../utils/formatter.js?v=1.8.198';
+-import { todayISO } from '../utils/session-rules.js?v=1.8.198';
+-import { getRoleTitle, resolveUserDisplay } from '../services/user-directory.service.js?v=1.8.198';
+-import { showToast } from './toast.js?v=1.8.198';
+-import { playPaymentSuccessSound } from '../utils/sound.js?v=1.8.198';
++import { openPopup } from './modal.js?v=1.8.199';
++import { createSelect } from './ui-select.js?v=1.8.199';
++import { formatINR, formatDateIN } from '../utils/formatter.js?v=1.8.199';
++import { todayISO } from '../utils/session-rules.js?v=1.8.199';
++import { getRoleTitle, resolveUserDisplay } from '../services/user-directory.service.js?v=1.8.199';
++import { showToast } from './toast.js?v=1.8.199';
++import { playPaymentSuccessSound } from '../utils/sound.js?v=1.8.199';
+ import {
+   recordPayment,
+   recordAdmissionWithPayment,
+@@ -16,13 +16,13 @@ import {
+   isAdmissionFeePaid,
+   isMaterialFeePaid,
+   isExamFeePaid
+-} from '../services/payment.service.js?v=1.8.198';
++} from '../services/payment.service.js?v=1.8.199';
+ import {
+   computeLateFee,
+   formatShortMonthYear,
+   fetchOpenKidsBillsForStudent,
+   recordKidsBillPayment
+-} from '../utils/school-billing.js?v=1.8.198';
++} from '../utils/school-billing.js?v=1.8.199';
+ 
+ function formatDateTime(d) {
+   const dt = d instanceof Date ? d : new Date(d);
+@@ -243,6 +243,193 @@ export function promptOpenReceipt({
+   openBtn.focus();
+ }
+ 
++function escapePopupHtml(str) {
++  return String(str == null ? '' : str)
++    .replace(/&/g, '&amp;')
++    .replace(/</g, '&lt;')
++    .replace(/>/g, '&gt;')
++    .replace(/"/g, '&quot;');
++}
++
++/**
++ * Shared Kids admission success modal (used by both Paid and No-payment flows).
++ */
++export function promptKidsAdmissionSuccess({
++  studentDocId,
++  studentId = '',
++  studentName = 'Student',
++  courseName = '',
++  batchName = '',
++  receiptNo = '',
++  admFeePaid = 0,
++  paymentMode = 'full',
++  mode = '',
++  txnId = '',
++  noPaymentReasonLabel = '',
++  monthlyFee = 0,
++  firstMonthlyMonthLabel = '',
++  onAdmitAnother = null
++}) {
++  const prevFocus = document.activeElement;
++  const back = document.createElement('div');
++  back.className = 'ui-modal-back pf-success-back';
++
++  const modal = document.createElement('div');
++  modal.className = 'ui-modal pf-success-modal is-admission';
++  modal.setAttribute('role', 'dialog');
++  modal.setAttribute('aria-modal', 'true');
++
++  let closed = false;
++  function close() {
++    if (closed) return;
++    closed = true;
++    document.removeEventListener('keydown', onKey);
++    back.remove();
++    if (prevFocus && typeof prevFocus.focus === 'function') {
++      try { prevFocus.focus(); } catch (_) {}
++    }
++  }
++
++  function onKey(e) {
++    if (e.key === 'Escape') {
++      e.preventDefault();
++      close();
++    }
++  }
++
++  back.addEventListener('click', (e) => {
++    if (e.target === back) close();
++  });
++  document.addEventListener('keydown', onKey);
++
++  const closeBtn = document.createElement('button');
++  closeBtn.type = 'button';
++  closeBtn.className = 'pf-success-close';
++  closeBtn.setAttribute('aria-label', 'Close');
++  closeBtn.innerHTML = '<i data-lucide="x"></i>';
++  closeBtn.onclick = () => close();
++
++  const iconWrap = document.createElement('div');
++  iconWrap.className = 'pf-success-icon-wrap is-animated';
++  iconWrap.innerHTML = '<i data-lucide="check"></i>';
++
++  const title = document.createElement('h3');
++  title.className = 'pf-success-title';
++  title.textContent = 'Admission successful';
++
++  const isNoPay = paymentMode === 'none' || Number(admFeePaid || 0) === 0;
++  const subtitle = document.createElement('p');
++  subtitle.className = 'pf-success-subtitle';
++  subtitle.textContent = isNoPay
++    ? 'Student admitted & admission slip ready.'
++    : 'Student admitted, admission fee recorded & slip ready.';
++
++  const summary = document.createElement('div');
++  summary.className = 'pf-success-summary';
++
++  function addRow(label, valueHtml) {
++    const row = document.createElement('div');
++    row.className = 'pf-success-row';
++    const lbl = document.createElement('span');
++    lbl.className = 'pf-success-label';
++    lbl.textContent = label;
++    const val = document.createElement('span');
++    val.className = 'pf-success-val';
++    val.innerHTML = valueHtml;
++    row.append(lbl, val);
++    summary.appendChild(row);
++  }
++
++  addRow(
++    'Slip / Receipt No.',
++    `<span style="font-family:monospace; font-weight:700; color:#3730A3; background:#EEF2FF; border:1px solid #E0E7FF; padding:2px 8px; border-radius:6px; font-size:12px;">${escapePopupHtml(receiptNo || '—')}</span>`
++  );
++  addRow(
++    'Student',
++    `<span class="font-semibold">${escapePopupHtml(studentName || 'Student')}</span>${studentId ? ` <span style="font-weight:400; color:var(--text-mute, #64748b); font-size:12px;">(${escapePopupHtml(studentId)})</span>` : ''}`
++  );
++  addRow(
++    'Level & Batch',
++    `${escapePopupHtml(courseName || '—')}${batchName ? ` <span style="color:var(--text-mute,#64748b);">· ${escapePopupHtml(batchName)}</span>` : ''}`
++  );
++
++  if (isNoPay) {
++    addRow(
++      'Admission Fee',
++      `<span style="display:inline-block;background:#FFF7ED;border:1px dashed #FB923C;color:#C2410C;padding:2px 9px;border-radius:9px;font-size:12px;font-weight:600;">&#8377;0 (No payment)</span>`
++    );
++    if (noPaymentReasonLabel) {
++      addRow('Reason', escapePopupHtml(noPaymentReasonLabel));
++    }
++  } else {
++    const modeVal = (mode || 'Cash').toUpperCase();
++    const modeClass = (mode || 'cash').toLowerCase();
++    addRow(
++      'Admission Fee Paid',
++      `<span class="font-semibold" style="color:var(--success,#16a34a);">${formatINR(admFeePaid)}</span> <span class="la-mode ${escapePopupHtml(modeClass)}">${escapePopupHtml(modeVal)}</span>${txnId ? ` <span style="font-size:11.5px; color:var(--text-mute,#64748b); font-family:monospace;">(${escapePopupHtml(txnId)})</span>` : ''}`
++    );
++  }
++
++  addRow(
++    'Monthly Billing',
++    `${formatINR(Number(monthlyFee || 0))}/mo${firstMonthlyMonthLabel ? ` from <strong>${escapePopupHtml(firstMonthlyMonthLabel)}</strong>` : ''}`
++  );
++
++  const actions = document.createElement('div');
++  actions.className = 'pf-success-actions is-grid';
++
++  const encodedId = encodeURIComponent(studentDocId);
++
++  const slipBtn = document.createElement('button');
++  slipBtn.type = 'button';
++  slipBtn.className = 'ui-btn primary';
++  slipBtn.innerHTML = '<i data-lucide="file-text"></i><span>View admission slip</span>';
++  slipBtn.onclick = () => {
++    close();
++    location.hash = `#/school-admissions/${encodedId}/receipt`;
++  };
++
++  const printBtn = document.createElement('button');
++  printBtn.type = 'button';
++  printBtn.className = 'ui-btn ghost';
++  printBtn.innerHTML = '<i data-lucide="printer"></i><span>Print</span>';
++  printBtn.onclick = () => {
++    close();
++    location.hash = `#/school-admissions/${encodedId}/receipt?print=1`;
++  };
++
++  const profileBtn = document.createElement('button');
++  profileBtn.type = 'button';
++  profileBtn.className = 'ui-btn ghost';
++  profileBtn.innerHTML = '<i data-lucide="user"></i><span>Open profile</span>';
++  profileBtn.onclick = () => {
++    close();
++    location.hash = `#/students/${encodedId}`;
++  };
++
++  const anotherBtn = document.createElement('button');
++  anotherBtn.type = 'button';
++  anotherBtn.className = 'ui-btn ghost';
++  anotherBtn.innerHTML = '<i data-lucide="user-plus"></i><span>Admit another</span>';
++  anotherBtn.onclick = () => {
++    close();
++    if (typeof onAdmitAnother === 'function') {
++      onAdmitAnother();
++    } else if (!location.hash.startsWith('#/school-students')) {
++      location.hash = '#/school-students';
++    }
++  };
++
++  actions.append(slipBtn, printBtn, profileBtn, anotherBtn);
++
++  modal.append(closeBtn, iconWrap, title, subtitle, summary, actions);
++  back.appendChild(modal);
++  document.body.appendChild(back);
++
++  if (typeof lucide !== 'undefined') lucide.createIcons();
++  slipBtn.focus();
++}
++
+ /**
+  * Opens the single shared Record / Collect Payment popup.
+  *
+@@ -686,7 +873,7 @@ export async function openPaymentPopup({
+   const onModeChange = (modeVal) => {
+     const isCash = modeVal === 'cash';
+     txnInput.disabled = isCash;
+-    txnInput.required = !isCash;
++    txnInput.required = false;
+     txnWrap.classList.remove('is-invalid');
+     txnErr.textContent = '';
+     if (isCash) {
+@@ -696,8 +883,8 @@ export async function openPaymentPopup({
+       txnWrap.classList.add('is-disabled');
+     } else {
+       const mLabel = MODE_OPTIONS.find((m) => m.value === modeVal)?.label || modeVal.toUpperCase();
+-      txnLabel.innerHTML = 'Transaction / Reference ID <em style="color:var(--danger,#dc2626);font-style:normal;">*</em> <span style="font-weight: normal; color: var(--text-mute, #64748b); font-size: 11.5px;">(Required)</span>';
+-      txnInput.placeholder = 'Enter ' + mLabel + ' Transaction / Ref ID';
++      txnLabel.innerHTML = 'Transaction / Reference ID <span style="font-weight: normal; color: var(--text-mute, #64748b); font-size: 11.5px;">(Optional)</span>';
++      txnInput.placeholder = 'Optional (' + mLabel + ' Ref / TXN ID)';
+       txnWrap.classList.remove('is-disabled');
+     }
+   };
+@@ -878,17 +1065,6 @@ export async function openPaymentPopup({
+       return;
+     }
+ 
+-    const selectedMode = String(modeSel.value || 'cash').toLowerCase().trim() || 'cash';
+-    const trimmedTxn = selectedMode !== 'cash' ? txnInput.value.trim() : '';
+-    if (selectedMode !== 'cash' && !trimmedTxn) {
+-      const mLabel = MODE_OPTIONS.find((m) => m.value === selectedMode)?.label || selectedMode.toUpperCase();
+-      txnWrap.classList.add('is-invalid');
+-      txnErr.textContent = `Transaction / Reference ID is required for ${mLabel} payments.`;
+-      showToast({ type: 'error', message: `Transaction / Reference ID is required for ${mLabel} payments.` });
+-      txnInput.focus();
+-      return;
+-    }
+-
+     const val = typeSel.value;
+     if (!val) {
+       showToast({ type: 'error', message: 'Please select a valid payment type.' });
+@@ -936,22 +1112,38 @@ export async function openPaymentPopup({
+           playPaymentSuccessSound();
+           confirmedPayment = true;
+           popup.close();
+-          promptOpenReceipt({
+-            studentDocId: kidsRes.id || kidsRes.studentDocId || s.id,
+-            paymentId: isUpgrade ? (kidsRes.paymentId || 'latest') : 'payment',
+-            receiptNo: kidsRes.receiptNo,
+-            student: { name: s.name, studentId: kidsRes.studentId || s.studentId },
+-            forText: isUpgrade
+-              ? ('Level Upgrade (' + (pendingAdmission.courseName || 'Package') + ')')
+-              : ('Admission Fee (' + (pendingAdmission.paymentMode === 'difference' ? 'Difference' : 'Full Payment') + ')'),
+-            amount: baseAmount,
+-            lateFee: 0,
+-            totalPaid: baseAmount,
+-            mode: modeSel.value,
+-            txnId: txnInput.value.trim(),
+-            date: new Date(),
+-            from: isUpgrade ? (from || 'profile') : 'school-admissions'
+-          });
++          if (isUpgrade) {
++            promptOpenReceipt({
++              studentDocId: kidsRes.id || kidsRes.studentDocId || s.id,
++              paymentId: kidsRes.paymentId || 'latest',
++              receiptNo: kidsRes.receiptNo,
++              student: { name: s.name, studentId: kidsRes.studentId || s.studentId },
++              forText: 'Level Upgrade (' + (pendingAdmission.courseName || 'Package') + ')',
++              amount: baseAmount,
++              lateFee: 0,
++              totalPaid: baseAmount,
++              mode: modeSel.value,
++              txnId: txnInput.value.trim(),
++              date: new Date(),
++              from: from || 'profile'
++            });
++          } else {
++            promptKidsAdmissionSuccess({
++              studentDocId: kidsRes.id || kidsRes.studentDocId || s.id,
++              studentId: kidsRes.studentId || s.studentId || '',
++              studentName: s.name,
++              courseName: kidsRes.courseName || pendingAdmission.courseName || s.courseName || '',
++              batchName: kidsRes.batchName || pendingAdmission.batchName || '',
++              receiptNo: kidsRes.receiptNo,
++              admFeePaid: baseAmount,
++              paymentMode: pendingAdmission.paymentMode || 'full',
++              mode: modeSel.value,
++              txnId: txnInput.value.trim(),
++              monthlyFee: kidsRes.monthlyFee ?? pendingAdmission.monthlyFee ?? 0,
++              firstMonthlyMonthLabel: pendingAdmission.firstMonthlyMonthLabel || '',
++              onAdmitAnother: pendingAdmission.onAdmitAnother || null
++            });
++          }
+           if (typeof onSuccess === 'function') {
+             await onSuccess({ ...kidsRes, mode: modeSel.value, txnId: txnInput.value.trim() });
+           }
+diff --git a/public/js/components/profile-modal.js b/public/js/components/profile-modal.js
+index b446040..ec67090 100644
+--- a/public/js/components/profile-modal.js
++++ b/public/js/components/profile-modal.js
+@@ -1,17 +1,17 @@
+ import { auth } from '../config/firebase-config.js';
+-import { openPopup } from './modal.js?v=1.8.198';
+-import { showToast } from './toast.js?v=1.8.198';
+-import { confirmDialog } from './ui-confirm.js?v=1.8.198';
+-import { cropSquareAvatarToBlob, isImageFile, formatBytes } from '../utils/image-compress.js?v=1.8.198';
+-import { formatPersonName, initials } from '../utils/formatter.js?v=1.8.198';
++import { openPopup } from './modal.js?v=1.8.199';
++import { showToast } from './toast.js?v=1.8.199';
++import { confirmDialog } from './ui-confirm.js?v=1.8.199';
++import { cropSquareAvatarToBlob, isImageFile, formatBytes } from '../utils/image-compress.js?v=1.8.199';
++import { formatPersonName, initials } from '../utils/formatter.js?v=1.8.199';
+ import {
+   getRoleTitle,
+   getUserTitle,
+   resolveUserDisplay,
+   saveOwnPhoto,
+   saveUserFields
+-} from '../services/user-directory.service.js?v=1.8.198';
+-import { changeSuperAdminPassword, mapAuthError } from '../core/auth.js?v=1.8.198';
++} from '../services/user-directory.service.js?v=1.8.199';
++import { changeSuperAdminPassword, mapAuthError } from '../core/auth.js?v=1.8.199';
+ 
+ function el(tag, cls, text) {
+   const node = document.createElement(tag);
+diff --git a/public/js/components/sidebar.js b/public/js/components/sidebar.js
+index e5ea4ca..0e7fc09 100644
+--- a/public/js/components/sidebar.js
++++ b/public/js/components/sidebar.js
+@@ -1,8 +1,8 @@
+-import { ROUTES } from '../core/router.js?v=1.8.198';
+-import { APP_VERSION } from '../core/app.js?v=1.8.198';
+-import { getRunningPeriod, getNextDueDate, formatDayMonth } from '../utils/date.utils.js?v=1.8.198';
+-import { getRunningSession, toPeriod, daysLeft, expectedStatus } from '../core/sessions.js?v=1.8.198';
+-import { getUserTitle, resolveUserDisplay } from '../services/user-directory.service.js?v=1.8.198';
++import { ROUTES } from '../core/router.js?v=1.8.199';
++import { APP_VERSION } from '../core/app.js?v=1.8.199';
++import { getRunningPeriod, getNextDueDate, formatDayMonth } from '../utils/date.utils.js?v=1.8.199';
++import { getRunningSession, toPeriod, daysLeft, expectedStatus } from '../core/sessions.js?v=1.8.199';
++import { getUserTitle, resolveUserDisplay } from '../services/user-directory.service.js?v=1.8.199';
+ 
+ let removeSidebarProfileListener = null;
+ 
+diff --git a/public/js/components/topbar.js b/public/js/components/topbar.js
+index e2dd51e..2cbed36 100644
+--- a/public/js/components/topbar.js
++++ b/public/js/components/topbar.js
+@@ -1,9 +1,9 @@
+-import { getRunningPeriod, getPeriodOptions } from '../utils/date.utils.js?v=1.8.198';
+-import { loadSessions, getSelectedSessionId, setSelectedSession } from '../core/sessions.js?v=1.8.198';
+-import { confirmLeave } from '../utils/unsaved-guard.js?v=1.8.198';
+-import { formatPersonName } from '../utils/formatter.js?v=1.8.198';
+-import { getRoleTitle, getUserTitle, resolveUserDisplay } from '../services/user-directory.service.js?v=1.8.198';
+-import { openProfileModal } from './profile-modal.js?v=1.8.198';
++import { getRunningPeriod, getPeriodOptions } from '../utils/date.utils.js?v=1.8.199';
++import { loadSessions, getSelectedSessionId, setSelectedSession } from '../core/sessions.js?v=1.8.199';
++import { confirmLeave } from '../utils/unsaved-guard.js?v=1.8.199';
++import { formatPersonName } from '../utils/formatter.js?v=1.8.199';
++import { getRoleTitle, getUserTitle, resolveUserDisplay } from '../services/user-directory.service.js?v=1.8.199';
++import { openProfileModal } from './profile-modal.js?v=1.8.199';
+ 
+ let topbarProfileCleanup = null;
+ 
+diff --git a/public/js/core/app.js b/public/js/core/app.js
+index 998df15..5ff8585 100644
+--- a/public/js/core/app.js
++++ b/public/js/core/app.js
+@@ -1,6 +1,6 @@
+ import { app } from '../config/firebase-config.js';
+ 
+-export const APP_VERSION = '1.8.198';
++export const APP_VERSION = '1.8.199';
+ 
+ export const APP_CACHE = {
+   currentUser: null,
+diff --git a/public/js/core/data-transfer.js b/public/js/core/data-transfer.js
+index 3cc48f7..5ed1943 100644
+--- a/public/js/core/data-transfer.js
++++ b/public/js/core/data-transfer.js
+@@ -12,9 +12,9 @@ import {
+   ref as storageRef,
+   uploadBytesResumable
+ } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-storage.js';
+-import { showToast } from '../components/toast.js?v=1.8.198';
+-import { getDatasetGeneration, initDatasetSession } from './dataset-session.js?v=1.8.198';
+-import { getRoleTitle, getRolePluralTitle } from '../services/user-directory.service.js?v=1.8.198';
++import { showToast } from '../components/toast.js?v=1.8.199';
++import { getDatasetGeneration, initDatasetSession } from './dataset-session.js?v=1.8.199';
++import { getRoleTitle, getRolePluralTitle } from '../services/user-directory.service.js?v=1.8.199';
+ 
+ const MAX_BYTES = 95 * 1024 * 1024;
+ const UNLOCK_IDLE_MS = 10 * 60 * 1000;
+diff --git a/public/js/core/guard.js b/public/js/core/guard.js
+index f979f0a..ca1f9ae 100644
+--- a/public/js/core/guard.js
++++ b/public/js/core/guard.js
+@@ -1,13 +1,13 @@
+ import { auth, db } from '../config/firebase-config.js';
+ import { terminate, clearIndexedDbPersistence } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
+-import { clearAppCache } from './app.js?v=1.8.198';
+-import { clearRouterCache } from './router.js?v=1.8.198';
++import { clearAppCache } from './app.js?v=1.8.199';
++import { clearRouterCache } from './router.js?v=1.8.199';
+ import { resolveSession, signOutUser } from './auth.js';
+-import { playLogoutSound } from '../utils/sound.js?v=1.8.198';
+-import { clearAllReportCaches } from '../services/report.service.js?v=1.8.198';
+-import { invalidateArchiveReminderCache } from '../services/archive.service.js?v=1.8.198';
+-import { clearUsersDirectoryCache } from '../services/user-directory.service.js?v=1.8.198';
+-import { clearPersistedBranchBatchFilters } from '../components/branch-batch-filter.js?v=1.8.198';
++import { playLogoutSound } from '../utils/sound.js?v=1.8.199';
++import { clearAllReportCaches } from '../services/report.service.js?v=1.8.199';
++import { invalidateArchiveReminderCache } from '../services/archive.service.js?v=1.8.199';
++import { clearUsersDirectoryCache } from '../services/user-directory.service.js?v=1.8.199';
++import { clearPersistedBranchBatchFilters } from '../components/branch-batch-filter.js?v=1.8.199';
+ 
+ const INACTIVITY_LIMIT_MS = 30 * 60 * 1000;
+ const LOGOUT_MIN_TRANSITION_MS = 1200;
+diff --git a/public/js/core/router.js b/public/js/core/router.js
+index 155645e..69c6865 100644
+--- a/public/js/core/router.js
++++ b/public/js/core/router.js
+@@ -1,6 +1,6 @@
+-import { APP_VERSION } from './app.js?v=1.8.198';
+-import { confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.198';
+-import { getRoleTitle } from '../services/user-directory.service.js?v=1.8.198';
++import { APP_VERSION } from './app.js?v=1.8.199';
++import { confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.199';
++import { getRoleTitle } from '../services/user-directory.service.js?v=1.8.199';
+ 
+ const htmlCache = new Map();
+ const htmlInflight = new Map();
+diff --git a/public/js/core/sessions.js b/public/js/core/sessions.js
+index 50091d4..1fd4f2b 100644
+--- a/public/js/core/sessions.js
++++ b/public/js/core/sessions.js
+@@ -1,6 +1,6 @@
+ import { db } from '../config/firebase-config.js';
+ import { collection, getDocs, query, where } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
+-import { todayISO as istTodayISO } from '../utils/session-rules.js?v=1.8.198';
++import { todayISO as istTodayISO } from '../utils/session-rules.js?v=1.8.199';
+ 
+ // Shared session state lives on window so every module copy sees the same data.
+ const SESSION_STALE_MS = 30000;
+diff --git a/public/js/pages/admission-receipt.page.js b/public/js/pages/admission-receipt.page.js
+index d24f1b2..0634798 100644
+--- a/public/js/pages/admission-receipt.page.js
++++ b/public/js/pages/admission-receipt.page.js
+@@ -10,11 +10,11 @@ import {
+   query,
+   where
+ } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
+-import { showToast } from '../components/toast.js?v=1.8.198';
+-import { createSelect } from '../components/ui-select.js?v=1.8.198';
+-import { buildYouthReceiptData, fmtRs } from '../utils/admission-receipt.js?v=1.8.198';
+-import { downloadYouthReceiptPdf } from '../utils/admission-receipt-pdf.js?v=1.8.198';
+-import { getStudentDocRecord } from '../utils/student-media.js?v=1.8.198';
++import { showToast } from '../components/toast.js?v=1.8.199';
++import { createSelect } from '../components/ui-select.js?v=1.8.199';
++import { buildYouthReceiptData, fmtRs } from '../utils/admission-receipt.js?v=1.8.199';
++import { downloadYouthReceiptPdf } from '../utils/admission-receipt-pdf.js?v=1.8.199';
++import { getStudentDocRecord } from '../utils/student-media.js?v=1.8.199';
+ 
+ const COL = 'students';
+ let studentDocId = '';
+diff --git a/public/js/pages/admissions.page.js b/public/js/pages/admissions.page.js
+index a9b24f0..dd7d028 100644
+--- a/public/js/pages/admissions.page.js
++++ b/public/js/pages/admissions.page.js
+@@ -15,23 +15,23 @@ import {
+   arrayUnion,
+   addDoc
+ } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
+-import { showToast } from '../components/toast.js?v=1.8.198';
+-import { registerDirty, confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.198';
+-import { buildStats, buildToolbar, renderPager, renderEmptyTableState, PAGE_SIZE } from '../components/list-page.js?v=1.8.198';
+-import { createSelect } from '../components/ui-select.js?v=1.8.198';
+-import { createBranchBatchFilter } from '../components/branch-batch-filter.js?v=1.8.198';
+-import { openMenu } from '../components/ui-menu.js?v=1.8.198';
+-import { confirmDialog } from '../components/ui-confirm.js?v=1.8.198';
+-import { openPopup } from '../components/modal.js?v=1.8.198';
+-import { createDatePicker } from '../components/ui-datepicker.js?v=1.8.198';
+-import { getSelectedSessionId, getSelectedSession, getCachedSessions, loadSessions, hasFreshSessionsCache, todayISO } from '../core/sessions.js?v=1.8.198';
+-import { firstInstallmentOf, admissionState, sessionLabel, installmentSchedule, batchAllowsCourse, batchCourseLabel, isCourseActive } from '../utils/session-rules.js?v=1.8.198';
+-import { formatINR, formatDateIN, formatPersonName, formatGenderDisplay, initials } from '../utils/formatter.js?v=1.8.198';
+-import { validatePhone, validateEmail, validateDOB, validateName, validateRequired } from '../utils/validator.js?v=1.8.198';
+-import { listStudentsRaw, checkDuplicatePhone, readStudentId, readReceiptNo, writeCounter, createStudentWithDocs, updateStudentWithDocs, updateStudent, deleteStudent } from '../services/admission.service.js?v=1.8.198';
+-import { feeTotal, courseFeeOf, discountOf } from '../utils/fees.js?v=1.8.198';
+-import { compressTo100KB, readAsDataURL, blobToDataURL, isImageFile, formatBytes } from '../utils/image-compress.js?v=1.8.198';
+-import { fetchStudentPayments, calculateStudentFinancials, buildReceiptMenuItems } from '../services/payment.service.js?v=1.8.198';
++import { showToast } from '../components/toast.js?v=1.8.199';
++import { registerDirty, confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.199';
++import { buildStats, buildToolbar, renderPager, renderEmptyTableState, PAGE_SIZE } from '../components/list-page.js?v=1.8.199';
++import { createSelect } from '../components/ui-select.js?v=1.8.199';
++import { createBranchBatchFilter } from '../components/branch-batch-filter.js?v=1.8.199';
++import { openMenu } from '../components/ui-menu.js?v=1.8.199';
++import { confirmDialog } from '../components/ui-confirm.js?v=1.8.199';
++import { openPopup } from '../components/modal.js?v=1.8.199';
++import { createDatePicker } from '../components/ui-datepicker.js?v=1.8.199';
++import { getSelectedSessionId, getSelectedSession, getCachedSessions, loadSessions, hasFreshSessionsCache, todayISO } from '../core/sessions.js?v=1.8.199';
++import { firstInstallmentOf, admissionState, sessionLabel, installmentSchedule, batchAllowsCourse, batchCourseLabel, isCourseActive } from '../utils/session-rules.js?v=1.8.199';
++import { formatINR, formatDateIN, formatPersonName, formatGenderDisplay, initials } from '../utils/formatter.js?v=1.8.199';
++import { validatePhone, validateEmail, validateDOB, validateName, validateRequired } from '../utils/validator.js?v=1.8.199';
++import { listStudentsRaw, checkDuplicatePhone, readStudentId, readReceiptNo, writeCounter, createStudentWithDocs, updateStudentWithDocs, updateStudent, deleteStudent } from '../services/admission.service.js?v=1.8.199';
++import { feeTotal, courseFeeOf, discountOf } from '../utils/fees.js?v=1.8.199';
++import { compressTo100KB, readAsDataURL, blobToDataURL, isImageFile, formatBytes } from '../utils/image-compress.js?v=1.8.199';
++import { fetchStudentPayments, calculateStudentFinancials, buildReceiptMenuItems } from '../services/payment.service.js?v=1.8.199';
+ import {
+   ensureReferenceData,
+   getCachedReferenceData,
+@@ -42,11 +42,11 @@ import {
+   scheduleDelayedSkeleton,
+   loadStudentPhotos,
+   getCachedStudentPhoto
+-} from '../services/report.service.js?v=1.8.198';
+-import { getStudentPhotoSrc, getStudentDocSrc, getStudentDocMime } from '../utils/student-media.js?v=1.8.198';
+-import { playPaymentSuccessSound } from '../utils/sound.js?v=1.8.198';
+-import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.198';
+-import { APP_CACHE } from '../core/app.js?v=1.8.198';
++} from '../services/report.service.js?v=1.8.199';
++import { getStudentPhotoSrc, getStudentDocSrc, getStudentDocMime } from '../utils/student-media.js?v=1.8.199';
++import { playPaymentSuccessSound } from '../utils/sound.js?v=1.8.199';
++import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.199';
++import { APP_CACHE } from '../core/app.js?v=1.8.199';
+ 
+ const COL = 'students';
+ 
+diff --git a/public/js/pages/archives.page.js b/public/js/pages/archives.page.js
+index 742d474..c30dfe6 100644
+--- a/public/js/pages/archives.page.js
++++ b/public/js/pages/archives.page.js
+@@ -1,5 +1,5 @@
+ // archives.page.js — Youth Centre Archives UI (Phase 1: Download, Password Encryption, Verify & History)
+-import { getContext } from '../core/app.js?v=1.8.198';
++import { getContext } from '../core/app.js?v=1.8.199';
+ import {
+   PAGE_SIZE,
+   buildStats,
+@@ -7,12 +7,12 @@ import {
+   buildTableCard,
+   renderPager,
+   renderEmptyTableState
+-} from '../components/list-page.js?v=1.8.198';
+-import { openPopup } from '../components/modal.js?v=1.8.198';
+-import { openMenu } from '../components/ui-menu.js?v=1.8.198';
+-import { showToast } from '../components/toast.js?v=1.8.198';
+-import { fmtDate } from '../utils/session-rules.js?v=1.8.198';
+-import { formatINR } from '../utils/formatter.js?v=1.8.198';
++} from '../components/list-page.js?v=1.8.199';
++import { openPopup } from '../components/modal.js?v=1.8.199';
++import { openMenu } from '../components/ui-menu.js?v=1.8.199';
++import { showToast } from '../components/toast.js?v=1.8.199';
++import { fmtDate } from '../utils/session-rules.js?v=1.8.199';
++import { formatINR } from '../utils/formatter.js?v=1.8.199';
+ import {
+   ENABLE_ARCHIVE_SESSION_DELETE,
+   computeArchiveSessionStatus,
+@@ -21,7 +21,7 @@ import {
+   scanSessionForExport,
+   buildAndDownloadArchiveZip,
+   verifyLocalArchiveZip
+-} from '../services/archive.service.js?v=1.8.198';
++} from '../services/archive.service.js?v=1.8.199';
+ 
+ let cleanups = [];
+ 
+diff --git a/public/js/pages/authorised-users.js b/public/js/pages/authorised-users.js
+index fa18f3e..77aecaf 100644
+--- a/public/js/pages/authorised-users.js
++++ b/public/js/pages/authorised-users.js
+@@ -1,20 +1,20 @@
+ import { db } from '../config/firebase-config.js';
+ import { collection, getDocs } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
+-import { openPopup } from '../components/modal.js?v=1.8.198';
+-import { showToast } from '../components/toast.js?v=1.8.198';
+-import { confirmDialog } from '../components/ui-confirm.js?v=1.8.198';
+-import { openMenu } from '../components/ui-menu.js?v=1.8.198';
+-import { PAGE_SIZE, renderPager } from '../components/list-page.js?v=1.8.198';
+-import { formatPersonName, initials } from '../utils/formatter.js?v=1.8.198';
+-import { sendResetEmailForUser, mapAuthError } from '../core/auth.js?v=1.8.198';
+-import { openPhotoCropModal, openChangePasswordModal } from '../components/profile-modal.js?v=1.8.198';
++import { openPopup } from '../components/modal.js?v=1.8.199';
++import { showToast } from '../components/toast.js?v=1.8.199';
++import { confirmDialog } from '../components/ui-confirm.js?v=1.8.199';
++import { openMenu } from '../components/ui-menu.js?v=1.8.199';
++import { PAGE_SIZE, renderPager } from '../components/list-page.js?v=1.8.199';
++import { formatPersonName, initials } from '../utils/formatter.js?v=1.8.199';
++import { sendResetEmailForUser, mapAuthError } from '../core/auth.js?v=1.8.199';
++import { openPhotoCropModal, openChangePasswordModal } from '../components/profile-modal.js?v=1.8.199';
+ import {
+   getRoleTitle,
+   getRolePluralTitle,
+   loadUsersDirectory,
+   resolveUserDisplay,
+   saveUserFields
+-} from '../services/user-directory.service.js?v=1.8.198';
++} from '../services/user-directory.service.js?v=1.8.199';
+ 
+ function el(tag, cls, text) {
+   const node = document.createElement(tag);
+diff --git a/public/js/pages/batches.page.js b/public/js/pages/batches.page.js
+index 9716aeb..d061b4a 100644
+--- a/public/js/pages/batches.page.js
++++ b/public/js/pages/batches.page.js
+@@ -1,16 +1,16 @@
+ import { db } from '../config/firebase-config.js';
+ import { collection, getDocs, getDoc, query, where, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, deleteField } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
+-import { showToast } from '../components/toast.js?v=1.8.198';
+-import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.198';
+-import { PAGE_SIZE, buildStats, buildToolbar, renderPager, renderEmptyTableState } from '../components/list-page.js?v=1.8.198';
+-import { createSelect } from '../components/ui-select.js?v=1.8.198';
+-import { createMultiSelect } from '../components/multi-select.js?v=1.8.198';
+-import { openMenu } from '../components/ui-menu.js?v=1.8.198';
+-import { confirmDialog } from '../components/ui-confirm.js?v=1.8.198';
+-import { loadSessions, getSelectedSessionId, getSelectedSession, getCachedSessions } from '../core/sessions.js?v=1.8.198';
+-import { ensureReferenceData, loadAllYouthSessionsForCompare, getCachedReferenceData } from '../services/report.service.js?v=1.8.198';
+-import { batchAllowsCourse, batchCourseLabel, batchCourseTooltip, isCourseActive } from '../utils/session-rules.js?v=1.8.198';
+-import { getRoleTitle } from '../services/user-directory.service.js?v=1.8.198';
++import { showToast } from '../components/toast.js?v=1.8.199';
++import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.199';
++import { PAGE_SIZE, buildStats, buildToolbar, renderPager, renderEmptyTableState } from '../components/list-page.js?v=1.8.199';
++import { createSelect } from '../components/ui-select.js?v=1.8.199';
++import { createMultiSelect } from '../components/multi-select.js?v=1.8.199';
++import { openMenu } from '../components/ui-menu.js?v=1.8.199';
++import { confirmDialog } from '../components/ui-confirm.js?v=1.8.199';
++import { loadSessions, getSelectedSessionId, getSelectedSession, getCachedSessions } from '../core/sessions.js?v=1.8.199';
++import { ensureReferenceData, loadAllYouthSessionsForCompare, getCachedReferenceData } from '../services/report.service.js?v=1.8.199';
++import { batchAllowsCourse, batchCourseLabel, batchCourseTooltip, isCourseActive } from '../utils/session-rules.js?v=1.8.199';
++import { getRoleTitle } from '../services/user-directory.service.js?v=1.8.199';
+ // Batches Part 2A/2B: add/edit form, delete, student capacity
+ 
+ const TEXT_KEYS = ['name', 'code', 'capacity'];
+diff --git a/public/js/pages/branch-heads.page.js b/public/js/pages/branch-heads.page.js
+index 7141b86..155d398 100644
+--- a/public/js/pages/branch-heads.page.js
++++ b/public/js/pages/branch-heads.page.js
+@@ -1,13 +1,13 @@
+ import { db } from '../config/firebase-config.js';
+ import { collection, getDocs, doc, getDoc, setDoc, updateDoc, deleteDoc, query, where, serverTimestamp } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
+-import { createSelect } from '../components/ui-select.js?v=1.8.198';
+-import { openMenu } from '../components/ui-menu.js?v=1.8.198';
+-import { confirmDialog } from '../components/ui-confirm.js?v=1.8.198';
+-import { showToast } from '../components/toast.js?v=1.8.198';
+-import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.198';
+-import { PAGE_SIZE, buildStats, buildToolbar, renderPager, renderEmptyTableState } from '../components/list-page.js?v=1.8.198';
+-import { formatPersonName } from '../utils/formatter.js?v=1.8.198';
+-import { loadUsersDirectory, getRoleTitle, getRolePluralTitle } from '../services/user-directory.service.js?v=1.8.198';
++import { createSelect } from '../components/ui-select.js?v=1.8.199';
++import { openMenu } from '../components/ui-menu.js?v=1.8.199';
++import { confirmDialog } from '../components/ui-confirm.js?v=1.8.199';
++import { showToast } from '../components/toast.js?v=1.8.199';
++import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.199';
++import { PAGE_SIZE, buildStats, buildToolbar, renderPager, renderEmptyTableState } from '../components/list-page.js?v=1.8.199';
++import { formatPersonName } from '../utils/formatter.js?v=1.8.199';
++import { loadUsersDirectory, getRoleTitle, getRolePluralTitle } from '../services/user-directory.service.js?v=1.8.199';
+ 
+ const TEXT_KEYS = ['name', 'email', 'phone'];
+ const KEYS = ['name', 'email', 'phone', 'branchId', 'status'];
+diff --git a/public/js/pages/branches.page.js b/public/js/pages/branches.page.js
+index 312a599..9481f18 100644
+--- a/public/js/pages/branches.page.js
++++ b/public/js/pages/branches.page.js
+@@ -4,10 +4,10 @@ import { createSelect } from '../components/ui-select.js';
+ import { openMenu } from '../components/ui-menu.js';
+ import { confirmDialog } from '../components/ui-confirm.js';
+ import { showToast } from '../components/toast.js';
+-import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.198';
+-import { PAGE_SIZE, buildStats, buildToolbar, renderPager, renderEmptyTableState } from '../components/list-page.js?v=1.8.198';
+-import { formatPersonName } from '../utils/formatter.js?v=1.8.198';
+-import { getRoleTitle, getRolePluralTitle } from '../services/user-directory.service.js?v=1.8.198';
++import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.199';
++import { PAGE_SIZE, buildStats, buildToolbar, renderPager, renderEmptyTableState } from '../components/list-page.js?v=1.8.199';
++import { formatPersonName } from '../utils/formatter.js?v=1.8.199';
++import { getRoleTitle, getRolePluralTitle } from '../services/user-directory.service.js?v=1.8.199';
+ 
+ let unbindBranchesBranding = null;
+ 
+diff --git a/public/js/pages/courses.page.js b/public/js/pages/courses.page.js
+index 72600ea..bc88393 100644
+--- a/public/js/pages/courses.page.js
++++ b/public/js/pages/courses.page.js
+@@ -1,20 +1,20 @@
+ import { db } from '../config/firebase-config.js';
+-import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.198';
++import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.199';
+ import { collection, getDocs, query, where, doc, addDoc, updateDoc, deleteDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
+ import { createSelect } from '../components/ui-select.js';
+ import { openMenu } from '../components/ui-menu.js';
+ import { confirmDialog } from '../components/ui-confirm.js';
+ import { showToast } from '../components/toast.js';
+-import { buildStats, buildToolbar, renderPager, renderEmptyTableState, PAGE_SIZE } from '../components/list-page.js?v=1.8.198';
+-import { INST_PER_SEM, feeTotal, courseFeeOf, discountOf } from '../utils/fees.js?v=1.8.198';
+-import { isCourseActive } from '../utils/session-rules.js?v=1.8.198';
++import { buildStats, buildToolbar, renderPager, renderEmptyTableState, PAGE_SIZE } from '../components/list-page.js?v=1.8.199';
++import { INST_PER_SEM, feeTotal, courseFeeOf, discountOf } from '../utils/fees.js?v=1.8.199';
++import { isCourseActive } from '../utils/session-rules.js?v=1.8.199';
+ import {
+   ensureReferenceData,
+   getCachedReferenceData,
+   scopeReferenceDataByCtx,
+   isCacheStale,
+   scheduleDelayedSkeleton
+-} from '../services/report.service.js?v=1.8.198';
++} from '../services/report.service.js?v=1.8.199';
+ 
+ const ENDED = ['ended', 'closed', 'completed', 'archived', 'cancelled'];
+ const LOCK_FIELDS = { admission: 'Admission fee', installment: 'Installment amount', material: 'Material fee' };
+diff --git a/public/js/pages/dashboard.page.js b/public/js/pages/dashboard.page.js
+index 3f362bc..5d159b4 100644
+--- a/public/js/pages/dashboard.page.js
++++ b/public/js/pages/dashboard.page.js
+@@ -1,31 +1,31 @@
+ // dashboard.page.js — Read-only Youth Centre Dashboard (#/dashboard) + preserved Unique Kids placeholder.
+ 
+-import { ROUTES } from '../core/router.js?v=1.8.198';
++import { ROUTES } from '../core/router.js?v=1.8.199';
+ import { db } from '../config/firebase-config.js';
+ import { collection, getDocs, query, where } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
+-import { createSelect } from '../components/ui-select.js?v=1.8.198';
++import { createSelect } from '../components/ui-select.js?v=1.8.199';
+ import {
+   renderDonutChart,
+   renderBarChart,
+   renderStackedBarChart,
+   renderLineChart
+-} from '../components/charts.js?v=1.8.198';
+-import { openPaymentDetailsModal } from '../components/payment-details-modal.js?v=1.8.198';
+-import { loadDashboardArchiveReminder, getCachedDashboardArchiveReminder } from '../services/archive.service.js?v=1.8.198';
+-import { resolveUserDisplay, getRoleTitle } from '../services/user-directory.service.js?v=1.8.198';
+-import { getCachedSessions, loadSessions, getSelectedSession, getSelectedSessionId, hasFreshSessionsCache } from '../core/sessions.js?v=1.8.198';
+-import { getOrgTimezone } from '../utils/session-rules.js?v=1.8.198';
+-import { formatPersonName, initials, formatDateIN } from '../utils/formatter.js?v=1.8.198';
+-import { buildYouthDashboardData } from '../services/dashboard.service.js?v=1.8.198';
+-import { localToday } from '../utils/school-lifecycle.js?v=1.8.198';
++} from '../components/charts.js?v=1.8.199';
++import { openPaymentDetailsModal } from '../components/payment-details-modal.js?v=1.8.199';
++import { loadDashboardArchiveReminder, getCachedDashboardArchiveReminder } from '../services/archive.service.js?v=1.8.199';
++import { resolveUserDisplay, getRoleTitle } from '../services/user-directory.service.js?v=1.8.199';
++import { getCachedSessions, loadSessions, getSelectedSession, getSelectedSessionId, hasFreshSessionsCache } from '../core/sessions.js?v=1.8.199';
++import { getOrgTimezone } from '../utils/session-rules.js?v=1.8.199';
++import { formatPersonName, initials, formatDateIN } from '../utils/formatter.js?v=1.8.199';
++import { buildYouthDashboardData } from '../services/dashboard.service.js?v=1.8.199';
++import { localToday } from '../utils/school-lifecycle.js?v=1.8.199';
+ import {
+   isBreakOverdueReturn,
+   formatBreakPeriod,
+   formatShortMonthYear,
+   evaluateKidsPendingBills,
+   syncOpenKidsBills
+-} from '../utils/school-billing.js?v=1.8.198';
+-import { openKidsResumeBreakModal } from '../utils/school-break-modals.js?v=1.8.198';
++} from '../utils/school-billing.js?v=1.8.199';
++import { openKidsResumeBreakModal } from '../utils/school-break-modals.js?v=1.8.199';
+ import {
+   ensureReferenceData,
+   getCachedReferenceData,
+@@ -50,7 +50,7 @@ import {
+   modeDisplayMeta,
+   formatINR,
+   fmtDate
+-} from '../services/report.service.js?v=1.8.198';
++} from '../services/report.service.js?v=1.8.199';
+ 
+ let state = null;
+ let profileListener = null;
+diff --git a/public/js/pages/login.page.js b/public/js/pages/login.page.js
+index 1261cd2..ea38b1c 100644
+--- a/public/js/pages/login.page.js
++++ b/public/js/pages/login.page.js
+@@ -5,9 +5,9 @@ import {
+   resolveSession,
+   sendResetEmailForUser,
+   mapAuthError
+-} from '../core/auth.js?v=1.8.198';
+-import { preloadLoginSound, playLoginSound, stopLoginSound } from '../utils/sound.js?v=1.8.198';
+-import { getRoleTitle, getRolePluralTitle, getPublicBranding, loadPublicBranding } from '../services/user-directory.service.js?v=1.8.198';
++} from '../core/auth.js?v=1.8.199';
++import { preloadLoginSound, playLoginSound, stopLoginSound } from '../utils/sound.js?v=1.8.199';
++import { getRoleTitle, getRolePluralTitle, getPublicBranding, loadPublicBranding } from '../services/user-directory.service.js?v=1.8.199';
+ 
+ const URL_REASONS = {
+   timeout: true,
+diff --git a/public/js/pages/org-details.page.js b/public/js/pages/org-details.page.js
+index 90ad56c..9ee5de7 100644
+--- a/public/js/pages/org-details.page.js
++++ b/public/js/pages/org-details.page.js
+@@ -1,10 +1,10 @@
+ import { db } from '../config/firebase-config.js';
+-import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.198';
+-import { showToast } from '../components/toast.js?v=1.8.198';
+-import { createManageDataController } from '../core/data-transfer.js?v=1.8.198';
+-import { mount as mountBranchHeads } from './branch-heads.page.js?v=1.8.198';
+-import { mountAuthorisedUsers } from './authorised-users.js?v=1.8.198';
+-import { syncPublicBranding } from '../services/user-directory.service.js?v=1.8.198';
++import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.199';
++import { showToast } from '../components/toast.js?v=1.8.199';
++import { createManageDataController } from '../core/data-transfer.js?v=1.8.199';
++import { mount as mountBranchHeads } from './branch-heads.page.js?v=1.8.199';
++import { mountAuthorisedUsers } from './authorised-users.js?v=1.8.199';
++import { syncPublicBranding } from '../services/user-directory.service.js?v=1.8.199';
+ import { doc, getDoc, setDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
+ 
+ const KEYS = ['name', 'tagline', 'phones', 'receiptCode', 'email', 'website', 'address'];
+@@ -157,7 +157,7 @@ export async function mount({ profile }) {
+     if (!isSuper || usersMounted || usersLoading || !usersHost) return;
+     usersLoading = true;
+     try {
+-      const res = await fetch('pages/branch-heads.html?v=1.8.198');
++      const res = await fetch('pages/branch-heads.html?v=1.8.199');
+       if (!res.ok) throw new Error('HTTP ' + res.status);
+       usersHost.innerHTML = await res.text();
+       const ctrl = await mountBranchHeads({ profile });
+diff --git a/public/js/pages/pay-fees.page.js b/public/js/pages/pay-fees.page.js
+index 2c3b6fc..e8c8eaf 100644
+--- a/public/js/pages/pay-fees.page.js
++++ b/public/js/pages/pay-fees.page.js
+@@ -11,14 +11,14 @@ import {
+   runTransaction,
+   serverTimestamp
+ } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
+-import { createSelect } from '../components/ui-select.js?v=1.8.198';
+-import { openPopup } from '../components/modal.js?v=1.8.198';
+-import { confirmDialog } from '../components/ui-confirm.js?v=1.8.198';
+-import { showToast } from '../components/toast.js?v=1.8.198';
+-import { getSelectedSessionId, getCachedSessions, loadSessions, hasFreshSessionsCache } from '../core/sessions.js?v=1.8.198';
+-import { todayISO, fmtDate, examWindowOf, installmentSchedule } from '../utils/session-rules.js?v=1.8.198';
+-import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.198';
+-import { getRoleTitle, resolveUserDisplay } from '../services/user-directory.service.js?v=1.8.198';
++import { createSelect } from '../components/ui-select.js?v=1.8.199';
++import { openPopup } from '../components/modal.js?v=1.8.199';
++import { confirmDialog } from '../components/ui-confirm.js?v=1.8.199';
++import { showToast } from '../components/toast.js?v=1.8.199';
++import { getSelectedSessionId, getCachedSessions, loadSessions, hasFreshSessionsCache } from '../core/sessions.js?v=1.8.199';
++import { todayISO, fmtDate, examWindowOf, installmentSchedule } from '../utils/session-rules.js?v=1.8.199';
++import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.199';
++import { getRoleTitle, resolveUserDisplay } from '../services/user-directory.service.js?v=1.8.199';
+ import {
+   ensureReferenceData,
+   getCachedReferenceData,
+@@ -26,7 +26,7 @@ import {
+   syncYouthStudentsDelta,
+   getCachedYouthStudents,
+   isCacheStale
+-} from '../services/report.service.js?v=1.8.198';
++} from '../services/report.service.js?v=1.8.199';
+ import {
+   calculateLateFee,
+   fetchStudentPayments,
+@@ -36,7 +36,7 @@ import {
+   courseBalanceWithoutExam,
+   calculateStudentFinancials,
+   repairStudentAdmissionPayment
+-} from '../services/payment.service.js?v=1.8.198';
++} from '../services/payment.service.js?v=1.8.199';
+ 
+ let currentUserProfile = null;
+ let currentCtx = 'youth';
+diff --git a/public/js/pages/payment-receipt.page.js b/public/js/pages/payment-receipt.page.js
+index 3e67728..203172e 100644
+--- a/public/js/pages/payment-receipt.page.js
++++ b/public/js/pages/payment-receipt.page.js
+@@ -2,19 +2,19 @@
+ // Matches reference-templates/monthly-payment-receipt (2).html and monthly-payment-receipt-late-fine (1).html
+ import { db } from '../config/firebase-config.js';
+ import { doc, getDoc, getDocs, collection, query, where } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
+-import { inWords } from '../utils/admission-receipt.js?v=1.8.198';
+-import { showToast } from '../components/toast.js?v=1.8.198';
+-import { fmtDate, todayISO } from '../utils/session-rules.js?v=1.8.198';
+-import { formatPersonName } from '../utils/formatter.js?v=1.8.198';
+-import { getStudentPhotoSrc } from '../utils/student-media.js?v=1.8.198';
+-import { getRoleTitle } from '../services/user-directory.service.js?v=1.8.198';
+-import { dueDateForMonth, formatShortMonthYear } from '../utils/school-billing.js?v=1.8.198';
++import { inWords } from '../utils/admission-receipt.js?v=1.8.199';
++import { showToast } from '../components/toast.js?v=1.8.199';
++import { fmtDate, todayISO } from '../utils/session-rules.js?v=1.8.199';
++import { formatPersonName } from '../utils/formatter.js?v=1.8.199';
++import { getStudentPhotoSrc } from '../utils/student-media.js?v=1.8.199';
++import { getRoleTitle } from '../services/user-directory.service.js?v=1.8.199';
++import { dueDateForMonth, formatShortMonthYear } from '../utils/school-billing.js?v=1.8.199';
+ import {
+   fetchStudentPayments,
+   isInstallmentPaid,
+   installmentCourseFee,
+   installmentBalanceDue
+-} from '../services/payment.service.js?v=1.8.198';
++} from '../services/payment.service.js?v=1.8.199';
+ 
+ function $(id) {
+   return document.getElementById(id);
+diff --git a/public/js/pages/payments.page.js b/public/js/pages/payments.page.js
+index 0afc862..e8e0b62 100644
+--- a/public/js/pages/payments.page.js
++++ b/public/js/pages/payments.page.js
+@@ -1,17 +1,17 @@
+ // payments.page.js — Payment History page for Youth Centre (#/payments) & Unique Kids (#/school-payments).
+ // Follows Rule 1 (global toolbar session only, plain-text subtitle) & Rule 2 (shared [ Branch -> Batch ] box).
+ 
+-import { createSelect } from '../components/ui-select.js?v=1.8.198';
+-import { createBranchBatchFilter, clearPersistedBranchBatchFilters } from '../components/branch-batch-filter.js?v=1.8.198';
+-import { openPopup } from '../components/modal.js?v=1.8.198';
+-import { showToast } from '../components/toast.js?v=1.8.198';
+-import { renderPager, renderEmptyTableState, PAGE_SIZE } from '../components/list-page.js?v=1.8.198';
++import { createSelect } from '../components/ui-select.js?v=1.8.199';
++import { createBranchBatchFilter, clearPersistedBranchBatchFilters } from '../components/branch-batch-filter.js?v=1.8.199';
++import { openPopup } from '../components/modal.js?v=1.8.199';
++import { showToast } from '../components/toast.js?v=1.8.199';
++import { renderPager, renderEmptyTableState, PAGE_SIZE } from '../components/list-page.js?v=1.8.199';
+ import {
+   getCachedSessions,
+   loadSessions,
+   getSelectedSession,
+   hasFreshSessionsCache
+-} from '../core/sessions.js?v=1.8.198';
++} from '../core/sessions.js?v=1.8.199';
+ import {
+   ensureReferenceData,
+   getCachedReferenceData,
+@@ -43,9 +43,9 @@ import {
+   formatINR,
+   fmtDate,
+   todayISO
+-} from '../services/report.service.js?v=1.8.198';
+-import { formatPersonName, initials } from '../utils/formatter.js?v=1.8.198';
+-import { resolveUserDisplay } from '../services/user-directory.service.js?v=1.8.198';
++} from '../services/report.service.js?v=1.8.199';
++import { formatPersonName, initials } from '../utils/formatter.js?v=1.8.199';
++import { resolveUserDisplay } from '../services/user-directory.service.js?v=1.8.199';
+ 
+ let state = null;
+ let sessionListener = null;
+diff --git a/public/js/pages/pending.page.js b/public/js/pages/pending.page.js
+index 20f0761..ba704ba 100644
+--- a/public/js/pages/pending.page.js
++++ b/public/js/pages/pending.page.js
+@@ -1,18 +1,18 @@
+ // pending.page.js — Shared Overdue Payments view for Youth Centre (#/pending) & Unique Kids (#/school-pending).
+ // Matches payments.page.js layout (no inner scroll, shared 10-row pager, short codes, icon actions, details popup).
+ 
+-import { createSelect } from '../components/ui-select.js?v=1.8.198';
+-import { createBranchBatchFilter, clearPersistedBranchBatchFilters } from '../components/branch-batch-filter.js?v=1.8.198';
+-import { openPopup } from '../components/modal.js?v=1.8.198';
+-import { showToast } from '../components/toast.js?v=1.8.198';
+-import { renderPager, renderEmptyTableState, PAGE_SIZE } from '../components/list-page.js?v=1.8.198';
+-import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.198';
++import { createSelect } from '../components/ui-select.js?v=1.8.199';
++import { createBranchBatchFilter, clearPersistedBranchBatchFilters } from '../components/branch-batch-filter.js?v=1.8.199';
++import { openPopup } from '../components/modal.js?v=1.8.199';
++import { showToast } from '../components/toast.js?v=1.8.199';
++import { renderPager, renderEmptyTableState, PAGE_SIZE } from '../components/list-page.js?v=1.8.199';
++import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.199';
+ import {
+   getCachedSessions,
+   loadSessions,
+   getSelectedSession,
+   hasFreshSessionsCache
+-} from '../core/sessions.js?v=1.8.198';
++} from '../core/sessions.js?v=1.8.199';
+ import {
+   ensureReferenceData,
+   getCachedReferenceData,
+@@ -39,8 +39,8 @@ import {
+   formatINR,
+   fmtDate,
+   todayISO
+-} from '../services/report.service.js?v=1.8.198';
+-import { initials } from '../utils/formatter.js?v=1.8.198';
++} from '../services/report.service.js?v=1.8.199';
++import { initials } from '../utils/formatter.js?v=1.8.199';
+ 
+ let state = null;
+ let sessionListener = null;
+diff --git a/public/js/pages/reports.page.js b/public/js/pages/reports.page.js
+index bce997c..f783acb 100644
+--- a/public/js/pages/reports.page.js
++++ b/public/js/pages/reports.page.js
+@@ -1,17 +1,17 @@
+ // reports.page.js — Read-only Youth Centre Reports page (#/reports)
+ // Keeps v1.8.179 joined KPI stat strips, header, filter bar & compact card radius with restored v1.8.178 multi-colour charts.
+ 
+-import { createSelect } from '../components/ui-select.js?v=1.8.198';
+-import { createBranchBatchFilter, clearPersistedBranchBatchFilters } from '../components/branch-batch-filter.js?v=1.8.198';
+-import { renderDonutChart, renderBarChart, renderStackedBarChart, renderLineChart } from '../components/charts.js?v=1.8.198';
+-import { showToast } from '../components/toast.js?v=1.8.198';
+-import { renderEmptyTableState } from '../components/list-page.js?v=1.8.198';
++import { createSelect } from '../components/ui-select.js?v=1.8.199';
++import { createBranchBatchFilter, clearPersistedBranchBatchFilters } from '../components/branch-batch-filter.js?v=1.8.199';
++import { renderDonutChart, renderBarChart, renderStackedBarChart, renderLineChart } from '../components/charts.js?v=1.8.199';
++import { showToast } from '../components/toast.js?v=1.8.199';
++import { renderEmptyTableState } from '../components/list-page.js?v=1.8.199';
+ import {
+   getCachedSessions,
+   loadSessions,
+   getSelectedSession,
+   hasFreshSessionsCache
+-} from '../core/sessions.js?v=1.8.198';
++} from '../core/sessions.js?v=1.8.199';
+ import {
+   ensureReferenceData,
+   getCachedReferenceData,
+@@ -34,8 +34,8 @@ import {
+   formatINR,
+   fmtDate,
+   todayISO
+-} from '../services/report.service.js?v=1.8.198';
+-import { resolveUserDisplay, getRoleTitle } from '../services/user-directory.service.js?v=1.8.198';
++} from '../services/report.service.js?v=1.8.199';
++import { resolveUserDisplay, getRoleTitle } from '../services/user-directory.service.js?v=1.8.199';
+ 
+ const FILTER_STORAGE_PREFIX = 'uicms.rep.v1.';
+ 
+diff --git a/public/js/pages/school-admission-receipt.page.js b/public/js/pages/school-admission-receipt.page.js
+index 796caba..5f69ad2 100644
+--- a/public/js/pages/school-admission-receipt.page.js
++++ b/public/js/pages/school-admission-receipt.page.js
+@@ -3,12 +3,12 @@
+ // Scope: Super Admin.
+ import { db } from '../config/firebase-config.js';
+ import { doc, getDoc, getDocs, collection, query, where } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
+-import { showToast } from '../components/toast.js?v=1.8.198';
+-import { createSelect } from '../components/ui-select.js?v=1.8.198';
+-import { formatDateIN } from '../utils/formatter.js?v=1.8.198';
+-import { buildSchoolReceiptData, fmtRs } from '../utils/school-receipt.js?v=1.8.198';
+-import { downloadSchoolReceiptPdf } from '../utils/school-receipt-pdf.js?v=1.8.198';
+-import { getStudentDocRecord } from '../utils/student-media.js?v=1.8.198';
++import { showToast } from '../components/toast.js?v=1.8.199';
++import { createSelect } from '../components/ui-select.js?v=1.8.199';
++import { formatDateIN } from '../utils/formatter.js?v=1.8.199';
++import { buildSchoolReceiptData, fmtRs } from '../utils/school-receipt.js?v=1.8.199';
++import { downloadSchoolReceiptPdf } from '../utils/school-receipt-pdf.js?v=1.8.199';
++import { getStudentDocRecord } from '../utils/student-media.js?v=1.8.199';
+ 
+ const COL = 'students';
+ let studentDocId = '';
+@@ -500,7 +500,7 @@ function renderReceipt(container, d) {
+     `;
+   } else if (d.paymentMode === 'none') {
+     paymentRows = `
+-      <tr><td>Admission fee (one-time)</td><td><span class="uk-pill due">No payment (${escapeHtml(d.noPaymentReasonFormatted)})</span></td><td>${fmtRs(0)}</td></tr>
++      <tr><td>Admission fee (one-time)</td><td><span class="uk-pill due">No payment &ndash; ${escapeHtml(d.noPaymentReasonFormatted)}</span></td><td>&#8377;0</td></tr>
+     `;
+   } else {
+     // Full payment
+@@ -521,13 +521,13 @@ function renderReceipt(container, d) {
+       <thead><tr><th>Description</th><th>Status</th><th>Amount</th></tr></thead>
+       <tbody>
+         ${paymentRows}
+-        ${d.actualAmountReceived > 0 ? `<tr><td>Payment mode</td><td><span class="uk-pill">${escapeHtml(d.paymentMethodLabel || 'Cash')}</span></td><td>${d.txnId ? 'TXN: ' + escapeHtml(d.txnId) : '—'}</td></tr>` : ''}
++        ${d.paymentMode !== 'none' && d.actualAmountReceived > 0 ? `<tr><td>Payment mode</td><td><span class="uk-pill">${escapeHtml(d.paymentMethodLabel || 'Cash')}</span></td><td>${d.txnId ? 'TXN: ' + escapeHtml(d.txnId) : '—'}</td></tr>` : ''}
+       </tbody>
+     </table>
+     <div class="uk-pbox">
+       <div class="uk-pcell">
+         <em>Total received</em>
+-        <b>${fmtRs(d.actualAmountReceived)}</b>
++        <b>${d.paymentMode === 'none' ? '&#8377;0' : fmtRs(d.actualAmountReceived)}</b>
+         <span class="w">(${escapeHtml(d.amountInWords)})</span>
+       </div>
+       <div class="uk-pcell bal">
+diff --git a/public/js/pages/school-admissions.page.js b/public/js/pages/school-admissions.page.js
+index f65e615..305d0d0 100644
+--- a/public/js/pages/school-admissions.page.js
++++ b/public/js/pages/school-admissions.page.js
+@@ -9,35 +9,35 @@ import {
+   collection, getDocs, query, where, doc, getDoc, addDoc, updateDoc, serverTimestamp,
+   runTransaction, deleteField, writeBatch, deleteDoc, arrayUnion
+ } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
+-import { showToast } from '../components/toast.js?v=1.8.198';
+-import { registerDirty, confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.198';
+-import { buildStats, buildToolbar, renderPager, PAGE_SIZE } from '../components/list-page.js?v=1.8.198';
+-import { createSelect } from '../components/ui-select.js?v=1.8.198';
+-import { createBranchBatchFilter } from '../components/branch-batch-filter.js?v=1.8.198';
+-import { openMenu } from '../components/ui-menu.js?v=1.8.198';
+-import { openPopup } from '../components/modal.js?v=1.8.198';
+-import { createDatePicker } from '../components/ui-datepicker.js?v=1.8.198';
+-import { confirmDialog } from '../components/ui-confirm.js?v=1.8.198';
+-import { formatINR, formatDateIN, initials } from '../utils/formatter.js?v=1.8.198';
+-import { validatePhone, validateEmail, validateDOB, validateName, validateRequired } from '../utils/validator.js?v=1.8.198';
+-import { readStudentId, readReceiptNo, writeCounter } from '../services/admission.service.js?v=1.8.198';
+-import { isCourseActive, batchAllowsCourse, todayISO } from '../utils/session-rules.js?v=1.8.198';
+-import { compressTo100KB, readAsDataURL, blobToDataURL, isImageFile } from '../utils/image-compress.js?v=1.8.198';
+-import { firstMonthlyMonth } from '../utils/school-receipt.js?v=1.8.198';
++import { showToast } from '../components/toast.js?v=1.8.199';
++import { registerDirty, confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.199';
++import { buildStats, buildToolbar, renderPager, PAGE_SIZE } from '../components/list-page.js?v=1.8.199';
++import { createSelect } from '../components/ui-select.js?v=1.8.199';
++import { createBranchBatchFilter } from '../components/branch-batch-filter.js?v=1.8.199';
++import { openMenu } from '../components/ui-menu.js?v=1.8.199';
++import { openPopup } from '../components/modal.js?v=1.8.199';
++import { createDatePicker } from '../components/ui-datepicker.js?v=1.8.199';
++import { confirmDialog } from '../components/ui-confirm.js?v=1.8.199';
++import { formatINR, formatDateIN, initials } from '../utils/formatter.js?v=1.8.199';
++import { validatePhone, validateEmail, validateDOB, validateName, validateRequired } from '../utils/validator.js?v=1.8.199';
++import { readStudentId, readReceiptNo, writeCounter } from '../services/admission.service.js?v=1.8.199';
++import { isCourseActive, batchAllowsCourse, todayISO } from '../utils/session-rules.js?v=1.8.199';
++import { compressTo100KB, readAsDataURL, blobToDataURL, isImageFile } from '../utils/image-compress.js?v=1.8.199';
++import { firstMonthlyMonth, formatNoPaymentReason } from '../utils/school-receipt.js?v=1.8.199';
+ import {
+   formatBreakStatusText,
+   isBreakOverdueReturn,
+   syncOpenKidsBills
+-} from '../utils/school-billing.js?v=1.8.198';
++} from '../utils/school-billing.js?v=1.8.199';
+ import {
+   createBillingStartSelector,
+   openKidsStartBreakModal,
+   openKidsResumeBreakModal,
+   openKidsUpgradePackageModal
+-} from '../utils/school-break-modals.js?v=1.8.198';
+-import { playPaymentSuccessSound } from '../utils/sound.js?v=1.8.198';
+-import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.198';
+-import { getRoleTitle } from '../services/user-directory.service.js?v=1.8.198';
++} from '../utils/school-break-modals.js?v=1.8.199';
++import { playPaymentSuccessSound } from '../utils/sound.js?v=1.8.199';
++import { openPaymentPopup, promptKidsAdmissionSuccess } from '../components/payment-popup.js?v=1.8.199';
++import { getRoleTitle } from '../services/user-directory.service.js?v=1.8.199';
+ import {
+   ensureReferenceData,
+   getCachedReferenceData,
+@@ -47,7 +47,7 @@ import {
+   syncKidsDatasetDelta,
+   isCacheStale,
+   scheduleDelayedSkeleton
+-} from '../services/report.service.js?v=1.8.198';
++} from '../services/report.service.js?v=1.8.199';
+ 
+ const COL = 'students';
+ const GENDERS = [
+@@ -1841,6 +1841,111 @@ export async function mount({ container, profile, ctx }) {
+       return result;
+     }
+ 
++    const selBatch = batches.find((b) => b.id === v.batchId) || null;
++    const chosenFirstMonth = v.firstMonthlyMonth || firstMonthlyMonth(v.admissionDate);
++    const billingMonthLabel = formatBillingMonth(chosenFirstMonth);
++
++    function openKidsNoPaymentConfirmPopup() {
++      const reasonLabel = v.paymentMode === 'none'
++        ? formatNoPaymentReason(v.noPaymentReason, v.noPaymentOther)
++        : 'Configured level admission fee is \u20B90';
++      const monthlyFeeNum = Number(selCourse?.monthlyFee || 0);
++      const popup = openPopup({
++        title: 'Confirm admission',
++        width: '480px',
++        onBeforeClose: () => !saving
++      });
++
++      const body = mk('div', 'sp-modal-form');
++      const summary = mk('div', 'pf-success-summary');
++      summary.style.marginBottom = '6px';
++
++      function addConfirmRow(label, value) {
++        const row = mk('div', 'pf-success-row');
++        const lbl = mk('span', 'pf-success-label', label);
++        const val = mk('span', 'pf-success-val');
++        if (typeof value === 'string') val.textContent = value;
++        else if (value) val.appendChild(value);
++        row.append(lbl, val);
++        summary.appendChild(row);
++      }
++
++      addConfirmRow('Student', mk('span', 'font-semibold', v.name));
++      addConfirmRow('Level', selCourse?.name || '-');
++      addConfirmRow('Batch', selBatch?.name || '-');
++      addConfirmRow('Admission date', formatDateIN(v.admissionDate) || v.admissionDate || '-');
++      const feeBadge = mk('span', '', 'Admission fee: \u20B90 (No payment)');
++      feeBadge.style.cssText = 'display:inline-block;background:#FFF7ED;border:1px dashed #FB923C;color:#C2410C;padding:2px 9px;border-radius:9px;font-size:12px;font-weight:600;';
++      addConfirmRow('Fee status', feeBadge);
++      addConfirmRow('Reason', reasonLabel);
++
++      const billingBanner = mk('div');
++      billingBanner.style.cssText = 'background:#EEF2FF;border:1px solid #C7D2FE;color:#312E81;border-radius:10px;padding:10px 12px;font-size:13px;font-weight:500;';
++      billingBanner.textContent = `Monthly fee ${formatINR(monthlyFeeNum)} will be billed from ${billingMonthLabel}`;
++
++      const footer = mk('div', 'adm-view-foot');
++      footer.style.marginTop = '4px';
++      const popCancelBtn = mk('button', 'ui-btn ghost', 'Cancel');
++      popCancelBtn.type = 'button';
++      const popConfirmBtn = mk('button', 'ui-btn primary', 'Confirm admission');
++      popConfirmBtn.type = 'button';
++
++      popCancelBtn.onclick = () => {
++        if (saving) return;
++        popup.close();
++      };
++
++      popConfirmBtn.onclick = async () => {
++        if (saving) return;
++        saving = true;
++        refresh();
++        popCancelBtn.disabled = true;
++        popConfirmBtn.disabled = true;
++        popConfirmBtn.innerHTML = '<i data-lucide="loader-2" class="spin"></i> Saving...';
++        if (typeof lucide !== 'undefined') lucide.createIcons();
++        setState('Saving...', 'dirty');
++        try {
++          const result = await executeKidsAdmissionSave({ mode: '', txnId: '', remarks: '' });
++          saved = {};
++          clearDirty();
++          saving = false;
++          popup.close();
++          closeForm();
++          load({ forceRefresh: false });
++          playPaymentSuccessSound();
++          showToast({ type: 'success', message: 'Admission saved! Student ID: ' + result.studentId });
++          promptKidsAdmissionSuccess({
++            studentDocId: result.id,
++            studentId: result.studentId,
++            studentName: v.name,
++            courseName: result.courseName || selCourse?.name || '',
++            batchName: result.batchName || selBatch?.name || '',
++            receiptNo: result.receiptNo,
++            admFeePaid: 0,
++            paymentMode: v.paymentMode || 'none',
++            noPaymentReasonLabel: reasonLabel,
++            monthlyFee: result.monthlyFee ?? monthlyFeeNum,
++            firstMonthlyMonthLabel: billingMonthLabel,
++            onAdmitAnother: () => openForm(null)
++          });
++        } catch (e) {
++          saving = false;
++          popCancelBtn.disabled = false;
++          popConfirmBtn.disabled = false;
++          popConfirmBtn.textContent = 'Confirm admission';
++          refresh();
++          setState('Save failed', 'error');
++          showToast({ type: 'error', message: e.message || 'Admission could not be saved. Please retry.' });
++        }
++      };
++
++      footer.append(popCancelBtn, popConfirmBtn);
++      body.append(summary, billingBanner, footer);
++      popup.container.appendChild(body);
++      if (typeof lucide !== 'undefined') lucide.createIcons();
++      popConfirmBtn.focus();
++    }
++
+     if (!updating && previewCharge > 0) {
+       openPaymentPopup({
+         student: {
+@@ -1856,6 +1961,10 @@ export async function mount({ container, profile, ctx }) {
+           paymentMode: v.paymentMode,
+           admFee: previewCharge,
+           courseName: selCourse?.name || '',
++          batchName: selBatch?.name || '',
++          monthlyFee: Number(selCourse?.monthlyFee || 0),
++          firstMonthlyMonthLabel: billingMonthLabel,
++          onAdmitAnother: () => openForm(null),
+           onConfirmPayment: async (pp) => {
+             const res = await executeKidsAdmissionSave(pp);
+             saved = {};
+@@ -1872,12 +1981,16 @@ export async function mount({ container, profile, ctx }) {
+       return;
+     }
+ 
++    if (!updating && (v.paymentMode === 'none' || previewCharge === 0)) {
++      openKidsNoPaymentConfirmPopup();
++      return;
++    }
++
+     saving = true; refresh(); saveBtn.disabled = true; cancelBtn.disabled = true; setState('Saving...', 'dirty');
+     try {
+       const result = await executeKidsAdmissionSave({ mode: '', txnId: '', remarks: '' });
+       closeForm();
+-      if (!updating) playPaymentSuccessSound();
+-      showToast({ type: 'success', message: updating ? 'Student details updated. Original payment unchanged.' : 'Admission saved.' });
++      showToast({ type: 'success', message: 'Student details updated. Original payment unchanged.' });
+       location.hash = '#/school-admissions/' + encodeURIComponent(result.id) + '/receipt';
+     } catch (e) {
+       if (alive) { saving = false; refresh(); setState('Save failed', 'error'); showToast({ type: 'error', message: e.message || 'Admission could not be saved. Please retry.' }); }
+diff --git a/public/js/pages/school-break.page.js b/public/js/pages/school-break.page.js
+index e3b30e0..1529e4b 100644
+--- a/public/js/pages/school-break.page.js
++++ b/public/js/pages/school-break.page.js
+@@ -3,29 +3,29 @@
+ // and "Break ended - not rejoined" follow-up list.
+ import { db } from '../config/firebase-config.js';
+ import { collection, getDocs, query, where } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
+-import { showToast } from '../components/toast.js?v=1.8.198';
+-import { PAGE_SIZE, buildStats, buildToolbar, renderPager } from '../components/list-page.js?v=1.8.198';
+-import { openPopup } from '../components/modal.js?v=1.8.198';
+-import { createSelect } from '../components/ui-select.js?v=1.8.198';
+-import { formatDateIN, formatPersonName } from '../utils/formatter.js?v=1.8.198';
+-import { localToday } from '../utils/school-lifecycle.js?v=1.8.198';
++import { showToast } from '../components/toast.js?v=1.8.199';
++import { PAGE_SIZE, buildStats, buildToolbar, renderPager } from '../components/list-page.js?v=1.8.199';
++import { openPopup } from '../components/modal.js?v=1.8.199';
++import { createSelect } from '../components/ui-select.js?v=1.8.199';
++import { formatDateIN, formatPersonName } from '../utils/formatter.js?v=1.8.199';
++import { localToday } from '../utils/school-lifecycle.js?v=1.8.199';
+ import {
+   formatBreakPeriod,
+   formatShortMonthYear,
+   isBreakOverdueReturn
+-} from '../utils/school-billing.js?v=1.8.198';
++} from '../utils/school-billing.js?v=1.8.199';
+ import {
+   openKidsStartBreakModal,
+   openKidsResumeBreakModal
+-} from '../utils/school-break-modals.js?v=1.8.198';
+-import { getRoleTitle, resolveUserDisplay } from '../services/user-directory.service.js?v=1.8.198';
++} from '../utils/school-break-modals.js?v=1.8.199';
++import { getRoleTitle, resolveUserDisplay } from '../services/user-directory.service.js?v=1.8.199';
+ import {
+   ensureKidsDataset,
+   getCachedKidsDataset,
+   syncKidsDatasetDelta,
+   isCacheStale,
+   scheduleDelayedSkeleton
+-} from '../services/report.service.js?v=1.8.198';
++} from '../services/report.service.js?v=1.8.199';
+ 
+ const COL = 'students';
+ const BREAKS_COL = 'breaks';
+diff --git a/public/js/pages/school-delete.page.js b/public/js/pages/school-delete.page.js
+index a923fab..8f119a4 100644
+--- a/public/js/pages/school-delete.page.js
++++ b/public/js/pages/school-delete.page.js
+@@ -6,9 +6,9 @@
+ // disabled. No browser-only partial-delete fallback is provided.
+ import { db } from '../config/firebase-config.js';
+ import { doc, getDoc } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
+-import { showToast } from '../components/toast.js?v=1.8.198';
+-import { formatINR, formatDateIN } from '../utils/formatter.js?v=1.8.198';
+-import { getRoleTitle } from '../services/user-directory.service.js?v=1.8.198';
++import { showToast } from '../components/toast.js?v=1.8.199';
++import { formatINR, formatDateIN } from '../utils/formatter.js?v=1.8.199';
++import { getRoleTitle } from '../services/user-directory.service.js?v=1.8.199';
+ 
+ const COL = 'students';
+ 
+diff --git a/public/js/pages/school-end.page.js b/public/js/pages/school-end.page.js
+index 3929e77..7e7428c 100644
+--- a/public/js/pages/school-end.page.js
++++ b/public/js/pages/school-end.page.js
+@@ -4,10 +4,10 @@
+ // are preserved. Idempotent (repeated clicks do not duplicate end events).
+ import { db } from '../config/firebase-config.js';
+ import { doc, getDoc, getDocs, query, where, updateDoc, runTransaction, serverTimestamp, collection } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
+-import { showToast } from '../components/toast.js?v=1.8.198';
+-import { localToday, nextMonth } from '../utils/school-lifecycle.js?v=1.8.198';
+-import { formatINR, formatDateIN } from '../utils/formatter.js?v=1.8.198';
+-import { getRoleTitle } from '../services/user-directory.service.js?v=1.8.198';
++import { showToast } from '../components/toast.js?v=1.8.199';
++import { localToday, nextMonth } from '../utils/school-lifecycle.js?v=1.8.199';
++import { formatINR, formatDateIN } from '../utils/formatter.js?v=1.8.199';
++import { getRoleTitle } from '../services/user-directory.service.js?v=1.8.199';
+ 
+ const COL = 'students';
+ const ENROLMENTS_COL = 'enrolments';
+diff --git a/public/js/pages/school-fee-payment.page.js b/public/js/pages/school-fee-payment.page.js
+index e9a6ca7..464b753 100644
+--- a/public/js/pages/school-fee-payment.page.js
++++ b/public/js/pages/school-fee-payment.page.js
+@@ -2,11 +2,11 @@
+ // Super Admin only. Shows bill details and opens the shared payment modal.
+ import { db } from '../config/firebase-config.js';
+ import { doc, getDoc } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
+-import { showToast } from '../components/toast.js?v=1.8.198';
+-import { formatINR } from '../utils/formatter.js?v=1.8.198';
+-import { computeLateFee, fetchOpenKidsBillsForStudent } from '../utils/school-billing.js?v=1.8.198';
+-import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.198';
+-import { getRoleTitle } from '../services/user-directory.service.js?v=1.8.198';
++import { showToast } from '../components/toast.js?v=1.8.199';
++import { formatINR } from '../utils/formatter.js?v=1.8.199';
++import { computeLateFee, fetchOpenKidsBillsForStudent } from '../utils/school-billing.js?v=1.8.199';
++import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.199';
++import { getRoleTitle } from '../services/user-directory.service.js?v=1.8.199';
+ 
+ const BILLS_COL = 'bills';
+ 
+diff --git a/public/js/pages/school-fees.page.js b/public/js/pages/school-fees.page.js
+index 9fe95cd..e118659 100644
+--- a/public/js/pages/school-fees.page.js
++++ b/public/js/pages/school-fees.page.js
+@@ -4,16 +4,16 @@
+ // 10th, late fine Rs 1/day from the 11th.
+ import { db } from '../config/firebase-config.js';
+ import { collection, getDocs, query, where } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
+-import { showToast } from '../components/toast.js?v=1.8.198';
+-import { PAGE_SIZE, buildStats, buildToolbar, renderPager } from '../components/list-page.js?v=1.8.198';
+-import { createSelect } from '../components/ui-select.js?v=1.8.198';
+-import { openMenu } from '../components/ui-menu.js?v=1.8.198';
+-import { formatINR, formatDateIN, formatPersonName } from '../utils/formatter.js?v=1.8.198';
+-import { getRoleTitle } from '../services/user-directory.service.js?v=1.8.198';
+-import { isCourseActive } from '../utils/session-rules.js?v=1.8.198';
+-import { localToday, monthSeq, nextMonth } from '../utils/school-lifecycle.js?v=1.8.198';
+-import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.198';
+-import { daysLate, computeLateFee, syncOpenKidsBills } from '../utils/school-billing.js?v=1.8.198';
++import { showToast } from '../components/toast.js?v=1.8.199';
++import { PAGE_SIZE, buildStats, buildToolbar, renderPager } from '../components/list-page.js?v=1.8.199';
++import { createSelect } from '../components/ui-select.js?v=1.8.199';
++import { openMenu } from '../components/ui-menu.js?v=1.8.199';
++import { formatINR, formatDateIN, formatPersonName } from '../utils/formatter.js?v=1.8.199';
++import { getRoleTitle } from '../services/user-directory.service.js?v=1.8.199';
++import { isCourseActive } from '../utils/session-rules.js?v=1.8.199';
++import { localToday, monthSeq, nextMonth } from '../utils/school-lifecycle.js?v=1.8.199';
++import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.199';
++import { daysLate, computeLateFee, syncOpenKidsBills } from '../utils/school-billing.js?v=1.8.199';
+ import {
+   ensureReferenceData,
+   getCachedReferenceData,
+@@ -23,7 +23,7 @@ import {
+   syncKidsDatasetDelta,
+   isCacheStale,
+   scheduleDelayedSkeleton
+-} from '../services/report.service.js?v=1.8.198';
++} from '../services/report.service.js?v=1.8.199';
+ 
+ const COL = 'students';
+ const BILLS_COL = 'bills';
+diff --git a/public/js/pages/school-students.page.js b/public/js/pages/school-students.page.js
+index bddeebf..e09200a 100644
+--- a/public/js/pages/school-students.page.js
++++ b/public/js/pages/school-students.page.js
+@@ -4,18 +4,18 @@
+ // permanent delete). Search by name, Student ID, or parent phone. Siblings may share phone.
+ import { db } from '../config/firebase-config.js';
+ import { collection, getDocs, query, where, doc, getDoc } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
+-import { showToast } from '../components/toast.js?v=1.8.198';
+-import { registerDirty, confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.198';
+-import { buildStats, buildToolbar } from '../components/list-page.js?v=1.8.198';
+-import { createSelect } from '../components/ui-select.js?v=1.8.198';
+-import { openMenu } from '../components/ui-menu.js?v=1.8.198';
+-import { confirmDialog } from '../components/ui-confirm.js?v=1.8.198';
+-import { formatINR, formatDateIN, formatPersonName, initials } from '../utils/formatter.js?v=1.8.198';
+-import { isCourseActive } from '../utils/session-rules.js?v=1.8.198';
+-import { localToday } from '../utils/school-lifecycle.js?v=1.8.198';
+-import { getRoleTitle } from '../services/user-directory.service.js?v=1.8.198';
+-import { loadStudentPhotos, getCachedStudentPhoto } from '../services/report.service.js?v=1.8.198';
+-import { getStudentPhotoSrc } from '../utils/student-media.js?v=1.8.198';
++import { showToast } from '../components/toast.js?v=1.8.199';
++import { registerDirty, confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.199';
++import { buildStats, buildToolbar } from '../components/list-page.js?v=1.8.199';
++import { createSelect } from '../components/ui-select.js?v=1.8.199';
++import { openMenu } from '../components/ui-menu.js?v=1.8.199';
++import { confirmDialog } from '../components/ui-confirm.js?v=1.8.199';
++import { formatINR, formatDateIN, formatPersonName, initials } from '../utils/formatter.js?v=1.8.199';
++import { isCourseActive } from '../utils/session-rules.js?v=1.8.199';
++import { localToday } from '../utils/school-lifecycle.js?v=1.8.199';
++import { getRoleTitle } from '../services/user-directory.service.js?v=1.8.199';
++import { loadStudentPhotos, getCachedStudentPhoto } from '../services/report.service.js?v=1.8.199';
++import { getStudentPhotoSrc } from '../utils/student-media.js?v=1.8.199';
+ 
+ const COL = 'students';
+ const GENDER_LABELS = { male: 'Male', female: 'Female', other: 'Other' };
+diff --git a/public/js/pages/school-transfer.page.js b/public/js/pages/school-transfer.page.js
+index cf63f9b..2d9d4ca 100644
+--- a/public/js/pages/school-transfer.page.js
++++ b/public/js/pages/school-transfer.page.js
+@@ -4,11 +4,11 @@
+ // Youth: youth context, same authorised branch/session/course.
+ import { db } from '../config/firebase-config.js';
+ import { doc, getDoc, getDocs, query, where, updateDoc, runTransaction, serverTimestamp, collection } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
+-import { showToast } from '../components/toast.js?v=1.8.198';
+-import { formatINR, formatDateIN } from '../utils/formatter.js?v=1.8.198';
+-import { isCourseActive, batchAllowsCourse } from '../utils/session-rules.js?v=1.8.198';
+-import { localToday } from '../utils/school-lifecycle.js?v=1.8.198';
+-import { getRoleTitle } from '../services/user-directory.service.js?v=1.8.198';
++import { showToast } from '../components/toast.js?v=1.8.199';
++import { formatINR, formatDateIN } from '../utils/formatter.js?v=1.8.199';
++import { isCourseActive, batchAllowsCourse } from '../utils/session-rules.js?v=1.8.199';
++import { localToday } from '../utils/school-lifecycle.js?v=1.8.199';
++import { getRoleTitle } from '../services/user-directory.service.js?v=1.8.199';
+ 
+ const COL = 'students';
+ const ENROLMENTS_COL = 'enrolments';
+diff --git a/public/js/pages/sessions.page.js b/public/js/pages/sessions.page.js
+index c701a64..0fe7193 100644
+--- a/public/js/pages/sessions.page.js
++++ b/public/js/pages/sessions.page.js
+@@ -4,10 +4,10 @@ import { createSelect } from '../components/ui-select.js';
+ import { openMenu } from '../components/ui-menu.js';
+ import { confirmDialog } from '../components/ui-confirm.js';
+ import { showToast } from '../components/toast.js';
+-import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.198';
+-import { PAGE_SIZE, buildStats, buildToolbar, renderPager, renderEmptyTableState } from '../components/list-page.js?v=1.8.198';
+-import { notifySessionsChanged, todayISO, expectedStatus, statusMismatch, daysLeft } from '../core/sessions.js?v=1.8.198';
+-import { firstInstallmentOf, admissionState, installmentSchedule, sessionPattern, fmtDate } from '../utils/session-rules.js?v=1.8.198';
++import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.199';
++import { PAGE_SIZE, buildStats, buildToolbar, renderPager, renderEmptyTableState } from '../components/list-page.js?v=1.8.199';
++import { notifySessionsChanged, todayISO, expectedStatus, statusMismatch, daysLeft } from '../core/sessions.js?v=1.8.199';
++import { firstInstallmentOf, admissionState, installmentSchedule, sessionPattern, fmtDate } from '../utils/session-rules.js?v=1.8.199';
+ 
+ const TEXT_KEYS = ['name', 'start', 'end'];
+ const KEYS = ['name', 'start', 'end', 'status'];
+diff --git a/public/js/pages/student-profile.page.js b/public/js/pages/student-profile.page.js
+index c52d7bf..3065f2c 100644
+--- a/public/js/pages/student-profile.page.js
++++ b/public/js/pages/student-profile.page.js
+@@ -11,20 +11,20 @@ import {
+   serverTimestamp,
+   runTransaction
+ } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
+-import { showToast } from '../components/toast.js?v=1.8.198';
+-import { openPopup } from '../components/modal.js?v=1.8.198';
+-import { createSelect } from '../components/ui-select.js?v=1.8.198';
+-import { confirmDialog } from '../components/ui-confirm.js?v=1.8.198';
+-import { openMenu } from '../components/ui-menu.js?v=1.8.198';
+-import { formatINR, formatDateIN, formatPersonName, formatGenderDisplay, initials } from '../utils/formatter.js?v=1.8.198';
+-import { validatePhone, validateEmail, validateDOB, validateName } from '../utils/validator.js?v=1.8.198';
+-import { registerDirty } from '../utils/unsaved-guard.js?v=1.8.198';
+-import { resolveUserDisplay, getRoleTitle, loadUsersDirectory } from '../services/user-directory.service.js?v=1.8.198';
+-import { compressTo100KB, blobToDataURL, isImageFile, formatBytes } from '../utils/image-compress.js?v=1.8.198';
+-import { getStudentPhotoSrc, getStudentDocRecord, getStudentDocSrc, getStudentDocMime } from '../utils/student-media.js?v=1.8.198';
+-import { todayISO } from '../utils/session-rules.js?v=1.8.198';
+-import { getSelectedSessionId } from '../core/sessions.js?v=1.8.198';
+-import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.198';
++import { showToast } from '../components/toast.js?v=1.8.197';
++import { openPopup } from '../components/modal.js?v=1.8.197';
++import { createSelect } from '../components/ui-select.js?v=1.8.197';
++import { confirmDialog } from '../components/ui-confirm.js?v=1.8.197';
++import { openMenu } from '../components/ui-menu.js?v=1.8.197';
++import { formatINR, formatDateIN, formatPersonName, formatGenderDisplay, initials } from '../utils/formatter.js?v=1.8.197';
++import { validatePhone, validateEmail, validateDOB, validateName } from '../utils/validator.js?v=1.8.197';
++import { registerDirty } from '../utils/unsaved-guard.js?v=1.8.197';
++import { resolveUserDisplay, getRoleTitle, loadUsersDirectory } from '../services/user-directory.service.js?v=1.8.197';
++import { compressTo100KB, blobToDataURL, isImageFile, formatBytes } from '../utils/image-compress.js?v=1.8.197';
++import { getStudentPhotoSrc, getStudentDocRecord, getStudentDocSrc, getStudentDocMime } from '../utils/student-media.js?v=1.8.197';
++import { todayISO } from '../utils/session-rules.js?v=1.8.197';
++import { getSelectedSessionId } from '../core/sessions.js?v=1.8.197';
++import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.197';
+ import {
+   fetchStudentPayments,
+   recordPaymentTx,
+@@ -35,8 +35,8 @@ import {
+   calculateStudentFinancials,
+   buildReceiptMenuItems,
+   repairStudentAdmissionPayment
+-} from '../services/payment.service.js?v=1.8.198';
+-import { courseFeeOf, discountOf } from '../utils/fees.js?v=1.8.198';
++} from '../services/payment.service.js?v=1.8.197';
++import { courseFeeOf, discountOf } from '../utils/fees.js?v=1.8.197';
+ import {
+   isBreakOverdueReturn,
+   formatBreakStatusText,
+@@ -45,13 +45,13 @@ import {
+   computeKidsStudentDues,
+   computeLateFee,
+   syncOpenKidsBills
+-} from '../utils/school-billing.js?v=1.8.198';
++} from '../utils/school-billing.js?v=1.8.197';
+ import {
+   openKidsStartBreakModal,
+   openKidsResumeBreakModal,
+   openKidsUpgradePackageModal
+-} from '../utils/school-break-modals.js?v=1.8.198';
+-import { firstMonthlyMonth } from '../utils/school-receipt.js?v=1.8.198';
++} from '../utils/school-break-modals.js?v=1.8.197';
++import { firstMonthlyMonth } from '../utils/school-receipt.js?v=1.8.197';
+ import {
+   ensureReferenceData,
+   getCachedReferenceData,
+@@ -60,7 +60,7 @@ import {
+   getCachedKidsHistory,
+   isCacheStale,
+   scheduleDelayedSkeleton
+-} from '../services/report.service.js?v=1.8.198';
++} from '../services/report.service.js?v=1.8.197';
+ 
+ const COL = 'students';
+ const QUALIFICATIONS = ['VIII Pass', 'Secondary (X) Pass', 'Higher Secondary (XII) Pass', 'ITI', 'Diploma', 'Undergraduate (Graduate)', 'Postgraduate', 'Other'];
+@@ -81,7 +81,6 @@ let paymentsCache = [];
+ let kidsBillsCache = [];
+ let kidsBreaksCache = [];
+ let kidsWaiversCache = [];
+-let kidsPaymentsHydrated = false;
+ let branchesCache = null;
+ let usersCache = null;
+ let coursesCache = null;
+@@ -142,7 +141,6 @@ function hydrateKidsCachesFromMemory(student) {
+   }
+   const hist = getCachedKidsHistory();
+   if (hist?.entries) {
+-    kidsPaymentsHydrated = true;
+     const mine = hist.entries.filter((e) => e.studentDocId === student.id || (student.studentId && e.studentId === student.studentId));
+     paymentsCache = mine
+       .filter((e) => !e.isPureWaiver)
+@@ -184,8 +182,6 @@ function hydrateKidsCachesFromMemory(student) {
+         waivedByName: e.recordedByName || '',
+         waivedByDesignation: e.recordedByDesignation || ''
+       }));
+-  } else {
+-    kidsPaymentsHydrated = false;
+   }
+   return true;
+ }
+@@ -206,7 +202,7 @@ async function getMyBranchId() {
+         }
+       }
+     }
+-  } catch (_) {}
++  } catch (_) { }
+   return null;
+ }
+ 
+@@ -455,7 +451,7 @@ export async function mount({ container, profile, ctx }) {
+         if (activeTab === 'documents') renderDocumentsTab();
+         else if (activeTab === 'payments') renderKidsPaymentsTab();
+         else if (activeTab === 'course') renderCourseTab();
+-      }).catch(() => {});
++      }).catch(() => { });
+       return;
+     }
+ 
+@@ -587,7 +583,6 @@ export function unmount() {
+   kidsBillsCache = [];
+   kidsBreaksCache = [];
+   kidsWaiversCache = [];
+-  kidsPaymentsHydrated = false;
+ }
+ 
+ function showLoading(show) {
+@@ -1073,10 +1068,15 @@ function renderMetrics() {
+     if (barText) barText.textContent = `${paidBillsCount} monthly bill${paidBillsCount === 1 ? '' : 's'} paid`;
+     const barFill = $('sp-stats-bar-fill');
+     if (barFill) barFill.style.width = pct + '%';
++    const docTabDesc = document.querySelector('#sp-tab-documents .sp-tab-desc');
++    if (docTabDesc) docTabDesc.textContent = 'Passport photo & student signature';
+     setTxt('sp-m-inst-paid', `${paidBillsCount}/${payableBillsCount} paid`);
+     return;
+   }
+ 
++  const docTabDescYouth = document.querySelector('#sp-tab-documents .sp-tab-desc');
++  if (docTabDescYouth) docTabDescYouth.textContent = 'Certificates & identification proofs';
++
+   setMetricCardLabels([
+     { label: 'Total Fee', sub: 'Course package' },
+     { label: 'Paid Amount' },
+@@ -1283,9 +1283,9 @@ function openEditPersonalModal() {
+ 
+   const unreg = registerDirty(() => {
+     return nameField.input.value !== (s.name || '') ||
+-           dobField.input.value !== (s.dob || '') ||
+-           genderSel.value.toLowerCase() !== (s.gender || '').toLowerCase() ||
+-           qualField.input.value !== (s.qualification || '');
++      dobField.input.value !== (s.dob || '') ||
++      genderSel.value.toLowerCase() !== (s.gender || '').toLowerCase() ||
++      qualField.input.value !== (s.qualification || '');
+   });
+ 
+   saveBtn.onclick = async () => {
+@@ -1355,9 +1355,9 @@ function openEditContactModal() {
+ 
+   const unreg = registerDirty(() => {
+     return phoneField.input.value !== (s.phone || '') ||
+-           altPhoneField.input.value !== (s.altPhone || '') ||
+-           emailField.input.value !== (s.email || '') ||
+-           addrField.input.value !== (s.address || '');
++      altPhoneField.input.value !== (s.altPhone || '') ||
++      emailField.input.value !== (s.email || '') ||
++      addrField.input.value !== (s.address || '');
+   });
+ 
+   saveBtn.onclick = async () => {
+@@ -1633,27 +1633,43 @@ function renderDocumentsTab() {
+   if (!grid) return;
+   grid.textContent = '';
+ 
++  const isKids = currentStudent?.ctx === 'school';
++  const docTabDesc = document.querySelector('#sp-tab-documents .sp-tab-desc');
++  if (docTabDesc) {
++    docTabDesc.textContent = isKids
++      ? 'Passport photo & student signature'
++      : 'Certificates & identification proofs';
++  }
++
++  // Unique Kids profiles only expose Passport Photo & Student Signature;
++  // leave any legacy dobProof/marksheet docs untouched in Firestore.
++  const baseKeys = isKids
++    ? DOC_KEYS.filter((d) => d.key === 'photo' || d.key === 'signature')
++    : DOC_KEYS;
++
+   const shownDocIds = new Set();
+-  const displayItems = DOC_KEYS.map((item) => {
++  const displayItems = baseKeys.map((item) => {
+     const rec = getStudentDocRecord(docsCache, item.key, currentStudent);
+     if (rec && rec.id) shownDocIds.add(String(rec.id).toLowerCase());
+     shownDocIds.add(String(item.key).toLowerCase());
+     return { key: item.key, label: item.label, docData: rec };
+   });
+ 
+-  // Also include any additional uploaded document keys saved under docs/ (e.g. aadhaar, certificate)
+-  Object.entries(docsCache || {}).forEach(([k, val]) => {
+-    const low = String(k || '').toLowerCase();
+-    const recKey = String(val?.key || val?.docType || k).toLowerCase();
+-    if (shownDocIds.has(low) || shownDocIds.has(recKey)) return;
+-    if (!getStudentDocSrc(val)) return;
+-    shownDocIds.add(low);
+-    displayItems.push({
+-      key: k,
+-      label: val?.label || formatPersonName(k.replace(/([A-Z])/g, ' $1').replace(/_/g, ' ')) || 'Document',
+-      docData: val
++  if (!isKids) {
++    // Also include any additional uploaded document keys saved under docs/ (e.g. aadhaar, certificate)
++    Object.entries(docsCache || {}).forEach(([k, val]) => {
++      const low = String(k || '').toLowerCase();
++      const recKey = String(val?.key || val?.docType || k).toLowerCase();
++      if (shownDocIds.has(low) || shownDocIds.has(recKey)) return;
++      if (!getStudentDocSrc(val)) return;
++      shownDocIds.add(low);
++      displayItems.push({
++        key: k,
++        label: val?.label || formatPersonName(k.replace(/([A-Z])/g, ' $1').replace(/_/g, ' ')) || 'Document',
++        docData: val
++      });
+     });
+-  });
++  }
+ 
+   displayItems.forEach(({ key, label, docData }) => {
+     const docSrc = getStudentDocSrc(docData, getStudentDocMime(docData));
+@@ -2035,10 +2051,10 @@ function openDocReplaceModal(key, label, existingDoc, droppedFile) {
+             <span class="sp-compare-filename" title="${existingDoc.name || label}">${existingDoc.name || label}</span>
+           </div>
+           <div class="sp-compare-preview">
+-            ${isOldPdf 
+-              ? `<div class="sp-replace-pdf-wrap"><i data-lucide="file-text"></i><span>PDF Document</span></div>`
+-              : `<img src="${existingSrc}" alt="Current">`
+-            }
++            ${isOldPdf
++            ? `<div class="sp-replace-pdf-wrap"><i data-lucide="file-text"></i><span>PDF Document</span></div>`
++            : `<img src="${existingSrc}" alt="Current">`
++          }
+           </div>
+           <div class="sp-compare-footer">
+             <span class="sp-compare-pill old">Will be replaced</span>
+@@ -2057,9 +2073,9 @@ function openDocReplaceModal(key, label, existingDoc, droppedFile) {
+           </div>
+           <div class="sp-compare-preview">
+             ${isNewPdf
+-              ? `<div class="sp-replace-pdf-wrap"><i data-lucide="file-text"></i><span>${readyPayload.name}</span></div>`
+-              : `<img src="${readyPayload.data}" alt="New">`
+-            }
++            ? `<div class="sp-replace-pdf-wrap"><i data-lucide="file-text"></i><span>${readyPayload.name}</span></div>`
++            : `<img src="${readyPayload.data}" alt="New">`
++          }
+           </div>
+           <div class="sp-compare-footer">
+             <span class="sp-replace-meta-pill"><i data-lucide="check-circle-2"></i> Ready · ${formatBytes(readyPayload.sizeBytes)}</span>
+@@ -2395,7 +2411,7 @@ async function renderCourseTab() {
+           if (cd) coursesCache.byCode[cd] = course;
+         }
+       }
+-    } catch (_) {}
++    } catch (_) { }
+   }
+ 
+   // 2. Resolve Session
+@@ -2415,7 +2431,7 @@ async function renderCourseTab() {
+             if (sn) sessionsCache.byName[sn] = sess;
+           }
+         }
+-      } catch (_) {}
++      } catch (_) { }
+     }
+   }
+ 
+@@ -2431,7 +2447,7 @@ async function renderCourseTab() {
+           batchesCache.byId[bDoc.id] = batch;
+         }
+       }
+-    } catch (_) {}
++    } catch (_) { }
+   }
+ 
+   if (s.ctx === 'school') {
+@@ -2486,7 +2502,7 @@ async function renderCourseTab() {
+             coursesCache.byId[pDoc.id] = prereqCourse;
+           }
+         }
+-      } catch (_) {}
++      } catch (_) { }
+     }
+   } else if (pCode && coursesCache?.byCode?.[String(pCode).trim().toUpperCase()]) {
+     prereqCourse = coursesCache.byCode[String(pCode).trim().toUpperCase()];
+@@ -2775,7 +2791,6 @@ async function loadPayments({ forceFresh = false } = {}) {
+       kidsBillsCache = bills;
+       kidsBreaksCache = breaks;
+       kidsWaiversCache = waivers;
+-      kidsPaymentsHydrated = true;
+       return;
+     }
+ 
+@@ -2827,7 +2842,6 @@ async function loadPayments({ forceFresh = false } = {}) {
+     kidsBillsCache = bills;
+     kidsBreaksCache = breaks;
+     kidsWaiversCache = waivers;
+-    kidsPaymentsHydrated = true;
+     return;
+   }
+ 
+@@ -3562,15 +3576,6 @@ function renderKidsTransactionsLedger() {
+   const s = currentStudent;
+   if (!s) return;
+ 
+-  if (!kidsPaymentsHydrated) {
+-    const tr = mk('tr');
+-    const td = mk('td', 'text-mute text-center', 'Loading payment transactions…');
+-    td.colSpan = 9;
+-    tr.appendChild(td);
+-    tbody.appendChild(tr);
+-    return;
+-  }
+-
+   const txns = [];
+   const admDoc = paymentsCache.find((p) => {
+     const t = String(p.type || '').toUpperCase();
+diff --git a/public/js/services/archive.service.js b/public/js/services/archive.service.js
+index 86b311c..41f5569 100644
+--- a/public/js/services/archive.service.js
++++ b/public/js/services/archive.service.js
+@@ -21,25 +21,25 @@ import {
+   ref as storageRef,
+   getDownloadURL
+ } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-storage.js';
+-import { APP_VERSION } from '../core/app.js?v=1.8.198';
+-import { loadAllSessions, getAllCachedSessions, hasFreshSessionsCache } from '../core/sessions.js?v=1.8.198';
+-import { todayISO, installmentSchedule, getOrgTimezone } from '../utils/session-rules.js?v=1.8.198';
++import { APP_VERSION } from '../core/app.js?v=1.8.199';
++import { loadAllSessions, getAllCachedSessions, hasFreshSessionsCache } from '../core/sessions.js?v=1.8.199';
++import { todayISO, installmentSchedule, getOrgTimezone } from '../utils/session-rules.js?v=1.8.199';
+ import {
+   calculateStudentFinancials,
+   evaluateYouthStudentDues,
+   normalizeYouthPaymentsLedger,
+   installmentCourseFee,
+   installmentBalanceDue
+-} from './payment.service.js?v=1.8.198';
++} from './payment.service.js?v=1.8.199';
+ import {
+   loadUsersDirectory,
+   resolveUserDisplay,
+   getUserTitle
+-} from './user-directory.service.js?v=1.8.198';
+-import { formatPersonName, formatGenderDisplay } from '../utils/formatter.js?v=1.8.198';
+-import { getStudentPhotoSrc, getStudentDocRecord, getStudentDocSrc, getStudentDocMime } from '../utils/student-media.js?v=1.8.198';
+-import { buildOfflineViewerAssets } from '../utils/archive-viewer-builder.js?v=1.8.198';
+-import { buildYouthReceiptData } from '../utils/admission-receipt.js?v=1.8.198';
++} from './user-directory.service.js?v=1.8.199';
++import { formatPersonName, formatGenderDisplay } from '../utils/formatter.js?v=1.8.199';
++import { getStudentPhotoSrc, getStudentDocRecord, getStudentDocSrc, getStudentDocMime } from '../utils/student-media.js?v=1.8.199';
++import { buildOfflineViewerAssets } from '../utils/archive-viewer-builder.js?v=1.8.199';
++import { buildYouthReceiptData } from '../utils/admission-receipt.js?v=1.8.199';
+ 
+ /** Feature flag keeping Phase 2 session deletion OFF until Phase 1 is verified and approved. */
+ export const ENABLE_ARCHIVE_SESSION_DELETE = false;
+diff --git a/public/js/services/dashboard.service.js b/public/js/services/dashboard.service.js
+index 5e672a1..1cbc058 100644
+--- a/public/js/services/dashboard.service.js
++++ b/public/js/services/dashboard.service.js
+@@ -9,8 +9,8 @@ import {
+   getDatePresetRange,
+   toTitleCaseIfCaps,
+   todayISO
+-} from './report.service.js?v=1.8.198';
+-import { isStudentEligibleForDues } from './payment.service.js?v=1.8.198';
++} from './report.service.js?v=1.8.199';
++import { isStudentEligibleForDues } from './payment.service.js?v=1.8.199';
+ 
+ function toIsoDate(ts) {
+   if (!ts) return '';
+diff --git a/public/js/services/payment.service.js b/public/js/services/payment.service.js
+index 0a16d98..63c9e53 100644
+--- a/public/js/services/payment.service.js
++++ b/public/js/services/payment.service.js
+@@ -8,11 +8,11 @@ import {
+   runTransaction,
+   serverTimestamp
+ } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
+-import { readStudentId, readReceiptNo, writeCounter } from './admission.service.js?v=1.8.198';
+-import { fineFor, todayISO, installmentSchedule, examWindowOf } from '../utils/session-rules.js?v=1.8.198';
+-import { courseFeeOf } from '../utils/fees.js?v=1.8.198';
+-import { formatPersonName } from '../utils/formatter.js?v=1.8.198';
+-import { resolveUserDisplay } from './user-directory.service.js?v=1.8.198';
++import { readStudentId, readReceiptNo, writeCounter } from './admission.service.js?v=1.8.199';
++import { fineFor, todayISO, installmentSchedule, examWindowOf } from '../utils/session-rules.js?v=1.8.199';
++import { courseFeeOf } from '../utils/fees.js?v=1.8.199';
++import { formatPersonName } from '../utils/formatter.js?v=1.8.199';
++import { resolveUserDisplay } from './user-directory.service.js?v=1.8.199';
+ 
+ const COL = 'students';
+ 
+diff --git a/public/js/services/report.service.js b/public/js/services/report.service.js
+index a2d410c..d4eb108 100644
+--- a/public/js/services/report.service.js
++++ b/public/js/services/report.service.js
+@@ -27,23 +27,23 @@ import {
+   fetchStudentPayments,
+   calculateStudentFinancials,
+   isStudentEligibleForDues
+-} from './payment.service.js?v=1.8.198';
++} from './payment.service.js?v=1.8.199';
+ import {
+   evaluateKidsPendingBills,
+   buildKidsPaymentLedger,
+   syncOpenKidsBills
+-} from '../utils/school-billing.js?v=1.8.198';
+-import { getStudentPhotoSrc } from '../utils/student-media.js?v=1.8.198';
++} from '../utils/school-billing.js?v=1.8.199';
++import { getStudentPhotoSrc } from '../utils/student-media.js?v=1.8.199';
+ import {
+   todayISO,
+   fmtDate,
+   getOrgTimezone
+-} from '../utils/session-rules.js?v=1.8.198';
+-import { formatINR } from '../utils/formatter.js?v=1.8.198';
+-import { formatPersonName } from '../utils/formatter.js?v=1.8.198';
+-import { resolveUserDisplay, loadUsersDirectory, getRoleTitle } from './user-directory.service.js?v=1.8.198';
+-import { loadPdfMake, urlToDataUrl } from '../utils/admission-receipt-pdf.js?v=1.8.198';
+-import { loadAllSessions, getAllCachedSessions, hasFreshSessionsCache } from '../core/sessions.js?v=1.8.198';
++} from '../utils/session-rules.js?v=1.8.199';
++import { formatINR } from '../utils/formatter.js?v=1.8.199';
++import { formatPersonName } from '../utils/formatter.js?v=1.8.199';
++import { resolveUserDisplay, loadUsersDirectory, getRoleTitle } from './user-directory.service.js?v=1.8.199';
++import { loadPdfMake, urlToDataUrl } from '../utils/admission-receipt-pdf.js?v=1.8.199';
++import { loadAllSessions, getAllCachedSessions, hasFreshSessionsCache } from '../core/sessions.js?v=1.8.199';
+ 
+ const CACHE_KEY = 'financialReports';
+ export const CACHE_STALE_MS = 30000;
+diff --git a/public/js/services/user-directory.service.js b/public/js/services/user-directory.service.js
+index b4a4154..5a3b0a7 100644
+--- a/public/js/services/user-directory.service.js
++++ b/public/js/services/user-directory.service.js
+@@ -15,7 +15,7 @@ import {
+   deleteObject
+ } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-storage.js';
+ import { getFunctions, httpsCallable } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-functions.js';
+-import { formatPersonName } from '../utils/formatter.js?v=1.8.198';
++import { formatPersonName } from '../utils/formatter.js?v=1.8.199';
+ 
+ const DEFAULT_ROLE_TITLES = {
+   superadmin: 'Super Admin',
+diff --git a/public/js/utils/admission-receipt-pdf.js b/public/js/utils/admission-receipt-pdf.js
+index 627ace9..d7e3620 100644
+--- a/public/js/utils/admission-receipt-pdf.js
++++ b/public/js/utils/admission-receipt-pdf.js
+@@ -2,7 +2,7 @@
+ // using pdfmake. Produces real, selectable, searchable text with exact 2-page layout
+ // matching reference-templates/Ui.html.
+ 
+-import { fmtRs } from './admission-receipt.js?v=1.8.198';
++import { fmtRs } from './admission-receipt.js?v=1.8.199';
+ 
+ const INK = '#1D1A3A';
+ const MUTED = '#5B5F85';
+diff --git a/public/js/utils/admission-receipt.js b/public/js/utils/admission-receipt.js
+index 955fe2a..c47a8a1 100644
+--- a/public/js/utils/admission-receipt.js
++++ b/public/js/utils/admission-receipt.js
+@@ -2,9 +2,9 @@
+ // Matching reference-templates/Ui.html.
+ // Shared by the on-screen HTML sheet and the vector PDF builder.
+ 
+-import { formatDateIN, formatPersonName, formatGenderDisplay } from './formatter.js?v=1.8.198';
+-import { courseFeeOf, discountOf } from './fees.js?v=1.8.198';
+-import { getStudentDocSrc, getStudentPhotoSrc } from './student-media.js?v=1.8.198';
++import { formatDateIN, formatPersonName, formatGenderDisplay } from './formatter.js?v=1.8.199';
++import { courseFeeOf, discountOf } from './fees.js?v=1.8.199';
++import { getStudentDocSrc, getStudentPhotoSrc } from './student-media.js?v=1.8.199';
+ 
+ // Format currency as "Rs. 1,000.00"
+ export function fmtRs(n) {
+diff --git a/public/js/utils/archive-viewer-builder.js b/public/js/utils/archive-viewer-builder.js
+index 50ee00c..523764e 100644
+--- a/public/js/utils/archive-viewer-builder.js
++++ b/public/js/utils/archive-viewer-builder.js
+@@ -1,5 +1,5 @@
+-import { ARCHIVE_VIEWER_OVERRIDES_CSS } from './archive-viewer-styles.js?v=1.8.198';
+-import { ARCHIVE_RECEIPTS_VIEWER_JS } from './archive-viewer-receipts.js?v=1.8.198';
++import { ARCHIVE_VIEWER_OVERRIDES_CSS } from './archive-viewer-styles.js?v=1.8.199';
++import { ARCHIVE_RECEIPTS_VIEWER_JS } from './archive-viewer-receipts.js?v=1.8.199';
+ 
+ /**
+  * Builds the static viewer files packed into each archive ZIP:
+diff --git a/public/js/utils/school-billing.js b/public/js/utils/school-billing.js
+index 536615c..c0377f5 100644
+--- a/public/js/utils/school-billing.js
++++ b/public/js/utils/school-billing.js
+@@ -11,11 +11,11 @@ import {
+   collection, getDocs, query, where, doc, getDoc, addDoc, updateDoc, serverTimestamp,
+   runTransaction, writeBatch, arrayUnion
+ } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
+-import { showToast } from '../components/toast.js?v=1.8.198';
+-import { localToday, monthSeq, nextMonth, previousMonth } from './school-lifecycle.js?v=1.8.198';
+-import { firstMonthlyMonth } from './school-receipt.js?v=1.8.198';
+-import { fineFor } from './session-rules.js?v=1.8.198';
+-import { readReceiptNo, writeCounter } from '../services/admission.service.js?v=1.8.198';
++import { showToast } from '../components/toast.js?v=1.8.199';
++import { localToday, monthSeq, nextMonth, previousMonth } from './school-lifecycle.js?v=1.8.199';
++import { firstMonthlyMonth } from './school-receipt.js?v=1.8.199';
++import { fineFor } from './session-rules.js?v=1.8.199';
++import { readReceiptNo, writeCounter } from '../services/admission.service.js?v=1.8.199';
+ 
+ const BILLS_COL = 'bills';
+ const PAYMENTS_COL = 'payments';
+diff --git a/public/js/utils/school-break-modals.js b/public/js/utils/school-break-modals.js
+index 87849da..f5f40bf 100644
+--- a/public/js/utils/school-break-modals.js
++++ b/public/js/utils/school-break-modals.js
+@@ -6,15 +6,15 @@
+ 
+ import { db } from '../config/firebase-config.js';
+ import { collection, getDocs, query, where } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
+-import { showToast } from '../components/toast.js?v=1.8.198';
+-import { openPopup } from '../components/modal.js?v=1.8.198';
+-import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.198';
+-import { createSelect } from '../components/ui-select.js?v=1.8.198';
+-import { createDatePicker, createMonthPicker } from '../components/ui-datepicker.js?v=1.8.198';
+-import { formatINR } from '../utils/formatter.js?v=1.8.198';
+-import { isCourseActive, batchAllowsCourse } from '../utils/session-rules.js?v=1.8.198';
+-import { resolveUserDisplay } from '../services/user-directory.service.js?v=1.8.198';
+-import { localToday, monthSeq } from './school-lifecycle.js?v=1.8.198';
++import { showToast } from '../components/toast.js?v=1.8.199';
++import { openPopup } from '../components/modal.js?v=1.8.199';
++import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.199';
++import { createSelect } from '../components/ui-select.js?v=1.8.199';
++import { createDatePicker, createMonthPicker } from '../components/ui-datepicker.js?v=1.8.199';
++import { formatINR } from '../utils/formatter.js?v=1.8.199';
++import { isCourseActive, batchAllowsCourse } from '../utils/session-rules.js?v=1.8.199';
++import { resolveUserDisplay } from '../services/user-directory.service.js?v=1.8.199';
++import { localToday, monthSeq } from './school-lifecycle.js?v=1.8.199';
+ import {
+   addMonthsYM,
+   formatBreakPeriod,
+@@ -27,7 +27,7 @@ import {
+   resumeKidsBreak,
+   upgradeKidsPackage,
+   isBreakOverdueReturn
+-} from './school-billing.js?v=1.8.198';
++} from './school-billing.js?v=1.8.199';
+ 
+ function mk(tag, cls, text) {
+   const e = document.createElement(tag);
+diff --git a/public/js/utils/school-lifecycle.js b/public/js/utils/school-lifecycle.js
+index 07ddd63..04607d6 100644
+--- a/public/js/utils/school-lifecycle.js
++++ b/public/js/utils/school-lifecycle.js
+@@ -27,9 +27,9 @@ import {
+   collection, getDocs, query, where, doc, getDoc, addDoc, updateDoc, deleteDoc,
+   serverTimestamp, runTransaction, writeBatch
+ } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
+-import { showToast } from '../components/toast.js?v=1.8.198';
+-import { firstMonthlyMonth } from './school-receipt.js?v=1.8.198';
+-import { isCourseActive, todayISO } from './session-rules.js?v=1.8.198';
++import { showToast } from '../components/toast.js?v=1.8.199';
++import { firstMonthlyMonth } from './school-receipt.js?v=1.8.199';
++import { isCourseActive, todayISO } from './session-rules.js?v=1.8.199';
+ const ENROLMENTS_COL = 'enrolments';
+ const BILLS_COL = 'bills';
+ const PAYMENTS_COL = 'payments';
+diff --git a/public/js/utils/school-receipt-pdf.js b/public/js/utils/school-receipt-pdf.js
+index 5f850ac..93a4d36 100644
+--- a/public/js/utils/school-receipt-pdf.js
++++ b/public/js/utils/school-receipt-pdf.js
+@@ -2,7 +2,7 @@
+ // using pdfmake. Loaded dynamically on demand. Produces real, selectable,
+ // searchable text with exact 2-page layout matching reference-templates/uk.html.
+ 
+-import { fmtRs } from './school-receipt.js?v=1.8.198';
++import { fmtRs } from './school-receipt.js?v=1.8.199';
+ 
+ const INK = '#1D1A3A';
+ const MUTED = '#5B5F85';
+@@ -415,7 +415,7 @@ export function buildSchoolReceiptPdfDefinition(d, logoDataUrl) {
+   } else if (d.paymentMode === 'none') {
+     payRows.push([
+       { text: 'Admission fee (one-time)', fontSize: 7.5 },
+-      { text: 'No payment (' + (d.noPaymentReasonFormatted || 'Exempt') + ')', fontSize: 7.5, color: '#C2410C' },
++      { text: 'No payment \u2013 ' + (d.noPaymentReasonFormatted || 'Exempt'), fontSize: 7.5, color: '#C2410C' },
+       { text: fmtRs(0), fontSize: 7.5, alignment: 'right' }
+     ]);
+   } else {
+@@ -425,7 +425,7 @@ export function buildSchoolReceiptPdfDefinition(d, logoDataUrl) {
+       { text: fmtRs(d.actualAmountReceived), fontSize: 7.5, alignment: 'right' }
+     ]);
+   }
+-  if (Number(d.actualAmountReceived || 0) > 0) {
++  if (d.paymentMode !== 'none' && Number(d.actualAmountReceived || 0) > 0) {
+     payRows.push([
+       { text: 'Payment mode', fontSize: 7.5 },
+       { text: d.paymentMethodLabel || 'Cash', fontSize: 7.5, color: NAVY, bold: true },
+diff --git a/public/js/utils/school-receipt.js b/public/js/utils/school-receipt.js
+index e3b676b..3781006 100644
+--- a/public/js/utils/school-receipt.js
++++ b/public/js/utils/school-receipt.js
+@@ -1,8 +1,8 @@
+ // school-receipt.js � pure view-model builders for the Kids admission receipt.
+ // No Firebase, no DOM. Safe to unit-test in plain Node.
+ 
+-import { formatDateIN, formatPersonName, formatGenderDisplay } from './formatter.js?v=1.8.198';
+-import { getStudentPhotoSrc, getStudentDocSrc } from './student-media.js?v=1.8.198';
++import { formatDateIN, formatPersonName, formatGenderDisplay } from './formatter.js?v=1.8.199';
++import { getStudentPhotoSrc, getStudentDocSrc } from './student-media.js?v=1.8.199';
+ 
+ const MONTH_NAMES = [
+   'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+diff --git a/public/js/utils/student-media.js b/public/js/utils/student-media.js
+index 3e92fef..a7ba74d 100644
+--- a/public/js/utils/student-media.js
++++ b/public/js/utils/student-media.js
+@@ -1,7 +1,7 @@
+ // Shared student photo, document source, and display normalization helpers.
+ // Used identically across live CMS pages, receipts, photo preloading, and offline Archives.
+ 
+-import { formatPersonName, formatGenderDisplay } from './formatter.js?v=1.8.198';
++import { formatPersonName, formatGenderDisplay } from './formatter.js?v=1.8.199';
+ 
+ const DOC_KEY_ALIASES = {
+   photo: ['photo', 'passportPhoto', 'passport_photo', 'studentPhoto', 'avatar', 'profilePhoto', 'image', 'pic'],
+diff --git a/public/pages/batches.html b/public/pages/batches.html
+index 0e6f819..3c0397b 100644
+--- a/public/pages/batches.html
++++ b/public/pages/batches.html
+@@ -3,7 +3,7 @@
+ <head>
+   <meta charset="UTF-8">
+   <title>Batches</title>
+-  <link rel="stylesheet" href="../css/pages/batches.css?v=1.8.198">
++  <link rel="stylesheet" href="../css/pages/batches.css?v=1.8.199">
+ </head>
+ <body>
+   <div class="page-shell">
+diff --git a/public/pages/login.html b/public/pages/login.html
+index 808555c..af70289 100644
+--- a/public/pages/login.html
++++ b/public/pages/login.html
+@@ -10,7 +10,7 @@
+   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+   <link rel="stylesheet" href="/css/main.css">
+-  <link rel="stylesheet" href="/css/pages/login.css?v=1.8.198">
++  <link rel="stylesheet" href="/css/pages/login.css?v=1.8.199">
+   <script>location.replace('/index.html' + location.search + location.hash);</script>
+ </head>
+ <body class="auth-screen" data-ctx="youth">
+diff --git a/public/pages/school-admissions.html b/public/pages/school-admissions.html
+index f731d9b..77101b6 100644
+--- a/public/pages/school-admissions.html
++++ b/public/pages/school-admissions.html
+@@ -143,7 +143,7 @@
+       </div>
+ <div class="adm-doc-grid">
+ <div class="adm-upload-card">
+-<label class="adm-doc-label">Student photo <em style="color:var(--danger);font-style:normal;">*</em></label>
++<label class="adm-doc-label">Passport Photo <em style="color:var(--danger);font-style:normal;">*</em></label>
+ <div class="adm-upload" id="adm-photo-upload">
+ <div class="adm-upload-empty">
+ <i data-lucide="image"></i>
+@@ -157,7 +157,7 @@
+ <div class="adm-err" id="adm-photo-err"></div>
+ </div>
+ <div class="adm-upload-card">
+-<label class="adm-doc-label">Student's signature <em style="color:var(--danger);font-style:normal;">*</em></label>
++<label class="adm-doc-label">Student Signature <em style="color:var(--danger);font-style:normal;">*</em></label>
+ <div class="adm-upload" id="adm-signature-upload">
+ <div class="adm-upload-empty">
+ <i data-lucide="pen-line"></i>

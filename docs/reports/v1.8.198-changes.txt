@@ -1,0 +1,2498 @@
+diff --git a/docs/02-PROGRESS-LOG.md b/docs/02-PROGRESS-LOG.md
+index afc09fc..4fcfe55 100644
+--- a/docs/02-PROGRESS-LOG.md
++++ b/docs/02-PROGRESS-LOG.md
+@@ -39,6 +39,36 @@
+ 
+ ---
+ 
++### [2026-11-28 19:55] Version 1.8.198 — Kids Upgrade Payment Popup, Required Non-Cash TXN ID & Live Deploy
++
++**What was built:**
++- **Kids Level Upgrade Shared Payment Popup (`public/js/utils/school-break-modals.js`, `public/js/utils/school-billing.js`, `public/js/components/payment-popup.js`, `public/js/pages/payment-receipt.page.js`)**:
++  - Updated `openKidsUpgradePackageModal` so whenever an upgrade charge is `> 0`, submitting opens `openPaymentPopup` (**Collect Upgrade Fee**) before committing. Cancelling writes nothing to Firestore and re-opens the Upgrade modal preserving the selected level, batch, payment option, and billing start month (`draft`).
++  - Updated `upgradeKidsPackage` (`runTransaction` when `charge > 0`) to assign sequential `UK<YY>UP-<CENTRE>-<NNNN>` receipts, record `mode`, `paymentMethod`, `txnId`, and `remarks` on both the `UPGRADE` payment doc and `packageHistory`, and return `paymentId` / `receiptNo`; updated `buildKidsPaymentLedger` upgrade `receiptRoute` to `#/payments/<studentDocId>/<paymentId>/receipt?from=school-payments`.
++- **Mandatory Non-Cash Transaction / Reference ID (`public/js/components/payment-popup.js`, Youth + Kids)**:
++  - Required non-empty Transaction / Reference ID on every non-cash mode (`UPI`, `Card`, `Bank Transfer`, `Cheque`) across both Youth and Kids, displaying `* (Required)` plus a clear inline field error (`Transaction / Reference ID is required for <Mode> payments.`) and toast on empty submit while keeping `Cash` disabled (`N/A for Cash`).
++- **Deploy, Reports & Diff**:
++  - Bumped `?v=` / `APP_VERSION` to `1.8.198` (`360` replacements across `55` files), deployed `firestore:indexes` (`33` index ops `Done = YES`), `firestore:rules`, and `hosting` (`184` files, `https://unique-infotech-cms.web.app`), and saved `docs/reports/v1.8.198-report.md` and `docs/reports/v1.8.198-changes.txt` (plain `.txt` diff; no `.diff` files).
++
++**Why:**
++- Eliminate the last Kids payment flow bypassing `openPaymentPopup` and enforce audit-complete Transaction / Reference IDs across all non-cash receipts in both programmes.
++
++**Files touched:**
++- CREATED: `docs/reports/v1.8.198-report.md`, `docs/reports/v1.8.198-changes.txt` (plus renamed `v1.8.197-changes.diff` -> `v1.8.197-changes.txt` committed cleanly)
++- MODIFIED: `public/js/components/payment-popup.js`, `public/js/utils/school-break-modals.js`, `public/js/utils/school-billing.js`, `public/js/pages/payment-receipt.page.js`, `docs/02-PROGRESS-LOG.md` (+ `bump-version.js 1.8.198` across `55` files in `public/`)
++
++**Firestore changes:**
++- Deployed `firestore.indexes.json` (`32` composite indexes + `1` override; `33` ops `Done = YES`), `firestore.rules`, and `hosting` (`https://unique-infotech-cms.web.app`). Upgrade payments use counter `counters/rcpt_UK_<YY>_UP_<CENTRE>`.
++
++**Tested on (post-final-edit):**
++- `node tools/check-imports.js`: ✅ (`115` files, `455` imports, `398` exports, `0` errors)
++- `scratch/run-tests.mjs`: ✅
++- `verify-kids-break-v196.mjs` (Firebase Emulators + Chrome): ✅ Kids Upgrade `openPaymentPopup` + Cancel preservation + `UPI-UPG-300` (`UK26UP-HO-0001`), empty TXN ID blocked across `UPI`/`Card`/`Bank`/`Cheque` + Youth `Cheque` `CHQ-990011`, `0` errors.
++- `verify-router-regression.mjs`, `verify-dashboard.mjs`, `verify-reports.mjs`, `verify-archives.mjs`, `verify-auth-profile.mjs`: ✅ all passed cleanly.
++- Live DevTools check: Blocked (desktop Chrome remote debugging not active; live DB untouched).
++
++---
++
+ ### [2026-11-28 14:25] Version 1.8.197 — Unique Kids Shared Payment Popup, Mode/TXN Receipts & Profile Ledger (Pushed to main, Pending Deploy Approval)
+ 
+ **What was built:**
+diff --git a/docs/reports/v1.8.197-changes.diff b/docs/reports/v1.8.197-changes.txt
+similarity index 100%
+rename from docs/reports/v1.8.197-changes.diff
+rename to docs/reports/v1.8.197-changes.txt
+diff --git a/docs/reports/v1.8.198-report.md b/docs/reports/v1.8.198-report.md
+new file mode 100644
+index 0000000..dfff8d7
+--- /dev/null
++++ b/docs/reports/v1.8.198-report.md
+@@ -0,0 +1,137 @@
++# Release v1.8.198 Review Report — Kids Level Upgrade Payment Popup, Mandatory Non-Cash TXN ID & Live Deploy
++
++**Scope:** Unique Kids (`openKidsUpgradePackageModal` + `upgradeKidsPackage`) and Shared Payment Popup (`payment-popup.js`, affecting both Youth Centre and Unique Kids). Youth Centre business rules and other UI pages were untouched.  
++**Base commit compared:** `29b5766` (`v1.8.197`)  
++**Plain text diff file:** `docs/reports/v1.8.198-changes.txt`
++
++---
++
++## 1. What Changed (Plain English)
++
++1. **Kids Level Upgrade Modal (`openKidsUpgradePackageModal`) Uses the Shared Payment Popup**
++   - Updated `openKidsUpgradePackageModal` (`public/js/utils/school-break-modals.js`) so whenever a level upgrade / package change has an extra amount `> 0` due now, clicking **Upgrade Package** opens `openPaymentPopup` (**Collect Upgrade Fee**) instead of saving immediately.
++   - If the admin clicks **Cancel** (or closes the payment modal via backdrop / `Escape` / `X`), **nothing is written to Firestore**, and the Upgrade modal re-opens with all chosen fields preserved (selected **New level**, **New batch**, **Upgrade admission fee option**, and **First monthly billing month**).
++   - When confirmed, `upgradeKidsPackage` (`public/js/utils/school-billing.js`) executes atomically inside `runTransaction`: generates a sequential Kids upgrade receipt number (`UK<YY>UP-<CENTRE>-<NNNN>`), stores `mode`, `paymentMethod`, `txnId`, and `remarks` on both the `payments` (`type: 'UPGRADE'`) document and the `packageHistory` upgrade entry, updates `enrolments` and unpaid future `bills`, and prompts the receipt modal (`Open Receipt` / `Print` -> `#/payments/<studentDocId>/<paymentId>/receipt?from=profile`).
++   - Updated `buildKidsPaymentLedger` (`public/js/utils/school-billing.js`) so `UPGRADE` payment rows link directly to `#/payments/<studentDocId>/<paymentId>/receipt?from=school-payments` and preserve saved payment mode (`p.mode || p.paymentMethod`).
++   - Updated `payment-receipt.page.js` so `Level Upgrade` receipts display `Level Upgrade (Full Admission)` vs `Level Upgrade Difference` accurately based on `payment.paymentMode`.
++
++2. **Transaction / Reference ID Required for All Non-Cash Modes (Youth & Kids)**
++   - Updated `public/js/components/payment-popup.js`:
++     - **Cash:** Transaction / Reference ID remains disabled (`N/A for Cash`), cleared, and optional (`required = false`).
++     - **Non-cash (`UPI`, `Card`, `Bank Transfer`, `Cheque`):** Transaction / Reference ID is now marked **\* (Required)** (`txnInput.required = true`). Clicking **Confirm & Record Payment** with an empty or whitespace-only ID is blocked in **both Youth and Kids**, displays a clear inline field error (`Transaction / Reference ID is required for <Mode> payments.`) plus toast error, and focuses the input. Entering text or switching back to Cash clears the validation state.
++
++---
++
++## 2. Files Changed and Why
++
++| File | Why It Changed |
++| :--- | :--- |
++| `public/js/components/payment-popup.js` | Enforced mandatory non-cash TXN ID validation (`UPI`, `Card`, `Bank Transfer`, `Cheque`) with clear inline + toast messages in both Youth and Kids; kept Cash disabled (`N/A for Cash`); added `isUpgrade` title/label/receipt routing and `onCancel` restore hook (`confirmedPayment` guard). |
++| `public/js/utils/school-break-modals.js` | Wired `openKidsUpgradePackageModal` (`charge > 0`) to close cleanly and open `openPaymentPopup`, restoring `draft` selections on Cancel and committing atomically only on payment confirmation (`charge === 0` still saves directly). |
++| `public/js/utils/school-billing.js` | Updated `upgradeKidsPackage` (`runTransaction` when `charge > 0`) to assign sequential `UK<YY>UP-<CENTRE>-<NNNN>` receipt numbers, persist `mode`, `paymentMethod`, `txnId`, `remarks`, and return `paymentId` / `receiptNo`; updated `buildKidsPaymentLedger` upgrade `type` and `receiptRoute`. |
++| `public/js/pages/payment-receipt.page.js` | Distinguished `Level Upgrade (Full Admission)` from `Level Upgrade Difference` on Kids `UPGRADE` receipts. |
++| `public/` `?v=` bump & `docs/` | Bumped `APP_VERSION` / `?v=` query strings to `1.8.198` across `55` files (`tools/bump-version.js 1.8.198`, `360` replacements), updated `docs/02-PROGRESS-LOG.md`, renamed prior diff per no-`.diff` rule / added `docs/reports/v1.8.198-report.md` & `docs/reports/v1.8.198-changes.txt`. |
++
++---
++
++## 3. Data Fields & Receipts Written
++
++- **`counters/rcpt_UK_<YY>_UP_<CENTRE>`:** Sequential upgrade receipt counter (`UK<YY>UP-<CENTRE>-<NNNN>`, e.g. `UK26UP-HO-0001`).
++- **`payments/<id>` (`type: 'UPGRADE'`):** Now additionally includes `receiptNo`, `receiptCentreCode`, `feeCovered`, `mode`, `paymentMethod`, `txnId`, `receivedByRole`, and optional custom `remarks`.
++- **`students/{id}` (`packageHistory[]`):** Upgrade item now records `{ ..., mode, txnId, receiptNo, paymentId }` when `diffPaid > 0`.
++
++---
++
++## 4. Verification & Test Results (Pre-Deploy, Test Data Only)
++
++All checks ran cleanly **after the final code edit**:
++
++1. `node tools/bump-version.js 1.8.198`: `360` `?v=` replacements across `55` files, `APP_VERSION: 1.8.198`.
++2. `node tools/check-imports.js`: **PASSED** (`115` files, `455` imports, `398` exports, `0` errors).
++3. `scratch/run-tests.mjs`: **PASSED** (ledger unit tests, filter architecture, column/paging, programme separation, 1,200-student parity, failed-precondition silent fallback).
++4. `firebase emulators:exec ... verify-kids-break-v196.mjs` (Auth + Firestore Emulators + Chrome): **PASSED** (`0` runtime/console errors):
++   - **Kids Level Upgrade popup + Cancel:** Clicking **Upgrade Package** (`₹300` difference) opens **Collect Upgrade Fee**; Firestore student doc remains `lvl-basic` until confirmed; clicking **Cancel** re-opens Upgrade modal preserving selected level (`Kids Level 2 Advanced`) and chosen billing month (`Next month`).
++   - **Mandatory Non-Cash TXN ID (Kids & Youth):** Tested `UPI`, `Card`, `Bank Transfer`, and `Cheque` with empty TXN ID — all 4 blocked submission with `"Transaction / Reference ID is required"`, while `Cash` disabled the input (`N/A for Cash`). Confirmed Kids upgrade (`UPI` + `UPI-UPG-300` -> `UK26UP-HO-0001`, `monthlyFee=600`, `actualAmountReceived=800`) and Youth installment (`Cheque` + `CHQ-990011` on `stu-y-1`).
++   - All prior checks (Kids Full/No-Payment admissions, Monthly collection on `#/school-fees`, Student Profile, `#/school-pending`, Receipts, Payment History Details, `school_head` read-only + Firestore `permission-denied`, 8 Kids pages `2ms–175ms`) passed.
++5. Browser regression suites: `verify-router-regression.mjs`, `verify-dashboard.mjs`, `verify-reports.mjs`, `verify-archives.mjs`, `verify-auth-profile.mjs` **ALL PASSED** (exit code `0`).
++
++---
++
++## 5. Deployment Output (`unique-infotech-cms`)
++
++Deployed strictly in order (`firestore:indexes` -> wait ready -> `firestore:rules` -> `hosting`):
++
++### Step A: `firebase deploy --only firestore:indexes --project unique-infotech-cms`
++```text
++=== Deploying to 'unique-infotech-cms'...
++
++i  deploying firestore
++i  firestore: ensuring required API firestore.googleapis.com is enabled...
++i  firestore: reading indexes from firestore.indexes.json...
++i  cloud.firestore: checking firestore.rules for compilation errors...
+++  cloud.firestore: rules file firestore.rules compiled successfully
++i  firestore: deploying indexes...
+++  firestore: deployed indexes in firestore.indexes.json successfully for (default) database
++
+++  Deploy complete!
++```
++
++Project Console: https://console.firebase.google.com/project/unique-infotech-cms/overview
++
++Verification via `firebase firestore:operations:list --project unique-infotech-cms` and `firebase firestore:indexes --project unique-infotech-cms`:
++- Composite index build operations: `Operations -> YES: 33, NO: 0` (all `Done = YES`).
++- Live index count: `32` composite indexes + `1` field override (`payment.date`).
++
++### Step B: `firebase deploy --only firestore:rules --project unique-infotech-cms`
++```text
++=== Deploying to 'unique-infotech-cms'...
++
++i  deploying firestore
++i  firestore: ensuring required API firestore.googleapis.com is enabled...
++i  firestore: reading indexes from firestore.indexes.json...
++i  cloud.firestore: checking firestore.rules for compilation errors...
+++  cloud.firestore: rules file firestore.rules compiled successfully
++i  firestore: latest version of firestore.rules already up to date, skipping upload...
+++  firestore: released rules firestore.rules to cloud.firestore
++
+++  Deploy complete!
++
++Project Console: https://console.firebase.google.com/project/unique-infotech-cms/overview
++```
++
++### Step C: `firebase deploy --only hosting --project unique-infotech-cms`
++```text
++=== Deploying to 'unique-infotech-cms'...
++
++i  deploying hosting
++i  hosting[unique-infotech-cms]: beginning deploy...
++i  hosting[unique-infotech-cms]: found 184 files in public
++i  hosting: uploading new files [0/63] (0%)
++i  hosting: upload complete
+++  hosting[unique-infotech-cms]: file upload complete
++i  hosting[unique-infotech-cms]: finalizing version...
+++  hosting[unique-infotech-cms]: version finalized
++i  hosting[unique-infotech-cms]: releasing new version...
+++  hosting[unique-infotech-cms]: release complete
++
+++  Deploy complete!
++
++Project Console: https://console.firebase.google.com/project/unique-infotech-cms/overview
++Hosting URL: https://unique-infotech-cms.web.app
++```
++
++### Step D: Live Site Browser Console Check (`https://unique-infotech-cms.web.app`)
++- Delegated read-only console check to `browser` subagent (`5315e267-88c8-4c00-bfd9-0c935ac9142d`).
++- **Blocked (Not Completed):** Chrome DevTools MCP reported `Could not find DevToolsActivePort for chrome at C:\Users\Asus\AppData\Local\Google\Chrome\User Data\DevToolsActivePort` because desktop Chrome remote debugging (`chrome://inspect/#remote-debugging`) is not enabled on this machine. No live tabs were opened and no live data was touched. Please verify the live console in your browser (or enable Chrome remote debugging and let me re-run the check).
++
++---
++
++## 6. Unique Kids vs Youth Centre — Parity Status
++
++- **Upgrade Fee Popup:** **Now Matched.** Kids package upgrades with amount `> 0` now open the shared payment popup identically to admissions and installments (`v1.8.198`).
++- **Non-Cash TXN ID Rule:** **Matched.** Both Youth and Kids require Transaction / Reference ID for `UPI`, `Card`, `Bank Transfer`, and `Cheque`, and keep `Cash` disabled (`N/A for Cash`).
++- **Larger Unimplemented Kids Parity Features (Unchanged by Design):**
++  - **Reports (`#/reports`)** and **Offline Zip Archives (`#/archives`)** remain `ctx: ['youth']` only in `router.js`.
++  - **Dashboard (`#/dashboard`):** Youth includes collection charts, recent-payments feed, and quick toolbar; Kids shows break/overdue KPIs and active break alerts.
++  - **Collect Fees (`#/pay-fees` vs `#/school-fees`):** Youth uses a single-student search collector view (`pay-fees`); Kids lists generated monthly bills (`school-fees`) plus Profile / Pending `Collect` actions (all now sharing `openPaymentPopup`).
++  - **Profile Transfer / End (`#/...`):** Youth runs transfer/drop inline inside Student Profile modals; Kids routes to `#/school-transfer` and `#/school-end`.
+diff --git a/public/index.html b/public/index.html
+index 6abdf4f..2465a3a 100644
+--- a/public/index.html
++++ b/public/index.html
+@@ -9,10 +9,10 @@
+   <link rel="preconnect" href="https://fonts.googleapis.com">
+   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+   <link href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+-  <link rel="stylesheet" href="css/main.css?v=1.8.197">
+-  <link rel="stylesheet" href="css/components/multi-select.css?v=1.8.197">
+-  <link rel="stylesheet" href="css/pages/login.css?v=1.8.197">
+-  <script>window.__BUILD__ = '1.8.197';</script>
++  <link rel="stylesheet" href="css/main.css?v=1.8.198">
++  <link rel="stylesheet" href="css/components/multi-select.css?v=1.8.198">
++  <link rel="stylesheet" href="css/pages/login.css?v=1.8.198">
++  <script>window.__BUILD__ = '1.8.198';</script>
+   <style>
+     body.auth-pending {
+       visibility: hidden;
+@@ -31,18 +31,18 @@
+     </div>
+   </div>
+   <script type="module">
+-    import { getContext, setContext, loadSavedContext } from './js/core/app.js?v=1.8.197';
+-    import { tryRestoreSession, activateSession, stopInactivityTracking, setUnauthenticatedHandler, logout } from './js/core/guard.js?v=1.8.197';
+-    import { startRouter, stopRouter, prefetchMainPages } from './js/core/router.js?v=1.8.197';
+-    import { confirmLeave, clearDirty } from './js/utils/unsaved-guard.js?v=1.8.197';
+-    import { renderSidebar, setActiveRoute, setCollapsed, toggleDrawer, closeDrawer, initSidebar, destroySidebar } from './js/components/sidebar.js?v=1.8.197';
+-    import { renderTopbar, setPageTitle, setSwitcherActive } from './js/components/topbar.js?v=1.8.197';
+-    import { clearPersistedBranchBatchFilters } from './js/components/branch-batch-filter.js?v=1.8.197';
+-    import { initDatasetSession, stopDatasetSession } from './js/core/dataset-session.js?v=1.8.197';
+-    import { invalidateFinancialCache } from './js/services/report.service.js?v=1.8.197';
+-    import { loadUsersDirectory, clearUsersDirectoryCache, loadPublicBranding, syncPublicBranding } from './js/services/user-directory.service.js?v=1.8.197';
+-    import { renderLoginView } from './js/pages/login.page.js?v=1.8.197';
+-    import { playSwitchSound, preloadSwitchSound, preloadLogoutSound } from './js/utils/sound.js?v=1.8.197';
++    import { getContext, setContext, loadSavedContext } from './js/core/app.js?v=1.8.198';
++    import { tryRestoreSession, activateSession, stopInactivityTracking, setUnauthenticatedHandler, logout } from './js/core/guard.js?v=1.8.198';
++    import { startRouter, stopRouter, prefetchMainPages } from './js/core/router.js?v=1.8.198';
++    import { confirmLeave, clearDirty } from './js/utils/unsaved-guard.js?v=1.8.198';
++    import { renderSidebar, setActiveRoute, setCollapsed, toggleDrawer, closeDrawer, initSidebar, destroySidebar } from './js/components/sidebar.js?v=1.8.198';
++    import { renderTopbar, setPageTitle, setSwitcherActive } from './js/components/topbar.js?v=1.8.198';
++    import { clearPersistedBranchBatchFilters } from './js/components/branch-batch-filter.js?v=1.8.198';
++    import { initDatasetSession, stopDatasetSession } from './js/core/dataset-session.js?v=1.8.198';
++    import { invalidateFinancialCache } from './js/services/report.service.js?v=1.8.198';
++    import { loadUsersDirectory, clearUsersDirectoryCache, loadPublicBranding, syncPublicBranding } from './js/services/user-directory.service.js?v=1.8.198';
++    import { renderLoginView } from './js/pages/login.page.js?v=1.8.198';
++    import { playSwitchSound, preloadSwitchSound, preloadLogoutSound } from './js/utils/sound.js?v=1.8.198';
+     import { db } from './js/config/firebase-config.js';
+     import { doc, getDoc } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
+ 
+@@ -112,7 +112,7 @@
+         const pendingNotice = sessionStorage.getItem('pending_verification_notice');
+         if (pendingNotice) {
+           sessionStorage.removeItem('pending_verification_notice');
+-          import('./js/components/toast.js?v=1.8.197').then(({ showToast }) => {
++          import('./js/components/toast.js?v=1.8.198').then(({ showToast }) => {
+             showToast({
+               type: 'info',
+               title: 'Email Verification',
+@@ -296,6 +296,6 @@
+       }
+     })();
+   </script>
+-  <script type="module" src="js/core/app.js?v=1.8.197"></script>
++  <script type="module" src="js/core/app.js?v=1.8.198"></script>
+ </body>
+ </html>
+diff --git a/public/js/components/branch-batch-filter.js b/public/js/components/branch-batch-filter.js
+index 6d6755b..7e123af 100644
+--- a/public/js/components/branch-batch-filter.js
++++ b/public/js/components/branch-batch-filter.js
+@@ -3,7 +3,7 @@
+ // locks branch for Branch Heads (and single-branch Kids mode), and locks Batch until a branch
+ // is chosen for Super Admin.
+ 
+-import { createSelect } from './ui-select.js?v=1.8.197';
++import { createSelect } from './ui-select.js?v=1.8.198';
+ 
+ const STORAGE_PREFIX = 'uicms.bb.';
+ 
+diff --git a/public/js/components/payment-details-modal.js b/public/js/components/payment-details-modal.js
+index 3dea825..4d52b2b 100644
+--- a/public/js/components/payment-details-modal.js
++++ b/public/js/components/payment-details-modal.js
+@@ -1,13 +1,13 @@
+ // payment-details-modal.js — Shared read-only Payment Details modal helper for Payment History & Dashboard.
+ 
+-import { openPopup } from './modal.js?v=1.8.197';
+-import { showToast } from './toast.js?v=1.8.197';
++import { openPopup } from './modal.js?v=1.8.198';
++import { showToast } from './toast.js?v=1.8.198';
+ import {
+   buildPaymentDetailsModel,
+   getCachedBillForEntry,
+   getCachedStudentPhoto
+-} from '../services/report.service.js?v=1.8.197';
+-import { formatPersonName } from '../utils/formatter.js?v=1.8.197';
++} from '../services/report.service.js?v=1.8.198';
++import { formatPersonName } from '../utils/formatter.js?v=1.8.198';
+ 
+ function mk(tag, cls, text) {
+   const el = document.createElement(tag);
+diff --git a/public/js/components/payment-popup.js b/public/js/components/payment-popup.js
+index d1d1c57..5ef0ebf 100644
+--- a/public/js/components/payment-popup.js
++++ b/public/js/components/payment-popup.js
+@@ -1,12 +1,12 @@
+ // payment-popup.js — Single Shared Payment Popup for Student Profile and Pay Fees
+ import { auth } from '../config/firebase-config.js';
+-import { openPopup } from './modal.js?v=1.8.197';
+-import { createSelect } from './ui-select.js?v=1.8.197';
+-import { formatINR, formatDateIN } from '../utils/formatter.js?v=1.8.197';
+-import { todayISO } from '../utils/session-rules.js?v=1.8.197';
+-import { getRoleTitle, resolveUserDisplay } from '../services/user-directory.service.js?v=1.8.197';
+-import { showToast } from './toast.js?v=1.8.197';
+-import { playPaymentSuccessSound } from '../utils/sound.js?v=1.8.197';
++import { openPopup } from './modal.js?v=1.8.198';
++import { createSelect } from './ui-select.js?v=1.8.198';
++import { formatINR, formatDateIN } from '../utils/formatter.js?v=1.8.198';
++import { todayISO } from '../utils/session-rules.js?v=1.8.198';
++import { getRoleTitle, resolveUserDisplay } from '../services/user-directory.service.js?v=1.8.198';
++import { showToast } from './toast.js?v=1.8.198';
++import { playPaymentSuccessSound } from '../utils/sound.js?v=1.8.198';
+ import {
+   recordPayment,
+   recordAdmissionWithPayment,
+@@ -16,13 +16,13 @@ import {
+   isAdmissionFeePaid,
+   isMaterialFeePaid,
+   isExamFeePaid
+-} from '../services/payment.service.js?v=1.8.197';
++} from '../services/payment.service.js?v=1.8.198';
+ import {
+   computeLateFee,
+   formatShortMonthYear,
+   fetchOpenKidsBillsForStudent,
+   recordKidsBillPayment
+-} from '../utils/school-billing.js?v=1.8.197';
++} from '../utils/school-billing.js?v=1.8.198';
+ 
+ function formatDateTime(d) {
+   const dt = d instanceof Date ? d : new Date(d);
+@@ -268,7 +268,8 @@ export async function openPaymentPopup({
+   activeSession,
+   payments,
+   from = 'pay-fees',
+-  onSuccess
++  onSuccess,
++  onCancel
+ }) {
+   const s = student;
+   if (!s) return;
+@@ -288,10 +289,11 @@ export async function openPaymentPopup({
+     if (isKids) {
+       const kAdmFee = Number(pa.admFee ?? admFee ?? 0);
+       const pmLabel = pa.paymentMode === 'difference' ? 'Difference Payment' : 'Full Payment';
++      const itemTitle = pa.isUpgrade ? 'Level Upgrade Fee' : 'Admission Fee';
+       typeOptions.push({
+         value: 'AD',
+-        label: `Admission Fee (${pmLabel}) — ${formatINR(kAdmFee)}`,
+-        icon: 'credit-card'
++        label: `${itemTitle} (${pmLabel}) — ${formatINR(kAdmFee)}`,
++        icon: pa.isUpgrade ? 'trending-up' : 'credit-card'
+       });
+     } else if (pa.isFull || s.paymentPlan === 'full') {
+       const fullAmt = Number(pa.fullAmt || s.fullPaymentAmount || s.dueAtAdmission?.full || s.feeTotal || 0);
+@@ -444,11 +446,20 @@ export async function openPaymentPopup({
+     ? `${s.name || 'New Student'} • ${courseCodeOrName || 'Admission'}`
+     : `${s.name || 'Student'} • ${s.studentId || s.id || courseCodeOrName || 'Student'}`;
+ 
++  let confirmedPayment = false;
++  const popupTitle = pendingAdmission?.isUpgrade
++    ? 'Collect Upgrade Fee'
++    : ((isAdmission || pendingAdmission) ? 'Collect Admission Fee' : 'Record Payment');
+   const popup = openPopup({
+-    title: (isAdmission || pendingAdmission) ? 'Collect Admission Fee' : 'Record Payment',
++    title: popupTitle,
+     subtitle: studentSubtitle,
+     icon: 'wallet',
+-    wide: true
++    wide: true,
++    onClose: () => {
++      if (!confirmedPayment && typeof onCancel === 'function') {
++        onCancel();
++      }
++    }
+   });
+ 
+   const form = document.createElement('form');
+@@ -657,20 +668,36 @@ export async function openPaymentPopup({
+   txnInput.className = 'ui-input';
+   txnInput.style.paddingLeft = '12px';
+   txnWrap.appendChild(txnInput);
+-  txnGroup.append(txnLabelRow, txnWrap);
++  const txnErr = document.createElement('div');
++  txnErr.className = 'ui-err';
++  txnErr.style.minHeight = '16px';
++  txnErr.style.fontSize = '12px';
++  txnErr.style.color = 'var(--danger, #dc2626)';
++  txnErr.style.marginTop = '4px';
++  txnGroup.append(txnLabelRow, txnWrap, txnErr);
++
++  txnInput.addEventListener('input', () => {
++    if (txnInput.value.trim()) {
++      txnWrap.classList.remove('is-invalid');
++      txnErr.textContent = '';
++    }
++  });
+ 
+   const onModeChange = (modeVal) => {
+     const isCash = modeVal === 'cash';
+     txnInput.disabled = isCash;
+-    txnInput.required = false;
++    txnInput.required = !isCash;
++    txnWrap.classList.remove('is-invalid');
++    txnErr.textContent = '';
+     if (isCash) {
+       txnInput.value = '';
+       txnLabel.innerHTML = 'Transaction / Reference ID <span style="font-weight: normal; color: var(--text-mute, #64748b); font-size: 11.5px;">(N/A for Cash)</span>';
+       txnInput.placeholder = 'Not applicable for Cash payments';
+       txnWrap.classList.add('is-disabled');
+     } else {
+-      txnLabel.innerHTML = 'Transaction / Reference ID <span style="font-weight: normal; color: var(--text-mute, #64748b); font-size: 11.5px;">(Optional)</span>';
+-      txnInput.placeholder = 'Optional for ' + modeVal.toUpperCase();
++      const mLabel = MODE_OPTIONS.find((m) => m.value === modeVal)?.label || modeVal.toUpperCase();
++      txnLabel.innerHTML = 'Transaction / Reference ID <em style="color:var(--danger,#dc2626);font-style:normal;">*</em> <span style="font-weight: normal; color: var(--text-mute, #64748b); font-size: 11.5px;">(Required)</span>';
++      txnInput.placeholder = 'Enter ' + mLabel + ' Transaction / Ref ID';
+       txnWrap.classList.remove('is-disabled');
+     }
+   };
+@@ -851,6 +878,17 @@ export async function openPaymentPopup({
+       return;
+     }
+ 
++    const selectedMode = String(modeSel.value || 'cash').toLowerCase().trim() || 'cash';
++    const trimmedTxn = selectedMode !== 'cash' ? txnInput.value.trim() : '';
++    if (selectedMode !== 'cash' && !trimmedTxn) {
++      const mLabel = MODE_OPTIONS.find((m) => m.value === selectedMode)?.label || selectedMode.toUpperCase();
++      txnWrap.classList.add('is-invalid');
++      txnErr.textContent = `Transaction / Reference ID is required for ${mLabel} payments.`;
++      showToast({ type: 'error', message: `Transaction / Reference ID is required for ${mLabel} payments.` });
++      txnInput.focus();
++      return;
++    }
++
+     const val = typeSel.value;
+     if (!val) {
+       showToast({ type: 'error', message: 'Please select a valid payment type.' });
+@@ -882,28 +920,37 @@ export async function openPaymentPopup({
+         const authEmail = auth?.currentUser?.email || profile?.email || '';
+         const userDisp = resolveUserDisplay(authEmail, profile?.name, profile?.designation);
+         if (isKids && typeof pendingAdmission?.onConfirmPayment === 'function') {
++          const isUpgrade = Boolean(pendingAdmission.isUpgrade);
+           const kidsRes = await pendingAdmission.onConfirmPayment({
+             mode: modeSel.value,
+             txnId: txnInput.value.trim(),
+             remarks: remInput.value.trim(),
+             paymentDate: todayISO()
+           });
+-          showToast({ type: 'success', message: 'Admission & payment recorded! Student ID: ' + kidsRes.studentId + ' | Receipt No: ' + kidsRes.receiptNo });
++          showToast({
++            type: 'success',
++            message: isUpgrade
++              ? ('Level upgraded! Receipt No: ' + (kidsRes.receiptNo || '-'))
++              : ('Admission & payment recorded! Student ID: ' + kidsRes.studentId + ' | Receipt No: ' + kidsRes.receiptNo)
++          });
+           playPaymentSuccessSound();
++          confirmedPayment = true;
+           popup.close();
+           promptOpenReceipt({
+-            studentDocId: kidsRes.id || kidsRes.studentDocId,
+-            paymentId: 'payment',
++            studentDocId: kidsRes.id || kidsRes.studentDocId || s.id,
++            paymentId: isUpgrade ? (kidsRes.paymentId || 'latest') : 'payment',
+             receiptNo: kidsRes.receiptNo,
+-            student: { name: s.name, studentId: kidsRes.studentId },
+-            forText: 'Admission Fee (' + (pendingAdmission.paymentMode === 'difference' ? 'Difference' : 'Full Payment') + ')',
++            student: { name: s.name, studentId: kidsRes.studentId || s.studentId },
++            forText: isUpgrade
++              ? ('Level Upgrade (' + (pendingAdmission.courseName || 'Package') + ')')
++              : ('Admission Fee (' + (pendingAdmission.paymentMode === 'difference' ? 'Difference' : 'Full Payment') + ')'),
+             amount: baseAmount,
+             lateFee: 0,
+             totalPaid: baseAmount,
+             mode: modeSel.value,
+             txnId: txnInput.value.trim(),
+             date: new Date(),
+-            from: 'school-admissions'
++            from: isUpgrade ? (from || 'profile') : 'school-admissions'
+           });
+           if (typeof onSuccess === 'function') {
+             await onSuccess({ ...kidsRes, mode: modeSel.value, txnId: txnInput.value.trim() });
+@@ -928,6 +975,7 @@ export async function openPaymentPopup({
+ 
+         showToast({ type: 'success', message: 'Admission & payment recorded! Student ID: ' + res.studentId + ' | Receipt No: ' + res.receiptNo });
+         playPaymentSuccessSound();
++        confirmedPayment = true;
+         popup.close();
+ 
+         const forText = pendingAdmission.isFull
+@@ -988,6 +1036,7 @@ export async function openPaymentPopup({
+         window.dispatchEvent(new CustomEvent('uic:data-mutated', { detail: { reason: 'kids:payment' } }));
+         showToast({ type: 'success', message: 'Payment recorded! Receipt No: ' + kidsPayRes.receiptNo });
+         playPaymentSuccessSound();
++        confirmedPayment = true;
+         popup.close();
+ 
+         const mText = formatShortMonthYear(kidsPayRes.month) || kidsPayRes.month || 'Monthly Fee';
+@@ -1049,6 +1098,7 @@ export async function openPaymentPopup({
+ 
+       showToast({ type: 'success', message: 'Payment recorded! Receipt No: ' + res.receiptNo });
+       playPaymentSuccessSound();
++      confirmedPayment = true;
+       popup.close();
+ 
+       const forText = isExam
+diff --git a/public/js/components/profile-modal.js b/public/js/components/profile-modal.js
+index 5b53427..b446040 100644
+--- a/public/js/components/profile-modal.js
++++ b/public/js/components/profile-modal.js
+@@ -1,17 +1,17 @@
+ import { auth } from '../config/firebase-config.js';
+-import { openPopup } from './modal.js?v=1.8.197';
+-import { showToast } from './toast.js?v=1.8.197';
+-import { confirmDialog } from './ui-confirm.js?v=1.8.197';
+-import { cropSquareAvatarToBlob, isImageFile, formatBytes } from '../utils/image-compress.js?v=1.8.197';
+-import { formatPersonName, initials } from '../utils/formatter.js?v=1.8.197';
++import { openPopup } from './modal.js?v=1.8.198';
++import { showToast } from './toast.js?v=1.8.198';
++import { confirmDialog } from './ui-confirm.js?v=1.8.198';
++import { cropSquareAvatarToBlob, isImageFile, formatBytes } from '../utils/image-compress.js?v=1.8.198';
++import { formatPersonName, initials } from '../utils/formatter.js?v=1.8.198';
+ import {
+   getRoleTitle,
+   getUserTitle,
+   resolveUserDisplay,
+   saveOwnPhoto,
+   saveUserFields
+-} from '../services/user-directory.service.js?v=1.8.197';
+-import { changeSuperAdminPassword, mapAuthError } from '../core/auth.js?v=1.8.197';
++} from '../services/user-directory.service.js?v=1.8.198';
++import { changeSuperAdminPassword, mapAuthError } from '../core/auth.js?v=1.8.198';
+ 
+ function el(tag, cls, text) {
+   const node = document.createElement(tag);
+diff --git a/public/js/components/sidebar.js b/public/js/components/sidebar.js
+index 1c5d4ef..e5ea4ca 100644
+--- a/public/js/components/sidebar.js
++++ b/public/js/components/sidebar.js
+@@ -1,8 +1,8 @@
+-import { ROUTES } from '../core/router.js?v=1.8.197';
+-import { APP_VERSION } from '../core/app.js?v=1.8.197';
+-import { getRunningPeriod, getNextDueDate, formatDayMonth } from '../utils/date.utils.js?v=1.8.197';
+-import { getRunningSession, toPeriod, daysLeft, expectedStatus } from '../core/sessions.js?v=1.8.197';
+-import { getUserTitle, resolveUserDisplay } from '../services/user-directory.service.js?v=1.8.197';
++import { ROUTES } from '../core/router.js?v=1.8.198';
++import { APP_VERSION } from '../core/app.js?v=1.8.198';
++import { getRunningPeriod, getNextDueDate, formatDayMonth } from '../utils/date.utils.js?v=1.8.198';
++import { getRunningSession, toPeriod, daysLeft, expectedStatus } from '../core/sessions.js?v=1.8.198';
++import { getUserTitle, resolveUserDisplay } from '../services/user-directory.service.js?v=1.8.198';
+ 
+ let removeSidebarProfileListener = null;
+ 
+diff --git a/public/js/components/topbar.js b/public/js/components/topbar.js
+index 590a48d..e2dd51e 100644
+--- a/public/js/components/topbar.js
++++ b/public/js/components/topbar.js
+@@ -1,9 +1,9 @@
+-import { getRunningPeriod, getPeriodOptions } from '../utils/date.utils.js?v=1.8.197';
+-import { loadSessions, getSelectedSessionId, setSelectedSession } from '../core/sessions.js?v=1.8.197';
+-import { confirmLeave } from '../utils/unsaved-guard.js?v=1.8.197';
+-import { formatPersonName } from '../utils/formatter.js?v=1.8.197';
+-import { getRoleTitle, getUserTitle, resolveUserDisplay } from '../services/user-directory.service.js?v=1.8.197';
+-import { openProfileModal } from './profile-modal.js?v=1.8.197';
++import { getRunningPeriod, getPeriodOptions } from '../utils/date.utils.js?v=1.8.198';
++import { loadSessions, getSelectedSessionId, setSelectedSession } from '../core/sessions.js?v=1.8.198';
++import { confirmLeave } from '../utils/unsaved-guard.js?v=1.8.198';
++import { formatPersonName } from '../utils/formatter.js?v=1.8.198';
++import { getRoleTitle, getUserTitle, resolveUserDisplay } from '../services/user-directory.service.js?v=1.8.198';
++import { openProfileModal } from './profile-modal.js?v=1.8.198';
+ 
+ let topbarProfileCleanup = null;
+ 
+diff --git a/public/js/core/app.js b/public/js/core/app.js
+index 48e661b..998df15 100644
+--- a/public/js/core/app.js
++++ b/public/js/core/app.js
+@@ -1,6 +1,6 @@
+ import { app } from '../config/firebase-config.js';
+ 
+-export const APP_VERSION = '1.8.197';
++export const APP_VERSION = '1.8.198';
+ 
+ export const APP_CACHE = {
+   currentUser: null,
+diff --git a/public/js/core/data-transfer.js b/public/js/core/data-transfer.js
+index 4046c37..3cc48f7 100644
+--- a/public/js/core/data-transfer.js
++++ b/public/js/core/data-transfer.js
+@@ -12,9 +12,9 @@ import {
+   ref as storageRef,
+   uploadBytesResumable
+ } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-storage.js';
+-import { showToast } from '../components/toast.js?v=1.8.197';
+-import { getDatasetGeneration, initDatasetSession } from './dataset-session.js?v=1.8.197';
+-import { getRoleTitle, getRolePluralTitle } from '../services/user-directory.service.js?v=1.8.197';
++import { showToast } from '../components/toast.js?v=1.8.198';
++import { getDatasetGeneration, initDatasetSession } from './dataset-session.js?v=1.8.198';
++import { getRoleTitle, getRolePluralTitle } from '../services/user-directory.service.js?v=1.8.198';
+ 
+ const MAX_BYTES = 95 * 1024 * 1024;
+ const UNLOCK_IDLE_MS = 10 * 60 * 1000;
+diff --git a/public/js/core/guard.js b/public/js/core/guard.js
+index fb398eb..f979f0a 100644
+--- a/public/js/core/guard.js
++++ b/public/js/core/guard.js
+@@ -1,13 +1,13 @@
+ import { auth, db } from '../config/firebase-config.js';
+ import { terminate, clearIndexedDbPersistence } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
+-import { clearAppCache } from './app.js?v=1.8.197';
+-import { clearRouterCache } from './router.js?v=1.8.197';
++import { clearAppCache } from './app.js?v=1.8.198';
++import { clearRouterCache } from './router.js?v=1.8.198';
+ import { resolveSession, signOutUser } from './auth.js';
+-import { playLogoutSound } from '../utils/sound.js?v=1.8.197';
+-import { clearAllReportCaches } from '../services/report.service.js?v=1.8.197';
+-import { invalidateArchiveReminderCache } from '../services/archive.service.js?v=1.8.197';
+-import { clearUsersDirectoryCache } from '../services/user-directory.service.js?v=1.8.197';
+-import { clearPersistedBranchBatchFilters } from '../components/branch-batch-filter.js?v=1.8.197';
++import { playLogoutSound } from '../utils/sound.js?v=1.8.198';
++import { clearAllReportCaches } from '../services/report.service.js?v=1.8.198';
++import { invalidateArchiveReminderCache } from '../services/archive.service.js?v=1.8.198';
++import { clearUsersDirectoryCache } from '../services/user-directory.service.js?v=1.8.198';
++import { clearPersistedBranchBatchFilters } from '../components/branch-batch-filter.js?v=1.8.198';
+ 
+ const INACTIVITY_LIMIT_MS = 30 * 60 * 1000;
+ const LOGOUT_MIN_TRANSITION_MS = 1200;
+diff --git a/public/js/core/router.js b/public/js/core/router.js
+index 27b85b8..155645e 100644
+--- a/public/js/core/router.js
++++ b/public/js/core/router.js
+@@ -1,6 +1,6 @@
+-import { APP_VERSION } from './app.js?v=1.8.197';
+-import { confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.197';
+-import { getRoleTitle } from '../services/user-directory.service.js?v=1.8.197';
++import { APP_VERSION } from './app.js?v=1.8.198';
++import { confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.198';
++import { getRoleTitle } from '../services/user-directory.service.js?v=1.8.198';
+ 
+ const htmlCache = new Map();
+ const htmlInflight = new Map();
+diff --git a/public/js/core/sessions.js b/public/js/core/sessions.js
+index f74b364..50091d4 100644
+--- a/public/js/core/sessions.js
++++ b/public/js/core/sessions.js
+@@ -1,6 +1,6 @@
+ import { db } from '../config/firebase-config.js';
+ import { collection, getDocs, query, where } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
+-import { todayISO as istTodayISO } from '../utils/session-rules.js?v=1.8.197';
++import { todayISO as istTodayISO } from '../utils/session-rules.js?v=1.8.198';
+ 
+ // Shared session state lives on window so every module copy sees the same data.
+ const SESSION_STALE_MS = 30000;
+diff --git a/public/js/pages/admission-receipt.page.js b/public/js/pages/admission-receipt.page.js
+index 868b0f0..d24f1b2 100644
+--- a/public/js/pages/admission-receipt.page.js
++++ b/public/js/pages/admission-receipt.page.js
+@@ -10,11 +10,11 @@ import {
+   query,
+   where
+ } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
+-import { showToast } from '../components/toast.js?v=1.8.197';
+-import { createSelect } from '../components/ui-select.js?v=1.8.197';
+-import { buildYouthReceiptData, fmtRs } from '../utils/admission-receipt.js?v=1.8.197';
+-import { downloadYouthReceiptPdf } from '../utils/admission-receipt-pdf.js?v=1.8.197';
+-import { getStudentDocRecord } from '../utils/student-media.js?v=1.8.197';
++import { showToast } from '../components/toast.js?v=1.8.198';
++import { createSelect } from '../components/ui-select.js?v=1.8.198';
++import { buildYouthReceiptData, fmtRs } from '../utils/admission-receipt.js?v=1.8.198';
++import { downloadYouthReceiptPdf } from '../utils/admission-receipt-pdf.js?v=1.8.198';
++import { getStudentDocRecord } from '../utils/student-media.js?v=1.8.198';
+ 
+ const COL = 'students';
+ let studentDocId = '';
+diff --git a/public/js/pages/admissions.page.js b/public/js/pages/admissions.page.js
+index 59d8da0..a9b24f0 100644
+--- a/public/js/pages/admissions.page.js
++++ b/public/js/pages/admissions.page.js
+@@ -15,23 +15,23 @@ import {
+   arrayUnion,
+   addDoc
+ } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
+-import { showToast } from '../components/toast.js?v=1.8.197';
+-import { registerDirty, confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.197';
+-import { buildStats, buildToolbar, renderPager, renderEmptyTableState, PAGE_SIZE } from '../components/list-page.js?v=1.8.197';
+-import { createSelect } from '../components/ui-select.js?v=1.8.197';
+-import { createBranchBatchFilter } from '../components/branch-batch-filter.js?v=1.8.197';
+-import { openMenu } from '../components/ui-menu.js?v=1.8.197';
+-import { confirmDialog } from '../components/ui-confirm.js?v=1.8.197';
+-import { openPopup } from '../components/modal.js?v=1.8.197';
+-import { createDatePicker } from '../components/ui-datepicker.js?v=1.8.197';
+-import { getSelectedSessionId, getSelectedSession, getCachedSessions, loadSessions, hasFreshSessionsCache, todayISO } from '../core/sessions.js?v=1.8.197';
+-import { firstInstallmentOf, admissionState, sessionLabel, installmentSchedule, batchAllowsCourse, batchCourseLabel, isCourseActive } from '../utils/session-rules.js?v=1.8.197';
+-import { formatINR, formatDateIN, formatPersonName, formatGenderDisplay, initials } from '../utils/formatter.js?v=1.8.197';
+-import { validatePhone, validateEmail, validateDOB, validateName, validateRequired } from '../utils/validator.js?v=1.8.197';
+-import { listStudentsRaw, checkDuplicatePhone, readStudentId, readReceiptNo, writeCounter, createStudentWithDocs, updateStudentWithDocs, updateStudent, deleteStudent } from '../services/admission.service.js?v=1.8.197';
+-import { feeTotal, courseFeeOf, discountOf } from '../utils/fees.js?v=1.8.197';
+-import { compressTo100KB, readAsDataURL, blobToDataURL, isImageFile, formatBytes } from '../utils/image-compress.js?v=1.8.197';
+-import { fetchStudentPayments, calculateStudentFinancials, buildReceiptMenuItems } from '../services/payment.service.js?v=1.8.197';
++import { showToast } from '../components/toast.js?v=1.8.198';
++import { registerDirty, confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.198';
++import { buildStats, buildToolbar, renderPager, renderEmptyTableState, PAGE_SIZE } from '../components/list-page.js?v=1.8.198';
++import { createSelect } from '../components/ui-select.js?v=1.8.198';
++import { createBranchBatchFilter } from '../components/branch-batch-filter.js?v=1.8.198';
++import { openMenu } from '../components/ui-menu.js?v=1.8.198';
++import { confirmDialog } from '../components/ui-confirm.js?v=1.8.198';
++import { openPopup } from '../components/modal.js?v=1.8.198';
++import { createDatePicker } from '../components/ui-datepicker.js?v=1.8.198';
++import { getSelectedSessionId, getSelectedSession, getCachedSessions, loadSessions, hasFreshSessionsCache, todayISO } from '../core/sessions.js?v=1.8.198';
++import { firstInstallmentOf, admissionState, sessionLabel, installmentSchedule, batchAllowsCourse, batchCourseLabel, isCourseActive } from '../utils/session-rules.js?v=1.8.198';
++import { formatINR, formatDateIN, formatPersonName, formatGenderDisplay, initials } from '../utils/formatter.js?v=1.8.198';
++import { validatePhone, validateEmail, validateDOB, validateName, validateRequired } from '../utils/validator.js?v=1.8.198';
++import { listStudentsRaw, checkDuplicatePhone, readStudentId, readReceiptNo, writeCounter, createStudentWithDocs, updateStudentWithDocs, updateStudent, deleteStudent } from '../services/admission.service.js?v=1.8.198';
++import { feeTotal, courseFeeOf, discountOf } from '../utils/fees.js?v=1.8.198';
++import { compressTo100KB, readAsDataURL, blobToDataURL, isImageFile, formatBytes } from '../utils/image-compress.js?v=1.8.198';
++import { fetchStudentPayments, calculateStudentFinancials, buildReceiptMenuItems } from '../services/payment.service.js?v=1.8.198';
+ import {
+   ensureReferenceData,
+   getCachedReferenceData,
+@@ -42,11 +42,11 @@ import {
+   scheduleDelayedSkeleton,
+   loadStudentPhotos,
+   getCachedStudentPhoto
+-} from '../services/report.service.js?v=1.8.197';
+-import { getStudentPhotoSrc, getStudentDocSrc, getStudentDocMime } from '../utils/student-media.js?v=1.8.197';
+-import { playPaymentSuccessSound } from '../utils/sound.js?v=1.8.197';
+-import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.197';
+-import { APP_CACHE } from '../core/app.js?v=1.8.197';
++} from '../services/report.service.js?v=1.8.198';
++import { getStudentPhotoSrc, getStudentDocSrc, getStudentDocMime } from '../utils/student-media.js?v=1.8.198';
++import { playPaymentSuccessSound } from '../utils/sound.js?v=1.8.198';
++import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.198';
++import { APP_CACHE } from '../core/app.js?v=1.8.198';
+ 
+ const COL = 'students';
+ 
+diff --git a/public/js/pages/archives.page.js b/public/js/pages/archives.page.js
+index 6592e3a..742d474 100644
+--- a/public/js/pages/archives.page.js
++++ b/public/js/pages/archives.page.js
+@@ -1,5 +1,5 @@
+ // archives.page.js — Youth Centre Archives UI (Phase 1: Download, Password Encryption, Verify & History)
+-import { getContext } from '../core/app.js?v=1.8.197';
++import { getContext } from '../core/app.js?v=1.8.198';
+ import {
+   PAGE_SIZE,
+   buildStats,
+@@ -7,12 +7,12 @@ import {
+   buildTableCard,
+   renderPager,
+   renderEmptyTableState
+-} from '../components/list-page.js?v=1.8.197';
+-import { openPopup } from '../components/modal.js?v=1.8.197';
+-import { openMenu } from '../components/ui-menu.js?v=1.8.197';
+-import { showToast } from '../components/toast.js?v=1.8.197';
+-import { fmtDate } from '../utils/session-rules.js?v=1.8.197';
+-import { formatINR } from '../utils/formatter.js?v=1.8.197';
++} from '../components/list-page.js?v=1.8.198';
++import { openPopup } from '../components/modal.js?v=1.8.198';
++import { openMenu } from '../components/ui-menu.js?v=1.8.198';
++import { showToast } from '../components/toast.js?v=1.8.198';
++import { fmtDate } from '../utils/session-rules.js?v=1.8.198';
++import { formatINR } from '../utils/formatter.js?v=1.8.198';
+ import {
+   ENABLE_ARCHIVE_SESSION_DELETE,
+   computeArchiveSessionStatus,
+@@ -21,7 +21,7 @@ import {
+   scanSessionForExport,
+   buildAndDownloadArchiveZip,
+   verifyLocalArchiveZip
+-} from '../services/archive.service.js?v=1.8.197';
++} from '../services/archive.service.js?v=1.8.198';
+ 
+ let cleanups = [];
+ 
+diff --git a/public/js/pages/authorised-users.js b/public/js/pages/authorised-users.js
+index 8cdf7b3..fa18f3e 100644
+--- a/public/js/pages/authorised-users.js
++++ b/public/js/pages/authorised-users.js
+@@ -1,20 +1,20 @@
+ import { db } from '../config/firebase-config.js';
+ import { collection, getDocs } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
+-import { openPopup } from '../components/modal.js?v=1.8.197';
+-import { showToast } from '../components/toast.js?v=1.8.197';
+-import { confirmDialog } from '../components/ui-confirm.js?v=1.8.197';
+-import { openMenu } from '../components/ui-menu.js?v=1.8.197';
+-import { PAGE_SIZE, renderPager } from '../components/list-page.js?v=1.8.197';
+-import { formatPersonName, initials } from '../utils/formatter.js?v=1.8.197';
+-import { sendResetEmailForUser, mapAuthError } from '../core/auth.js?v=1.8.197';
+-import { openPhotoCropModal, openChangePasswordModal } from '../components/profile-modal.js?v=1.8.197';
++import { openPopup } from '../components/modal.js?v=1.8.198';
++import { showToast } from '../components/toast.js?v=1.8.198';
++import { confirmDialog } from '../components/ui-confirm.js?v=1.8.198';
++import { openMenu } from '../components/ui-menu.js?v=1.8.198';
++import { PAGE_SIZE, renderPager } from '../components/list-page.js?v=1.8.198';
++import { formatPersonName, initials } from '../utils/formatter.js?v=1.8.198';
++import { sendResetEmailForUser, mapAuthError } from '../core/auth.js?v=1.8.198';
++import { openPhotoCropModal, openChangePasswordModal } from '../components/profile-modal.js?v=1.8.198';
+ import {
+   getRoleTitle,
+   getRolePluralTitle,
+   loadUsersDirectory,
+   resolveUserDisplay,
+   saveUserFields
+-} from '../services/user-directory.service.js?v=1.8.197';
++} from '../services/user-directory.service.js?v=1.8.198';
+ 
+ function el(tag, cls, text) {
+   const node = document.createElement(tag);
+diff --git a/public/js/pages/batches.page.js b/public/js/pages/batches.page.js
+index 719e2c6..9716aeb 100644
+--- a/public/js/pages/batches.page.js
++++ b/public/js/pages/batches.page.js
+@@ -1,16 +1,16 @@
+ import { db } from '../config/firebase-config.js';
+ import { collection, getDocs, getDoc, query, where, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, deleteField } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
+-import { showToast } from '../components/toast.js?v=1.8.197';
+-import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.197';
+-import { PAGE_SIZE, buildStats, buildToolbar, renderPager, renderEmptyTableState } from '../components/list-page.js?v=1.8.197';
+-import { createSelect } from '../components/ui-select.js?v=1.8.197';
+-import { createMultiSelect } from '../components/multi-select.js?v=1.8.197';
+-import { openMenu } from '../components/ui-menu.js?v=1.8.197';
+-import { confirmDialog } from '../components/ui-confirm.js?v=1.8.197';
+-import { loadSessions, getSelectedSessionId, getSelectedSession, getCachedSessions } from '../core/sessions.js?v=1.8.197';
+-import { ensureReferenceData, loadAllYouthSessionsForCompare, getCachedReferenceData } from '../services/report.service.js?v=1.8.197';
+-import { batchAllowsCourse, batchCourseLabel, batchCourseTooltip, isCourseActive } from '../utils/session-rules.js?v=1.8.197';
+-import { getRoleTitle } from '../services/user-directory.service.js?v=1.8.197';
++import { showToast } from '../components/toast.js?v=1.8.198';
++import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.198';
++import { PAGE_SIZE, buildStats, buildToolbar, renderPager, renderEmptyTableState } from '../components/list-page.js?v=1.8.198';
++import { createSelect } from '../components/ui-select.js?v=1.8.198';
++import { createMultiSelect } from '../components/multi-select.js?v=1.8.198';
++import { openMenu } from '../components/ui-menu.js?v=1.8.198';
++import { confirmDialog } from '../components/ui-confirm.js?v=1.8.198';
++import { loadSessions, getSelectedSessionId, getSelectedSession, getCachedSessions } from '../core/sessions.js?v=1.8.198';
++import { ensureReferenceData, loadAllYouthSessionsForCompare, getCachedReferenceData } from '../services/report.service.js?v=1.8.198';
++import { batchAllowsCourse, batchCourseLabel, batchCourseTooltip, isCourseActive } from '../utils/session-rules.js?v=1.8.198';
++import { getRoleTitle } from '../services/user-directory.service.js?v=1.8.198';
+ // Batches Part 2A/2B: add/edit form, delete, student capacity
+ 
+ const TEXT_KEYS = ['name', 'code', 'capacity'];
+diff --git a/public/js/pages/branch-heads.page.js b/public/js/pages/branch-heads.page.js
+index 79e20df..7141b86 100644
+--- a/public/js/pages/branch-heads.page.js
++++ b/public/js/pages/branch-heads.page.js
+@@ -1,13 +1,13 @@
+ import { db } from '../config/firebase-config.js';
+ import { collection, getDocs, doc, getDoc, setDoc, updateDoc, deleteDoc, query, where, serverTimestamp } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
+-import { createSelect } from '../components/ui-select.js?v=1.8.197';
+-import { openMenu } from '../components/ui-menu.js?v=1.8.197';
+-import { confirmDialog } from '../components/ui-confirm.js?v=1.8.197';
+-import { showToast } from '../components/toast.js?v=1.8.197';
+-import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.197';
+-import { PAGE_SIZE, buildStats, buildToolbar, renderPager, renderEmptyTableState } from '../components/list-page.js?v=1.8.197';
+-import { formatPersonName } from '../utils/formatter.js?v=1.8.197';
+-import { loadUsersDirectory, getRoleTitle, getRolePluralTitle } from '../services/user-directory.service.js?v=1.8.197';
++import { createSelect } from '../components/ui-select.js?v=1.8.198';
++import { openMenu } from '../components/ui-menu.js?v=1.8.198';
++import { confirmDialog } from '../components/ui-confirm.js?v=1.8.198';
++import { showToast } from '../components/toast.js?v=1.8.198';
++import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.198';
++import { PAGE_SIZE, buildStats, buildToolbar, renderPager, renderEmptyTableState } from '../components/list-page.js?v=1.8.198';
++import { formatPersonName } from '../utils/formatter.js?v=1.8.198';
++import { loadUsersDirectory, getRoleTitle, getRolePluralTitle } from '../services/user-directory.service.js?v=1.8.198';
+ 
+ const TEXT_KEYS = ['name', 'email', 'phone'];
+ const KEYS = ['name', 'email', 'phone', 'branchId', 'status'];
+diff --git a/public/js/pages/branches.page.js b/public/js/pages/branches.page.js
+index 3a6a63d..312a599 100644
+--- a/public/js/pages/branches.page.js
++++ b/public/js/pages/branches.page.js
+@@ -4,10 +4,10 @@ import { createSelect } from '../components/ui-select.js';
+ import { openMenu } from '../components/ui-menu.js';
+ import { confirmDialog } from '../components/ui-confirm.js';
+ import { showToast } from '../components/toast.js';
+-import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.197';
+-import { PAGE_SIZE, buildStats, buildToolbar, renderPager, renderEmptyTableState } from '../components/list-page.js?v=1.8.197';
+-import { formatPersonName } from '../utils/formatter.js?v=1.8.197';
+-import { getRoleTitle, getRolePluralTitle } from '../services/user-directory.service.js?v=1.8.197';
++import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.198';
++import { PAGE_SIZE, buildStats, buildToolbar, renderPager, renderEmptyTableState } from '../components/list-page.js?v=1.8.198';
++import { formatPersonName } from '../utils/formatter.js?v=1.8.198';
++import { getRoleTitle, getRolePluralTitle } from '../services/user-directory.service.js?v=1.8.198';
+ 
+ let unbindBranchesBranding = null;
+ 
+diff --git a/public/js/pages/courses.page.js b/public/js/pages/courses.page.js
+index 216f42f..72600ea 100644
+--- a/public/js/pages/courses.page.js
++++ b/public/js/pages/courses.page.js
+@@ -1,20 +1,20 @@
+ import { db } from '../config/firebase-config.js';
+-import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.197';
++import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.198';
+ import { collection, getDocs, query, where, doc, addDoc, updateDoc, deleteDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
+ import { createSelect } from '../components/ui-select.js';
+ import { openMenu } from '../components/ui-menu.js';
+ import { confirmDialog } from '../components/ui-confirm.js';
+ import { showToast } from '../components/toast.js';
+-import { buildStats, buildToolbar, renderPager, renderEmptyTableState, PAGE_SIZE } from '../components/list-page.js?v=1.8.197';
+-import { INST_PER_SEM, feeTotal, courseFeeOf, discountOf } from '../utils/fees.js?v=1.8.197';
+-import { isCourseActive } from '../utils/session-rules.js?v=1.8.197';
++import { buildStats, buildToolbar, renderPager, renderEmptyTableState, PAGE_SIZE } from '../components/list-page.js?v=1.8.198';
++import { INST_PER_SEM, feeTotal, courseFeeOf, discountOf } from '../utils/fees.js?v=1.8.198';
++import { isCourseActive } from '../utils/session-rules.js?v=1.8.198';
+ import {
+   ensureReferenceData,
+   getCachedReferenceData,
+   scopeReferenceDataByCtx,
+   isCacheStale,
+   scheduleDelayedSkeleton
+-} from '../services/report.service.js?v=1.8.197';
++} from '../services/report.service.js?v=1.8.198';
+ 
+ const ENDED = ['ended', 'closed', 'completed', 'archived', 'cancelled'];
+ const LOCK_FIELDS = { admission: 'Admission fee', installment: 'Installment amount', material: 'Material fee' };
+diff --git a/public/js/pages/dashboard.page.js b/public/js/pages/dashboard.page.js
+index 6ea5c44..3f362bc 100644
+--- a/public/js/pages/dashboard.page.js
++++ b/public/js/pages/dashboard.page.js
+@@ -1,31 +1,31 @@
+ // dashboard.page.js — Read-only Youth Centre Dashboard (#/dashboard) + preserved Unique Kids placeholder.
+ 
+-import { ROUTES } from '../core/router.js?v=1.8.197';
++import { ROUTES } from '../core/router.js?v=1.8.198';
+ import { db } from '../config/firebase-config.js';
+ import { collection, getDocs, query, where } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
+-import { createSelect } from '../components/ui-select.js?v=1.8.197';
++import { createSelect } from '../components/ui-select.js?v=1.8.198';
+ import {
+   renderDonutChart,
+   renderBarChart,
+   renderStackedBarChart,
+   renderLineChart
+-} from '../components/charts.js?v=1.8.197';
+-import { openPaymentDetailsModal } from '../components/payment-details-modal.js?v=1.8.197';
+-import { loadDashboardArchiveReminder, getCachedDashboardArchiveReminder } from '../services/archive.service.js?v=1.8.197';
+-import { resolveUserDisplay, getRoleTitle } from '../services/user-directory.service.js?v=1.8.197';
+-import { getCachedSessions, loadSessions, getSelectedSession, getSelectedSessionId, hasFreshSessionsCache } from '../core/sessions.js?v=1.8.197';
+-import { getOrgTimezone } from '../utils/session-rules.js?v=1.8.197';
+-import { formatPersonName, initials, formatDateIN } from '../utils/formatter.js?v=1.8.197';
+-import { buildYouthDashboardData } from '../services/dashboard.service.js?v=1.8.197';
+-import { localToday } from '../utils/school-lifecycle.js?v=1.8.197';
++} from '../components/charts.js?v=1.8.198';
++import { openPaymentDetailsModal } from '../components/payment-details-modal.js?v=1.8.198';
++import { loadDashboardArchiveReminder, getCachedDashboardArchiveReminder } from '../services/archive.service.js?v=1.8.198';
++import { resolveUserDisplay, getRoleTitle } from '../services/user-directory.service.js?v=1.8.198';
++import { getCachedSessions, loadSessions, getSelectedSession, getSelectedSessionId, hasFreshSessionsCache } from '../core/sessions.js?v=1.8.198';
++import { getOrgTimezone } from '../utils/session-rules.js?v=1.8.198';
++import { formatPersonName, initials, formatDateIN } from '../utils/formatter.js?v=1.8.198';
++import { buildYouthDashboardData } from '../services/dashboard.service.js?v=1.8.198';
++import { localToday } from '../utils/school-lifecycle.js?v=1.8.198';
+ import {
+   isBreakOverdueReturn,
+   formatBreakPeriod,
+   formatShortMonthYear,
+   evaluateKidsPendingBills,
+   syncOpenKidsBills
+-} from '../utils/school-billing.js?v=1.8.197';
+-import { openKidsResumeBreakModal } from '../utils/school-break-modals.js?v=1.8.197';
++} from '../utils/school-billing.js?v=1.8.198';
++import { openKidsResumeBreakModal } from '../utils/school-break-modals.js?v=1.8.198';
+ import {
+   ensureReferenceData,
+   getCachedReferenceData,
+@@ -50,7 +50,7 @@ import {
+   modeDisplayMeta,
+   formatINR,
+   fmtDate
+-} from '../services/report.service.js?v=1.8.197';
++} from '../services/report.service.js?v=1.8.198';
+ 
+ let state = null;
+ let profileListener = null;
+diff --git a/public/js/pages/login.page.js b/public/js/pages/login.page.js
+index c4813fb..1261cd2 100644
+--- a/public/js/pages/login.page.js
++++ b/public/js/pages/login.page.js
+@@ -5,9 +5,9 @@ import {
+   resolveSession,
+   sendResetEmailForUser,
+   mapAuthError
+-} from '../core/auth.js?v=1.8.197';
+-import { preloadLoginSound, playLoginSound, stopLoginSound } from '../utils/sound.js?v=1.8.197';
+-import { getRoleTitle, getRolePluralTitle, getPublicBranding, loadPublicBranding } from '../services/user-directory.service.js?v=1.8.197';
++} from '../core/auth.js?v=1.8.198';
++import { preloadLoginSound, playLoginSound, stopLoginSound } from '../utils/sound.js?v=1.8.198';
++import { getRoleTitle, getRolePluralTitle, getPublicBranding, loadPublicBranding } from '../services/user-directory.service.js?v=1.8.198';
+ 
+ const URL_REASONS = {
+   timeout: true,
+diff --git a/public/js/pages/org-details.page.js b/public/js/pages/org-details.page.js
+index 2473e92..90ad56c 100644
+--- a/public/js/pages/org-details.page.js
++++ b/public/js/pages/org-details.page.js
+@@ -1,10 +1,10 @@
+ import { db } from '../config/firebase-config.js';
+-import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.197';
+-import { showToast } from '../components/toast.js?v=1.8.197';
+-import { createManageDataController } from '../core/data-transfer.js?v=1.8.197';
+-import { mount as mountBranchHeads } from './branch-heads.page.js?v=1.8.197';
+-import { mountAuthorisedUsers } from './authorised-users.js?v=1.8.197';
+-import { syncPublicBranding } from '../services/user-directory.service.js?v=1.8.197';
++import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.198';
++import { showToast } from '../components/toast.js?v=1.8.198';
++import { createManageDataController } from '../core/data-transfer.js?v=1.8.198';
++import { mount as mountBranchHeads } from './branch-heads.page.js?v=1.8.198';
++import { mountAuthorisedUsers } from './authorised-users.js?v=1.8.198';
++import { syncPublicBranding } from '../services/user-directory.service.js?v=1.8.198';
+ import { doc, getDoc, setDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
+ 
+ const KEYS = ['name', 'tagline', 'phones', 'receiptCode', 'email', 'website', 'address'];
+@@ -157,7 +157,7 @@ export async function mount({ profile }) {
+     if (!isSuper || usersMounted || usersLoading || !usersHost) return;
+     usersLoading = true;
+     try {
+-      const res = await fetch('pages/branch-heads.html?v=1.8.197');
++      const res = await fetch('pages/branch-heads.html?v=1.8.198');
+       if (!res.ok) throw new Error('HTTP ' + res.status);
+       usersHost.innerHTML = await res.text();
+       const ctrl = await mountBranchHeads({ profile });
+diff --git a/public/js/pages/pay-fees.page.js b/public/js/pages/pay-fees.page.js
+index ad9e146..2c3b6fc 100644
+--- a/public/js/pages/pay-fees.page.js
++++ b/public/js/pages/pay-fees.page.js
+@@ -11,14 +11,14 @@ import {
+   runTransaction,
+   serverTimestamp
+ } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
+-import { createSelect } from '../components/ui-select.js?v=1.8.197';
+-import { openPopup } from '../components/modal.js?v=1.8.197';
+-import { confirmDialog } from '../components/ui-confirm.js?v=1.8.197';
+-import { showToast } from '../components/toast.js?v=1.8.197';
+-import { getSelectedSessionId, getCachedSessions, loadSessions, hasFreshSessionsCache } from '../core/sessions.js?v=1.8.197';
+-import { todayISO, fmtDate, examWindowOf, installmentSchedule } from '../utils/session-rules.js?v=1.8.197';
+-import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.197';
+-import { getRoleTitle, resolveUserDisplay } from '../services/user-directory.service.js?v=1.8.197';
++import { createSelect } from '../components/ui-select.js?v=1.8.198';
++import { openPopup } from '../components/modal.js?v=1.8.198';
++import { confirmDialog } from '../components/ui-confirm.js?v=1.8.198';
++import { showToast } from '../components/toast.js?v=1.8.198';
++import { getSelectedSessionId, getCachedSessions, loadSessions, hasFreshSessionsCache } from '../core/sessions.js?v=1.8.198';
++import { todayISO, fmtDate, examWindowOf, installmentSchedule } from '../utils/session-rules.js?v=1.8.198';
++import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.198';
++import { getRoleTitle, resolveUserDisplay } from '../services/user-directory.service.js?v=1.8.198';
+ import {
+   ensureReferenceData,
+   getCachedReferenceData,
+@@ -26,7 +26,7 @@ import {
+   syncYouthStudentsDelta,
+   getCachedYouthStudents,
+   isCacheStale
+-} from '../services/report.service.js?v=1.8.197';
++} from '../services/report.service.js?v=1.8.198';
+ import {
+   calculateLateFee,
+   fetchStudentPayments,
+@@ -36,7 +36,7 @@ import {
+   courseBalanceWithoutExam,
+   calculateStudentFinancials,
+   repairStudentAdmissionPayment
+-} from '../services/payment.service.js?v=1.8.197';
++} from '../services/payment.service.js?v=1.8.198';
+ 
+ let currentUserProfile = null;
+ let currentCtx = 'youth';
+diff --git a/public/js/pages/payment-receipt.page.js b/public/js/pages/payment-receipt.page.js
+index f069f98..3e67728 100644
+--- a/public/js/pages/payment-receipt.page.js
++++ b/public/js/pages/payment-receipt.page.js
+@@ -2,19 +2,19 @@
+ // Matches reference-templates/monthly-payment-receipt (2).html and monthly-payment-receipt-late-fine (1).html
+ import { db } from '../config/firebase-config.js';
+ import { doc, getDoc, getDocs, collection, query, where } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
+-import { inWords } from '../utils/admission-receipt.js?v=1.8.197';
+-import { showToast } from '../components/toast.js?v=1.8.197';
+-import { fmtDate, todayISO } from '../utils/session-rules.js?v=1.8.197';
+-import { formatPersonName } from '../utils/formatter.js?v=1.8.197';
+-import { getStudentPhotoSrc } from '../utils/student-media.js?v=1.8.197';
+-import { getRoleTitle } from '../services/user-directory.service.js?v=1.8.197';
+-import { dueDateForMonth, formatShortMonthYear } from '../utils/school-billing.js?v=1.8.197';
++import { inWords } from '../utils/admission-receipt.js?v=1.8.198';
++import { showToast } from '../components/toast.js?v=1.8.198';
++import { fmtDate, todayISO } from '../utils/session-rules.js?v=1.8.198';
++import { formatPersonName } from '../utils/formatter.js?v=1.8.198';
++import { getStudentPhotoSrc } from '../utils/student-media.js?v=1.8.198';
++import { getRoleTitle } from '../services/user-directory.service.js?v=1.8.198';
++import { dueDateForMonth, formatShortMonthYear } from '../utils/school-billing.js?v=1.8.198';
+ import {
+   fetchStudentPayments,
+   isInstallmentPaid,
+   installmentCourseFee,
+   installmentBalanceDue
+-} from '../services/payment.service.js?v=1.8.197';
++} from '../services/payment.service.js?v=1.8.198';
+ 
+ function $(id) {
+   return document.getElementById(id);
+@@ -594,7 +594,7 @@ function renderKidsReceiptHTML({ student, payment, org, orgLogo, bills, photoUrl
+   }
+ 
+   const paidForText = isUpgrade
+-    ? 'Level Upgrade Difference'
++    ? (String(payment.paymentMode || '').toLowerCase() === 'full' ? 'Level Upgrade (Full Admission)' : 'Level Upgrade Difference')
+     : (monthStr ? `Monthly Fee (${formatShortMonthYear(monthStr)})` : 'Monthly Tuition Fee');
+   const dueDateText = isUpgrade
+     ? 'At Upgrade'
+diff --git a/public/js/pages/payments.page.js b/public/js/pages/payments.page.js
+index 07532a1..0afc862 100644
+--- a/public/js/pages/payments.page.js
++++ b/public/js/pages/payments.page.js
+@@ -1,17 +1,17 @@
+ // payments.page.js — Payment History page for Youth Centre (#/payments) & Unique Kids (#/school-payments).
+ // Follows Rule 1 (global toolbar session only, plain-text subtitle) & Rule 2 (shared [ Branch -> Batch ] box).
+ 
+-import { createSelect } from '../components/ui-select.js?v=1.8.197';
+-import { createBranchBatchFilter, clearPersistedBranchBatchFilters } from '../components/branch-batch-filter.js?v=1.8.197';
+-import { openPopup } from '../components/modal.js?v=1.8.197';
+-import { showToast } from '../components/toast.js?v=1.8.197';
+-import { renderPager, renderEmptyTableState, PAGE_SIZE } from '../components/list-page.js?v=1.8.197';
++import { createSelect } from '../components/ui-select.js?v=1.8.198';
++import { createBranchBatchFilter, clearPersistedBranchBatchFilters } from '../components/branch-batch-filter.js?v=1.8.198';
++import { openPopup } from '../components/modal.js?v=1.8.198';
++import { showToast } from '../components/toast.js?v=1.8.198';
++import { renderPager, renderEmptyTableState, PAGE_SIZE } from '../components/list-page.js?v=1.8.198';
+ import {
+   getCachedSessions,
+   loadSessions,
+   getSelectedSession,
+   hasFreshSessionsCache
+-} from '../core/sessions.js?v=1.8.197';
++} from '../core/sessions.js?v=1.8.198';
+ import {
+   ensureReferenceData,
+   getCachedReferenceData,
+@@ -43,9 +43,9 @@ import {
+   formatINR,
+   fmtDate,
+   todayISO
+-} from '../services/report.service.js?v=1.8.197';
+-import { formatPersonName, initials } from '../utils/formatter.js?v=1.8.197';
+-import { resolveUserDisplay } from '../services/user-directory.service.js?v=1.8.197';
++} from '../services/report.service.js?v=1.8.198';
++import { formatPersonName, initials } from '../utils/formatter.js?v=1.8.198';
++import { resolveUserDisplay } from '../services/user-directory.service.js?v=1.8.198';
+ 
+ let state = null;
+ let sessionListener = null;
+diff --git a/public/js/pages/pending.page.js b/public/js/pages/pending.page.js
+index 82b4ab4..20f0761 100644
+--- a/public/js/pages/pending.page.js
++++ b/public/js/pages/pending.page.js
+@@ -1,18 +1,18 @@
+ // pending.page.js — Shared Overdue Payments view for Youth Centre (#/pending) & Unique Kids (#/school-pending).
+ // Matches payments.page.js layout (no inner scroll, shared 10-row pager, short codes, icon actions, details popup).
+ 
+-import { createSelect } from '../components/ui-select.js?v=1.8.197';
+-import { createBranchBatchFilter, clearPersistedBranchBatchFilters } from '../components/branch-batch-filter.js?v=1.8.197';
+-import { openPopup } from '../components/modal.js?v=1.8.197';
+-import { showToast } from '../components/toast.js?v=1.8.197';
+-import { renderPager, renderEmptyTableState, PAGE_SIZE } from '../components/list-page.js?v=1.8.197';
+-import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.197';
++import { createSelect } from '../components/ui-select.js?v=1.8.198';
++import { createBranchBatchFilter, clearPersistedBranchBatchFilters } from '../components/branch-batch-filter.js?v=1.8.198';
++import { openPopup } from '../components/modal.js?v=1.8.198';
++import { showToast } from '../components/toast.js?v=1.8.198';
++import { renderPager, renderEmptyTableState, PAGE_SIZE } from '../components/list-page.js?v=1.8.198';
++import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.198';
+ import {
+   getCachedSessions,
+   loadSessions,
+   getSelectedSession,
+   hasFreshSessionsCache
+-} from '../core/sessions.js?v=1.8.197';
++} from '../core/sessions.js?v=1.8.198';
+ import {
+   ensureReferenceData,
+   getCachedReferenceData,
+@@ -39,8 +39,8 @@ import {
+   formatINR,
+   fmtDate,
+   todayISO
+-} from '../services/report.service.js?v=1.8.197';
+-import { initials } from '../utils/formatter.js?v=1.8.197';
++} from '../services/report.service.js?v=1.8.198';
++import { initials } from '../utils/formatter.js?v=1.8.198';
+ 
+ let state = null;
+ let sessionListener = null;
+diff --git a/public/js/pages/reports.page.js b/public/js/pages/reports.page.js
+index 0049bd6..bce997c 100644
+--- a/public/js/pages/reports.page.js
++++ b/public/js/pages/reports.page.js
+@@ -1,17 +1,17 @@
+ // reports.page.js — Read-only Youth Centre Reports page (#/reports)
+ // Keeps v1.8.179 joined KPI stat strips, header, filter bar & compact card radius with restored v1.8.178 multi-colour charts.
+ 
+-import { createSelect } from '../components/ui-select.js?v=1.8.197';
+-import { createBranchBatchFilter, clearPersistedBranchBatchFilters } from '../components/branch-batch-filter.js?v=1.8.197';
+-import { renderDonutChart, renderBarChart, renderStackedBarChart, renderLineChart } from '../components/charts.js?v=1.8.197';
+-import { showToast } from '../components/toast.js?v=1.8.197';
+-import { renderEmptyTableState } from '../components/list-page.js?v=1.8.197';
++import { createSelect } from '../components/ui-select.js?v=1.8.198';
++import { createBranchBatchFilter, clearPersistedBranchBatchFilters } from '../components/branch-batch-filter.js?v=1.8.198';
++import { renderDonutChart, renderBarChart, renderStackedBarChart, renderLineChart } from '../components/charts.js?v=1.8.198';
++import { showToast } from '../components/toast.js?v=1.8.198';
++import { renderEmptyTableState } from '../components/list-page.js?v=1.8.198';
+ import {
+   getCachedSessions,
+   loadSessions,
+   getSelectedSession,
+   hasFreshSessionsCache
+-} from '../core/sessions.js?v=1.8.197';
++} from '../core/sessions.js?v=1.8.198';
+ import {
+   ensureReferenceData,
+   getCachedReferenceData,
+@@ -34,8 +34,8 @@ import {
+   formatINR,
+   fmtDate,
+   todayISO
+-} from '../services/report.service.js?v=1.8.197';
+-import { resolveUserDisplay, getRoleTitle } from '../services/user-directory.service.js?v=1.8.197';
++} from '../services/report.service.js?v=1.8.198';
++import { resolveUserDisplay, getRoleTitle } from '../services/user-directory.service.js?v=1.8.198';
+ 
+ const FILTER_STORAGE_PREFIX = 'uicms.rep.v1.';
+ 
+diff --git a/public/js/pages/school-admission-receipt.page.js b/public/js/pages/school-admission-receipt.page.js
+index af34943..796caba 100644
+--- a/public/js/pages/school-admission-receipt.page.js
++++ b/public/js/pages/school-admission-receipt.page.js
+@@ -3,12 +3,12 @@
+ // Scope: Super Admin.
+ import { db } from '../config/firebase-config.js';
+ import { doc, getDoc, getDocs, collection, query, where } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
+-import { showToast } from '../components/toast.js?v=1.8.197';
+-import { createSelect } from '../components/ui-select.js?v=1.8.197';
+-import { formatDateIN } from '../utils/formatter.js?v=1.8.197';
+-import { buildSchoolReceiptData, fmtRs } from '../utils/school-receipt.js?v=1.8.197';
+-import { downloadSchoolReceiptPdf } from '../utils/school-receipt-pdf.js?v=1.8.197';
+-import { getStudentDocRecord } from '../utils/student-media.js?v=1.8.197';
++import { showToast } from '../components/toast.js?v=1.8.198';
++import { createSelect } from '../components/ui-select.js?v=1.8.198';
++import { formatDateIN } from '../utils/formatter.js?v=1.8.198';
++import { buildSchoolReceiptData, fmtRs } from '../utils/school-receipt.js?v=1.8.198';
++import { downloadSchoolReceiptPdf } from '../utils/school-receipt-pdf.js?v=1.8.198';
++import { getStudentDocRecord } from '../utils/student-media.js?v=1.8.198';
+ 
+ const COL = 'students';
+ let studentDocId = '';
+diff --git a/public/js/pages/school-admissions.page.js b/public/js/pages/school-admissions.page.js
+index 9f4e51e..f65e615 100644
+--- a/public/js/pages/school-admissions.page.js
++++ b/public/js/pages/school-admissions.page.js
+@@ -9,35 +9,35 @@ import {
+   collection, getDocs, query, where, doc, getDoc, addDoc, updateDoc, serverTimestamp,
+   runTransaction, deleteField, writeBatch, deleteDoc, arrayUnion
+ } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
+-import { showToast } from '../components/toast.js?v=1.8.197';
+-import { registerDirty, confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.197';
+-import { buildStats, buildToolbar, renderPager, PAGE_SIZE } from '../components/list-page.js?v=1.8.197';
+-import { createSelect } from '../components/ui-select.js?v=1.8.197';
+-import { createBranchBatchFilter } from '../components/branch-batch-filter.js?v=1.8.197';
+-import { openMenu } from '../components/ui-menu.js?v=1.8.197';
+-import { openPopup } from '../components/modal.js?v=1.8.197';
+-import { createDatePicker } from '../components/ui-datepicker.js?v=1.8.197';
+-import { confirmDialog } from '../components/ui-confirm.js?v=1.8.197';
+-import { formatINR, formatDateIN, initials } from '../utils/formatter.js?v=1.8.197';
+-import { validatePhone, validateEmail, validateDOB, validateName, validateRequired } from '../utils/validator.js?v=1.8.197';
+-import { readStudentId, readReceiptNo, writeCounter } from '../services/admission.service.js?v=1.8.197';
+-import { isCourseActive, batchAllowsCourse, todayISO } from '../utils/session-rules.js?v=1.8.197';
+-import { compressTo100KB, readAsDataURL, blobToDataURL, isImageFile } from '../utils/image-compress.js?v=1.8.197';
+-import { firstMonthlyMonth } from '../utils/school-receipt.js?v=1.8.197';
++import { showToast } from '../components/toast.js?v=1.8.198';
++import { registerDirty, confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.198';
++import { buildStats, buildToolbar, renderPager, PAGE_SIZE } from '../components/list-page.js?v=1.8.198';
++import { createSelect } from '../components/ui-select.js?v=1.8.198';
++import { createBranchBatchFilter } from '../components/branch-batch-filter.js?v=1.8.198';
++import { openMenu } from '../components/ui-menu.js?v=1.8.198';
++import { openPopup } from '../components/modal.js?v=1.8.198';
++import { createDatePicker } from '../components/ui-datepicker.js?v=1.8.198';
++import { confirmDialog } from '../components/ui-confirm.js?v=1.8.198';
++import { formatINR, formatDateIN, initials } from '../utils/formatter.js?v=1.8.198';
++import { validatePhone, validateEmail, validateDOB, validateName, validateRequired } from '../utils/validator.js?v=1.8.198';
++import { readStudentId, readReceiptNo, writeCounter } from '../services/admission.service.js?v=1.8.198';
++import { isCourseActive, batchAllowsCourse, todayISO } from '../utils/session-rules.js?v=1.8.198';
++import { compressTo100KB, readAsDataURL, blobToDataURL, isImageFile } from '../utils/image-compress.js?v=1.8.198';
++import { firstMonthlyMonth } from '../utils/school-receipt.js?v=1.8.198';
+ import {
+   formatBreakStatusText,
+   isBreakOverdueReturn,
+   syncOpenKidsBills
+-} from '../utils/school-billing.js?v=1.8.197';
++} from '../utils/school-billing.js?v=1.8.198';
+ import {
+   createBillingStartSelector,
+   openKidsStartBreakModal,
+   openKidsResumeBreakModal,
+   openKidsUpgradePackageModal
+-} from '../utils/school-break-modals.js?v=1.8.197';
+-import { playPaymentSuccessSound } from '../utils/sound.js?v=1.8.197';
+-import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.197';
+-import { getRoleTitle } from '../services/user-directory.service.js?v=1.8.197';
++} from '../utils/school-break-modals.js?v=1.8.198';
++import { playPaymentSuccessSound } from '../utils/sound.js?v=1.8.198';
++import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.198';
++import { getRoleTitle } from '../services/user-directory.service.js?v=1.8.198';
+ import {
+   ensureReferenceData,
+   getCachedReferenceData,
+@@ -47,7 +47,7 @@ import {
+   syncKidsDatasetDelta,
+   isCacheStale,
+   scheduleDelayedSkeleton
+-} from '../services/report.service.js?v=1.8.197';
++} from '../services/report.service.js?v=1.8.198';
+ 
+ const COL = 'students';
+ const GENDERS = [
+diff --git a/public/js/pages/school-break.page.js b/public/js/pages/school-break.page.js
+index e6ed2fa..e3b30e0 100644
+--- a/public/js/pages/school-break.page.js
++++ b/public/js/pages/school-break.page.js
+@@ -3,29 +3,29 @@
+ // and "Break ended - not rejoined" follow-up list.
+ import { db } from '../config/firebase-config.js';
+ import { collection, getDocs, query, where } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
+-import { showToast } from '../components/toast.js?v=1.8.197';
+-import { PAGE_SIZE, buildStats, buildToolbar, renderPager } from '../components/list-page.js?v=1.8.197';
+-import { openPopup } from '../components/modal.js?v=1.8.197';
+-import { createSelect } from '../components/ui-select.js?v=1.8.197';
+-import { formatDateIN, formatPersonName } from '../utils/formatter.js?v=1.8.197';
+-import { localToday } from '../utils/school-lifecycle.js?v=1.8.197';
++import { showToast } from '../components/toast.js?v=1.8.198';
++import { PAGE_SIZE, buildStats, buildToolbar, renderPager } from '../components/list-page.js?v=1.8.198';
++import { openPopup } from '../components/modal.js?v=1.8.198';
++import { createSelect } from '../components/ui-select.js?v=1.8.198';
++import { formatDateIN, formatPersonName } from '../utils/formatter.js?v=1.8.198';
++import { localToday } from '../utils/school-lifecycle.js?v=1.8.198';
+ import {
+   formatBreakPeriod,
+   formatShortMonthYear,
+   isBreakOverdueReturn
+-} from '../utils/school-billing.js?v=1.8.197';
++} from '../utils/school-billing.js?v=1.8.198';
+ import {
+   openKidsStartBreakModal,
+   openKidsResumeBreakModal
+-} from '../utils/school-break-modals.js?v=1.8.197';
+-import { getRoleTitle, resolveUserDisplay } from '../services/user-directory.service.js?v=1.8.197';
++} from '../utils/school-break-modals.js?v=1.8.198';
++import { getRoleTitle, resolveUserDisplay } from '../services/user-directory.service.js?v=1.8.198';
+ import {
+   ensureKidsDataset,
+   getCachedKidsDataset,
+   syncKidsDatasetDelta,
+   isCacheStale,
+   scheduleDelayedSkeleton
+-} from '../services/report.service.js?v=1.8.197';
++} from '../services/report.service.js?v=1.8.198';
+ 
+ const COL = 'students';
+ const BREAKS_COL = 'breaks';
+diff --git a/public/js/pages/school-delete.page.js b/public/js/pages/school-delete.page.js
+index 67bfed6..a923fab 100644
+--- a/public/js/pages/school-delete.page.js
++++ b/public/js/pages/school-delete.page.js
+@@ -6,9 +6,9 @@
+ // disabled. No browser-only partial-delete fallback is provided.
+ import { db } from '../config/firebase-config.js';
+ import { doc, getDoc } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
+-import { showToast } from '../components/toast.js?v=1.8.197';
+-import { formatINR, formatDateIN } from '../utils/formatter.js?v=1.8.197';
+-import { getRoleTitle } from '../services/user-directory.service.js?v=1.8.197';
++import { showToast } from '../components/toast.js?v=1.8.198';
++import { formatINR, formatDateIN } from '../utils/formatter.js?v=1.8.198';
++import { getRoleTitle } from '../services/user-directory.service.js?v=1.8.198';
+ 
+ const COL = 'students';
+ 
+diff --git a/public/js/pages/school-end.page.js b/public/js/pages/school-end.page.js
+index 1d1ba1a..3929e77 100644
+--- a/public/js/pages/school-end.page.js
++++ b/public/js/pages/school-end.page.js
+@@ -4,10 +4,10 @@
+ // are preserved. Idempotent (repeated clicks do not duplicate end events).
+ import { db } from '../config/firebase-config.js';
+ import { doc, getDoc, getDocs, query, where, updateDoc, runTransaction, serverTimestamp, collection } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
+-import { showToast } from '../components/toast.js?v=1.8.197';
+-import { localToday, nextMonth } from '../utils/school-lifecycle.js?v=1.8.197';
+-import { formatINR, formatDateIN } from '../utils/formatter.js?v=1.8.197';
+-import { getRoleTitle } from '../services/user-directory.service.js?v=1.8.197';
++import { showToast } from '../components/toast.js?v=1.8.198';
++import { localToday, nextMonth } from '../utils/school-lifecycle.js?v=1.8.198';
++import { formatINR, formatDateIN } from '../utils/formatter.js?v=1.8.198';
++import { getRoleTitle } from '../services/user-directory.service.js?v=1.8.198';
+ 
+ const COL = 'students';
+ const ENROLMENTS_COL = 'enrolments';
+diff --git a/public/js/pages/school-fee-payment.page.js b/public/js/pages/school-fee-payment.page.js
+index 9641e64..e9a6ca7 100644
+--- a/public/js/pages/school-fee-payment.page.js
++++ b/public/js/pages/school-fee-payment.page.js
+@@ -2,11 +2,11 @@
+ // Super Admin only. Shows bill details and opens the shared payment modal.
+ import { db } from '../config/firebase-config.js';
+ import { doc, getDoc } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
+-import { showToast } from '../components/toast.js?v=1.8.197';
+-import { formatINR } from '../utils/formatter.js?v=1.8.197';
+-import { computeLateFee, fetchOpenKidsBillsForStudent } from '../utils/school-billing.js?v=1.8.197';
+-import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.197';
+-import { getRoleTitle } from '../services/user-directory.service.js?v=1.8.197';
++import { showToast } from '../components/toast.js?v=1.8.198';
++import { formatINR } from '../utils/formatter.js?v=1.8.198';
++import { computeLateFee, fetchOpenKidsBillsForStudent } from '../utils/school-billing.js?v=1.8.198';
++import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.198';
++import { getRoleTitle } from '../services/user-directory.service.js?v=1.8.198';
+ 
+ const BILLS_COL = 'bills';
+ 
+diff --git a/public/js/pages/school-fees.page.js b/public/js/pages/school-fees.page.js
+index fca1bdd..9fe95cd 100644
+--- a/public/js/pages/school-fees.page.js
++++ b/public/js/pages/school-fees.page.js
+@@ -4,16 +4,16 @@
+ // 10th, late fine Rs 1/day from the 11th.
+ import { db } from '../config/firebase-config.js';
+ import { collection, getDocs, query, where } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
+-import { showToast } from '../components/toast.js?v=1.8.197';
+-import { PAGE_SIZE, buildStats, buildToolbar, renderPager } from '../components/list-page.js?v=1.8.197';
+-import { createSelect } from '../components/ui-select.js?v=1.8.197';
+-import { openMenu } from '../components/ui-menu.js?v=1.8.197';
+-import { formatINR, formatDateIN, formatPersonName } from '../utils/formatter.js?v=1.8.197';
+-import { getRoleTitle } from '../services/user-directory.service.js?v=1.8.197';
+-import { isCourseActive } from '../utils/session-rules.js?v=1.8.197';
+-import { localToday, monthSeq, nextMonth } from '../utils/school-lifecycle.js?v=1.8.197';
+-import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.197';
+-import { daysLate, computeLateFee, syncOpenKidsBills } from '../utils/school-billing.js?v=1.8.197';
++import { showToast } from '../components/toast.js?v=1.8.198';
++import { PAGE_SIZE, buildStats, buildToolbar, renderPager } from '../components/list-page.js?v=1.8.198';
++import { createSelect } from '../components/ui-select.js?v=1.8.198';
++import { openMenu } from '../components/ui-menu.js?v=1.8.198';
++import { formatINR, formatDateIN, formatPersonName } from '../utils/formatter.js?v=1.8.198';
++import { getRoleTitle } from '../services/user-directory.service.js?v=1.8.198';
++import { isCourseActive } from '../utils/session-rules.js?v=1.8.198';
++import { localToday, monthSeq, nextMonth } from '../utils/school-lifecycle.js?v=1.8.198';
++import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.198';
++import { daysLate, computeLateFee, syncOpenKidsBills } from '../utils/school-billing.js?v=1.8.198';
+ import {
+   ensureReferenceData,
+   getCachedReferenceData,
+@@ -23,7 +23,7 @@ import {
+   syncKidsDatasetDelta,
+   isCacheStale,
+   scheduleDelayedSkeleton
+-} from '../services/report.service.js?v=1.8.197';
++} from '../services/report.service.js?v=1.8.198';
+ 
+ const COL = 'students';
+ const BILLS_COL = 'bills';
+diff --git a/public/js/pages/school-students.page.js b/public/js/pages/school-students.page.js
+index bebf574..bddeebf 100644
+--- a/public/js/pages/school-students.page.js
++++ b/public/js/pages/school-students.page.js
+@@ -4,18 +4,18 @@
+ // permanent delete). Search by name, Student ID, or parent phone. Siblings may share phone.
+ import { db } from '../config/firebase-config.js';
+ import { collection, getDocs, query, where, doc, getDoc } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
+-import { showToast } from '../components/toast.js?v=1.8.197';
+-import { registerDirty, confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.197';
+-import { buildStats, buildToolbar } from '../components/list-page.js?v=1.8.197';
+-import { createSelect } from '../components/ui-select.js?v=1.8.197';
+-import { openMenu } from '../components/ui-menu.js?v=1.8.197';
+-import { confirmDialog } from '../components/ui-confirm.js?v=1.8.197';
+-import { formatINR, formatDateIN, formatPersonName, initials } from '../utils/formatter.js?v=1.8.197';
+-import { isCourseActive } from '../utils/session-rules.js?v=1.8.197';
+-import { localToday } from '../utils/school-lifecycle.js?v=1.8.197';
+-import { getRoleTitle } from '../services/user-directory.service.js?v=1.8.197';
+-import { loadStudentPhotos, getCachedStudentPhoto } from '../services/report.service.js?v=1.8.197';
+-import { getStudentPhotoSrc } from '../utils/student-media.js?v=1.8.197';
++import { showToast } from '../components/toast.js?v=1.8.198';
++import { registerDirty, confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.198';
++import { buildStats, buildToolbar } from '../components/list-page.js?v=1.8.198';
++import { createSelect } from '../components/ui-select.js?v=1.8.198';
++import { openMenu } from '../components/ui-menu.js?v=1.8.198';
++import { confirmDialog } from '../components/ui-confirm.js?v=1.8.198';
++import { formatINR, formatDateIN, formatPersonName, initials } from '../utils/formatter.js?v=1.8.198';
++import { isCourseActive } from '../utils/session-rules.js?v=1.8.198';
++import { localToday } from '../utils/school-lifecycle.js?v=1.8.198';
++import { getRoleTitle } from '../services/user-directory.service.js?v=1.8.198';
++import { loadStudentPhotos, getCachedStudentPhoto } from '../services/report.service.js?v=1.8.198';
++import { getStudentPhotoSrc } from '../utils/student-media.js?v=1.8.198';
+ 
+ const COL = 'students';
+ const GENDER_LABELS = { male: 'Male', female: 'Female', other: 'Other' };
+diff --git a/public/js/pages/school-transfer.page.js b/public/js/pages/school-transfer.page.js
+index 8fc6f5a..cf63f9b 100644
+--- a/public/js/pages/school-transfer.page.js
++++ b/public/js/pages/school-transfer.page.js
+@@ -4,11 +4,11 @@
+ // Youth: youth context, same authorised branch/session/course.
+ import { db } from '../config/firebase-config.js';
+ import { doc, getDoc, getDocs, query, where, updateDoc, runTransaction, serverTimestamp, collection } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
+-import { showToast } from '../components/toast.js?v=1.8.197';
+-import { formatINR, formatDateIN } from '../utils/formatter.js?v=1.8.197';
+-import { isCourseActive, batchAllowsCourse } from '../utils/session-rules.js?v=1.8.197';
+-import { localToday } from '../utils/school-lifecycle.js?v=1.8.197';
+-import { getRoleTitle } from '../services/user-directory.service.js?v=1.8.197';
++import { showToast } from '../components/toast.js?v=1.8.198';
++import { formatINR, formatDateIN } from '../utils/formatter.js?v=1.8.198';
++import { isCourseActive, batchAllowsCourse } from '../utils/session-rules.js?v=1.8.198';
++import { localToday } from '../utils/school-lifecycle.js?v=1.8.198';
++import { getRoleTitle } from '../services/user-directory.service.js?v=1.8.198';
+ 
+ const COL = 'students';
+ const ENROLMENTS_COL = 'enrolments';
+diff --git a/public/js/pages/sessions.page.js b/public/js/pages/sessions.page.js
+index b7cf8ac..c701a64 100644
+--- a/public/js/pages/sessions.page.js
++++ b/public/js/pages/sessions.page.js
+@@ -4,10 +4,10 @@ import { createSelect } from '../components/ui-select.js';
+ import { openMenu } from '../components/ui-menu.js';
+ import { confirmDialog } from '../components/ui-confirm.js';
+ import { showToast } from '../components/toast.js';
+-import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.197';
+-import { PAGE_SIZE, buildStats, buildToolbar, renderPager, renderEmptyTableState } from '../components/list-page.js?v=1.8.197';
+-import { notifySessionsChanged, todayISO, expectedStatus, statusMismatch, daysLeft } from '../core/sessions.js?v=1.8.197';
+-import { firstInstallmentOf, admissionState, installmentSchedule, sessionPattern, fmtDate } from '../utils/session-rules.js?v=1.8.197';
++import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.198';
++import { PAGE_SIZE, buildStats, buildToolbar, renderPager, renderEmptyTableState } from '../components/list-page.js?v=1.8.198';
++import { notifySessionsChanged, todayISO, expectedStatus, statusMismatch, daysLeft } from '../core/sessions.js?v=1.8.198';
++import { firstInstallmentOf, admissionState, installmentSchedule, sessionPattern, fmtDate } from '../utils/session-rules.js?v=1.8.198';
+ 
+ const TEXT_KEYS = ['name', 'start', 'end'];
+ const KEYS = ['name', 'start', 'end', 'status'];
+diff --git a/public/js/pages/student-profile.page.js b/public/js/pages/student-profile.page.js
+index 0772273..c52d7bf 100644
+--- a/public/js/pages/student-profile.page.js
++++ b/public/js/pages/student-profile.page.js
+@@ -11,20 +11,20 @@ import {
+   serverTimestamp,
+   runTransaction
+ } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
+-import { showToast } from '../components/toast.js?v=1.8.197';
+-import { openPopup } from '../components/modal.js?v=1.8.197';
+-import { createSelect } from '../components/ui-select.js?v=1.8.197';
+-import { confirmDialog } from '../components/ui-confirm.js?v=1.8.197';
+-import { openMenu } from '../components/ui-menu.js?v=1.8.197';
+-import { formatINR, formatDateIN, formatPersonName, formatGenderDisplay, initials } from '../utils/formatter.js?v=1.8.197';
+-import { validatePhone, validateEmail, validateDOB, validateName } from '../utils/validator.js?v=1.8.197';
+-import { registerDirty } from '../utils/unsaved-guard.js?v=1.8.197';
+-import { resolveUserDisplay, getRoleTitle, loadUsersDirectory } from '../services/user-directory.service.js?v=1.8.197';
+-import { compressTo100KB, blobToDataURL, isImageFile, formatBytes } from '../utils/image-compress.js?v=1.8.197';
+-import { getStudentPhotoSrc, getStudentDocRecord, getStudentDocSrc, getStudentDocMime } from '../utils/student-media.js?v=1.8.197';
+-import { todayISO } from '../utils/session-rules.js?v=1.8.197';
+-import { getSelectedSessionId } from '../core/sessions.js?v=1.8.197';
+-import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.197';
++import { showToast } from '../components/toast.js?v=1.8.198';
++import { openPopup } from '../components/modal.js?v=1.8.198';
++import { createSelect } from '../components/ui-select.js?v=1.8.198';
++import { confirmDialog } from '../components/ui-confirm.js?v=1.8.198';
++import { openMenu } from '../components/ui-menu.js?v=1.8.198';
++import { formatINR, formatDateIN, formatPersonName, formatGenderDisplay, initials } from '../utils/formatter.js?v=1.8.198';
++import { validatePhone, validateEmail, validateDOB, validateName } from '../utils/validator.js?v=1.8.198';
++import { registerDirty } from '../utils/unsaved-guard.js?v=1.8.198';
++import { resolveUserDisplay, getRoleTitle, loadUsersDirectory } from '../services/user-directory.service.js?v=1.8.198';
++import { compressTo100KB, blobToDataURL, isImageFile, formatBytes } from '../utils/image-compress.js?v=1.8.198';
++import { getStudentPhotoSrc, getStudentDocRecord, getStudentDocSrc, getStudentDocMime } from '../utils/student-media.js?v=1.8.198';
++import { todayISO } from '../utils/session-rules.js?v=1.8.198';
++import { getSelectedSessionId } from '../core/sessions.js?v=1.8.198';
++import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.198';
+ import {
+   fetchStudentPayments,
+   recordPaymentTx,
+@@ -35,8 +35,8 @@ import {
+   calculateStudentFinancials,
+   buildReceiptMenuItems,
+   repairStudentAdmissionPayment
+-} from '../services/payment.service.js?v=1.8.197';
+-import { courseFeeOf, discountOf } from '../utils/fees.js?v=1.8.197';
++} from '../services/payment.service.js?v=1.8.198';
++import { courseFeeOf, discountOf } from '../utils/fees.js?v=1.8.198';
+ import {
+   isBreakOverdueReturn,
+   formatBreakStatusText,
+@@ -45,13 +45,13 @@ import {
+   computeKidsStudentDues,
+   computeLateFee,
+   syncOpenKidsBills
+-} from '../utils/school-billing.js?v=1.8.197';
++} from '../utils/school-billing.js?v=1.8.198';
+ import {
+   openKidsStartBreakModal,
+   openKidsResumeBreakModal,
+   openKidsUpgradePackageModal
+-} from '../utils/school-break-modals.js?v=1.8.197';
+-import { firstMonthlyMonth } from '../utils/school-receipt.js?v=1.8.197';
++} from '../utils/school-break-modals.js?v=1.8.198';
++import { firstMonthlyMonth } from '../utils/school-receipt.js?v=1.8.198';
+ import {
+   ensureReferenceData,
+   getCachedReferenceData,
+@@ -60,7 +60,7 @@ import {
+   getCachedKidsHistory,
+   isCacheStale,
+   scheduleDelayedSkeleton
+-} from '../services/report.service.js?v=1.8.197';
++} from '../services/report.service.js?v=1.8.198';
+ 
+ const COL = 'students';
+ const QUALIFICATIONS = ['VIII Pass', 'Secondary (X) Pass', 'Higher Secondary (XII) Pass', 'ITI', 'Diploma', 'Undergraduate (Graduate)', 'Postgraduate', 'Other'];
+diff --git a/public/js/services/archive.service.js b/public/js/services/archive.service.js
+index ca78853..86b311c 100644
+--- a/public/js/services/archive.service.js
++++ b/public/js/services/archive.service.js
+@@ -21,25 +21,25 @@ import {
+   ref as storageRef,
+   getDownloadURL
+ } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-storage.js';
+-import { APP_VERSION } from '../core/app.js?v=1.8.197';
+-import { loadAllSessions, getAllCachedSessions, hasFreshSessionsCache } from '../core/sessions.js?v=1.8.197';
+-import { todayISO, installmentSchedule, getOrgTimezone } from '../utils/session-rules.js?v=1.8.197';
++import { APP_VERSION } from '../core/app.js?v=1.8.198';
++import { loadAllSessions, getAllCachedSessions, hasFreshSessionsCache } from '../core/sessions.js?v=1.8.198';
++import { todayISO, installmentSchedule, getOrgTimezone } from '../utils/session-rules.js?v=1.8.198';
+ import {
+   calculateStudentFinancials,
+   evaluateYouthStudentDues,
+   normalizeYouthPaymentsLedger,
+   installmentCourseFee,
+   installmentBalanceDue
+-} from './payment.service.js?v=1.8.197';
++} from './payment.service.js?v=1.8.198';
+ import {
+   loadUsersDirectory,
+   resolveUserDisplay,
+   getUserTitle
+-} from './user-directory.service.js?v=1.8.197';
+-import { formatPersonName, formatGenderDisplay } from '../utils/formatter.js?v=1.8.197';
+-import { getStudentPhotoSrc, getStudentDocRecord, getStudentDocSrc, getStudentDocMime } from '../utils/student-media.js?v=1.8.197';
+-import { buildOfflineViewerAssets } from '../utils/archive-viewer-builder.js?v=1.8.197';
+-import { buildYouthReceiptData } from '../utils/admission-receipt.js?v=1.8.197';
++} from './user-directory.service.js?v=1.8.198';
++import { formatPersonName, formatGenderDisplay } from '../utils/formatter.js?v=1.8.198';
++import { getStudentPhotoSrc, getStudentDocRecord, getStudentDocSrc, getStudentDocMime } from '../utils/student-media.js?v=1.8.198';
++import { buildOfflineViewerAssets } from '../utils/archive-viewer-builder.js?v=1.8.198';
++import { buildYouthReceiptData } from '../utils/admission-receipt.js?v=1.8.198';
+ 
+ /** Feature flag keeping Phase 2 session deletion OFF until Phase 1 is verified and approved. */
+ export const ENABLE_ARCHIVE_SESSION_DELETE = false;
+diff --git a/public/js/services/dashboard.service.js b/public/js/services/dashboard.service.js
+index 72a748e..5e672a1 100644
+--- a/public/js/services/dashboard.service.js
++++ b/public/js/services/dashboard.service.js
+@@ -9,8 +9,8 @@ import {
+   getDatePresetRange,
+   toTitleCaseIfCaps,
+   todayISO
+-} from './report.service.js?v=1.8.197';
+-import { isStudentEligibleForDues } from './payment.service.js?v=1.8.197';
++} from './report.service.js?v=1.8.198';
++import { isStudentEligibleForDues } from './payment.service.js?v=1.8.198';
+ 
+ function toIsoDate(ts) {
+   if (!ts) return '';
+diff --git a/public/js/services/payment.service.js b/public/js/services/payment.service.js
+index 8fe69e8..0a16d98 100644
+--- a/public/js/services/payment.service.js
++++ b/public/js/services/payment.service.js
+@@ -8,11 +8,11 @@ import {
+   runTransaction,
+   serverTimestamp
+ } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
+-import { readStudentId, readReceiptNo, writeCounter } from './admission.service.js?v=1.8.197';
+-import { fineFor, todayISO, installmentSchedule, examWindowOf } from '../utils/session-rules.js?v=1.8.197';
+-import { courseFeeOf } from '../utils/fees.js?v=1.8.197';
+-import { formatPersonName } from '../utils/formatter.js?v=1.8.197';
+-import { resolveUserDisplay } from './user-directory.service.js?v=1.8.197';
++import { readStudentId, readReceiptNo, writeCounter } from './admission.service.js?v=1.8.198';
++import { fineFor, todayISO, installmentSchedule, examWindowOf } from '../utils/session-rules.js?v=1.8.198';
++import { courseFeeOf } from '../utils/fees.js?v=1.8.198';
++import { formatPersonName } from '../utils/formatter.js?v=1.8.198';
++import { resolveUserDisplay } from './user-directory.service.js?v=1.8.198';
+ 
+ const COL = 'students';
+ 
+diff --git a/public/js/services/report.service.js b/public/js/services/report.service.js
+index cc5abd9..a2d410c 100644
+--- a/public/js/services/report.service.js
++++ b/public/js/services/report.service.js
+@@ -27,23 +27,23 @@ import {
+   fetchStudentPayments,
+   calculateStudentFinancials,
+   isStudentEligibleForDues
+-} from './payment.service.js?v=1.8.197';
++} from './payment.service.js?v=1.8.198';
+ import {
+   evaluateKidsPendingBills,
+   buildKidsPaymentLedger,
+   syncOpenKidsBills
+-} from '../utils/school-billing.js?v=1.8.197';
+-import { getStudentPhotoSrc } from '../utils/student-media.js?v=1.8.197';
++} from '../utils/school-billing.js?v=1.8.198';
++import { getStudentPhotoSrc } from '../utils/student-media.js?v=1.8.198';
+ import {
+   todayISO,
+   fmtDate,
+   getOrgTimezone
+-} from '../utils/session-rules.js?v=1.8.197';
+-import { formatINR } from '../utils/formatter.js?v=1.8.197';
+-import { formatPersonName } from '../utils/formatter.js?v=1.8.197';
+-import { resolveUserDisplay, loadUsersDirectory, getRoleTitle } from './user-directory.service.js?v=1.8.197';
+-import { loadPdfMake, urlToDataUrl } from '../utils/admission-receipt-pdf.js?v=1.8.197';
+-import { loadAllSessions, getAllCachedSessions, hasFreshSessionsCache } from '../core/sessions.js?v=1.8.197';
++} from '../utils/session-rules.js?v=1.8.198';
++import { formatINR } from '../utils/formatter.js?v=1.8.198';
++import { formatPersonName } from '../utils/formatter.js?v=1.8.198';
++import { resolveUserDisplay, loadUsersDirectory, getRoleTitle } from './user-directory.service.js?v=1.8.198';
++import { loadPdfMake, urlToDataUrl } from '../utils/admission-receipt-pdf.js?v=1.8.198';
++import { loadAllSessions, getAllCachedSessions, hasFreshSessionsCache } from '../core/sessions.js?v=1.8.198';
+ 
+ const CACHE_KEY = 'financialReports';
+ export const CACHE_STALE_MS = 30000;
+diff --git a/public/js/services/user-directory.service.js b/public/js/services/user-directory.service.js
+index 62ba471..b4a4154 100644
+--- a/public/js/services/user-directory.service.js
++++ b/public/js/services/user-directory.service.js
+@@ -15,7 +15,7 @@ import {
+   deleteObject
+ } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-storage.js';
+ import { getFunctions, httpsCallable } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-functions.js';
+-import { formatPersonName } from '../utils/formatter.js?v=1.8.197';
++import { formatPersonName } from '../utils/formatter.js?v=1.8.198';
+ 
+ const DEFAULT_ROLE_TITLES = {
+   superadmin: 'Super Admin',
+diff --git a/public/js/utils/admission-receipt-pdf.js b/public/js/utils/admission-receipt-pdf.js
+index c90fe0a..627ace9 100644
+--- a/public/js/utils/admission-receipt-pdf.js
++++ b/public/js/utils/admission-receipt-pdf.js
+@@ -2,7 +2,7 @@
+ // using pdfmake. Produces real, selectable, searchable text with exact 2-page layout
+ // matching reference-templates/Ui.html.
+ 
+-import { fmtRs } from './admission-receipt.js?v=1.8.197';
++import { fmtRs } from './admission-receipt.js?v=1.8.198';
+ 
+ const INK = '#1D1A3A';
+ const MUTED = '#5B5F85';
+diff --git a/public/js/utils/admission-receipt.js b/public/js/utils/admission-receipt.js
+index 25aad94..955fe2a 100644
+--- a/public/js/utils/admission-receipt.js
++++ b/public/js/utils/admission-receipt.js
+@@ -2,9 +2,9 @@
+ // Matching reference-templates/Ui.html.
+ // Shared by the on-screen HTML sheet and the vector PDF builder.
+ 
+-import { formatDateIN, formatPersonName, formatGenderDisplay } from './formatter.js?v=1.8.197';
+-import { courseFeeOf, discountOf } from './fees.js?v=1.8.197';
+-import { getStudentDocSrc, getStudentPhotoSrc } from './student-media.js?v=1.8.197';
++import { formatDateIN, formatPersonName, formatGenderDisplay } from './formatter.js?v=1.8.198';
++import { courseFeeOf, discountOf } from './fees.js?v=1.8.198';
++import { getStudentDocSrc, getStudentPhotoSrc } from './student-media.js?v=1.8.198';
+ 
+ // Format currency as "Rs. 1,000.00"
+ export function fmtRs(n) {
+diff --git a/public/js/utils/archive-viewer-builder.js b/public/js/utils/archive-viewer-builder.js
+index 85d2bd8..50ee00c 100644
+--- a/public/js/utils/archive-viewer-builder.js
++++ b/public/js/utils/archive-viewer-builder.js
+@@ -1,5 +1,5 @@
+-import { ARCHIVE_VIEWER_OVERRIDES_CSS } from './archive-viewer-styles.js?v=1.8.197';
+-import { ARCHIVE_RECEIPTS_VIEWER_JS } from './archive-viewer-receipts.js?v=1.8.197';
++import { ARCHIVE_VIEWER_OVERRIDES_CSS } from './archive-viewer-styles.js?v=1.8.198';
++import { ARCHIVE_RECEIPTS_VIEWER_JS } from './archive-viewer-receipts.js?v=1.8.198';
+ 
+ /**
+  * Builds the static viewer files packed into each archive ZIP:
+diff --git a/public/js/utils/school-billing.js b/public/js/utils/school-billing.js
+index dab53e7..536615c 100644
+--- a/public/js/utils/school-billing.js
++++ b/public/js/utils/school-billing.js
+@@ -11,11 +11,11 @@ import {
+   collection, getDocs, query, where, doc, getDoc, addDoc, updateDoc, serverTimestamp,
+   runTransaction, writeBatch, arrayUnion
+ } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
+-import { showToast } from '../components/toast.js?v=1.8.197';
+-import { localToday, monthSeq, nextMonth, previousMonth } from './school-lifecycle.js?v=1.8.197';
+-import { firstMonthlyMonth } from './school-receipt.js?v=1.8.197';
+-import { fineFor } from './session-rules.js?v=1.8.197';
+-import { readReceiptNo, writeCounter } from '../services/admission.service.js?v=1.8.197';
++import { showToast } from '../components/toast.js?v=1.8.198';
++import { localToday, monthSeq, nextMonth, previousMonth } from './school-lifecycle.js?v=1.8.198';
++import { firstMonthlyMonth } from './school-receipt.js?v=1.8.198';
++import { fineFor } from './session-rules.js?v=1.8.198';
++import { readReceiptNo, writeCounter } from '../services/admission.service.js?v=1.8.198';
+ 
+ const BILLS_COL = 'bills';
+ const PAYMENTS_COL = 'payments';
+@@ -1014,11 +1014,15 @@ export async function upgradeKidsPackage({
+   defaultStartMonth,
+   paymentMode = 'difference',
+   diffCharge = 0,
++  mode = 'cash',
++  txnId = '',
++  remarks = '',
+   noPaymentReason = '',
+   noPaymentOther = '',
+   actorEmail = 'admin',
+   actorName = '',
+   actorDesignation = '',
++  actorRole = '',
+   paidDate,
+   asOfDate
+ } = {}) {
+@@ -1034,6 +1038,9 @@ export async function upgradeKidsPackage({
+   const prevPaid = rupees(student.actualAmountReceived ?? student.admissionFee ?? 0);
+   const newConfiguredAdm = rupees(newCourse.admissionFee || 0);
+   const charge = rupees(diffCharge || 0);
++  const cleanMode = charge > 0 ? (String(mode || 'cash').toLowerCase().trim() || 'cash') : '';
++  const cleanTxn = (charge > 0 && cleanMode !== 'cash') ? String(txnId || '').trim() : '';
++  const cleanRemarks = String(remarks || '').trim();
+ 
+   const [bills, enrols, breaks] = await Promise.all([
+     queryStudentDocs(targetDb, BILLS_COL, student),
+@@ -1041,170 +1048,207 @@ export async function upgradeKidsPackage({
+     queryStudentDocs(targetDb, BREAKS_COL, student)
+   ]);
+ 
+-  const wb = writeBatch(targetDb);
+   const prevEndMonth = addMonthsYM(billingStartMonth, -1);
+-
+-  for (const en of enrols) {
+-    if (String(en.status || '').toLowerCase() === 'active') {
+-      wb.update(en._ref, {
+-        status: 'upgraded',
+-        billingTo: prevEndMonth,
+-        upgradedAt: serverTimestamp(),
+-        upgradedBy: actorEmail,
+-        updatedAt: serverTimestamp()
+-      });
+-    }
+-  }
+-
+-  const newEnrolRef = doc(collection(targetDb, ENROLMENTS_COL));
+-  wb.set(newEnrolRef, {
+-    id: newEnrolRef.id,
+-    ctx: 'school',
+-    studentId: student.id,
+-    studentCode: student.studentId || '',
+-    type: 'upgrade',
+-    courseId: newCourse.id,
+-    courseName: newCourse.name || newCourse.id,
+-    courseLevelName: newCourse.name || newCourse.id,
+-    batchId: newBatch.id,
+-    batchName: newBatch.name || newBatch.id,
+-    admissionFee: charge,
+-    monthlyFee: newMonthly,
+-    firstMonthlyMonth: billingStartMonth,
+-    defaultFirstMonthlyMonth: defaultStartMonth || billingStartMonth,
+-    firstMonthlyChangedFromDefault: Boolean(defaultStartMonth && billingStartMonth !== defaultStartMonth),
+-    billingFrom: billingStartMonth,
+-    billingTo: null,
+-    status: 'active',
+-    previousCourseId: student.courseId || '',
+-    previousCourseName: student.courseName || '',
+-    createdAt: serverTimestamp(),
+-    createdBy: actorEmail
+-  });
+-
+-  // Update untouched unpaid bills from billingStartMonth onward to the new level & monthly fee (no double billing),
+-  // leaving earlier months untouched on the old package.
+-  const existingMonthSet = new Set();
+-  for (const b of bills) {
+-    existingMonthSet.add(b.month);
+-    if (monthSeq(b.month) >= monthSeq(billingStartMonth) && String(b.status || '').toLowerCase() === 'unpaid' && !(Number(b.paidAmount || 0) > 0)) {
+-      wb.update(b._ref, {
+-        ctx: 'school',
+-        enrolmentId: newEnrolRef.id,
+-        courseId: newCourse.id,
+-        courseName: newCourse.name || newCourse.id,
+-        courseLevelName: newCourse.name || newCourse.id,
+-        batchId: newBatch.id,
+-        batchName: newBatch.name || newBatch.id,
+-        monthlyFee: newMonthly,
+-        updatedAt: serverTimestamp(),
+-        updatedBy: actorEmail
+-      });
+-    }
+-  }
+-
+-  // Generate open bills >= billingStartMonth up to currentMonth if active and not on break.
+   const breakMap = buildApprovedBreakMonthsMap(breaks);
+   const skipSet = new Set([
+     ...(breakMap.get(student.id) || []),
+     ...(student.studentId ? (breakMap.get(student.studentId) || []) : [])
+   ]);
+-  if (isKidsStudentEligible(student) && monthSeq(billingStartMonth) <= monthSeq(currentMonth)) {
+-    let m = billingStartMonth;
+-    let guard = 0;
+-    while (m && monthSeq(m) <= monthSeq(currentMonth) && guard < 120) {
+-      if (!existingMonthSet.has(m) && !skipSet.has(m)) {
+-        const bRef = doc(targetDb, BILLS_COL, `${student.id}_${m}`);
+-        wb.set(bRef, {
+-          id: bRef.id,
++  const newEnrolRef = doc(collection(targetDb, ENROLMENTS_COL));
++  const nowIso = new Date().toISOString();
++
++  function applyUpgradeWrites(writer, { payRef = null, receiptNo = '', centreCode = '' } = {}) {
++    for (const en of enrols) {
++      if (String(en.status || '').toLowerCase() === 'active') {
++        writer.update(en._ref, {
++          status: 'upgraded',
++          billingTo: prevEndMonth,
++          upgradedAt: serverTimestamp(),
++          upgradedBy: actorEmail,
++          updatedAt: serverTimestamp()
++        });
++      }
++    }
++
++    writer.set(newEnrolRef, {
++      id: newEnrolRef.id,
++      ctx: 'school',
++      studentId: student.id,
++      studentCode: student.studentId || '',
++      type: 'upgrade',
++      courseId: newCourse.id,
++      courseName: newCourse.name || newCourse.id,
++      courseLevelName: newCourse.name || newCourse.id,
++      batchId: newBatch.id,
++      batchName: newBatch.name || newBatch.id,
++      admissionFee: charge,
++      monthlyFee: newMonthly,
++      firstMonthlyMonth: billingStartMonth,
++      defaultFirstMonthlyMonth: defaultStartMonth || billingStartMonth,
++      firstMonthlyChangedFromDefault: Boolean(defaultStartMonth && billingStartMonth !== defaultStartMonth),
++      billingFrom: billingStartMonth,
++      billingTo: null,
++      status: 'active',
++      previousCourseId: student.courseId || '',
++      previousCourseName: student.courseName || '',
++      createdAt: serverTimestamp(),
++      createdBy: actorEmail
++    });
++
++    // Update untouched unpaid bills from billingStartMonth onward to the new level & monthly fee (no double billing),
++    // leaving earlier months untouched on the old package.
++    const existingMonthSet = new Set();
++    for (const b of bills) {
++      existingMonthSet.add(b.month);
++      if (monthSeq(b.month) >= monthSeq(billingStartMonth) && String(b.status || '').toLowerCase() === 'unpaid' && !(Number(b.paidAmount || 0) > 0)) {
++        writer.update(b._ref, {
+           ctx: 'school',
+-          studentId: student.id,
+-          ...(student.studentId ? { studentCode: student.studentId } : {}),
+           enrolmentId: newEnrolRef.id,
+           courseId: newCourse.id,
+           courseName: newCourse.name || newCourse.id,
+           courseLevelName: newCourse.name || newCourse.id,
+           batchId: newBatch.id,
+           batchName: newBatch.name || newBatch.id,
+-          month: m,
+           monthlyFee: newMonthly,
+-          status: 'unpaid',
+-          dueDate: dueDateForMonth(m),
+-          lateFee: 0,
+-          paidAmount: 0,
+-          createdAt: serverTimestamp(),
+-          updatedAt: serverTimestamp()
++          updatedAt: serverTimestamp(),
++          updatedBy: actorEmail
+         });
+       }
+-      m = addMonthsYM(m, 1);
+-      guard += 1;
+     }
+-  }
+ 
+-  if (charge > 0) {
+-    const payRef = doc(collection(targetDb, PAYMENTS_COL));
+-    wb.set(payRef, {
+-      id: payRef.id,
+-      ctx: 'school',
+-      type: 'UPGRADE',
+-      studentId: student.id,
+-      studentCode: student.studentId || '',
++    // Generate open bills >= billingStartMonth up to currentMonth if active and not on break.
++    if (isKidsStudentEligible(student) && monthSeq(billingStartMonth) <= monthSeq(currentMonth)) {
++      let m = billingStartMonth;
++      let guard = 0;
++      while (m && monthSeq(m) <= monthSeq(currentMonth) && guard < 120) {
++        if (!existingMonthSet.has(m) && !skipSet.has(m)) {
++          const bRef = doc(targetDb, BILLS_COL, `${student.id}_${m}`);
++          writer.set(bRef, {
++            id: bRef.id,
++            ctx: 'school',
++            studentId: student.id,
++            ...(student.studentId ? { studentCode: student.studentId } : {}),
++            enrolmentId: newEnrolRef.id,
++            courseId: newCourse.id,
++            courseName: newCourse.name || newCourse.id,
++            courseLevelName: newCourse.name || newCourse.id,
++            batchId: newBatch.id,
++            batchName: newBatch.name || newBatch.id,
++            month: m,
++            monthlyFee: newMonthly,
++            status: 'unpaid',
++            dueDate: dueDateForMonth(m),
++            lateFee: 0,
++            paidAmount: 0,
++            createdAt: serverTimestamp(),
++            updatedAt: serverTimestamp()
++          });
++        }
++        m = addMonthsYM(m, 1);
++        guard += 1;
++      }
++    }
++
++    if (charge > 0 && payRef) {
++      writer.set(payRef, {
++        id: payRef.id,
++        ctx: 'school',
++        type: 'UPGRADE',
++        studentId: student.id,
++        studentDocId: student.id,
++        studentCode: student.studentId || '',
++        courseId: newCourse.id,
++        courseName: newCourse.name || newCourse.id,
++        receiptNo,
++        receiptCentreCode: centreCode,
++        amount: charge,
++        feeCovered: charge,
++        totalAmount: charge,
++        paymentMode,
++        mode: cleanMode,
++        paymentMethod: cleanMode,
++        txnId: cleanTxn,
++        receivedDate: today,
++        receivedBy: actorEmail,
++        ...(actorName ? { receivedByName: actorName } : {}),
++        ...(actorDesignation ? { recordedByDesignation: actorDesignation } : {}),
++        ...(actorRole ? { receivedByRole: actorRole } : {}),
++        remarks: cleanRemarks || `Level upgrade (${student.courseName || '-'} -> ${newCourse.name || newCourse.id})`,
++        createdAt: serverTimestamp()
++      });
++    }
++
++    writer.update(doc(targetDb, STUDENTS_COL, student.id), {
++      ...(student.ctx ? {} : { ctx: 'school' }),
++      ...(student.branchId ? {} : { branchId: 'HO', branchName: 'Head Office' }),
+       courseId: newCourse.id,
+       courseName: newCourse.name || newCourse.id,
+-      amount: charge,
+-      totalAmount: charge,
+-      paymentMode,
+-      receivedDate: today,
+-      receivedBy: actorEmail,
+-      ...(actorName ? { receivedByName: actorName } : {}),
+-      ...(actorDesignation ? { recordedByDesignation: actorDesignation } : {}),
+-      remarks: `Level upgrade (${student.courseName || '-'} -> ${newCourse.name || newCourse.id})`,
+-      createdAt: serverTimestamp()
++      courseLevelName: newCourse.name || newCourse.id,
++      batchId: newBatch.id,
++      batchName: newBatch.name || newBatch.id,
++      monthlyFee: newMonthly,
++      configuredAdmissionFee: newConfiguredAdm,
++      firstMonthlyMonth: billingStartMonth,
++      defaultFirstMonthlyMonth: defaultStartMonth || billingStartMonth,
++      firstMonthlyChangedFromDefault: Boolean(defaultStartMonth && billingStartMonth !== defaultStartMonth),
++      activeEnrolmentId: newEnrolRef.id,
++      upgradeDifferencePaid: rupees(Number(student.upgradeDifferencePaid || 0) + charge),
++      actualAmountReceived: rupees(prevPaid + charge),
++      packageHistory: arrayUnion({
++        type: 'upgrade',
++        fromCourseId: student.courseId || '',
++        fromCourseName: student.courseName || '',
++        toCourseId: newCourse.id,
++        toCourseName: newCourse.name || newCourse.id,
++        toBatchId: newBatch.id,
++        toBatchName: newBatch.name || newBatch.id,
++        newMonthlyFee: newMonthly,
++        billingStartMonth,
++        defaultStartMonth: defaultStartMonth || billingStartMonth,
++        changedFromDefault: Boolean(defaultStartMonth && billingStartMonth !== defaultStartMonth),
++        paymentMode,
++        diffPaid: charge,
++        ...(charge > 0 ? { mode: cleanMode, txnId: cleanTxn, receiptNo, paymentId: payRef?.id || '' } : {}),
++        noPaymentReason: noPaymentReason || '',
++        noPaymentOther: noPaymentOther || '',
++        by: actorEmail,
++        at: nowIso
++      }),
++      updatedAt: serverTimestamp(),
++      updatedBy: actorEmail
+     });
+   }
+ 
+-  const nowIso = new Date().toISOString();
+-  wb.update(doc(targetDb, STUDENTS_COL, student.id), {
+-    ...(student.ctx ? {} : { ctx: 'school' }),
+-    ...(student.branchId ? {} : { branchId: 'HO', branchName: 'Head Office' }),
+-    courseId: newCourse.id,
+-    courseName: newCourse.name || newCourse.id,
+-    courseLevelName: newCourse.name || newCourse.id,
+-    batchId: newBatch.id,
+-    batchName: newBatch.name || newBatch.id,
+-    monthlyFee: newMonthly,
+-    configuredAdmissionFee: newConfiguredAdm,
+-    firstMonthlyMonth: billingStartMonth,
+-    defaultFirstMonthlyMonth: defaultStartMonth || billingStartMonth,
+-    firstMonthlyChangedFromDefault: Boolean(defaultStartMonth && billingStartMonth !== defaultStartMonth),
+-    activeEnrolmentId: newEnrolRef.id,
+-    upgradeDifferencePaid: rupees(Number(student.upgradeDifferencePaid || 0) + charge),
+-    actualAmountReceived: rupees(prevPaid + charge),
+-    packageHistory: arrayUnion({
+-      type: 'upgrade',
+-      fromCourseId: student.courseId || '',
+-      fromCourseName: student.courseName || '',
+-      toCourseId: newCourse.id,
+-      toCourseName: newCourse.name || newCourse.id,
+-      toBatchId: newBatch.id,
+-      toBatchName: newBatch.name || newBatch.id,
+-      newMonthlyFee: newMonthly,
+-      billingStartMonth,
+-      defaultStartMonth: defaultStartMonth || billingStartMonth,
+-      changedFromDefault: Boolean(defaultStartMonth && billingStartMonth !== defaultStartMonth),
+-      paymentMode,
+-      diffPaid: charge,
+-      noPaymentReason: noPaymentReason || '',
+-      noPaymentOther: noPaymentOther || '',
+-      by: actorEmail,
+-      at: nowIso
+-    }),
+-    updatedAt: serverTimestamp(),
+-    updatedBy: actorEmail
+-  });
++  let paymentId = '';
++  let receiptNo = '';
+ 
+-  await wb.commit();
+-  return { enrolmentId: newEnrolRef.id, billingStartMonth, charge };
++  if (charge > 0) {
++    await runTransaction(targetDb, async (tx) => {
++      const orgSnap = await tx.get(doc(targetDb, 'settings', 'org_config'));
++      const configuredCode = String(orgSnap.exists() ? orgSnap.data().receiptCode || '' : '').trim().toUpperCase();
++      const centreCode = /^[A-Z0-9]{2,12}$/.test(configuredCode) ? configuredCode : (student.receiptCentreCode || 'HO');
++      const rc = await readReceiptNo(tx, { org: 'school', type: 'UP', branchCode: centreCode, date: today });
++      const payRef = doc(collection(targetDb, PAYMENTS_COL));
++      paymentId = payRef.id;
++      receiptNo = rc.receiptNo;
++      writeCounter(tx, rc.ref, rc.next, { org: 'school', type: 'UP', branchCode: centreCode, date: today });
++      applyUpgradeWrites(tx, { payRef, receiptNo, centreCode });
++    });
++  } else {
++    const wb = writeBatch(targetDb);
++    applyUpgradeWrites(wb);
++    await wb.commit();
++  }
++
++  return {
++    enrolmentId: newEnrolRef.id,
++    billingStartMonth,
++    charge,
++    paymentId,
++    receiptNo,
++    studentDocId: student.id,
++    studentId: student.studentId || ''
++  };
+ }
+ 
+ export function evaluateKidsPendingBills({ students = [], bills = [], breaks = [], asOfDate } = {}) {
+@@ -1430,9 +1474,9 @@ export function buildKidsPaymentLedger({ students = [], admissionPayments = [],
+       isCrossBranch: false,
+       courseId: p.courseId || s.courseId || '',
+       courseName: p.courseName || s.courseLevelName || s.courseName || '',
+-      type: isUpgrade ? 'AD' : 'KIDS_MONTHLY',
++      type: isUpgrade ? 'UPGRADE' : 'KIDS_MONTHLY',
+       typeLabel: isUpgrade ? 'Upgrade difference' : 'Kids monthly fee',
+-      mode: (p.mode || 'cash').toLowerCase(),
++      mode: String(p.mode || p.paymentMethod || 'cash').toLowerCase(),
+       txnId: p.txnId || '',
+       amount: amt,
+       lateFeePaid: 0,
+@@ -1443,7 +1487,9 @@ export function buildKidsPaymentLedger({ students = [], admissionPayments = [],
+       recordedByName: p.receivedByName || p.recordedByName || '',
+       recordedByDesignation: p.recordedByDesignation || '',
+       remarks: p.remarks || '',
+-      receiptRoute: isUpgrade ? `#/students/${encodeURIComponent(s.id)}?tab=course` : `#/students/${encodeURIComponent(s.id)}?tab=payments`,
++      receiptRoute: (isUpgrade && p.id)
++        ? `#/payments/${encodeURIComponent(s.id)}/${encodeURIComponent(p.id)}/receipt?from=school-payments`
++        : (isUpgrade ? `#/students/${encodeURIComponent(s.id)}?tab=course` : `#/students/${encodeURIComponent(s.id)}?tab=payments`),
+       createdAtSec: toSec(p.createdAt)
+     });
+   }
+diff --git a/public/js/utils/school-break-modals.js b/public/js/utils/school-break-modals.js
+index 4991431..87849da 100644
+--- a/public/js/utils/school-break-modals.js
++++ b/public/js/utils/school-break-modals.js
+@@ -6,14 +6,15 @@
+ 
+ import { db } from '../config/firebase-config.js';
+ import { collection, getDocs, query, where } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
+-import { showToast } from '../components/toast.js?v=1.8.197';
+-import { openPopup } from '../components/modal.js?v=1.8.197';
+-import { createSelect } from '../components/ui-select.js?v=1.8.197';
+-import { createDatePicker, createMonthPicker } from '../components/ui-datepicker.js?v=1.8.197';
+-import { formatINR } from '../utils/formatter.js?v=1.8.197';
+-import { isCourseActive, batchAllowsCourse } from '../utils/session-rules.js?v=1.8.197';
+-import { resolveUserDisplay } from '../services/user-directory.service.js?v=1.8.197';
+-import { localToday, monthSeq } from './school-lifecycle.js?v=1.8.197';
++import { showToast } from '../components/toast.js?v=1.8.198';
++import { openPopup } from '../components/modal.js?v=1.8.198';
++import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.198';
++import { createSelect } from '../components/ui-select.js?v=1.8.198';
++import { createDatePicker, createMonthPicker } from '../components/ui-datepicker.js?v=1.8.198';
++import { formatINR } from '../utils/formatter.js?v=1.8.198';
++import { isCourseActive, batchAllowsCourse } from '../utils/session-rules.js?v=1.8.198';
++import { resolveUserDisplay } from '../services/user-directory.service.js?v=1.8.198';
++import { localToday, monthSeq } from './school-lifecycle.js?v=1.8.198';
+ import {
+   addMonthsYM,
+   formatBreakPeriod,
+@@ -26,7 +27,7 @@ import {
+   resumeKidsBreak,
+   upgradeKidsPackage,
+   isBreakOverdueReturn
+-} from './school-billing.js?v=1.8.197';
++} from './school-billing.js?v=1.8.198';
+ 
+ function mk(tag, cls, text) {
+   const e = document.createElement(tag);
+@@ -461,7 +462,7 @@ export async function openKidsResumeBreakModal({ student, breakDoc = null, profi
+ /**
+  * Shared Course Upgrade / Package Change modal (uses the exact same First monthly billing month selector).
+  */
+-export async function openKidsUpgradePackageModal({ student, levels = [], batches = [], profile, onSuccess } = {}) {
++export async function openKidsUpgradePackageModal({ student, levels = [], batches = [], profile, onSuccess, draft = null } = {}) {
+   if (!student || !student.id) return;
+   let saving = false;
+   const today = localToday();
+@@ -505,30 +506,41 @@ export async function openKidsUpgradePackageModal({ student, levels = [], batche
+     }))
+   );
+ 
+-  let selectedLevelId = '';
+-  let selectedBatchId = '';
+-  let paymentMode = 'difference';
++  let selectedLevelId = draft?.levelId || '';
++  let selectedBatchId = draft?.batchId || '';
++  let paymentMode = draft?.paymentMode || 'difference';
++
++  function buildBatchOptionsForLevel(levelId) {
++    const cr = useLevels.find((l) => l.id === levelId) || null;
++    const bOpts = [{ value: '', label: 'Select destination batch', icon: 'layers' }];
++    if (cr) {
++      useBatches.filter((b) => batchAllowsCourse(b, cr.id, useLevels)).forEach((b) => {
++        bOpts.push({ value: b.id, label: b.name || b.id, icon: 'layers' });
++      });
++    }
++    return bOpts;
++  }
++
++  const initialBatchOpts = buildBatchOptionsForLevel(selectedLevelId);
++  if (selectedBatchId && !initialBatchOpts.some((o) => o.value === selectedBatchId)) {
++    selectedBatchId = '';
++  }
+ 
+   const batchSel = createSelect(batHost, {
+-    options: [{ value: '', label: 'Select destination batch', icon: 'layers' }],
+-    value: '',
++    options: initialBatchOpts,
++    value: selectedBatchId,
+     ariaLabel: 'New batch',
+     onChange: (v) => { selectedBatchId = v; check(); }
+   });
+ 
+   const levelSel = createSelect(lvlHost, {
+     options: lvlOpts,
+-    value: '',
++    value: selectedLevelId,
+     ariaLabel: 'New level',
+     onChange: (v) => {
+       selectedLevelId = v;
+       const cr = useLevels.find((l) => l.id === v) || null;
+-      const bOpts = [{ value: '', label: 'Select destination batch', icon: 'layers' }];
+-      if (cr) {
+-        useBatches.filter((b) => batchAllowsCourse(b, cr.id, useLevels)).forEach((b) => {
+-          bOpts.push({ value: b.id, label: b.name || b.id, icon: 'layers' });
+-        });
+-      }
++      const bOpts = buildBatchOptionsForLevel(v);
+       batchSel.setOptions(bOpts);
+       if (cr && student.batchId && bOpts.some((o) => o.value === student.batchId)) {
+         selectedBatchId = student.batchId;
+@@ -556,7 +568,7 @@ export async function openKidsUpgradePackageModal({ student, levels = [], batche
+       { value: 'none', label: 'No admission payment (upgraded student)', icon: 'shield-off' },
+       { value: 'full', label: 'Full admission fee', icon: 'banknote' }
+     ],
+-    value: 'difference',
++    value: paymentMode,
+     ariaLabel: 'Admission fee option',
+     onChange: (v) => { paymentMode = v; syncBillingAndFee(); check(); }
+   });
+@@ -585,7 +597,7 @@ export async function openKidsUpgradePackageModal({ student, levels = [], batche
+     return Math.max(0, cfg - prevPaid);
+   }
+ 
+-  function syncBillingAndFee() {
++  function syncBillingAndFee(explicitBillingStart) {
+     const cr = useLevels.find((l) => l.id === selectedLevelId) || null;
+     const chg = calcCharge();
+     feeSummaryTxt.textContent = cr
+@@ -594,7 +606,8 @@ export async function openKidsUpgradePackageModal({ student, levels = [], batche
+     billingSelector.setConfig({
+       anchorDate: today,
+       monthlyFee: cr ? Number(cr.monthlyFee || 0) : 0,
+-      paymentMode
++      paymentMode,
++      ...(explicitBillingStart !== undefined ? { value: explicitBillingStart } : {})
+     });
+   }
+ 
+@@ -603,7 +616,7 @@ export async function openKidsUpgradePackageModal({ student, levels = [], batche
+     okBtn.disabled = saving || !selectedLevelId || !selectedBatchId || !st.value;
+   }
+ 
+-  syncBillingAndFee();
++  syncBillingAndFee(draft?.billingStartMonth);
+   check();
+   if (typeof lucide !== 'undefined') lucide.createIcons();
+ 
+@@ -612,11 +625,66 @@ export async function openKidsUpgradePackageModal({ student, levels = [], batche
+     const br = useBatches.find((b) => b.id === selectedBatchId);
+     if (!cr || !br) return;
+     const st = billingSelector.getState();
++    const chg = calcCharge();
++    const who = (profile && profile.email) || 'admin';
++    const disp = resolveUserDisplay(who, profile?.name, profile?.designation);
++
++    if (chg > 0) {
++      const savedDraft = {
++        levelId: selectedLevelId,
++        batchId: selectedBatchId,
++        paymentMode,
++        billingStartMonth: st.value
++      };
++      popup.close(true);
++      openPaymentPopup({
++        student: { ...student, ctx: 'school', courseCode: cr.code || cr.courseCode || '', courseName: cr.name || cr.id },
++        pendingAdmission: {
++          org: 'school',
++          isUpgrade: true,
++          paymentMode,
++          admFee: chg,
++          courseName: cr.name || cr.id,
++          onConfirmPayment: async (pp) => {
++            const upgRes = await upgradeKidsPackage({
++              db,
++              student,
++              newCourse: cr,
++              newBatch: br,
++              billingStartMonth: st.value,
++              defaultStartMonth: st.defaultValue,
++              paymentMode,
++              diffCharge: chg,
++              mode: pp.mode,
++              txnId: pp.txnId,
++              remarks: pp.remarks,
++              actorEmail: who,
++              actorName: disp.name || profile?.name || '',
++              actorDesignation: disp.designation || profile?.designation || '',
++              actorRole: profile?.role || '',
++              paidDate: pp.paymentDate || today,
++              asOfDate: today
++            });
++            window.dispatchEvent(new CustomEvent('uic:data-mutated', { detail: { reason: 'student:upgrade' } }));
++            return upgRes;
++          }
++        },
++        isAdmission: true,
++        profile,
++        from: 'profile',
++        onSuccess: async () => {
++          if (onSuccess) await onSuccess();
++        },
++        onCancel: () => {
++          openKidsUpgradePackageModal({ student, levels: useLevels, batches: useBatches, profile, onSuccess, draft: savedDraft });
++        }
++      });
++      return;
++    }
++
+     saving = true;
+     setSaving(true);
+     try {
+-      const who = (profile && profile.email) || 'admin';
+-      const disp = resolveUserDisplay(who, profile?.name, profile?.designation);
+       await upgradeKidsPackage({
+         db,
+         student,
+@@ -625,10 +693,11 @@ export async function openKidsUpgradePackageModal({ student, levels = [], batche
+         billingStartMonth: st.value,
+         defaultStartMonth: st.defaultValue,
+         paymentMode,
+-        diffCharge: calcCharge(),
++        diffCharge: 0,
+         actorEmail: who,
+         actorName: disp.name || profile?.name || '',
+         actorDesignation: disp.designation || profile?.designation || '',
++        actorRole: profile?.role || '',
+         paidDate: today,
+         asOfDate: today
+       });
+diff --git a/public/js/utils/school-lifecycle.js b/public/js/utils/school-lifecycle.js
+index 50d76b0..07ddd63 100644
+--- a/public/js/utils/school-lifecycle.js
++++ b/public/js/utils/school-lifecycle.js
+@@ -27,9 +27,9 @@ import {
+   collection, getDocs, query, where, doc, getDoc, addDoc, updateDoc, deleteDoc,
+   serverTimestamp, runTransaction, writeBatch
+ } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
+-import { showToast } from '../components/toast.js?v=1.8.197';
+-import { firstMonthlyMonth } from './school-receipt.js?v=1.8.197';
+-import { isCourseActive, todayISO } from './session-rules.js?v=1.8.197';
++import { showToast } from '../components/toast.js?v=1.8.198';
++import { firstMonthlyMonth } from './school-receipt.js?v=1.8.198';
++import { isCourseActive, todayISO } from './session-rules.js?v=1.8.198';
+ const ENROLMENTS_COL = 'enrolments';
+ const BILLS_COL = 'bills';
+ const PAYMENTS_COL = 'payments';
+diff --git a/public/js/utils/school-receipt-pdf.js b/public/js/utils/school-receipt-pdf.js
+index 86dda4e..5f850ac 100644
+--- a/public/js/utils/school-receipt-pdf.js
++++ b/public/js/utils/school-receipt-pdf.js
+@@ -2,7 +2,7 @@
+ // using pdfmake. Loaded dynamically on demand. Produces real, selectable,
+ // searchable text with exact 2-page layout matching reference-templates/uk.html.
+ 
+-import { fmtRs } from './school-receipt.js?v=1.8.197';
++import { fmtRs } from './school-receipt.js?v=1.8.198';
+ 
+ const INK = '#1D1A3A';
+ const MUTED = '#5B5F85';
+diff --git a/public/js/utils/school-receipt.js b/public/js/utils/school-receipt.js
+index 7cfa410..e3b676b 100644
+--- a/public/js/utils/school-receipt.js
++++ b/public/js/utils/school-receipt.js
+@@ -1,8 +1,8 @@
+ // school-receipt.js � pure view-model builders for the Kids admission receipt.
+ // No Firebase, no DOM. Safe to unit-test in plain Node.
+ 
+-import { formatDateIN, formatPersonName, formatGenderDisplay } from './formatter.js?v=1.8.197';
+-import { getStudentPhotoSrc, getStudentDocSrc } from './student-media.js?v=1.8.197';
++import { formatDateIN, formatPersonName, formatGenderDisplay } from './formatter.js?v=1.8.198';
++import { getStudentPhotoSrc, getStudentDocSrc } from './student-media.js?v=1.8.198';
+ 
+ const MONTH_NAMES = [
+   'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+diff --git a/public/js/utils/student-media.js b/public/js/utils/student-media.js
+index 3fdf3a3..3e92fef 100644
+--- a/public/js/utils/student-media.js
++++ b/public/js/utils/student-media.js
+@@ -1,7 +1,7 @@
+ // Shared student photo, document source, and display normalization helpers.
+ // Used identically across live CMS pages, receipts, photo preloading, and offline Archives.
+ 
+-import { formatPersonName, formatGenderDisplay } from './formatter.js?v=1.8.197';
++import { formatPersonName, formatGenderDisplay } from './formatter.js?v=1.8.198';
+ 
+ const DOC_KEY_ALIASES = {
+   photo: ['photo', 'passportPhoto', 'passport_photo', 'studentPhoto', 'avatar', 'profilePhoto', 'image', 'pic'],
+diff --git a/public/pages/batches.html b/public/pages/batches.html
+index 95acc82..0e6f819 100644
+--- a/public/pages/batches.html
++++ b/public/pages/batches.html
+@@ -3,7 +3,7 @@
+ <head>
+   <meta charset="UTF-8">
+   <title>Batches</title>
+-  <link rel="stylesheet" href="../css/pages/batches.css?v=1.8.197">
++  <link rel="stylesheet" href="../css/pages/batches.css?v=1.8.198">
+ </head>
+ <body>
+   <div class="page-shell">
+diff --git a/public/pages/login.html b/public/pages/login.html
+index db1e8ed..808555c 100644
+--- a/public/pages/login.html
++++ b/public/pages/login.html
+@@ -10,7 +10,7 @@
+   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+   <link rel="stylesheet" href="/css/main.css">
+-  <link rel="stylesheet" href="/css/pages/login.css?v=1.8.197">
++  <link rel="stylesheet" href="/css/pages/login.css?v=1.8.198">
+   <script>location.replace('/index.html' + location.search + location.hash);</script>
+ </head>
+ <body class="auth-screen" data-ctx="youth">

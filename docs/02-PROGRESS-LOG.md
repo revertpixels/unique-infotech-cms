@@ -39,6 +39,33 @@
 
 ---
 
+### [2026-11-28 12:06] Version 1.8.195 — Firestore Aggregation & Composite Indexes + Silent Fallback (Local Only)
+
+**What was built:**
+- **Missing composite & aggregation indexes (`firestore.indexes.json`)**:
+  - Added 6 `students` aggregation composite indexes covering `loadYouthDashboardServerAggregates` (Super Admin & Branch Head scoped): `[ctx, sessionId, feeTotal, paidAmount]`, `[ctx, branchId, sessionId, feeTotal, paidAmount]`, `[ctx, sessionId, status, balanceDue]`, `[ctx, branchId, sessionId, status, balanceDue]`, `[ctx, sessionId, status, feeTotal, paidAmount]`, and `[ctx, branchId, sessionId, status, feeTotal, paidAmount]`.
+  - Audited every `query()` / `collectionGroup()` call across `public/js/` and added the remaining missing non-aggregation composite indexes: `students` `[branchId, studentId]` (`student-profile.page.js`), `students` `[branchId, courseId, phone, status]` (`admission.service.js`), `bills` `[studentId, month]`, `[studentId, status]`, `[studentId, status, month]` (`school-billing.js`, `school-lifecycle.js`, `school-break.page.js`, `school-end.page.js`, `school-fees.page.js`), and `enrolments` `[studentId, status]` (`school-end.page.js`). Total `firestore.indexes.json` entries: `27` composite indexes + `1` `payment.date` collection-group `fieldOverrides`.
+- **Silent session circuit-breaker (`public/js/services/report.service.js`)**:
+  - Updated `loadYouthDashboardServerAggregates` with `isFailedPreconditionError` + `disableServerAggregationForSession`: on any `failed-precondition` error (including `Promise.all`, `moneyCountQ`, `dropQ`, or fallback `getCountFromServer`), logs **one** `console.warn` (zero `console.error`), returns `null`, and short-circuits all subsequent calls for the rest of the browser session with zero retries (reset only on full session wipe via `clearAllReportCaches`).
+
+**Why:**
+- Eliminate live `RunAggregationQuery failed-precondition (400)` errors on Dashboard KPIs where Firestore Emulators do not enforce composite indexes, close every un-indexed multi-`where()` query gap across the codebase, and prevent repeated HTTP 400 console noise while indexes are missing or building.
+
+**Files touched (committed locally only, NOT deployed or pushed):**
+- MODIFIED: `firestore.indexes.json`, `public/js/services/report.service.js`, `docs/02-PROGRESS-LOG.md` (+ `bump-version.js 1.8.195` across `54` app assets).
+
+**Firestore changes:**
+- Prepared in `firestore.indexes.json` (`12` new composite indexes added locally; **NOT deployed yet** — requires `firebase deploy --only firestore:indexes --project unique-infotech-cms` after green flag).
+
+**Tested on (post-bump `1.8.195`):**
+- `node tools/check-imports.js` (`114` files, `424` imports, `369` exports, `0` errors) + `JSON.parse('firestore.indexes.json')`: ✅
+- `scratch/run-tests.mjs` (financial/ledger, filter architecture, 1,200-student pagination parity, plus `failed-precondition` circuit-breaker unit checks verifying `1` `console.warn`, `0` `console.error`, `0` retries on both primary & `dropQ` queries): ✅
+- Chrome E2E (`verify-router-regression.mjs`, `verify-dashboard.mjs`, `verify-reports.mjs`, `verify-archives.mjs`, `verify-auth-profile.mjs`, `verify-qa-189.mjs`, `bench-perf.mjs`): ✅
+- Firebase Auth + Firestore Emulators (`verify-backfill-backup-v194.mjs`, `verify-backfill-emulator.mjs`, `verify-emulator-runner.mjs`, `verify-multitab-logout.mjs` with updated `firestore.indexes.json` & `firestore.rules`): ✅
+- Deployed: ❌ NO (local commit only; wait for green flag).
+
+---
+
 ### [2026-11-27 19:40] Version 1.8.194 — Backfill `feeTotal` and `paidInstallments` / `installmentsPaid` Fix (Local Only)
 
 **What was built:**

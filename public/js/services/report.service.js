@@ -27,22 +27,22 @@ import {
   fetchStudentPayments,
   calculateStudentFinancials,
   isStudentEligibleForDues
-} from './payment.service.js?v=1.8.194';
+} from './payment.service.js?v=1.8.195';
 import {
   evaluateKidsPendingBills,
   buildKidsPaymentLedger
-} from '../utils/school-billing.js?v=1.8.194';
-import { getStudentPhotoSrc } from '../utils/student-media.js?v=1.8.194';
+} from '../utils/school-billing.js?v=1.8.195';
+import { getStudentPhotoSrc } from '../utils/student-media.js?v=1.8.195';
 import {
   todayISO,
   fmtDate,
   getOrgTimezone
-} from '../utils/session-rules.js?v=1.8.194';
-import { formatINR } from '../utils/formatter.js?v=1.8.194';
-import { formatPersonName } from '../utils/formatter.js?v=1.8.194';
-import { resolveUserDisplay, loadUsersDirectory, getRoleTitle } from './user-directory.service.js?v=1.8.194';
-import { loadPdfMake, urlToDataUrl } from '../utils/admission-receipt-pdf.js?v=1.8.194';
-import { loadAllSessions, getAllCachedSessions, hasFreshSessionsCache } from '../core/sessions.js?v=1.8.194';
+} from '../utils/session-rules.js?v=1.8.195';
+import { formatINR } from '../utils/formatter.js?v=1.8.195';
+import { formatPersonName } from '../utils/formatter.js?v=1.8.195';
+import { resolveUserDisplay, loadUsersDirectory, getRoleTitle } from './user-directory.service.js?v=1.8.195';
+import { loadPdfMake, urlToDataUrl } from '../utils/admission-receipt-pdf.js?v=1.8.195';
+import { loadAllSessions, getAllCachedSessions, hasFreshSessionsCache } from '../core/sessions.js?v=1.8.195';
 
 const CACHE_KEY = 'financialReports';
 export const CACHE_STALE_MS = 30000;
@@ -55,6 +55,28 @@ const inflightStudents = new Map();
 const inflightSessionDatasets = new Map();
 const inflightPending = new Map();
 const inflightHistory = new Map();
+
+let serverAggregationDisabledForSession = false;
+let serverAggregationWarnedForSession = false;
+
+function isFailedPreconditionError(err) {
+  if (!err) return false;
+  const code = String(err.code || '').toLowerCase();
+  if (code === 'failed-precondition' || code.endsWith('/failed-precondition')) return true;
+  const msg = String(err.message || '').toLowerCase();
+  return msg.includes('failed-precondition') || msg.includes('requires an index');
+}
+
+function disableServerAggregationForSession(err) {
+  serverAggregationDisabledForSession = true;
+  if (!serverAggregationWarnedForSession) {
+    serverAggregationWarnedForSession = true;
+    const reason = err?.message || err?.code || 'missing composite index';
+    console.warn(
+      `[Dashboard] Server aggregation unavailable (${reason}); using local session dataset for this session.`
+    );
+  }
+}
 
 function ensureCacheRoot() {
   if (typeof window === 'undefined') {
@@ -145,6 +167,8 @@ export function clearAllReportCaches() {
   inflightSessionDatasets.clear();
   inflightPending.clear();
   inflightHistory.clear();
+  serverAggregationDisabledForSession = false;
+  serverAggregationWarnedForSession = false;
 }
 
 if (typeof window !== 'undefined' && typeof window.addEventListener === 'function' && !window.__uicReportListenersBound) {
@@ -1214,6 +1238,7 @@ export async function loadYouthDashboardServerAggregates({
   branchFilter = 'all'
 } = {}) {
   if (!session?.id) return null;
+  if (serverAggregationDisabledForSession) return null;
   const isBranchHead = profile?.role === 'branch_head' && !!profile?.branchId;
   const effBranch = isBranchHead ? profile.branchId : (branchFilter && branchFilter !== 'all' ? branchFilter : 'all');
   const constraints = [where('ctx', '==', 'youth')];
@@ -1239,7 +1264,10 @@ export async function loadYouthDashboardServerAggregates({
       getAggregateFromServer(baseQ, {
         moneySum: sum('moneyCollected')
       }),
-      getCountFromServer(moneyCountQ).catch(() => null)
+      getCountFromServer(moneyCountQ).catch((err) => {
+        if (isFailedPreconditionError(err)) throw err;
+        return null;
+      })
     ]);
 
     const totalAll = Number(totalCountSnap?.data?.()?.count || 0);
@@ -1265,7 +1293,10 @@ export async function loadYouthDashboardServerAggregates({
         dropCount: count(),
         dropFee: sum('feeTotal'),
         dropPaid: sum('paidAmount')
-      }).catch(() => null);
+      }).catch((err) => {
+        if (isFailedPreconditionError(err)) throw err;
+        return null;
+      });
       if (dropSnap && typeof dropSnap.data === 'function') {
         const dd = dropSnap.data();
         dropCount = Number(dd.dropCount || 0);
@@ -1301,7 +1332,11 @@ export async function loadYouthDashboardServerAggregates({
       hasMoneySum: !missingMoneyCollected && (moneySum > 0 || totalCount === 0),
       readCount
     };
-  } catch (_) {
+  } catch (err) {
+    if (isFailedPreconditionError(err)) {
+      disableServerAggregationForSession(err);
+      return null;
+    }
     try {
       const cntSnap = await getCountFromServer(baseQ);
       const totalCount = Number(cntSnap?.data?.()?.count || 0);
@@ -1318,7 +1353,10 @@ export async function loadYouthDashboardServerAggregates({
         hasMoneySum: totalCount === 0,
         readCount: 1
       };
-    } catch (__) {
+    } catch (countErr) {
+      if (isFailedPreconditionError(countErr)) {
+        disableServerAggregationForSession(countErr);
+      }
       return null;
     }
   }

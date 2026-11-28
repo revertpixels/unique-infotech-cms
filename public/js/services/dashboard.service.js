@@ -9,8 +9,8 @@ import {
   getDatePresetRange,
   toTitleCaseIfCaps,
   todayISO
-} from './report.service.js?v=1.8.194';
-import { isStudentEligibleForDues } from './payment.service.js?v=1.8.194';
+} from './report.service.js?v=1.8.195';
+import { isStudentEligibleForDues } from './payment.service.js?v=1.8.195';
 
 function toIsoDate(ts) {
   if (!ts) return '';

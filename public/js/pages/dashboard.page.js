@@ -1,20 +1,31 @@
 // dashboard.page.js — Read-only Youth Centre Dashboard (#/dashboard) + preserved Unique Kids placeholder.
 
-import { ROUTES } from '../core/router.js?v=1.8.195';
-import { createSelect } from '../components/ui-select.js?v=1.8.195';
+import { ROUTES } from '../core/router.js?v=1.8.196';
+import { db } from '../config/firebase-config.js';
+import { collection, getDocs, query, where } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
+import { createSelect } from '../components/ui-select.js?v=1.8.196';
 import {
   renderDonutChart,
   renderBarChart,
   renderStackedBarChart,
   renderLineChart
-} from '../components/charts.js?v=1.8.195';
-import { openPaymentDetailsModal } from '../components/payment-details-modal.js?v=1.8.195';
-import { loadDashboardArchiveReminder, getCachedDashboardArchiveReminder } from '../services/archive.service.js?v=1.8.195';
-import { resolveUserDisplay, getRoleTitle } from '../services/user-directory.service.js?v=1.8.195';
-import { getCachedSessions, loadSessions, getSelectedSession, getSelectedSessionId, hasFreshSessionsCache } from '../core/sessions.js?v=1.8.195';
-import { getOrgTimezone } from '../utils/session-rules.js?v=1.8.195';
-import { formatPersonName, initials } from '../utils/formatter.js?v=1.8.195';
-import { buildYouthDashboardData } from '../services/dashboard.service.js?v=1.8.195';
+} from '../components/charts.js?v=1.8.196';
+import { openPaymentDetailsModal } from '../components/payment-details-modal.js?v=1.8.196';
+import { loadDashboardArchiveReminder, getCachedDashboardArchiveReminder } from '../services/archive.service.js?v=1.8.196';
+import { resolveUserDisplay, getRoleTitle } from '../services/user-directory.service.js?v=1.8.196';
+import { getCachedSessions, loadSessions, getSelectedSession, getSelectedSessionId, hasFreshSessionsCache } from '../core/sessions.js?v=1.8.196';
+import { getOrgTimezone } from '../utils/session-rules.js?v=1.8.196';
+import { formatPersonName, initials, formatDateIN } from '../utils/formatter.js?v=1.8.196';
+import { buildYouthDashboardData } from '../services/dashboard.service.js?v=1.8.196';
+import { localToday } from '../utils/school-lifecycle.js?v=1.8.196';
+import {
+  isBreakOverdueReturn,
+  formatBreakPeriod,
+  formatShortMonthYear,
+  evaluateKidsPendingBills,
+  syncOpenKidsBills
+} from '../utils/school-billing.js?v=1.8.196';
+import { openKidsResumeBreakModal } from '../utils/school-break-modals.js?v=1.8.196';
 import {
   ensureReferenceData,
   getCachedReferenceData,
@@ -25,6 +36,7 @@ import {
   getCachedYouthHistory,
   loadYouthPendingReport,
   getCachedYouthPending,
+  loadKidsPaymentHistory,
   loadStudentPhotos,
   getCachedStudentPhoto,
   isCacheStale,
@@ -33,7 +45,7 @@ import {
   modeDisplayMeta,
   formatINR,
   fmtDate
-} from '../services/report.service.js?v=1.8.195';
+} from '../services/report.service.js?v=1.8.196';
 
 let state = null;
 let profileListener = null;
@@ -41,6 +53,8 @@ let usersListener = null;
 let sessionSelListener = null;
 let sessionsLoadedListener = null;
 let sessionsChangedListener = null;
+let kidsDataMutatedListener = null;
+let kidsDashDestroyed = false;
 
 function $(id) {
   return document.getElementById(id);
@@ -1023,6 +1037,7 @@ export function mount({ profile, ctx } = {}) {
   if (activeCtx === 'school') {
     if (youthShell) youthShell.hidden = true;
     if (kidsShell) kidsShell.hidden = false;
+    kidsDashDestroyed = false;
 
     const kidsEl = $('dash-kids-greeting');
     const updateKidsGreeting = () => {
@@ -1033,6 +1048,117 @@ export function mount({ profile, ctx } = {}) {
     usersListener = updateKidsGreeting;
     window.addEventListener('uic:profile-updated', profileListener);
     window.addEventListener('uic:users-updated', usersListener);
+
+    const breakCard = $('dash-kids-break-card');
+    if (breakCard) breakCard.onclick = () => { location.hash = '#/school-break?filter=active'; };
+    const overdueCard = $('dash-kids-break-overdue-card');
+    if (overdueCard) overdueCard.onclick = () => { location.hash = '#/school-break?filter=overdue'; };
+
+    const isSuper = profile?.role === 'superadmin';
+    async function loadKidsDashboard() {
+      if (kidsDashDestroyed) return;
+      try {
+        const today = localToday();
+        const [stSnap, billsSnap, brkSnap, histRes] = await Promise.all([
+          getDocs(query(collection(db, 'students'), where('ctx', '==', 'school'))),
+          getDocs(collection(db, 'bills')),
+          getDocs(collection(db, 'breaks')),
+          loadKidsPaymentHistory({ profile, forceRefresh: false }).catch(() => null)
+        ]);
+        if (kidsDashDestroyed) return;
+
+        const students = stSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        let bills = billsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        const breaks = brkSnap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((b) => !b.ctx || b.ctx === 'school');
+
+        if (isSuper) {
+          const newBills = await syncOpenKidsBills(db, { students, bills, breaks, asOfDate: today }).catch(() => []);
+          if (newBills && newBills.length) bills = bills.concat(newBills);
+        }
+        if (kidsDashDestroyed) return;
+
+        // Exclude on-break, completed, ended, dropped from Active count (Rule 6)
+        const activeKids = students.filter((s) => (s.status || 'active') === 'active');
+        const onBreakKids = students.filter((s) => (s.status || 'active') === 'break');
+        const ongoingBreakBySid = new Map();
+        breaks.forEach((b) => {
+          const st = String(b.status || '').toLowerCase();
+          if ((st === 'active' || st === 'approved') && !b.actualReturnDate && !b.actualReturnMonth) {
+            if (b.studentId) ongoingBreakBySid.set(b.studentId, b);
+            if (b.studentCode) ongoingBreakBySid.set(b.studentCode, b);
+          }
+        });
+
+        const breakRows = onBreakKids.map((s) => {
+          const ab = ongoingBreakBySid.get(s.id) || (s.studentId ? ongoingBreakBySid.get(s.studentId) : null) || null;
+          const startMonth = ab?.startMonth || s.breakFrom || '';
+          const plannedEnd = ab?.plannedEndMonth || ab?.endMonth || s.breakTo || '';
+          const overdue = isBreakOverdueReturn(ab || s, today);
+          return { student: s, breakDoc: ab, startMonth, plannedEnd, reason: ab?.reason || s.breakReason || '-', overdue };
+        }).sort((a, b) => (a.overdue === b.overdue ? String(a.plannedEnd).localeCompare(String(b.plannedEnd)) : (a.overdue ? -1 : 1)));
+
+        const overdueCount = breakRows.filter((r) => r.overdue).length;
+        const collectedTotal = (histRes?.entries || []).reduce((a, e) => a + Number(e.totalReceived || 0), 0);
+        const pendingItems = evaluateKidsPendingBills({ students, bills, breaks, asOfDate: today })
+          .filter((it) => it.status === 'due' || it.status === 'overdue');
+        const pendingTotal = pendingItems.reduce((a, it) => a + Number(it.totalPayable || 0), 0);
+        const overdueTotal = pendingItems.filter((it) => it.status === 'overdue').reduce((a, it) => a + Number(it.totalPayable || 0), 0);
+
+        const setTxtEl = (id, txt) => { const el = $(id); if (el) el.textContent = txt; };
+        setTxtEl('dash-kids-students', String(activeKids.length));
+        setTxtEl('dash-kids-students-sub', `${students.length} total records`);
+        setTxtEl('dash-kids-break', String(onBreakKids.length));
+        setTxtEl('dash-kids-break-sub', onBreakKids.length ? `${onBreakKids.length} paused (₹0 bills)` : 'None on break');
+        setTxtEl('dash-kids-break-overdue', String(overdueCount));
+        setTxtEl('dash-kids-collected', formatINR(collectedTotal));
+        setTxtEl('dash-kids-dues', formatINR(pendingTotal));
+        setTxtEl('dash-kids-overdue', formatINR(overdueTotal));
+
+        const bodyEl = $('dash-kids-breaks-body');
+        if (bodyEl) {
+          if (!breakRows.length) {
+            bodyEl.innerHTML = '<div class="empty-state"><i data-lucide="check-circle"></i><h3>No students currently on break</h3><p>All active Unique Kids students are following normal monthly billing.</p></div>';
+          } else {
+            const escK = (x) => String(x == null ? '' : x).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+            let html = '<div class="lp-scroll"><table class="lp-table"><thead><tr><th>Student ID</th><th>Student</th><th>Break Period</th><th>Status</th><th>Reason</th><th class="act">Action</th></tr></thead><tbody>';
+            breakRows.forEach((r) => {
+              const s = r.student;
+              const period = formatBreakPeriod(r.startMonth, r.plannedEnd);
+              const badge = r.overdue
+                ? `<span class="adm-pill break-overdue">Ended - not rejoined (${escK(formatShortMonthYear(r.plannedEnd))})</span>`
+                : `<span class="adm-pill break">On Break</span>`;
+              html += `<tr><td><b>${escK(s.studentId || '-')}</b></td><td><a href="#/students/${encodeURIComponent(s.id)}">${escK(formatPersonName(s.name || '') || '-')}</a></td><td><strong>${escK(period)}</strong></td><td>${badge}</td><td>${escK(r.reason)}</td><td class="act">${isSuper ? `<button type="button" class="ui-btn ghost sm dk-resume-btn" data-sid="${escK(s.id)}"><i data-lucide="play-circle"></i><span>Resume</span></button>` : `<a class="ui-btn ghost sm" href="#/students/${encodeURIComponent(s.id)}">Profile</a>`}</td></tr>`;
+            });
+            html += '</tbody></table></div>';
+            bodyEl.innerHTML = html;
+            if (isSuper) {
+              bodyEl.querySelectorAll('.dk-resume-btn').forEach((btn) => {
+                btn.addEventListener('click', () => {
+                  const row = breakRows.find((x) => x.student.id === btn.dataset.sid);
+                  if (!row) return;
+                  openKidsResumeBreakModal({
+                    student: row.student,
+                    breakDoc: row.breakDoc,
+                    profile,
+                    onSuccess: () => {
+                      window.dispatchEvent(new CustomEvent('uic:data-mutated', { detail: { reason: 'break:resume' } }));
+                      return loadKidsDashboard();
+                    }
+                  });
+                });
+              });
+            }
+          }
+          if (typeof lucide !== 'undefined') lucide.createIcons();
+        }
+      } catch (err) {
+        console.warn('[dashboard-kids] load failed:', err);
+      }
+    }
+
+    kidsDataMutatedListener = () => { if (!kidsDashDestroyed) loadKidsDashboard(); };
+    window.addEventListener('uic:data-mutated', kidsDataMutatedListener);
+    loadKidsDashboard();
     paint();
     return;
   }
@@ -1144,7 +1270,12 @@ export function mount({ profile, ctx } = {}) {
 }
 
 export function unmount() {
+  kidsDashDestroyed = true;
   if (state) state.destroyed = true;
+  if (kidsDataMutatedListener) {
+    window.removeEventListener('uic:data-mutated', kidsDataMutatedListener);
+    kidsDataMutatedListener = null;
+  }
   if (profileListener) {
     window.removeEventListener('uic:profile-updated', profileListener);
     profileListener = null;

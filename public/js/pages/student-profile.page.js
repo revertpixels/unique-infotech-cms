@@ -11,20 +11,20 @@ import {
   serverTimestamp,
   runTransaction
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.195';
-import { openPopup } from '../components/modal.js?v=1.8.195';
-import { createSelect } from '../components/ui-select.js?v=1.8.195';
-import { confirmDialog } from '../components/ui-confirm.js?v=1.8.195';
-import { openMenu } from '../components/ui-menu.js?v=1.8.195';
-import { formatINR, formatDateIN, formatPersonName, formatGenderDisplay, initials } from '../utils/formatter.js?v=1.8.195';
-import { validatePhone, validateEmail, validateDOB, validateName } from '../utils/validator.js?v=1.8.195';
-import { registerDirty } from '../utils/unsaved-guard.js?v=1.8.195';
-import { resolveUserDisplay, getRoleTitle, loadUsersDirectory } from '../services/user-directory.service.js?v=1.8.195';
-import { compressTo100KB, blobToDataURL, isImageFile, formatBytes } from '../utils/image-compress.js?v=1.8.195';
-import { getStudentPhotoSrc, getStudentDocRecord, getStudentDocSrc, getStudentDocMime } from '../utils/student-media.js?v=1.8.195';
-import { todayISO } from '../utils/session-rules.js?v=1.8.195';
-import { getSelectedSessionId } from '../core/sessions.js?v=1.8.195';
-import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.195';
+import { showToast } from '../components/toast.js?v=1.8.196';
+import { openPopup } from '../components/modal.js?v=1.8.196';
+import { createSelect } from '../components/ui-select.js?v=1.8.196';
+import { confirmDialog } from '../components/ui-confirm.js?v=1.8.196';
+import { openMenu } from '../components/ui-menu.js?v=1.8.196';
+import { formatINR, formatDateIN, formatPersonName, formatGenderDisplay, initials } from '../utils/formatter.js?v=1.8.196';
+import { validatePhone, validateEmail, validateDOB, validateName } from '../utils/validator.js?v=1.8.196';
+import { registerDirty } from '../utils/unsaved-guard.js?v=1.8.196';
+import { resolveUserDisplay, getRoleTitle, loadUsersDirectory } from '../services/user-directory.service.js?v=1.8.196';
+import { compressTo100KB, blobToDataURL, isImageFile, formatBytes } from '../utils/image-compress.js?v=1.8.196';
+import { getStudentPhotoSrc, getStudentDocRecord, getStudentDocSrc, getStudentDocMime } from '../utils/student-media.js?v=1.8.196';
+import { todayISO } from '../utils/session-rules.js?v=1.8.196';
+import { getSelectedSessionId } from '../core/sessions.js?v=1.8.196';
+import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.196';
 import {
   fetchStudentPayments,
   recordPaymentTx,
@@ -35,8 +35,23 @@ import {
   calculateStudentFinancials,
   buildReceiptMenuItems,
   repairStudentAdmissionPayment
-} from '../services/payment.service.js?v=1.8.195';
-import { courseFeeOf, discountOf } from '../utils/fees.js?v=1.8.195';
+} from '../services/payment.service.js?v=1.8.196';
+import { courseFeeOf, discountOf } from '../utils/fees.js?v=1.8.196';
+import {
+  isBreakOverdueReturn,
+  formatBreakStatusText,
+  formatBreakPeriod,
+  formatShortMonthYear,
+  computeKidsStudentDues,
+  computeLateFee,
+  syncOpenKidsBills
+} from '../utils/school-billing.js?v=1.8.196';
+import {
+  openKidsStartBreakModal,
+  openKidsResumeBreakModal,
+  openKidsUpgradePackageModal
+} from '../utils/school-break-modals.js?v=1.8.196';
+import { firstMonthlyMonth } from '../utils/school-receipt.js?v=1.8.196';
 
 const COL = 'students';
 const QUALIFICATIONS = ['VIII Pass', 'Secondary (X) Pass', 'Higher Secondary (XII) Pass', 'ITI', 'Diploma', 'Undergraduate (Graduate)', 'Postgraduate', 'Other'];
@@ -54,6 +69,8 @@ let sessionDocsList = [];
 let activeTab = 'personal';
 let docsCache = {};
 let paymentsCache = [];
+let kidsBillsCache = [];
+let kidsBreaksCache = [];
 let branchesCache = null;
 let usersCache = null;
 let coursesCache = null;
@@ -82,21 +99,22 @@ async function getMyBranchId() {
 }
 
 async function ensureMetadataCache() {
-  if (branchesCache && usersCache && coursesCache && sessionsCache) return;
+  if (branchesCache && usersCache && coursesCache && sessionsCache && batchesCache) return;
   try {
     const isSuper = currentUserProfile && currentUserProfile.role === 'superadmin';
     const isHead = currentUserProfile && currentUserProfile.role === 'branch_head';
+    const isSchoolHead = currentUserProfile && currentUserProfile.role === 'school_head';
     let myBranch = currentUserProfile && currentUserProfile.branchId;
     if (!myBranch && isHead) {
       myBranch = await getMyBranchId();
     }
 
     const [bSnap, uSnap, cSnap, sSnap, btSnap] = await Promise.all([
-      branchesCache ? null : (isSuper ? getDocs(collection(db, 'branches')).catch(() => null) : (myBranch ? getDoc(doc(db, 'branches', myBranch)).catch(() => null) : null)),
-      usersCache ? null : getDocs(collection(db, 'users')).catch(() => null),
-      coursesCache ? null : getDocs(collection(db, 'courses')).catch(() => null),
-      sessionsCache ? null : getDocs(collection(db, 'sessions')).catch(() => null),
-      batchesCache ? null : getDocs(collection(db, 'batches')).catch(() => null),
+      (branchesCache || isSchoolHead) ? null : (isSuper ? getDocs(collection(db, 'branches')).catch(() => null) : (myBranch ? getDoc(doc(db, 'branches', myBranch)).catch(() => null) : null)),
+      (usersCache || isSchoolHead) ? null : getDocs(collection(db, 'users')).catch(() => null),
+      coursesCache ? null : getDocs(isSchoolHead ? query(collection(db, 'courses'), where('ctx', '==', 'school')) : collection(db, 'courses')).catch(() => null),
+      (sessionsCache || isSchoolHead) ? null : getDocs(collection(db, 'sessions')).catch(() => null),
+      batchesCache ? null : getDocs(isSchoolHead ? query(collection(db, 'batches'), where('ctx', '==', 'school')) : collection(db, 'batches')).catch(() => null),
       loadUsersDirectory({ forceRefresh: false }).catch(() => null)
     ]);
     if (!branchesCache) branchesCache = {};
@@ -172,7 +190,9 @@ async function ensureMetadataCache() {
     if (btSnap && btSnap.docs) {
       batchesCache = { byId: {} };
       btSnap.docs.forEach(d => {
-        batchesCache[d.id] = { id: d.id, ...d.data() };
+        const bObj = { id: d.id, ...d.data() };
+        batchesCache[d.id] = bObj;
+        batchesCache.byId[d.id] = bObj;
       });
     } else if (!batchesCache) {
       batchesCache = { byId: {} };
@@ -221,9 +241,37 @@ function getAuthEmail() {
   return (currentUserProfile && currentUserProfile.email ? currentUserProfile.email : '').toLowerCase();
 }
 
+function canEditCurrentStudent() {
+  if (!currentStudent || !currentUserProfile) return false;
+  if (currentUserProfile.role === 'superadmin') return true;
+  if (currentStudent.ctx === 'school') return false;
+  return currentUserProfile.role === 'branch_head';
+}
+
+function getActiveKidsBreak(breaks) {
+  return (breaks || []).find((b) => ['active', 'approved'].includes(String(b.status || '').toLowerCase()) && !b.actualReturnDate) || null;
+}
+
+async function reloadKidsStudentProfile() {
+  if (!currentStudent) return;
+  const freshSnap = await getDoc(doc(db, COL, currentStudent.id));
+  if (freshSnap.exists()) {
+    currentStudent = Object.assign({ id: freshSnap.id }, freshSnap.data());
+  }
+  await renderProfile(activeTab);
+}
+
 export async function mount({ container, profile, ctx }) {
   currentUserProfile = profile || {};
   currentCtx = ctx || 'youth';
+
+  const isSchoolHeadInit = currentUserProfile.role === 'school_head';
+  if (isSchoolHeadInit || currentCtx === 'school') {
+    const backBtn = $('sp-back-btn');
+    if (backBtn) backBtn.href = '#/school-students';
+    const errBackLink = document.querySelector('#sp-error a');
+    if (errBackLink) errBackLink.href = '#/school-students';
+  }
 
   // Parse location.hash: #/students/<id>?tab=<tabName>
   const hash = location.hash;
@@ -250,13 +298,34 @@ export async function mount({ container, profile, ctx }) {
     // Role verification
     const isSuper = currentUserProfile.role === 'superadmin';
     const isHead = currentUserProfile.role === 'branch_head';
+    const isSchoolHead = currentUserProfile.role === 'school_head';
     let myBranch = currentUserProfile.branchId;
     if (!myBranch && isHead) {
       myBranch = await getMyBranchId();
     }
-    if (!isSuper && isHead && myBranch && student.branchId && student.branchId !== myBranch) {
+    if (!isSuper && !isHead && !isSchoolHead) {
+      showError('Access restricted', 'You do not have permission to view student profiles.');
+      return;
+    }
+    if (isSchoolHead && student.ctx !== 'school') {
+      showError('Access restricted', 'You only have permission to view Unique Kids student profiles.');
+      return;
+    }
+    if (isHead && (student.ctx === 'school' || (myBranch && student.branchId && student.branchId !== myBranch))) {
       showError('Access restricted', 'You only have permission to view students in your assigned branch.');
       return;
+    }
+
+    const backHref = student.ctx === 'school' ? '#/school-students' : '#/students';
+    const backBtn = $('sp-back-btn');
+    if (backBtn) backBtn.href = backHref;
+    const errBackLink = document.querySelector('#sp-error a');
+    if (errBackLink) errBackLink.href = backHref;
+    const crumbsEl = document.querySelector('.pg-crumbs');
+    if (crumbsEl) {
+      crumbsEl.innerHTML = student.ctx === 'school'
+        ? 'Unique Kids / Students / <span>Student Profile</span>'
+        : 'Students / <span>Student Profile</span>';
     }
 
     currentStudent = student;
@@ -278,6 +347,8 @@ export function unmount() {
   sessionDocsList = [];
   docsCache = {};
   paymentsCache = [];
+  kidsBillsCache = [];
+  kidsBreaksCache = [];
 }
 
 function showLoading(show) {
@@ -311,6 +382,7 @@ function showError(title, desc) {
 async function resolveStudent(param) {
   const isSuper = currentUserProfile && currentUserProfile.role === 'superadmin';
   const isHead = currentUserProfile && currentUserProfile.role === 'branch_head';
+  const isSchoolHead = currentUserProfile && currentUserProfile.role === 'school_head';
   let bId = currentUserProfile && currentUserProfile.branchId;
   if (!bId && isHead) {
     bId = await getMyBranchId();
@@ -321,11 +393,14 @@ async function resolveStudent(param) {
     const docSnap = await getDoc(doc(db, COL, param));
     if (docSnap.exists()) {
       const data = Object.assign({ id: docSnap.id }, docSnap.data());
-      if (isHead && bId && data.branchId && data.branchId !== bId) {
+      if (isSchoolHead && data.ctx !== 'school') {
+        return null;
+      }
+      if (isHead && (data.ctx === 'school' || (bId && data.branchId && data.branchId !== bId))) {
         return null;
       }
       if (data.studentId) {
-        await loadSessionDocs(data.studentId);
+        await loadSessionDocs(data.studentId, data.ctx);
       }
       return data;
     }
@@ -336,6 +411,9 @@ async function resolveStudent(param) {
     const constraints = [where('studentId', '==', param)];
     if (!isSuper && isHead && bId) {
       constraints.push(where('branchId', '==', bId));
+    }
+    if (isSchoolHead) {
+      constraints.push(where('ctx', '==', 'school'));
     }
     const q = query(collection(db, COL), ...constraints);
     const snap = await getDocs(q);
@@ -363,10 +441,11 @@ async function resolveStudent(param) {
   }
 }
 
-async function loadSessionDocs(studentId) {
+async function loadSessionDocs(studentId, studentCtx) {
   try {
     const isSuper = currentUserProfile && currentUserProfile.role === 'superadmin';
     const isHead = currentUserProfile && currentUserProfile.role === 'branch_head';
+    const isSchoolHead = currentUserProfile && currentUserProfile.role === 'school_head';
     let bId = currentUserProfile && currentUserProfile.branchId;
     if (!bId && isHead) {
       bId = await getMyBranchId();
@@ -375,6 +454,9 @@ async function loadSessionDocs(studentId) {
     const constraints = [where('studentId', '==', studentId)];
     if (!isSuper && isHead && bId) {
       constraints.push(where('branchId', '==', bId));
+    }
+    if (isSchoolHead || studentCtx === 'school') {
+      constraints.push(where('ctx', '==', 'school'));
     }
     const q = query(collection(db, COL), ...constraints);
     const snap = await getDocs(q);
@@ -389,7 +471,6 @@ async function loadSessionDocs(studentId) {
  */
 async function renderProfile(tabName) {
   const content = $('sp-content');
-  if (content) content.hidden = false;
 
   await Promise.all([
     loadDocs(),
@@ -398,8 +479,15 @@ async function renderProfile(tabName) {
 
   renderHeader();
   renderMetrics();
+  // Keep Personal edit buttons synced even when opening on another ?tab=
+  const canEdit = canEditCurrentStudent();
+  ['sp-edit-personal', 'sp-edit-contact', 'sp-edit-guardian'].forEach((id) => {
+    const btn = $(id);
+    if (btn) btn.hidden = !canEdit;
+  });
 
-  switchTab(tabName || activeTab || 'personal');
+  await switchTab(tabName || activeTab || 'personal');
+  if (content) content.hidden = false;
 }
 
 /**
@@ -484,19 +572,28 @@ function renderHeader() {
   const rawStatus = (s.status || 'active').toLowerCase();
   const isOk = rawStatus === 'running' || rawStatus === 'active' || rawStatus === 'completed' || rawStatus === 'passed';
   const isDrop = rawStatus === 'dropped' || rawStatus === 'inactive' || rawStatus === 'deleted';
-  const pillCls = isOk ? 'active' : (isDrop ? 'dropped' : 'neutral');
+  let pillCls = isOk ? 'active' : (isDrop ? 'dropped' : 'neutral');
+  let pillLabel = rawStatus.charAt(0).toUpperCase() + rawStatus.slice(1);
+  if (s.ctx === 'school' && rawStatus === 'break') {
+    pillCls = isBreakOverdueReturn(s) ? 'dropped' : 'break';
+    pillLabel = formatBreakStatusText(s);
+  }
   if (statusEl) {
     statusEl.className = 'sp-status-badge ' + pillCls;
   }
   if (statusTxt) {
-    statusTxt.textContent = rawStatus.charAt(0).toUpperCase() + rawStatus.slice(1);
+    statusTxt.textContent = pillLabel;
   }
 
   // Meta items
   setTxt('sp-course-text', (s.courseCode ? s.courseCode + ' — ' : '') + (s.courseName || '-'));
   setTxt('sp-batch-text', s.batchName || 'General Batch');
-  setTxt('sp-session-text', s.sessionName || 'Session');
-  setTxt('sp-branch-text', formatPersonName(s.branchName || '') || 'Head Office');
+  setTxt('sp-session-text', s.ctx === 'school'
+    ? ('Admitted ' + (formatDateIN(s.admissionDate) || '-'))
+    : (s.sessionName || 'Session'));
+  setTxt('sp-branch-text', s.ctx === 'school'
+    ? 'Unique Kids · Head Office'
+    : (formatPersonName(s.branchName || '') || 'Head Office'));
 
   // Avatar
   renderAvatar();
@@ -542,24 +639,74 @@ function renderHeader() {
     }
   }
 
-  // 4th action button: View Receipts Menu
+  // 4th action button: View Receipts Menu (or Kids admission receipt)
   const receiptBtn = $('sp-btn-receipt');
   if (receiptBtn) {
     receiptBtn.onclick = async () => {
+      if (s.ctx === 'school') {
+        location.hash = '#/school-admissions/' + s.id + '/receipt';
+        return;
+      }
       const payments = paymentsCache && paymentsCache.length ? paymentsCache : await fetchStudentPayments(s.id).catch(() => []);
       const receiptItems = buildReceiptMenuItems(s, payments);
       openMenu(receiptBtn, receiptItems);
     };
   }
 
-  // Payment Notify Button (Always visible per AI reference layout)
-  const { total, outstanding } = calculateStudentFinancials(s, paymentsCache);
+  // Kids Break / Resume / Upgrade buttons (Super Admin ONLY; hidden for school_head)
+  const kidsActionsEl = $('sp-kids-actions');
+  if (kidsActionsEl) {
+    kidsActionsEl.textContent = '';
+    const isSuper = currentUserProfile?.role === 'superadmin';
+    if (s.ctx === 'school' && isSuper && (rawStatus === 'active' || rawStatus === 'break')) {
+      kidsActionsEl.hidden = false;
+      if (rawStatus === 'active') {
+        const brBtn = mk('button', 'ui-btn ghost sm');
+        brBtn.type = 'button';
+        brBtn.id = 'sp-kids-btn-start-break';
+        brBtn.innerHTML = '<i data-lucide="pause-circle"></i><span>Start Break</span>';
+        brBtn.onclick = () => openKidsStartBreakModal({ student: s, profile: currentUserProfile, onSuccess: reloadKidsStudentProfile });
+        kidsActionsEl.appendChild(brBtn);
+      } else if (rawStatus === 'break') {
+        const resBtn = mk('button', 'ui-btn primary sm');
+        resBtn.type = 'button';
+        resBtn.id = 'sp-kids-btn-resume-break';
+        resBtn.innerHTML = '<i data-lucide="play-circle"></i><span>Resume / Rejoin</span>';
+        resBtn.onclick = () => openKidsResumeBreakModal({
+          student: s,
+          breakDoc: getActiveKidsBreak(kidsBreaksCache),
+          profile: currentUserProfile,
+          onSuccess: reloadKidsStudentProfile
+        });
+        kidsActionsEl.appendChild(resBtn);
+      }
+      const upBtn = mk('button', 'ui-btn ghost sm');
+      upBtn.type = 'button';
+      upBtn.id = 'sp-kids-btn-upgrade';
+      upBtn.innerHTML = '<i data-lucide="trending-up"></i><span>Upgrade Level</span>';
+      upBtn.onclick = () => openKidsUpgradePackageModal({
+        student: s,
+        levels: Object.values(coursesCache?.byId || {}),
+        batches: Object.values(batchesCache?.byId || {}),
+        profile: currentUserProfile,
+        onSuccess: reloadKidsStudentProfile
+      });
+      kidsActionsEl.appendChild(upBtn);
+    } else {
+      kidsActionsEl.hidden = true;
+    }
+  }
+
+  // Payment Notify Button (Always visible for Super Admin / Youth; read-only for school_head)
+  const outstandingForNotify = s.ctx === 'school'
+    ? computeKidsStudentDues(s, kidsBillsCache, kidsBreaksCache).totalDue
+    : calculateStudentFinancials(s, paymentsCache).outstanding;
 
   const notifyBtn = $('sp-btn-notify');
   if (notifyBtn) {
-    notifyBtn.onclick = () => openNotifyModal(outstanding);
-    if (outstanding > 0) {
-      notifyBtn.title = 'Notify dues: ' + formatINR(outstanding);
+    notifyBtn.onclick = () => openNotifyModal(outstandingForNotify);
+    if (outstandingForNotify > 0) {
+      notifyBtn.title = 'Notify dues: ' + formatINR(outstandingForNotify);
     } else {
       notifyBtn.title = 'Notify dues (No outstanding balance)';
     }
@@ -637,9 +784,63 @@ function isExamFeePaid(examFee, paymentsList, student) {
 /**
  * Render Key Metrics
  */
+function setMetricCardLabels(labels) {
+  const cards = document.querySelectorAll('.sp-stats-grid-4 .lp-stat');
+  labels.forEach((cfg, idx) => {
+    const card = cards[idx];
+    if (!card) return;
+    const lbl = card.querySelector('.lp-stat-label');
+    const sub = card.querySelector('.lp-stat-sub');
+    if (lbl && cfg.label) lbl.textContent = cfg.label;
+    if (sub && cfg.sub !== undefined && (!sub.id || sub.id === cfg.subId)) sub.textContent = cfg.sub;
+  });
+}
+
 function renderMetrics() {
   const s = currentStudent;
   if (!s) return;
+
+  if (s.ctx === 'school') {
+    const admPaid = Number(s.actualAmountReceived ?? s.admissionFee ?? 0);
+    const billsPaid = kidsBillsCache.reduce((sum, b) => sum + Number(b.paidAmount || 0), 0);
+    const totalPaid = admPaid + billsPaid;
+    const dues = computeKidsStudentDues(s, kidsBillsCache, kidsBreaksCache);
+    const paidBillsCount = kidsBillsCache.filter((b) => String(b.status || '').toLowerCase() === 'paid').length;
+    const payableBillsCount = kidsBillsCache.filter((b) => !['break-waived', 'stopped', 'cancelled'].includes(String(b.status || '').toLowerCase())).length;
+    const billedTotal = totalPaid + dues.totalDue;
+    const pct = billedTotal > 0 ? Math.min(100, Math.round((totalPaid / billedTotal) * 100)) : 100;
+
+    setMetricCardLabels([
+      { label: 'Monthly Fee', sub: 'Per calendar month' },
+      { label: 'Paid Amount' },
+      { label: 'Unpaid Dues' },
+      { label: 'Monthly Bills', sub: `${kidsBreaksCache.length} break record${kidsBreaksCache.length === 1 ? '' : 's'}` }
+    ]);
+
+    setTxt('sp-m-total-fee', formatINR(Number(s.monthlyFee || 0)));
+    setTxt('sp-m-paid', formatINR(totalPaid));
+    setTxt('sp-m-outstanding', formatINR(dues.totalDue));
+    setTxt(
+      'sp-m-outstanding-sub',
+      dues.lateFeeDue > 0
+        ? ('Includes ' + formatINR(dues.lateFeeDue) + ' late fine')
+        : (dues.billCount > 0 ? `${dues.billCount} open bill${dues.billCount === 1 ? '' : 's'}` : 'All bills cleared')
+    );
+
+    const barText = $('sp-progress-text');
+    if (barText) barText.textContent = `${paidBillsCount} monthly bill${paidBillsCount === 1 ? '' : 's'} paid`;
+    const barFill = $('sp-stats-bar-fill');
+    if (barFill) barFill.style.width = pct + '%';
+    setTxt('sp-m-inst-paid', `${paidBillsCount}/${payableBillsCount} paid`);
+    return;
+  }
+
+  setMetricCardLabels([
+    { label: 'Total Fee', sub: 'Course package' },
+    { label: 'Paid Amount' },
+    { label: 'Outstanding', sub: 'Balance due', subId: 'sp-m-outstanding-sub' },
+    { label: 'Installments', sub: 'Paid of scheduled' }
+  ]);
 
   const { total, paid, outstanding, percent: pct } = calculateStudentFinancials(s, paymentsCache);
 
@@ -681,7 +882,7 @@ function initTabListeners() {
   });
 }
 
-function switchTab(tab) {
+async function switchTab(tab) {
   activeTab = tab;
   const tabs = ['personal', 'documents', 'course', 'payments'];
   tabs.forEach((t) => {
@@ -706,8 +907,8 @@ function switchTab(tab) {
 
   if (tab === 'personal') renderPersonalTab();
   if (tab === 'documents') renderDocumentsTab();
-  if (tab === 'course') renderCourseTab();
-  if (tab === 'payments') renderPaymentsTab();
+  if (tab === 'course') await renderCourseTab();
+  if (tab === 'payments') await renderPaymentsTab();
 
   if (typeof lucide !== 'undefined') lucide.createIcons();
 }
@@ -722,7 +923,7 @@ function renderPersonalTab() {
   setTxt('sp-dt-name', formatPersonName(s.name || '') || '-');
   setTxt('sp-dt-dob', formatDateIN(s.dob || '-'));
   setTxt('sp-dt-gender', formatGenderDisplay(s.gender, '-'));
-  setTxt('sp-dt-qual', s.qualification || '-');
+  setTxt('sp-dt-qual', s.ctx === 'school' ? (s.schoolClass || s.qualification || '-') : (s.qualification || '-'));
 
   setTxt('sp-dt-phone', s.phone || '-');
   setTxt('sp-dt-altphone', s.altPhone || '-');
@@ -733,8 +934,8 @@ function renderPersonalTab() {
 
   setTxt('sp-dt-course', (s.courseCode ? s.courseCode + ' — ' : '') + (s.courseName || '-'));
   setTxt('sp-dt-batch', s.batchName || '-');
-  setTxt('sp-dt-session', s.sessionName || '-');
-  setTxt('sp-dt-branch', formatPersonName(s.branchName || '') || '-');
+  setTxt('sp-dt-session', s.ctx === 'school' ? (formatDateIN(s.admissionDate) || '-') : (s.sessionName || '-'));
+  setTxt('sp-dt-branch', s.ctx === 'school' ? 'Head Office' : (formatPersonName(s.branchName || '') || '-'));
 
   const isSuper = currentUserProfile?.role === 'superadmin';
   const auditCard = $('sp-audit-card');
@@ -758,10 +959,15 @@ function renderPersonalTab() {
   setTxt('sp-dt-createdby', regByDisp);
   setTxt('sp-dt-createdat', s.createdAt && s.createdAt.seconds ? formatDateIN(new Date(s.createdAt.seconds * 1000).toISOString().slice(0, 10)) : '-');
 
-  // Edit Handlers
-  $('sp-edit-personal').onclick = () => openEditPersonalModal();
-  $('sp-edit-contact').onclick = () => openEditContactModal();
-  $('sp-edit-guardian').onclick = () => openEditGuardianModal();
+  // Edit Handlers (hidden for read-only roles e.g. school_head on Kids profiles)
+  const canEdit = canEditCurrentStudent();
+  ['sp-edit-personal', 'sp-edit-contact', 'sp-edit-guardian'].forEach((id) => {
+    const btn = $(id);
+    if (btn) btn.hidden = !canEdit;
+  });
+  $('sp-edit-personal').onclick = canEdit ? () => openEditPersonalModal() : null;
+  $('sp-edit-contact').onclick = canEdit ? () => openEditContactModal() : null;
+  $('sp-edit-guardian').onclick = canEdit ? () => openEditGuardianModal() : null;
 }
 
 function openEditPersonalModal() {
@@ -1265,13 +1471,17 @@ function renderDocumentsTab() {
       dlBtn.innerHTML = '<i data-lucide="download"></i><span>Download</span>';
       dlBtn.onclick = () => downloadDocFile(docData, (currentStudent.studentId || currentStudent.id) + '_' + key);
 
-      const repBtn = mk('button', 'ui-btn ghost sm');
-      repBtn.type = 'button';
-      repBtn.title = 'Replace document';
-      repBtn.innerHTML = '<i data-lucide="refresh-cw"></i><span>Replace</span>';
-      repBtn.onclick = () => openDocReplaceModal(key, label, docData);
-
-      foot.append(prevBtn, dlBtn, repBtn);
+      const canEditDoc = canEditCurrentStudent();
+      if (canEditDoc) {
+        const repBtn = mk('button', 'ui-btn ghost sm');
+        repBtn.type = 'button';
+        repBtn.title = 'Replace document';
+        repBtn.innerHTML = '<i data-lucide="refresh-cw"></i><span>Replace</span>';
+        repBtn.onclick = () => openDocReplaceModal(key, label, docData);
+        foot.append(prevBtn, dlBtn, repBtn);
+      } else {
+        foot.append(prevBtn, dlBtn);
+      }
       body.appendChild(foot);
       card.appendChild(body);
     } else {
@@ -1285,29 +1495,35 @@ function renderDocumentsTab() {
       head.appendChild(pill);
       body.appendChild(head);
 
-      // Dashed area with upload icon
-      const dropZone = mk('div', 'sp-doc-dashed-zone');
-      dropZone.innerHTML = '<i data-lucide="upload-cloud"></i><span>Click or drop file to upload</span>';
-      dropZone.onclick = () => openDocReplaceModal(key, label, null);
-      dropZone.ondragover = (ev) => { ev.preventDefault(); dropZone.classList.add('dragover'); };
-      dropZone.ondragleave = () => dropZone.classList.remove('dragover');
-      dropZone.ondrop = (ev) => {
-        ev.preventDefault();
-        dropZone.classList.remove('dragover');
-        if (ev.dataTransfer.files && ev.dataTransfer.files[0]) {
-          openDocReplaceModal(key, label, null, ev.dataTransfer.files[0]);
-        }
-      };
-      body.appendChild(dropZone);
+      const canEditDoc = canEditCurrentStudent();
+      if (canEditDoc) {
+        // Dashed area with upload icon
+        const dropZone = mk('div', 'sp-doc-dashed-zone');
+        dropZone.innerHTML = '<i data-lucide="upload-cloud"></i><span>Click or drop file to upload</span>';
+        dropZone.onclick = () => openDocReplaceModal(key, label, null);
+        dropZone.ondragover = (ev) => { ev.preventDefault(); dropZone.classList.add('dragover'); };
+        dropZone.ondragleave = () => dropZone.classList.remove('dragover');
+        dropZone.ondrop = (ev) => {
+          ev.preventDefault();
+          dropZone.classList.remove('dragover');
+          if (ev.dataTransfer.files && ev.dataTransfer.files[0]) {
+            openDocReplaceModal(key, label, null, ev.dataTransfer.files[0]);
+          }
+        };
+        body.appendChild(dropZone);
 
-      // Upload text button
-      const foot = mk('div', 'sp-doc-actions');
-      const upBtn = mk('button', 'ui-btn primary sm');
-      upBtn.type = 'button';
-      upBtn.innerHTML = '<i data-lucide="upload"></i><span>Upload Document</span>';
-      upBtn.onclick = () => openDocReplaceModal(key, label, null);
-      foot.appendChild(upBtn);
-      body.appendChild(foot);
+        // Upload text button
+        const foot = mk('div', 'sp-doc-actions');
+        const upBtn = mk('button', 'ui-btn primary sm');
+        upBtn.type = 'button';
+        upBtn.innerHTML = '<i data-lucide="upload"></i><span>Upload Document</span>';
+        upBtn.onclick = () => openDocReplaceModal(key, label, null);
+        foot.appendChild(upBtn);
+        body.appendChild(foot);
+      } else {
+        const roNote = mk('div', 'sp-doc-meta', 'Not uploaded (read-only view).');
+        body.appendChild(roNote);
+      }
 
       card.appendChild(body);
     }
@@ -1723,6 +1939,190 @@ function openDocReplaceModal(key, label, existingDoc, droppedFile) {
   };
 }
 
+function setKvLabel(valElId, labelText) {
+  const el = $(valElId);
+  const item = el ? el.closest('.sp-kv-item') : null;
+  const lbl = item ? item.querySelector('.sp-kv-label') : null;
+  if (lbl) lbl.textContent = labelText;
+}
+
+function renderKidsBreakHistoryTable(s) {
+  const tbody = $('sp-kids-breaks-tbody');
+  const actionsEl = $('sp-kids-breaks-actions');
+  if (!tbody) return;
+  tbody.textContent = '';
+
+  const rawStatus = String(s.status || 'active').toLowerCase();
+  if (actionsEl) {
+    actionsEl.textContent = '';
+    if (currentUserProfile?.role === 'superadmin') {
+      if (rawStatus === 'active') {
+        const btn = mk('button', 'ui-btn ghost sm');
+        btn.type = 'button';
+        btn.innerHTML = '<i data-lucide="pause-circle"></i><span>Start Break</span>';
+        btn.onclick = () => openKidsStartBreakModal({ student: s, profile: currentUserProfile, onSuccess: reloadKidsStudentProfile });
+        actionsEl.appendChild(btn);
+      } else if (rawStatus === 'break') {
+        const btn = mk('button', 'ui-btn primary sm');
+        btn.type = 'button';
+        btn.innerHTML = '<i data-lucide="play-circle"></i><span>Resume / Rejoin</span>';
+        btn.onclick = () => openKidsResumeBreakModal({
+          student: s,
+          breakDoc: getActiveKidsBreak(kidsBreaksCache),
+          profile: currentUserProfile,
+          onSuccess: reloadKidsStudentProfile
+        });
+        actionsEl.appendChild(btn);
+      }
+    }
+  }
+
+  const rows = [];
+  const seen = new Set();
+  (kidsBreaksCache || []).forEach((b) => {
+    const startYM = b.startMonth || b.from || b.breakFrom || '';
+    const endYM = b.plannedEndMonth || b.endMonth || b.to || b.breakTo || '';
+    if (b.id) seen.add(b.id);
+    if (startYM) seen.add(`${startYM}:${endYM}`);
+    rows.push(b);
+  });
+  if (Array.isArray(s.breakHistory)) {
+    s.breakHistory.forEach((h) => {
+      const startYM = h.startMonth || h.from || h.breakFrom || '';
+      const endYM = h.plannedEndMonth || h.endMonth || h.to || h.breakTo || '';
+      const key = `${startYM}:${endYM}`;
+      if ((h.breakId && seen.has(h.breakId)) || seen.has(key)) return;
+      seen.add(key);
+      rows.push(h);
+    });
+  }
+
+  if (rows.length === 0) {
+    const tr = mk('tr');
+    const td = mk('td', 'text-mute text-center', 'No breaks recorded for this student yet.');
+    td.colSpan = 6;
+    tr.appendChild(td);
+    tbody.appendChild(tr);
+    return;
+  }
+
+  rows.sort((a, b) => (b.startMonth || b.from || b.breakFrom || '').localeCompare(a.startMonth || a.from || a.breakFrom || ''));
+
+  rows.forEach((br) => {
+    const tr = mk('tr');
+    const startYM = br.startMonth || br.from || br.breakFrom || '';
+    const plannedEndYM = br.plannedEndMonth || br.endMonth || br.to || br.breakTo || '';
+    const bStatus = String(br.status || 'active').toLowerCase();
+    const isCompleted = bStatus === 'completed' || !!br.actualReturnDate;
+    const isOverdue = !isCompleted && isBreakOverdueReturn({ ...br, plannedEndMonth: plannedEndYM });
+
+    const periodTd = mk('td', 'font-semibold', formatBreakPeriod(startYM, plannedEndYM));
+    const endTd = mk('td', '', plannedEndYM ? formatShortMonthYear(plannedEndYM) : '-');
+    const retText = br.actualReturnDate
+      ? formatDateIN(br.actualReturnDate)
+      : (isOverdue ? 'Not rejoined yet' : 'On break');
+    const retTd = mk('td', isOverdue ? 'text-danger font-semibold' : '', retText);
+
+    const stTd = mk('td');
+    let pillCls = 'break';
+    let pillLabel = 'On Break';
+    if (isCompleted) {
+      pillCls = 'paid';
+      pillLabel = br.endedEarly ? 'Rejoined early' : 'Rejoined';
+    } else if (isOverdue) {
+      pillCls = 'due';
+      pillLabel = 'Break ended - not rejoined';
+    }
+    stTd.appendChild(mk('span', 'ar-pill ' + pillCls, pillLabel));
+
+    const reasonTd = mk('td', '', br.reason || '-');
+
+    const startedInfo = resolveUserDisplay(br.startedBy || '', br.startedByName, br.startedByDesignation);
+    let actorStr = startedInfo && startedInfo.name && startedInfo.name !== '-' ? formatPersonName(startedInfo.name) : (br.startedBy || '-');
+    if (br.resumedBy) {
+      const resInfo = resolveUserDisplay(br.resumedBy || '', br.resumedByName, br.resumedByDesignation);
+      const resName = resInfo && resInfo.name && resInfo.name !== '-' ? formatPersonName(resInfo.name) : br.resumedBy;
+      actorStr += ' -> Resumed: ' + resName;
+    }
+    const actorTd = mk('td', '', actorStr);
+
+    tr.append(periodTd, endTd, retTd, stTd, reasonTd, actorTd);
+    tbody.appendChild(tr);
+  });
+}
+
+async function renderKidsCourseTab(s, course, batch) {
+  setTxt('sp-c-name', s.courseName || s.courseLevelName || course?.name || '-');
+  setTxt('sp-c-code', s.courseCode || course?.code || course?.courseCode || 'KIDS');
+  setKvLabel('sp-c-duration', 'Billing Model');
+  setTxt('sp-c-duration', 'Ongoing Monthly');
+  setKvLabel('sp-c-prereq', 'School Class');
+  setTxt('sp-c-prereq', s.schoolClass || '-');
+  setTxt('sp-c-batch-name', s.batchName || batch?.name || '-');
+  setTxt('sp-c-batch-timing', s.batchTiming || batch?.timing || batch?.schedule || 'Standard Batch Schedule');
+
+  const firstYM = s.firstMonthlyMonth || firstMonthlyMonth(s.admissionDate);
+  const firstLabel = (firstYM ? formatShortMonthYear(firstYM) : '-') + (s.firstMonthlyChangedFromDefault ? ' (Custom)' : ' (Default)');
+  setKvLabel('sp-c-sess-start', 'Admission Date');
+  setTxt('sp-c-sess-start', s.admissionDate ? formatDateIN(s.admissionDate) : '-');
+  setKvLabel('sp-c-sess-end', 'First Monthly Billing');
+  setTxt('sp-c-sess-end', firstLabel);
+  setTxt('sp-c-branch-name', 'Unique Kids · Head Office');
+
+  const tbody = $('sp-fee-breakdown-tbody');
+  if (tbody) {
+    tbody.textContent = '';
+    const modeLabels = {
+      full: 'Full payment',
+      difference: 'Upgrade difference',
+      none: 'No payment'
+    };
+    const configuredAdm = Number(s.configuredAdmissionFee ?? s.admissionFee ?? 0);
+    const paidAdm = Number(s.actualAmountReceived ?? s.admissionFee ?? 0);
+    const monthlyFee = Number(s.monthlyFee || 0);
+    const rows = [
+      { label: 'Configured Admission Fee', val: formatINR(configuredAdm), cls: 'num font-semibold' },
+      { label: 'Admission Payment Mode', val: modeLabels[s.paymentMode || 'full'] || (s.paymentMode || 'Full'), cls: 'num' },
+      { label: 'Admission Fee Paid', val: formatINR(paidAdm), cls: 'num font-bold text-success' },
+      { label: 'Monthly Tuition Fee', val: formatINR(monthlyFee) + '/mo', cls: 'num font-bold' },
+      { label: 'First Monthly Billing Month', val: firstLabel, cls: 'num font-semibold' }
+    ];
+    const histList = Array.isArray(s.packageHistory) && s.packageHistory.length
+      ? s.packageHistory
+      : (Array.isArray(s.upgradeHistory) ? s.upgradeHistory : []);
+    if (histList.length > 0) {
+      const lastUp = histList[histList.length - 1];
+      const toCourse = lastUp.toCourseName || lastUp.courseName || '-';
+      const startM = lastUp.billingStartMonth || lastUp.firstMonthlyMonth || '';
+      rows.push({
+        label: `Latest Level Upgrade (${lastUp.fromCourseName || '-'} -> ${toCourse})`,
+        val: startM ? ('Starts ' + formatShortMonthYear(startM)) : '-',
+        cls: 'num'
+      });
+    }
+    rows.forEach((r) => {
+      const tr = mk('tr');
+      tr.append(mk('td', '', r.label), mk('td', r.cls, r.val));
+      tbody.appendChild(tr);
+    });
+  }
+
+  const schedCard = $('sp-sched-tbody')?.closest('.lp-card');
+  if (schedCard) schedCard.hidden = true;
+
+  const breaksCard = $('sp-kids-breaks-card');
+  if (breaksCard) breaksCard.hidden = false;
+  renderKidsBreakHistoryTable(s);
+
+  const recBtn = $('sp-view-receipt-btn');
+  if (recBtn) {
+    recBtn.onclick = () => {
+      location.hash = '#/school-admissions/' + currentStudent.id + '/receipt';
+    };
+  }
+  if (typeof lucide !== 'undefined') lucide.createIcons();
+}
+
 /**
  * TAB 3: Course Details
  */
@@ -1751,25 +2151,28 @@ async function renderCourseTab() {
   }
 
   // 2. Resolve Session
-  let sess = (sessionsCache && (sessionsCache.byId?.[s.sessionId] || sessionsCache.byName?.[(s.sessionName || '').toLowerCase().trim()])) || null;
-  if (!sess && s.sessionId) {
-    try {
-      const sDoc = await getDoc(doc(db, 'sessions', s.sessionId));
-      if (sDoc.exists()) {
-        sess = { id: sDoc.id, ...sDoc.data() };
-        if (sessionsCache) {
-          if (!sessionsCache.byId) sessionsCache.byId = {};
-          if (!sessionsCache.byName) sessionsCache.byName = {};
-          sessionsCache.byId[sDoc.id] = sess;
-          const sn = (sess.name || '').toLowerCase().trim();
-          if (sn) sessionsCache.byName[sn] = sess;
+  let sess = null;
+  if (s.ctx !== 'school') {
+    sess = (sessionsCache && (sessionsCache.byId?.[s.sessionId] || sessionsCache.byName?.[(s.sessionName || '').toLowerCase().trim()])) || null;
+    if (!sess && s.sessionId) {
+      try {
+        const sDoc = await getDoc(doc(db, 'sessions', s.sessionId));
+        if (sDoc.exists()) {
+          sess = { id: sDoc.id, ...sDoc.data() };
+          if (sessionsCache) {
+            if (!sessionsCache.byId) sessionsCache.byId = {};
+            if (!sessionsCache.byName) sessionsCache.byName = {};
+            sessionsCache.byId[sDoc.id] = sess;
+            const sn = (sess.name || '').toLowerCase().trim();
+            if (sn) sessionsCache.byName[sn] = sess;
+          }
         }
-      }
-    } catch (_) {}
+      } catch (_) {}
+    }
   }
 
   // 3. Resolve Batch
-  let batch = (batchesCache && batchesCache.byId?.[s.batchId]) || null;
+  let batch = (batchesCache && (batchesCache.byId?.[s.batchId] || batchesCache[s.batchId])) || null;
   if (!batch && s.batchId) {
     try {
       const bDoc = await getDoc(doc(db, 'batches', s.batchId));
@@ -1782,6 +2185,21 @@ async function renderCourseTab() {
       }
     } catch (_) {}
   }
+
+  if (s.ctx === 'school') {
+    await renderKidsCourseTab(s, course, batch);
+    return;
+  }
+
+  // Restore Youth Course tab card visibility & labels if returning from Kids
+  setKvLabel('sp-c-duration', 'Course Duration');
+  setKvLabel('sp-c-prereq', 'Prerequisites');
+  setKvLabel('sp-c-sess-start', 'Session Begins');
+  setKvLabel('sp-c-sess-end', 'Session Ends');
+  const schedCard = $('sp-sched-tbody')?.closest('.lp-card');
+  if (schedCard) schedCard.hidden = false;
+  const breaksCard = $('sp-kids-breaks-card');
+  if (breaksCard) breaksCard.hidden = true;
 
   // Course Name & Code
   setTxt('sp-c-name', s.courseName || course?.name || '-');
@@ -2034,6 +2452,55 @@ async function renderCourseTab() {
  */
 async function loadPayments() {
   if (!currentStudent) return;
+  if (currentStudent.ctx === 'school') {
+    const keys = [...new Set([currentStudent.id, currentStudent.studentId].filter(Boolean))];
+    const bills = [];
+    const breaks = [];
+    const payments = [];
+    const fetchKeys = async () => {
+      for (const k of keys) {
+        const [bSnap, brSnap, pSnap] = await Promise.all([
+          getDocs(query(collection(db, 'bills'), where('studentId', '==', k))).catch(() => null),
+          getDocs(query(collection(db, 'breaks'), where('studentId', '==', k))).catch(() => null),
+          getDocs(query(collection(db, 'payments'), where('studentId', '==', k))).catch(() => null)
+        ]);
+        if (bSnap) bSnap.docs.forEach((d) => { if (!bills.some((x) => x.id === d.id)) bills.push({ id: d.id, ...d.data() }); });
+        if (brSnap) brSnap.docs.forEach((d) => { if (!breaks.some((x) => x.id === d.id)) breaks.push({ id: d.id, ...d.data() }); });
+        if (pSnap) pSnap.docs.forEach((d) => { if (!payments.some((x) => x.id === d.id)) payments.push({ id: d.id, ...d.data() }); });
+      }
+    };
+    await Promise.all([
+      fetchKeys(),
+      fetchStudentPayments(currentStudent.id).then((res) => { paymentsCache = res || []; }).catch(() => { paymentsCache = []; }),
+      ensureMetadataCache()
+    ]);
+    payments.forEach((p) => { if (!paymentsCache.some((x) => x.id === p.id)) paymentsCache.push(p); });
+
+    if (currentUserProfile?.role === 'superadmin' && String(currentStudent.status || 'active').toLowerCase() === 'active') {
+      try {
+        const created = await syncOpenKidsBills(db, {
+          students: [currentStudent],
+          bills,
+          breaks
+        });
+        if (created && created.length) bills.push(...created);
+      } catch (err) {
+        console.warn('[student-profile] syncOpenKidsBills skipped:', err);
+      }
+    }
+
+    const activeBr = getActiveKidsBreak(breaks);
+    if (activeBr) {
+      currentStudent.breakFrom = currentStudent.breakFrom || activeBr.startMonth;
+      currentStudent.breakTo = currentStudent.breakTo || activeBr.plannedEndMonth || activeBr.endMonth;
+      currentStudent.breakReason = currentStudent.breakReason || activeBr.reason;
+    }
+
+    kidsBillsCache = bills;
+    kidsBreaksCache = breaks;
+    return;
+  }
+
   await Promise.all([
     fetchStudentPayments(currentStudent.id).then(res => { paymentsCache = res; }),
     ensureMetadataCache()
@@ -2621,40 +3088,71 @@ async function openRecordPaymentModal(preselectedOption) {
  */
 async function renderKidsPaymentsTab() {
   const tbody = $('sp-kids-bills-tbody');
+  if (!tbody) return;
   tbody.textContent = '';
 
   try {
-    const q = query(collection(db, 'bills'), where('studentId', '==', currentStudent.studentId || currentStudent.id));
-    const snap = await getDocs(q);
+    let bills = Array.isArray(kidsBillsCache) ? kidsBillsCache.slice() : [];
+    if (!bills.length) {
+      const keys = [...new Set([currentStudent.id, currentStudent.studentId].filter(Boolean))];
+      for (const k of keys) {
+        const snap = await getDocs(query(collection(db, 'bills'), where('studentId', '==', k))).catch(() => null);
+        if (snap) snap.docs.forEach((d) => { if (!bills.some((x) => x.id === d.id)) bills.push({ id: d.id, ...d.data() }); });
+      }
+    }
 
-    if (snap.empty) {
+    if (!bills.length) {
       const tr = mk('tr');
-      const td = mk('td', 'text-mute text-center', 'No bills generated for this student yet.');
+      const td = mk('td', 'text-mute text-center', 'No monthly bills generated for this student yet.');
       td.colSpan = 7;
       tr.appendChild(td);
       tbody.appendChild(tr);
       return;
     }
 
-    const bills = snap.docs.map(d => Object.assign({ id: d.id }, d.data()));
     bills.sort((a, b) => (b.month || '').localeCompare(a.month || ''));
 
     bills.forEach((b) => {
       const tr = mk('tr');
-      const isPaid = b.status === 'paid';
+      const st = String(b.status || 'unpaid').toLowerCase();
+      const isPaid = st === 'paid';
+      const isBreak = st === 'break-waived';
+      const isStopped = st === 'stopped' || st === 'cancelled';
+      const isPayable = st === 'unpaid' || st === 'partial';
+      const lf = isPayable ? Math.max(Number(b.lateFee || 0), computeLateFee(b)) : (isPaid ? Number(b.lateFee || 0) : 0);
 
-      const monthTd = mk('td', 'font-semibold', b.month || '-');
-      const dueTd = mk('td', '', formatDateIN(b.dueDate));
-      const feeTd = mk('td', 'num', formatINR(b.monthlyFee || 0));
-      const lateTd = mk('td', 'num text-danger', formatINR(b.lateFee || 0));
+      const monthTd = mk('td', 'font-semibold', b.month ? formatShortMonthYear(b.month) : '-');
+      const dueTd = mk('td', '', isBreak || isStopped ? '—' : formatDateIN(b.dueDate));
+      const feeTd = mk('td', 'num', isBreak ? '₹0' : formatINR(b.monthlyFee || 0));
+      const lateTd = mk('td', lf > 0 ? 'num text-danger' : 'num text-mute', formatINR(lf));
       const paidTd = mk('td', 'num font-semibold text-success', formatINR(b.paidAmount || 0));
 
       const statusTd = mk('td');
-      const badge = mk('span', 'ar-pill ' + (isPaid ? 'paid' : 'due'), b.status || 'unpaid');
-      statusTd.appendChild(badge);
+      let pillCls = 'due';
+      let pillText = st || 'unpaid';
+      if (isPaid) {
+        pillCls = 'paid';
+        pillText = 'Paid';
+      } else if (st === 'partial') {
+        pillCls = 'partial';
+        pillText = 'Partial';
+      } else if (isBreak) {
+        pillCls = 'break';
+        pillText = 'Break (₹0)';
+      } else if (isStopped) {
+        pillCls = 'stopped';
+        pillText = 'Stopped';
+      } else if (lf > 0) {
+        pillCls = 'due';
+        pillText = 'Overdue';
+      } else {
+        pillCls = 'due';
+        pillText = 'Unpaid';
+      }
+      statusTd.appendChild(mk('span', 'ar-pill ' + pillCls, pillText));
 
       const actionTd = mk('td', 'act');
-      if (!isPaid && currentUserProfile.role === 'superadmin') {
+      if (isPayable && currentUserProfile?.role === 'superadmin') {
         const payBtn = mk('a', 'ar-btn primary sm', 'Pay Bill');
         payBtn.href = '#/school-fee-payment?billId=' + b.id;
         actionTd.appendChild(payBtn);

@@ -189,6 +189,20 @@
 .sp-status-badge.neutral .sp-status-dot {
   background: #94A3B8;
 }
+.sp-status-badge.break {
+  background: #FFFBEB;
+  color: #D97706;
+  border: 1px solid #FDE68A;
+}
+.sp-status-badge.break .sp-status-dot {
+  background: #F59E0B;
+}
+.sp-kids-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
 .sp-status-dot {
   width: 6px;
   height: 6px;

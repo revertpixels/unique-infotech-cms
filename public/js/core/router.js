@@ -1,6 +1,6 @@
-import { APP_VERSION } from './app.js?v=1.8.195';
-import { confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.195';
-import { getRoleTitle } from '../services/user-directory.service.js?v=1.8.195';
+import { APP_VERSION } from './app.js?v=1.8.196';
+import { confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.196';
+import { getRoleTitle } from '../services/user-directory.service.js?v=1.8.196';
 
 const htmlCache = new Map();
 const htmlInflight = new Map();
@@ -116,7 +116,7 @@ export const ROUTES = {
   'school-levels': { label: 'Levels & Fees', icon: 'sliders-horizontal', group: 'Setup', page: 'school-levels', ctx: ['school'], roles: ['superadmin'] },
   'school-transfer': { label: 'Change Batch', icon: 'shuffle', group: 'Students', page: 'school-transfer', ctx: ['school'], roles: ['superadmin'], nav: false },
   'school-end': { label: 'End Course', icon: 'x-circle', group: 'Students', page: 'school-end', ctx: ['school'], roles: ['superadmin'], nav: false },
-  'school-break': { label: 'Break Management', icon: 'pause-circle', group: 'Students', page: 'school-break', ctx: ['school'], roles: ['superadmin'] },
+  'school-break': { label: 'Break Management', icon: 'pause-circle', group: 'Students', page: 'school-break', ctx: ['school'], roles: ['superadmin', 'school_head'] },
   'school-delete': { label: 'Permanent Delete', icon: 'trash-2', group: 'Students', page: 'school-delete', ctx: ['school'], roles: ['superadmin'], nav: false },
   'youth-transfer': { label: 'Change Batch', icon: 'shuffle', group: 'Students', page: 'school-transfer', ctx: ['youth'], roles: ['superadmin'], nav: false },
   'youth-end': { label: 'End Course', icon: 'x-circle', group: 'Students', page: 'school-end', ctx: ['youth'], roles: ['superadmin'], nav: false },

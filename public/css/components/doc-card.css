@@ -225,6 +225,21 @@ table.ar-fe tfoot td {
   color: #c92a2a;
   background: #fdf2f2;
 }
+.ar-pill.break {
+  border-color: #b45309;
+  color: #92400e;
+  background: #fef3c7;
+}
+.ar-pill.partial {
+  border-color: #4338ca;
+  color: #3730a3;
+  background: #eef2ff;
+}
+.ar-pill.stopped {
+  border-color: #cbd5e1;
+  color: #64748b;
+  background: #f1f5f9;
+}
 
 /* Pay / Summary Box matching .pbox */
 .ar-pbox {

@@ -242,6 +242,30 @@
       ]
     },
     {
+      "collectionGroup": "bills",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "ctx", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "breaks",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "ctx", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "breaks",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "ctx", "order": "ASCENDING" },
+        { "fieldPath": "studentId", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "enrolments",
       "queryScope": "COLLECTION",
       "fields": [

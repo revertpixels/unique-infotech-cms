@@ -1,13 +1,13 @@
 import { auth, db } from '../config/firebase-config.js';
 import { terminate, clearIndexedDbPersistence } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { clearAppCache } from './app.js?v=1.8.195';
-import { clearRouterCache } from './router.js?v=1.8.195';
+import { clearAppCache } from './app.js?v=1.8.196';
+import { clearRouterCache } from './router.js?v=1.8.196';
 import { resolveSession, signOutUser } from './auth.js';
-import { playLogoutSound } from '../utils/sound.js?v=1.8.195';
-import { clearAllReportCaches } from '../services/report.service.js?v=1.8.195';
-import { invalidateArchiveReminderCache } from '../services/archive.service.js?v=1.8.195';
-import { clearUsersDirectoryCache } from '../services/user-directory.service.js?v=1.8.195';
-import { clearPersistedBranchBatchFilters } from '../components/branch-batch-filter.js?v=1.8.195';
+import { playLogoutSound } from '../utils/sound.js?v=1.8.196';
+import { clearAllReportCaches } from '../services/report.service.js?v=1.8.196';
+import { invalidateArchiveReminderCache } from '../services/archive.service.js?v=1.8.196';
+import { clearUsersDirectoryCache } from '../services/user-directory.service.js?v=1.8.196';
+import { clearPersistedBranchBatchFilters } from '../components/branch-batch-filter.js?v=1.8.196';
 
 const INACTIVITY_LIMIT_MS = 30 * 60 * 1000;
 const LOGOUT_MIN_TRANSITION_MS = 1200;

@@ -9,18 +9,125 @@
 import { db } from '../config/firebase-config.js';
 import {
   collection, getDocs, query, where, doc, getDoc, addDoc, updateDoc, serverTimestamp,
-  runTransaction
+  runTransaction, writeBatch, arrayUnion
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.195';
-import { localToday, monthSeq, nextMonth, previousMonth } from './school-lifecycle.js?v=1.8.195';
-import { fineFor } from './session-rules.js?v=1.8.195';
+import { showToast } from '../components/toast.js?v=1.8.196';
+import { localToday, monthSeq, nextMonth, previousMonth } from './school-lifecycle.js?v=1.8.196';
+import { firstMonthlyMonth } from './school-receipt.js?v=1.8.196';
+import { fineFor } from './session-rules.js?v=1.8.196';
 
 const BILLS_COL = 'bills';
 const PAYMENTS_COL = 'payments';
 const WAIVERS_COL = 'waivers';
+const BREAKS_COL = 'breaks';
+const ENROLMENTS_COL = 'enrolments';
+const STUDENTS_COL = 'students';
 const LATE_FEE_PER_DAY = 1; // Rs 1 per day, organisation-level setting
 
 function rupees(n) { return Math.round(Number(n || 0) * 100) / 100; }
+
+// ---------- calendar YYYY-MM helpers ----------
+
+export function addMonthsYM(ym, delta) {
+  if (!ym) return '';
+  const m = /^(\d{4})-(\d{2})/.exec(String(ym));
+  if (!m) return '';
+  const total = Number(m[1]) * 12 + (Number(m[2]) - 1) + Number(delta || 0);
+  const ny = Math.floor(total / 12);
+  const nm = ((total % 12) + 12) % 12 + 1;
+  return ny + '-' + String(nm).padStart(2, '0');
+}
+
+export function ymRange(fromYM, toYM) {
+  const out = [];
+  if (!fromYM || !toYM) return out;
+  let cur = String(fromYM).slice(0, 7);
+  const end = String(toYM).slice(0, 7);
+  let guard = 0;
+  while (cur && monthSeq(cur) <= monthSeq(end) && guard < 120) {
+    out.push(cur);
+    cur = addMonthsYM(cur, 1);
+    guard += 1;
+  }
+  return out;
+}
+
+export function formatLongMonthYear(ym) {
+  if (!ym || !/^\d{4}-\d{2}/.test(String(ym))) return String(ym || '');
+  const parts = String(ym).slice(0, 7).split('-').map(Number);
+  const dt = new Date(Date.UTC(parts[0], parts[1] - 1, 1));
+  return new Intl.DateTimeFormat('en-IN', { timeZone: 'UTC', month: 'long', year: 'numeric' }).format(dt);
+}
+
+export function formatShortMonthYear(ym) {
+  if (!ym || !/^\d{4}-\d{2}/.test(String(ym))) return String(ym || '');
+  const parts = String(ym).slice(0, 7).split('-').map(Number);
+  const dt = new Date(Date.UTC(parts[0], parts[1] - 1, 1));
+  return new Intl.DateTimeFormat('en-IN', { timeZone: 'UTC', month: 'short', year: 'numeric' }).format(dt);
+}
+
+export function formatBreakPeriod(fromYM, toYM) {
+  const a = String(fromYM || '').slice(0, 7);
+  const b = String(toYM || '').slice(0, 7);
+  if (!a && !b) return '-';
+  if (!b || a === b) return formatShortMonthYear(a || b);
+  if (!a) return formatShortMonthYear(b);
+  const [y1, m1] = a.split('-').map(Number);
+  const [y2, m2] = b.split('-').map(Number);
+  const m1Short = new Intl.DateTimeFormat('en-IN', { timeZone: 'UTC', month: 'short' }).format(new Date(Date.UTC(y1, m1 - 1, 1)));
+  const m2Short = new Intl.DateTimeFormat('en-IN', { timeZone: 'UTC', month: 'short' }).format(new Date(Date.UTC(y2, m2 - 1, 1)));
+  if (y1 === y2) return `${m1Short}-${m2Short} ${y1}`;
+  return `${m1Short} ${y1}-${m2Short} ${y2}`;
+}
+
+export function formatBreakStatusText(studentOrBreak, asOfDate) {
+  const fromYM = studentOrBreak?.startMonth || studentOrBreak?.breakFrom || '';
+  const toYM = studentOrBreak?.plannedEndMonth || studentOrBreak?.endMonth || studentOrBreak?.breakTo || '';
+  const period = (fromYM || toYM) ? ` (${formatBreakPeriod(fromYM, toYM)})` : '';
+  if (isBreakOverdueReturn(studentOrBreak, asOfDate)) {
+    return `On Break${period} · Rejoin overdue`;
+  }
+  return `On Break${period}`;
+}
+
+// Compute allowed start month and explanatory message under Rule 1 & Rule 3:
+// Breaks ALWAYS start from the NEXT month or later; current month can never become a break month.
+export function computeStartBreakRange({ requestDate, today } = {}) {
+  const todayStr = today || localToday();
+  const currentYM = todayStr.slice(0, 7);
+  const reqYM = (requestDate && /^\d{4}-\d{2}/.test(requestDate)) ? requestDate.slice(0, 7) : currentYM;
+  const anchorYM = reqYM > currentYM ? reqYM : currentYM;
+  const minStartMonth = addMonthsYM(currentYM, 1);
+  const autoStartMonth = addMonthsYM(anchorYM, 1);
+  const anchorLabel = formatLongMonthYear(anchorYM);
+  const startLabel = formatShortMonthYear(autoStartMonth);
+  const notice = `${anchorLabel} is charged in full; break starts ${startLabel}`;
+  return { currentYM, anchorYM, minStartMonth, autoStartMonth, notice };
+}
+
+export function isBreakOverdueReturn(record, asOfDate) {
+  if (!record) return false;
+  const st = String(record.status || '').toLowerCase().trim();
+  const isOngoingBreak = (st === 'break' || st === 'active' || st === 'approved') && !record.actualReturnDate && !record.actualReturnMonth;
+  if (!isOngoingBreak) return false;
+  const endYM = String(record.plannedEndMonth || record.endMonth || record.breakTo || '').slice(0, 7);
+  if (!endYM) return false;
+  const curYM = String(asOfDate || localToday()).slice(0, 7);
+  return curYM > endYM;
+}
+
+// Allowed range and default for "First monthly billing month" selector:
+// - admission mode: default = calendar +2 months (firstMonthlyMonth), min = -1 month, max = +3 months from admissionDate
+// - upgrade mode: default = next month (+1), min = -1 month, max = +3 months from effective/current date
+export function computeBillingStartBounds({ anchorDate, today, mode = 'admission' } = {}) {
+  const refDate = anchorDate || today || localToday();
+  const anchorYM = String(refDate).slice(0, 7);
+  const isUpgrade = mode === 'upgrade';
+  const defaultYM = isUpgrade ? addMonthsYM(anchorYM, 1) : (firstMonthlyMonth(refDate) || addMonthsYM(anchorYM, 2));
+  const minYM = addMonthsYM(anchorYM, -1);
+  const maxYM = addMonthsYM(anchorYM, 3);
+  return { anchorYM, defaultYM, minYM, maxYM };
+}
 
 // ---------- bill month helpers ----------
 
@@ -59,31 +166,41 @@ export function daysLate(monthISO, asOfDate) {
 // break months and already-existing bills. Idempotent.
 // Returns array of created bill refs.
 export async function generateStudentBills(tx, {
-  studentId, enrolmentId, courseId, courseName, courseLevelName,
-  batchId, batchName, monthlyFee, startMonth, endMonth, breakMonths = new Set()
+  studentId, studentCode = '', enrolmentId = '', courseId = '', courseName = '', courseLevelName = '',
+  batchId = '', batchName = '', monthlyFee = 0, startMonth, endMonth, breakMonths = new Set()
 }) {
   const existing = await getDocs(query(collection(db, 'bills'),
     where('studentId', '==', studentId),
     where('month', '>=', startMonth),
     where('month', '<=', endMonth)));
-  const existingIds = new Set(existing.docs.map(d => d.data().month));
+  const existingMonths = new Set(existing.docs.map(d => d.data().month));
+  if (studentCode && studentCode !== studentId) {
+    const existingCode = await getDocs(query(collection(db, 'bills'),
+      where('studentId', '==', studentCode),
+      where('month', '>=', startMonth),
+      where('month', '<=', endMonth)));
+    existingCode.docs.forEach(d => existingMonths.add(d.data().month));
+  }
 
   const created = [];
   let m = startMonth;
   while (monthSeq(m) <= monthSeq(endMonth)) {
     if (breakMonths.has(m)) { m = nextMonth(m); continue; }
-    if (existingIds.has(m)) { m = nextMonth(m); continue; }
+    if (existingMonths.has(m)) { m = nextMonth(m); continue; }
     if (!monthIsOpen(m)) { m = nextMonth(m); continue; } // don't bill future months before opening
 
-    const billRef = doc(collection(db, BILLS_COL));
-    tx.set(billRef, {
-      id: billRef.id, studentId, enrolmentId, courseId, courseName, courseLevelName,
+    const billId = `${studentId}_${m}`;
+    const billRef = doc(db, BILLS_COL, billId);
+    const billObj = {
+      id: billRef.id, ctx: 'school', studentId, ...(studentCode ? { studentCode } : {}),
+      enrolmentId, courseId, courseName, courseLevelName,
       batchId, batchName, month: m, monthlyFee: rupees(monthlyFee),
       status: 'unpaid', dueDate: dueDateForMonth(m),
       lateFee: 0, paidAmount: 0,
       createdAt: serverTimestamp(), updatedAt: serverTimestamp()
-    });
-    created.push({ id: billRef.id, month: m, monthlyFee: rupees(monthlyFee), dueDate: dueDateForMonth(m) });
+    };
+    tx.set(billRef, billObj);
+    created.push(billObj);
     m = nextMonth(m);
   }
   return created;
@@ -205,23 +322,705 @@ export function isKidsStudentEligible(student) {
   return st === 'active';
 }
 
+export function resolveEffectiveBreakMonthRange(br) {
+  if (!br) return [];
+  const st = String(br.status || '').toLowerCase().trim();
+  const start = String(br.startMonth || br.breakFrom || '').slice(0, 7);
+  const plannedEnd = String(br.plannedEndMonth || br.endMonth || br.breakTo || '').slice(0, 7);
+  if (!start || !plannedEnd) return [];
+
+  if (st === 'active' || st === 'approved') {
+    return ymRange(start, plannedEnd);
+  }
+  if (st === 'completed') {
+    const retM = String(br.actualReturnMonth || (br.actualReturnDate ? br.actualReturnDate.slice(0, 7) : '')).slice(0, 7);
+    if (!retM) {
+      const eff = String(br.effectiveEndMonth || plannedEnd).slice(0, 7);
+      return monthSeq(eff) >= monthSeq(start) ? ymRange(start, eff) : [];
+    }
+    // Rejoin month itself is charged in FULL; all months from startMonth up to < rejoinMonth stay paused/unbilled.
+    const lastPaused = addMonthsYM(retM, -1);
+    if (monthSeq(lastPaused) < monthSeq(start)) return [];
+    return ymRange(start, lastPaused);
+  }
+  return [];
+}
+
 export function buildApprovedBreakMonthsMap(breaks = []) {
   const byStudent = new Map();
   for (const br of (breaks || [])) {
-    if (!br || String(br.status || '').toLowerCase() !== 'approved') continue;
-    const key = br.studentId;
-    if (!key || !br.startMonth || !br.endMonth) continue;
-    if (!byStudent.has(key)) byStudent.set(key, new Set());
-    const set = byStudent.get(key);
-    let m = br.startMonth;
-    let guard = 0;
-    while (m && monthSeq(m + '-01') <= monthSeq(br.endMonth + '-01') && guard < 120) {
-      set.add(m);
-      m = nextMonth(m + '-01');
-      guard += 1;
+    if (!br) continue;
+    const months = resolveEffectiveBreakMonthRange(br);
+    if (!months.length) continue;
+    const keys = [br.studentId, br.studentCode].filter(Boolean);
+    for (const key of keys) {
+      if (!byStudent.has(key)) byStudent.set(key, new Set());
+      const set = byStudent.get(key);
+      for (const m of months) set.add(m);
     }
   }
   return byStudent;
+}
+
+export function computeKidsStudentDues(student, bills = [], breaks = [], asOfDate) {
+  const today = asOfDate || localToday();
+  const breakMap = buildApprovedBreakMonthsMap(breaks);
+  const breakSet = new Set([
+    ...(breakMap.get(student?.id) || []),
+    ...(student?.studentId ? (breakMap.get(student.studentId) || []) : [])
+  ]);
+  const keys = new Set([student?.id, student?.studentId].filter(Boolean));
+  let baseDue = 0;
+  let lateFeeDue = 0;
+  let billCount = 0;
+  for (const b of (bills || [])) {
+    if (!b || !keys.has(b.studentId)) continue;
+    const st = String(b.status || 'unpaid').toLowerCase();
+    if (st !== 'unpaid' && st !== 'partial') continue;
+    if (breakSet.has(b.month)) continue;
+    const fee = rupees(b.monthlyFee || 0);
+    const paid = rupees(b.paidAmount || 0);
+    const waived = rupees(b.waivedAmount || 0);
+    const rem = Math.max(0, rupees(fee - paid - waived));
+    const lf = daysLate(b.month, today);
+    if (rem <= 0 && lf <= 0) continue;
+    baseDue = rupees(baseDue + rem);
+    lateFeeDue = rupees(lateFeeDue + lf);
+    billCount += 1;
+  }
+  return {
+    baseDue,
+    lateFeeDue,
+    totalDue: rupees(baseDue + lateFeeDue),
+    billCount
+  };
+}
+
+// Idempotently generate open monthly bills for active Kids students (`ctx === 'school'`).
+// Never bills future months (> currentMonth), ended/completed/dropped students,
+// students currently on break (even past plannedEndMonth), or months inside a break range.
+export async function syncOpenKidsBills(dbInstance, {
+  students = [],
+  bills = [],
+  breaks = [],
+  asOfDate
+} = {}) {
+  const targetDb = dbInstance || db;
+  const today = asOfDate || localToday();
+  const currentMonth = today.slice(0, 7);
+  const breakMap = buildApprovedBreakMonthsMap(breaks);
+
+  const existingByStudentMonth = new Map();
+  for (const b of (bills || [])) {
+    if (!b || !b.studentId || !b.month) continue;
+    if (!existingByStudentMonth.has(b.studentId)) existingByStudentMonth.set(b.studentId, new Set());
+    existingByStudentMonth.get(b.studentId).add(b.month);
+  }
+
+  const newBills = [];
+  for (const s of (students || [])) {
+    if (!s || (s.ctx && s.ctx !== 'school')) continue;
+    if (!isKidsStudentEligible(s)) continue; // skips 'break', 'ended', 'completed', 'dropped'
+
+    const startMonth = s.firstMonthlyMonth || firstMonthlyMonth(s.admissionDate);
+    if (!startMonth || !/^\d{4}-\d{2}$/.test(startMonth)) continue;
+    if (monthSeq(startMonth) > monthSeq(currentMonth)) continue;
+
+    const monthlyFee = rupees(s.monthlyFee || 0);
+    const existingForStudent = new Set([
+      ...(existingByStudentMonth.get(s.id) || []),
+      ...(s.studentId ? (existingByStudentMonth.get(s.studentId) || []) : [])
+    ]);
+    const breakForStudent = new Set([
+      ...(breakMap.get(s.id) || []),
+      ...(s.studentId ? (breakMap.get(s.studentId) || []) : [])
+    ]);
+
+    let m = startMonth;
+    let guard = 0;
+    while (m && monthSeq(m) <= monthSeq(currentMonth) && guard < 120) {
+      if (!existingForStudent.has(m) && !breakForStudent.has(m)) {
+        const billId = `${s.id}_${m}`;
+        const billRef = doc(targetDb, BILLS_COL, billId);
+        newBills.push({
+          ref: billRef,
+          data: {
+            id: billRef.id,
+            ctx: 'school',
+            studentId: s.id,
+            ...(s.studentId ? { studentCode: s.studentId } : {}),
+            enrolmentId: s.activeEnrolmentId || '',
+            courseId: s.courseId || '',
+            courseName: s.courseName || s.courseLevelName || '',
+            courseLevelName: s.courseLevelName || s.courseName || '',
+            batchId: s.batchId || '',
+            batchName: s.batchName || '',
+            month: m,
+            monthlyFee,
+            status: 'unpaid',
+            dueDate: dueDateForMonth(m),
+            lateFee: 0,
+            paidAmount: 0,
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp()
+          }
+        });
+        existingForStudent.add(m);
+      }
+      m = addMonthsYM(m, 1);
+      guard += 1;
+    }
+  }
+
+  if (newBills.length > 0) {
+    for (let i = 0; i < newBills.length; i += 400) {
+      const wb = writeBatch(targetDb);
+      newBills.slice(i, i + 400).forEach((item) => wb.set(item.ref, item.data));
+      await wb.commit();
+    }
+  }
+
+  return newBills.map((x) => ({
+    ...x.data,
+    createdAt: { seconds: Math.floor(Date.now() / 1000) }
+  }));
+}
+
+async function queryStudentDocs(targetDb, colName, student) {
+  const keys = [...new Set([student.id, student.studentId].filter(Boolean))];
+  const out = [];
+  for (const k of keys) {
+    const snap = await getDocs(query(collection(targetDb, colName), where('studentId', '==', k)));
+    snap.docs.forEach((d) => {
+      if (!out.some((x) => x.id === d.id)) out.push({ id: d.id, _ref: d.ref, ...d.data() });
+    });
+  }
+  return out;
+}
+
+export async function startKidsBreak({
+  db: dbOverride,
+  student,
+  startMonth,
+  plannedEndMonth,
+  reason,
+  actorEmail = 'admin',
+  actorName = '',
+  actorDesignation = '',
+  asOfDate
+} = {}) {
+  const targetDb = dbOverride || db;
+  if (!student || !student.id) throw new Error('Student record is required.');
+  const curYM = String(asOfDate || localToday()).slice(0, 7);
+  const minAllowedStart = addMonthsYM(curYM, 1);
+  if (!startMonth || !/^\d{4}-\d{2}$/.test(startMonth)) throw new Error('Select a break start month.');
+  if (monthSeq(startMonth) < monthSeq(minAllowedStart)) {
+    throw new Error(`Break cannot start in the current or past month. Earliest start month is ${formatShortMonthYear(minAllowedStart)}.`);
+  }
+  if (!plannedEndMonth || !/^\d{4}-\d{2}$/.test(plannedEndMonth) || monthSeq(plannedEndMonth) < monthSeq(startMonth)) {
+    throw new Error('Planned end month must be the same as or after start month.');
+  }
+  const cleanReason = String(reason || '').trim();
+  if (!cleanReason) throw new Error('Enter a reason for the break.');
+
+  const [bills, existingBreaks] = await Promise.all([
+    queryStudentDocs(targetDb, BILLS_COL, student),
+    queryStudentDocs(targetDb, BREAKS_COL, student)
+  ]);
+
+  const activeExisting = existingBreaks.find((b) => ['active', 'approved'].includes(String(b.status || '').toLowerCase()) && !b.actualReturnDate);
+  if (activeExisting || String(student.status || '').toLowerCase() === 'break') {
+    throw new Error('Student already has an active break. Resume the existing break before starting another.');
+  }
+
+  const ymList = ymRange(startMonth, plannedEndMonth);
+  const ymSet = new Set(ymList);
+  const breakRef = doc(collection(targetDb, BREAKS_COL));
+  const nowIso = new Date().toISOString();
+
+  const wb = writeBatch(targetDb);
+  let cancelledCount = 0;
+  for (const b of bills) {
+    if (ymSet.has(b.month) && String(b.status || '').toLowerCase() === 'unpaid' && !(Number(b.paidAmount || 0) > 0)) {
+      wb.update(b._ref, {
+        ctx: 'school',
+        status: 'break-waived',
+        breakId: breakRef.id,
+        cancelReason: 'Student break: ' + cleanReason,
+        stoppedAt: serverTimestamp(),
+        stoppedBy: actorEmail,
+        updatedAt: serverTimestamp()
+      });
+      cancelledCount += 1;
+    }
+  }
+
+  const breakPayload = {
+    id: breakRef.id,
+    ctx: 'school',
+    studentId: student.id,
+    studentCode: student.studentId || '',
+    studentName: student.name || '',
+    startMonth,
+    endMonth: plannedEndMonth,
+    plannedEndMonth,
+    effectiveEndMonth: plannedEndMonth,
+    actualReturnDate: null,
+    actualReturnMonth: null,
+    endedEarly: false,
+    reason: cleanReason,
+    status: 'active',
+    billsWaived: cancelledCount,
+    startedBy: actorEmail,
+    startedByName: actorName || '',
+    startedByDesignation: actorDesignation || '',
+    startedAtISO: nowIso,
+    startedAt: serverTimestamp(),
+    resumedBy: null,
+    resumedAt: null,
+    resumedAtISO: null,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp()
+  };
+  wb.set(breakRef, breakPayload);
+
+  const histEntry = {
+    breakId: breakRef.id,
+    from: startMonth,
+    to: plannedEndMonth,
+    actualReturnDate: null,
+    actualReturnMonth: null,
+    reason: cleanReason,
+    status: 'active',
+    by: actorEmail,
+    byName: actorName || '',
+    at: nowIso,
+    billsCancelled: cancelledCount
+  };
+
+  wb.update(doc(targetDb, STUDENTS_COL, student.id), {
+    ...(student.ctx ? {} : { ctx: 'school' }),
+    ...(student.branchId ? {} : { branchId: 'HO', branchName: 'Head Office' }),
+    status: 'break',
+    activeBreakId: breakRef.id,
+    breakFrom: startMonth,
+    breakTo: plannedEndMonth,
+    breakReason: cleanReason,
+    breakStartedBy: actorEmail,
+    breakApprovedAt: serverTimestamp(),
+    breakHistory: arrayUnion(histEntry),
+    updatedAt: serverTimestamp(),
+    updatedBy: actorEmail
+  });
+
+  await wb.commit();
+  return { breakId: breakRef.id, breakDoc: breakPayload, billsWaived: cancelledCount };
+}
+
+export async function resumeKidsBreak({
+  db: dbOverride,
+  student,
+  breakDoc = null,
+  returnDate,
+  actorEmail = 'admin',
+  actorName = '',
+  actorDesignation = '',
+  asOfDate
+} = {}) {
+  const targetDb = dbOverride || db;
+  if (!student || !student.id) throw new Error('Student record is required.');
+  if (!returnDate || !/^\d{4}-\d{2}-\d{2}$/.test(returnDate)) throw new Error('Select a valid return date.');
+
+  const rejoinMonth = returnDate.slice(0, 7);
+  const currentMonth = String(asOfDate || localToday()).slice(0, 7);
+  const nowIso = new Date().toISOString();
+
+  const [bills, existingBreaks] = await Promise.all([
+    queryStudentDocs(targetDb, BILLS_COL, student),
+    queryStudentDocs(targetDb, BREAKS_COL, student)
+  ]);
+
+  const resolvedFromDb =
+    (breakDoc?.id ? existingBreaks.find((b) => b.id === breakDoc.id) : null)
+    || existingBreaks.find((b) => student.activeBreakId && b.id === student.activeBreakId)
+    || existingBreaks.find((b) => ['active', 'approved'].includes(String(b.status || '').toLowerCase()) && !b.actualReturnDate)
+    || null;
+  const targetBreak = resolvedFromDb || breakDoc || null;
+  const targetRef = targetBreak?._ref || (targetBreak?.id ? doc(targetDb, BREAKS_COL, targetBreak.id) : null);
+
+  const startMonth = targetBreak?.startMonth || student.breakFrom || rejoinMonth;
+  const plannedEnd = targetBreak?.plannedEndMonth || targetBreak?.endMonth || student.breakTo || rejoinMonth;
+  const effectiveEndMonth = monthSeq(rejoinMonth) > monthSeq(startMonth) ? addMonthsYM(rejoinMonth, -1) : null;
+  const endedEarly = monthSeq(rejoinMonth) <= monthSeq(plannedEnd);
+
+  const wb = writeBatch(targetDb);
+
+  if (targetRef) {
+    wb.update(targetRef, {
+      ctx: 'school',
+      status: 'completed',
+      actualReturnDate: returnDate,
+      actualReturnMonth: rejoinMonth,
+      effectiveEndMonth,
+      endedEarly,
+      resumedBy: actorEmail,
+      resumedByName: actorName || '',
+      resumedByDesignation: actorDesignation || '',
+      resumedAtISO: nowIso,
+      resumedAt: serverTimestamp(),
+      updatedAt: serverTimestamp()
+    });
+  } else {
+    const legacyRef = doc(collection(targetDb, BREAKS_COL));
+    wb.set(legacyRef, {
+      id: legacyRef.id,
+      ctx: 'school',
+      studentId: student.id,
+      studentCode: student.studentId || '',
+      studentName: student.name || '',
+      startMonth,
+      endMonth: plannedEnd,
+      plannedEndMonth: plannedEnd,
+      effectiveEndMonth,
+      actualReturnDate: returnDate,
+      actualReturnMonth: rejoinMonth,
+      endedEarly,
+      reason: student.breakReason || 'Student break',
+      status: 'completed',
+      startedBy: student.breakStartedBy || actorEmail,
+      startedAtISO: null,
+      resumedBy: actorEmail,
+      resumedByName: actorName || '',
+      resumedByDesignation: actorDesignation || '',
+      resumedAtISO: nowIso,
+      resumedAt: serverTimestamp(),
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp()
+    });
+  }
+
+  // Restore any paused/cancelled break bills from rejoinMonth onward so rejoin month is billed in FULL.
+  const touchedMonths = new Set();
+  for (const b of bills) {
+    touchedMonths.add(b.month);
+    const st = String(b.status || '').toLowerCase();
+    if (monthSeq(b.month) >= monthSeq(rejoinMonth) && (st === 'break-waived' || st === 'cancelled')) {
+      wb.update(b._ref, {
+        ctx: 'school',
+        status: 'unpaid',
+        cancelReason: null,
+        breakId: null,
+        stoppedAt: null,
+        stoppedBy: null,
+        updatedAt: serverTimestamp(),
+        updatedBy: actorEmail
+      });
+    }
+  }
+
+  // Create full monthly bills for any open months from rejoinMonth up to currentMonth missing a bill doc.
+  const otherBreaks = existingBreaks.filter((b) => !targetBreak || b.id !== targetBreak.id);
+  const otherBreakMap = buildApprovedBreakMonthsMap(otherBreaks);
+  const skipOther = new Set([
+    ...(otherBreakMap.get(student.id) || []),
+    ...(student.studentId ? (otherBreakMap.get(student.studentId) || []) : [])
+  ]);
+
+  const createdMonths = [];
+  if (monthSeq(rejoinMonth) <= monthSeq(currentMonth)) {
+    let m = rejoinMonth;
+    let guard = 0;
+    while (m && monthSeq(m) <= monthSeq(currentMonth) && guard < 120) {
+      if (!touchedMonths.has(m) && !skipOther.has(m)) {
+        const billRef = doc(targetDb, BILLS_COL, `${student.id}_${m}`);
+        wb.set(billRef, {
+          id: billRef.id,
+          ctx: 'school',
+          studentId: student.id,
+          ...(student.studentId ? { studentCode: student.studentId } : {}),
+          enrolmentId: student.activeEnrolmentId || '',
+          courseId: student.courseId || '',
+          courseName: student.courseName || student.courseLevelName || '',
+          courseLevelName: student.courseLevelName || student.courseName || '',
+          batchId: student.batchId || '',
+          batchName: student.batchName || '',
+          month: m,
+          monthlyFee: rupees(student.monthlyFee || 0),
+          status: 'unpaid',
+          dueDate: dueDateForMonth(m),
+          lateFee: 0,
+          paidAmount: 0,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp()
+        });
+        createdMonths.push(m);
+      }
+      m = addMonthsYM(m, 1);
+      guard += 1;
+    }
+  }
+
+  // Update breakHistory array cleanly if matching entry exists, else leave past entries intact and append completion detail
+  const existingHist = Array.isArray(student.breakHistory) ? student.breakHistory.slice() : [];
+  let matchedIdx = -1;
+  for (let i = existingHist.length - 1; i >= 0; i--) {
+    const h = existingHist[i];
+    if ((targetBreak && h.breakId === targetBreak.id) || (!h.actualReturnDate && h.from === startMonth && h.to === plannedEnd)) {
+      matchedIdx = i;
+      break;
+    }
+  }
+  if (matchedIdx !== -1) {
+    existingHist[matchedIdx] = {
+      ...existingHist[matchedIdx],
+      status: 'completed',
+      actualReturnDate: returnDate,
+      actualReturnMonth: rejoinMonth,
+      effectiveEndMonth,
+      endedEarly,
+      resumedBy: actorEmail,
+      resumedByName: actorName || '',
+      resumedAt: nowIso
+    };
+  } else {
+    existingHist.push({
+      breakId: targetBreak?.id || null,
+      from: startMonth,
+      to: plannedEnd,
+      actualReturnDate: returnDate,
+      actualReturnMonth: rejoinMonth,
+      effectiveEndMonth,
+      endedEarly,
+      reason: student.breakReason || targetBreak?.reason || 'Student break',
+      status: 'completed',
+      by: student.breakStartedBy || actorEmail,
+      resumedBy: actorEmail,
+      resumedByName: actorName || '',
+      resumedAt: nowIso
+    });
+  }
+
+  wb.update(doc(targetDb, STUDENTS_COL, student.id), {
+    ...(student.ctx ? {} : { ctx: 'school' }),
+    ...(student.branchId ? {} : { branchId: 'HO', branchName: 'Head Office' }),
+    status: 'active',
+    activeBreakId: null,
+    breakFrom: null,
+    breakTo: null,
+    breakReason: null,
+    breakReturnDate: returnDate,
+    breakReturnMonth: rejoinMonth,
+    breakResumedBy: actorEmail,
+    breakResumedAt: serverTimestamp(),
+    breakHistory: existingHist,
+    updatedAt: serverTimestamp(),
+    updatedBy: actorEmail
+  });
+
+  await wb.commit();
+  return { rejoinMonth, endedEarly, effectiveEndMonth, createdMonths };
+}
+
+export async function upgradeKidsPackage({
+  db: dbOverride,
+  student,
+  newCourse,
+  newBatch,
+  billingStartMonth,
+  defaultStartMonth,
+  paymentMode = 'difference',
+  diffCharge = 0,
+  noPaymentReason = '',
+  noPaymentOther = '',
+  actorEmail = 'admin',
+  actorName = '',
+  actorDesignation = '',
+  paidDate,
+  asOfDate
+} = {}) {
+  const targetDb = dbOverride || db;
+  if (!student || !student.id) throw new Error('Student record is required.');
+  if (!newCourse || !newCourse.id) throw new Error('Select the destination level.');
+  if (!newBatch || !newBatch.id) throw new Error('Select the destination batch.');
+  if (!billingStartMonth || !/^\d{4}-\d{2}$/.test(billingStartMonth)) throw new Error('Select when the new monthly fee starts.');
+
+  const today = asOfDate || paidDate || localToday();
+  const currentMonth = today.slice(0, 7);
+  const newMonthly = rupees(newCourse.monthlyFee || 0);
+  const prevPaid = rupees(student.actualAmountReceived ?? student.admissionFee ?? 0);
+  const newConfiguredAdm = rupees(newCourse.admissionFee || 0);
+  const charge = rupees(diffCharge || 0);
+
+  const [bills, enrols, breaks] = await Promise.all([
+    queryStudentDocs(targetDb, BILLS_COL, student),
+    queryStudentDocs(targetDb, ENROLMENTS_COL, student),
+    queryStudentDocs(targetDb, BREAKS_COL, student)
+  ]);
+
+  const wb = writeBatch(targetDb);
+  const prevEndMonth = addMonthsYM(billingStartMonth, -1);
+
+  for (const en of enrols) {
+    if (String(en.status || '').toLowerCase() === 'active') {
+      wb.update(en._ref, {
+        status: 'upgraded',
+        billingTo: prevEndMonth,
+        upgradedAt: serverTimestamp(),
+        upgradedBy: actorEmail,
+        updatedAt: serverTimestamp()
+      });
+    }
+  }
+
+  const newEnrolRef = doc(collection(targetDb, ENROLMENTS_COL));
+  wb.set(newEnrolRef, {
+    id: newEnrolRef.id,
+    ctx: 'school',
+    studentId: student.id,
+    studentCode: student.studentId || '',
+    type: 'upgrade',
+    courseId: newCourse.id,
+    courseName: newCourse.name || newCourse.id,
+    courseLevelName: newCourse.name || newCourse.id,
+    batchId: newBatch.id,
+    batchName: newBatch.name || newBatch.id,
+    admissionFee: charge,
+    monthlyFee: newMonthly,
+    firstMonthlyMonth: billingStartMonth,
+    defaultFirstMonthlyMonth: defaultStartMonth || billingStartMonth,
+    firstMonthlyChangedFromDefault: Boolean(defaultStartMonth && billingStartMonth !== defaultStartMonth),
+    billingFrom: billingStartMonth,
+    billingTo: null,
+    status: 'active',
+    previousCourseId: student.courseId || '',
+    previousCourseName: student.courseName || '',
+    createdAt: serverTimestamp(),
+    createdBy: actorEmail
+  });
+
+  // Update untouched unpaid bills from billingStartMonth onward to the new level & monthly fee (no double billing),
+  // leaving earlier months untouched on the old package.
+  const existingMonthSet = new Set();
+  for (const b of bills) {
+    existingMonthSet.add(b.month);
+    if (monthSeq(b.month) >= monthSeq(billingStartMonth) && String(b.status || '').toLowerCase() === 'unpaid' && !(Number(b.paidAmount || 0) > 0)) {
+      wb.update(b._ref, {
+        ctx: 'school',
+        enrolmentId: newEnrolRef.id,
+        courseId: newCourse.id,
+        courseName: newCourse.name || newCourse.id,
+        courseLevelName: newCourse.name || newCourse.id,
+        batchId: newBatch.id,
+        batchName: newBatch.name || newBatch.id,
+        monthlyFee: newMonthly,
+        updatedAt: serverTimestamp(),
+        updatedBy: actorEmail
+      });
+    }
+  }
+
+  // Generate open bills >= billingStartMonth up to currentMonth if active and not on break.
+  const breakMap = buildApprovedBreakMonthsMap(breaks);
+  const skipSet = new Set([
+    ...(breakMap.get(student.id) || []),
+    ...(student.studentId ? (breakMap.get(student.studentId) || []) : [])
+  ]);
+  if (isKidsStudentEligible(student) && monthSeq(billingStartMonth) <= monthSeq(currentMonth)) {
+    let m = billingStartMonth;
+    let guard = 0;
+    while (m && monthSeq(m) <= monthSeq(currentMonth) && guard < 120) {
+      if (!existingMonthSet.has(m) && !skipSet.has(m)) {
+        const bRef = doc(targetDb, BILLS_COL, `${student.id}_${m}`);
+        wb.set(bRef, {
+          id: bRef.id,
+          ctx: 'school',
+          studentId: student.id,
+          ...(student.studentId ? { studentCode: student.studentId } : {}),
+          enrolmentId: newEnrolRef.id,
+          courseId: newCourse.id,
+          courseName: newCourse.name || newCourse.id,
+          courseLevelName: newCourse.name || newCourse.id,
+          batchId: newBatch.id,
+          batchName: newBatch.name || newBatch.id,
+          month: m,
+          monthlyFee: newMonthly,
+          status: 'unpaid',
+          dueDate: dueDateForMonth(m),
+          lateFee: 0,
+          paidAmount: 0,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp()
+        });
+      }
+      m = addMonthsYM(m, 1);
+      guard += 1;
+    }
+  }
+
+  if (charge > 0) {
+    const payRef = doc(collection(targetDb, PAYMENTS_COL));
+    wb.set(payRef, {
+      id: payRef.id,
+      ctx: 'school',
+      type: 'UPGRADE',
+      studentId: student.id,
+      studentCode: student.studentId || '',
+      courseId: newCourse.id,
+      courseName: newCourse.name || newCourse.id,
+      amount: charge,
+      totalAmount: charge,
+      paymentMode,
+      receivedDate: today,
+      receivedBy: actorEmail,
+      ...(actorName ? { receivedByName: actorName } : {}),
+      ...(actorDesignation ? { recordedByDesignation: actorDesignation } : {}),
+      remarks: `Level upgrade (${student.courseName || '-'} -> ${newCourse.name || newCourse.id})`,
+      createdAt: serverTimestamp()
+    });
+  }
+
+  const nowIso = new Date().toISOString();
+  wb.update(doc(targetDb, STUDENTS_COL, student.id), {
+    ...(student.ctx ? {} : { ctx: 'school' }),
+    ...(student.branchId ? {} : { branchId: 'HO', branchName: 'Head Office' }),
+    courseId: newCourse.id,
+    courseName: newCourse.name || newCourse.id,
+    courseLevelName: newCourse.name || newCourse.id,
+    batchId: newBatch.id,
+    batchName: newBatch.name || newBatch.id,
+    monthlyFee: newMonthly,
+    configuredAdmissionFee: newConfiguredAdm,
+    firstMonthlyMonth: billingStartMonth,
+    defaultFirstMonthlyMonth: defaultStartMonth || billingStartMonth,
+    firstMonthlyChangedFromDefault: Boolean(defaultStartMonth && billingStartMonth !== defaultStartMonth),
+    activeEnrolmentId: newEnrolRef.id,
+    upgradeDifferencePaid: rupees(Number(student.upgradeDifferencePaid || 0) + charge),
+    actualAmountReceived: rupees(prevPaid + charge),
+    packageHistory: arrayUnion({
+      type: 'upgrade',
+      fromCourseId: student.courseId || '',
+      fromCourseName: student.courseName || '',
+      toCourseId: newCourse.id,
+      toCourseName: newCourse.name || newCourse.id,
+      toBatchId: newBatch.id,
+      toBatchName: newBatch.name || newBatch.id,
+      newMonthlyFee: newMonthly,
+      billingStartMonth,
+      defaultStartMonth: defaultStartMonth || billingStartMonth,
+      changedFromDefault: Boolean(defaultStartMonth && billingStartMonth !== defaultStartMonth),
+      paymentMode,
+      diffPaid: charge,
+      noPaymentReason: noPaymentReason || '',
+      noPaymentOther: noPaymentOther || '',
+      by: actorEmail,
+      at: nowIso
+    }),
+    updatedAt: serverTimestamp(),
+    updatedBy: actorEmail
+  });
+
+  await wb.commit();
+  return { enrolmentId: newEnrolRef.id, billingStartMonth, charge };
 }
 
 export function evaluateKidsPendingBills({ students = [], bills = [], breaks = [], asOfDate } = {}) {
@@ -417,11 +1216,12 @@ export function buildKidsPaymentLedger({ students = [], admissionPayments = [], 
   }
 
   for (const p of summaries) {
-    if (allocKeys.has(`${p.studentId || ''}|${p.receivedDate || ''}`)) continue;
+    if (String(p.type || '').toUpperCase() !== 'UPGRADE' && allocKeys.has(`${p.studentId || ''}|${p.receivedDate || ''}`)) continue;
     const s = resolveStudent(p);
     if (!s) continue;
     const amt = rupees(p.totalAmount ?? p.amount ?? 0);
     if (amt <= 0) continue;
+    const isUpgrade = String(p.type || '').toUpperCase() === 'UPGRADE';
     entries.push({
       id: p.id,
       ctx: 'school',
@@ -444,10 +1244,10 @@ export function buildKidsPaymentLedger({ students = [], admissionPayments = [], 
       collectedAtBranchName: 'Head Office',
       collectedByRole: String(p.receivedByRole || p.recordedByRole || '').toLowerCase(),
       isCrossBranch: false,
-      courseId: s.courseId || '',
-      courseName: s.courseLevelName || s.courseName || '',
-      type: 'KIDS_MONTHLY',
-      typeLabel: 'Kids monthly fee',
+      courseId: p.courseId || s.courseId || '',
+      courseName: p.courseName || s.courseLevelName || s.courseName || '',
+      type: isUpgrade ? 'AD' : 'KIDS_MONTHLY',
+      typeLabel: isUpgrade ? 'Upgrade difference' : 'Kids monthly fee',
       mode: (p.mode || 'cash').toLowerCase(),
       txnId: p.txnId || '',
       amount: amt,
@@ -459,7 +1259,7 @@ export function buildKidsPaymentLedger({ students = [], admissionPayments = [], 
       recordedByName: p.receivedByName || p.recordedByName || '',
       recordedByDesignation: p.recordedByDesignation || '',
       remarks: p.remarks || '',
-      receiptRoute: `#/students/${encodeURIComponent(s.id)}?tab=payments`,
+      receiptRoute: isUpgrade ? `#/students/${encodeURIComponent(s.id)}?tab=course` : `#/students/${encodeURIComponent(s.id)}?tab=payments`,
       createdAtSec: toSec(p.createdAt)
     });
   }

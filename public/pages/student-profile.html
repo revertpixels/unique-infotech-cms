@@ -133,6 +133,7 @@
 
         <!-- Right: Actions Block -->
         <div class="sp-hero-actions">
+          <div class="sp-kids-actions" id="sp-kids-actions" hidden></div>
           <button class="sp-notify-btn" id="sp-btn-notify" type="button" title="Notify payment dues">
             <i data-lucide="bell"></i><span>Notify Dues</span>
           </button>
@@ -485,6 +486,31 @@
                   </tr>
                 </thead>
                 <tbody id="sp-sched-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Kids Break History (ctx: 'school') -->
+          <div class="lp-card" id="sp-kids-breaks-card" hidden>
+            <div class="lp-card-head">
+              <div class="lp-card-title">
+                <i data-lucide="pause-circle"></i><span>Break History</span>
+              </div>
+              <div id="sp-kids-breaks-actions"></div>
+            </div>
+            <div class="lp-scroll">
+              <table class="lp-table">
+                <thead>
+                  <tr>
+                    <th>Break Period</th>
+                    <th>Planned End</th>
+                    <th>Actual Return</th>
+                    <th>Status</th>
+                    <th>Reason</th>
+                    <th>Recorded / Resumed By</th>
+                  </tr>
+                </thead>
+                <tbody id="sp-kids-breaks-tbody"></tbody>
               </table>
             </div>
           </div>

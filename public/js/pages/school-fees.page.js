@@ -4,18 +4,18 @@
 // 10th, late fine Rs 1/day from the 11th.
 import { db } from '../config/firebase-config.js';
 import { collection, getDocs, query, where, doc, getDoc, updateDoc, runTransaction, serverTimestamp } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.195';
-import { registerDirty, confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.195';
-import { PAGE_SIZE, buildStats, buildToolbar, renderPager } from '../components/list-page.js?v=1.8.195';
-import { createSelect } from '../components/ui-select.js?v=1.8.195';
-import { openMenu } from '../components/ui-menu.js?v=1.8.195';
-import { confirmDialog } from '../components/ui-confirm.js?v=1.8.195';
-import { formatINR, formatDateIN, formatPersonName } from '../utils/formatter.js?v=1.8.195';
-import { resolveUserDisplay, getRoleTitle } from '../services/user-directory.service.js?v=1.8.195';
-import { isCourseActive } from '../utils/session-rules.js?v=1.8.195';
-import { localToday, monthSeq, nextMonth } from '../utils/school-lifecycle.js?v=1.8.195';
-import { playPaymentSuccessSound } from '../utils/sound.js?v=1.8.195';
-import { daysLate, computeLateFee } from '../utils/school-billing.js?v=1.8.195';
+import { showToast } from '../components/toast.js?v=1.8.196';
+import { registerDirty, confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.196';
+import { PAGE_SIZE, buildStats, buildToolbar, renderPager } from '../components/list-page.js?v=1.8.196';
+import { createSelect } from '../components/ui-select.js?v=1.8.196';
+import { openMenu } from '../components/ui-menu.js?v=1.8.196';
+import { confirmDialog } from '../components/ui-confirm.js?v=1.8.196';
+import { formatINR, formatDateIN, formatPersonName } from '../utils/formatter.js?v=1.8.196';
+import { resolveUserDisplay, getRoleTitle } from '../services/user-directory.service.js?v=1.8.196';
+import { isCourseActive } from '../utils/session-rules.js?v=1.8.196';
+import { localToday, monthSeq, nextMonth } from '../utils/school-lifecycle.js?v=1.8.196';
+import { playPaymentSuccessSound } from '../utils/sound.js?v=1.8.196';
+import { daysLate, computeLateFee, syncOpenKidsBills } from '../utils/school-billing.js?v=1.8.196';
 
 const COL = 'students';
 const BILLS_COL = 'bills';
@@ -53,7 +53,7 @@ export async function mount({ container, profile, ctx }) {
       id: 'status', label: 'Status', options: [
         { value: 'all', label: 'All statuses' }, { value: 'unpaid', label: 'Unpaid' },
         { value: 'paid', label: 'Paid' }, { value: 'partial', label: 'Partial' },
-        { value: 'overdue', label: 'Overdue' }
+        { value: 'overdue', label: 'Overdue' }, { value: 'break-waived', label: 'Break (No fee)' }
       ]
     },
     { id: 'month', label: 'Month', options: [{ value: 'all', label: 'All months', icon: 'calendar' }] },
@@ -116,14 +116,22 @@ export async function mount({ container, profile, ctx }) {
     setLoading(true);
     loadError = null;
     try {
-      const [bSnap, sSnap, cSnap, brSnap] = await Promise.all([
-        getDocs(query(collection(db, BILLS_COL), where('ctx', '==', 'school'))),
+      const [bSnap, sSnap, cSnap, brSnap, brkSnap] = await Promise.all([
+        getDocs(collection(db, BILLS_COL)),
         getDocs(query(collection(db, COL), where('ctx', '==', 'school'))),
         getDocs(query(collection(db, 'courses'), where('ctx', '==', 'school'))),
-        getDocs(query(collection(db, 'batches'), where('ctx', '==', 'school')))
+        getDocs(query(collection(db, 'batches'), where('ctx', '==', 'school'))),
+        getDocs(collection(db, 'breaks')).catch(() => null)
       ]);
-      bills = bSnap.docs.map(d => Object.assign({ id: d.id }, d.data()));
       students = sSnap.docs.map(d => Object.assign({ id: d.id }, d.data()));
+      const studentKeys = new Set();
+      students.forEach((s) => { if (s.id) studentKeys.add(s.id); if (s.studentId) studentKeys.add(String(s.studentId)); });
+      const rawBills = bSnap.docs.map(d => Object.assign({ id: d.id }, d.data()))
+        .filter((b) => studentKeys.has(b.studentId));
+      const allBreaks = brkSnap ? brkSnap.docs.map(d => ({ id: d.id, ...d.data() })).filter(b => !b.ctx || b.ctx === 'school') : [];
+      const newBills = await syncOpenKidsBills(db, { students, bills: rawBills, breaks: allBreaks }).catch(() => []);
+      bills = rawBills.concat(newBills || []);
+      bills.sort((a, b) => String(b.month || '').localeCompare(String(a.month || '')));
       levels = cSnap.docs.map(d => Object.assign({ id: d.id }, d.data())).filter(c => (c.status || 'active') === 'active');
       coursesById = {}; levels.forEach(c => { coursesById[c.id] = c; });
       batches = brSnap.docs.map(d => Object.assign({ id: d.id }, d.data())).filter(b => (b.status || 'active') === 'active');
@@ -158,10 +166,11 @@ export async function mount({ container, profile, ctx }) {
     const today = localToday();
 
     const list = bills.filter(b => {
+      const st = String(b.status || 'unpaid').toLowerCase();
       if (f.status && f.status !== 'all') {
         if (f.status === 'overdue') {
-          if (b.status === 'paid' || daysLate(b.month) <= 0) return false;
-        } else if (b.status !== f.status) return false;
+          if ((st !== 'unpaid' && st !== 'partial') || daysLate(b.month) <= 0) return false;
+        } else if (st !== f.status) return false;
       }
       if (f.month && f.month !== 'all' && b.month !== f.month) return false;
       if (f.level && f.level !== 'all') {
@@ -190,7 +199,7 @@ export async function mount({ container, profile, ctx }) {
       stats.update(0, bills.length);
       stats.update(1, bills.filter(b => b.status === 'unpaid' || b.status === 'partial').length);
       stats.update(2, bills.filter(b => b.status === 'paid').length);
-      stats.update(3, bills.filter(b => b.status !== 'paid' && daysLate(b.month) > 0).length);
+      stats.update(3, bills.filter(b => (b.status === 'unpaid' || b.status === 'partial') && daysLate(b.month) > 0).length);
       return;
     }
 
@@ -199,22 +208,30 @@ export async function mount({ container, profile, ctx }) {
     const pageList = list.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
     pageList.forEach(b => {
-      const s = students.find(x => x.id === b.studentId) || {};
+      const s = students.find(x => x.id === b.studentId || (b.studentCode && x.studentId === b.studentCode) || x.studentId === b.studentId) || {};
       const c = coursesById[b.courseId] || {};
       const late = computeLateFee(b);
+      const st = String(b.status || 'unpaid').toLowerCase();
+      const canPay = st === 'unpaid' || st === 'partial';
+      const stText = st === 'paid'
+        ? 'Paid'
+        : (st === 'partial'
+          ? 'Partial (' + Math.round((Number(b.paidAmount || 0) / Number(b.monthlyFee || 1)) * 100) + '%)'
+          : (st === 'break-waived'
+            ? 'Break (No fee)'
+            : (st === 'stopped' || st === 'cancelled' ? 'Stopped' : 'Unpaid')));
       const tr = document.createElement('tr');
-      const paidPct = b.monthlyFee > 0 ? Math.round((Number(b.paidAmount || 0) / Number(b.monthlyFee)) * 100) : 0;
       tr.innerHTML =
         '<td class="sf-id">' + (s.studentId || '-') + '</td>' +
         '<td>' + (formatPersonName(s.name || '') || '-') + '</td>' +
         '<td class="hide-sm">' + (s.phone || '-') + '</td>' +
-        '<td>' + (c.name || '-') + '</td>' +
+        '<td>' + (c.name || b.courseName || '-') + '</td>' +
         '<td>' + (b.month || '-') + '</td>' +
-        '<td>' + formatINR(b.monthlyFee) + '</td>' +
-        '<td>' + (b.status === 'paid' ? 'Paid' : b.status === 'partial' ? 'Partial (' + Math.round((Number(b.paidAmount || 0) / Number(b.monthlyFee || 1)) * 100) + '%)' : 'Unpaid') + '</td>' +
+        '<td>' + (st === 'break-waived' ? '₹0' : formatINR(b.monthlyFee)) + '</td>' +
+        '<td>' + stText + '</td>' +
         '<td>' + (late > 0 ? formatINR(late) : '-') + '</td>' +
         '<td class="sk-actions">' +
-        '<button type="button" class="sk-act pay" data-id="' + b.id + '" title="Record payment"><i data-lucide="credit-card"></i></button>' +
+        (canPay ? '<button type="button" class="sk-act pay" data-id="' + b.id + '" title="Record payment"><i data-lucide="credit-card"></i></button>' : '<span class="text-mute">—</span>') +
         '</td>';
       rowsHost.appendChild(tr);
     });
@@ -222,7 +239,7 @@ export async function mount({ container, profile, ctx }) {
 
     const unpaidN = bills.filter(b => b.status === 'unpaid' || b.status === 'partial').length;
     const paidN = bills.filter(b => b.status === 'paid').length;
-    const overdueN = bills.filter(b => b.status !== 'paid' && daysLate(b.month) > 0).length;
+    const overdueN = bills.filter(b => (b.status === 'unpaid' || b.status === 'partial') && daysLate(b.month) > 0).length;
     stats.update(0, bills.length);
     stats.update(1, unpaidN);
     stats.update(2, paidN);

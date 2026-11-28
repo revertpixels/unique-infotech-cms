@@ -27,9 +27,9 @@ import {
   collection, getDocs, query, where, doc, getDoc, addDoc, updateDoc, deleteDoc,
   serverTimestamp, runTransaction, writeBatch
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.195';
-import { firstMonthlyMonth } from './school-receipt.js?v=1.8.195';
-import { isCourseActive, todayISO } from './session-rules.js?v=1.8.195';
+import { showToast } from '../components/toast.js?v=1.8.196';
+import { firstMonthlyMonth } from './school-receipt.js?v=1.8.196';
+import { isCourseActive, todayISO } from './session-rules.js?v=1.8.196';
 const ENROLMENTS_COL = 'enrolments';
 const BILLS_COL = 'bills';
 const PAYMENTS_COL = 'payments';
@@ -53,33 +53,33 @@ export function localToday() {
   return todayISO();
 }
 
-// nextMonth: calendar +1 month
+// nextMonth: calendar +1 month (accepts YYYY-MM or YYYY-MM-DD)
 export function nextMonth(iso) {
   if (!iso) return '';
   const p = String(iso).split('-').map(Number);
-  if (p.length !== 3 || p.some((n) => !Number.isFinite(n))) return '';
+  if (p.length < 2 || !Number.isFinite(p[0]) || !Number.isFinite(p[1])) return '';
   let total = p[0] * 12 + (p[1] - 1) + 1;
   const ny = Math.floor(total / 12);
   const nm = ((total % 12) + 12) % 12 + 1;
   return ny + '-' + String(nm).padStart(2, '0');
 }
 
-// previousMonth: calendar -1 month
+// previousMonth: calendar -1 month (accepts YYYY-MM or YYYY-MM-DD)
 export function previousMonth(iso) {
   if (!iso) return '';
   const p = String(iso).split('-').map(Number);
-  if (p.length !== 3 || p.some((n) => !Number.isFinite(n))) return '';
+  if (p.length < 2 || !Number.isFinite(p[0]) || !Number.isFinite(p[1])) return '';
   let total = p[0] * 12 + (p[1] - 1) - 1;
   const ny = Math.floor(total / 12);
   const nm = ((total % 12) + 12) % 12 + 1;
   return ny + '-' + String(nm).padStart(2, '0');
 }
 
-// monthSeq: sortable integer for YYYY-MM
+// monthSeq: sortable integer for YYYY-MM or YYYY-MM-DD
 export function monthSeq(iso) {
   if (!iso) return 0;
   const p = String(iso).split('-').map(Number);
-  if (p.length !== 3) return 0;
+  if (p.length < 2 || !Number.isFinite(p[0]) || !Number.isFinite(p[1])) return 0;
   return p[0] * 12 + (p[1] - 1);
 }
 
@@ -132,9 +132,10 @@ export async function generateBillsTx(tx, { studentId, enrolmentId, courseId, co
     if (existingBillIds.has(billId)) { m = nextMonth(m); continue; }
     const billRef = doc(collection(db, BILLS_COL));
     tx.set(billRef, {
-      id: billRef.id, studentId, enrolmentId, courseId, courseName, courseLevelName,
+      id: billRef.id, ctx: 'school', studentId, enrolmentId, courseId, courseName, courseLevelName,
       batchId, batchName, month: m, monthlyFee: rupees(monthlyFee),
       status: 'unpaid', dueDate: m + '-10',
+      lateFee: 0, paidAmount: 0,
       createdAt: serverTimestamp(), updatedAt: serverTimestamp()
     });
     created.push(billRef.id);
@@ -161,12 +162,19 @@ export async function recordPaymentTx(tx, { studentId, billId, month, amount, re
 
 // ---------- break records ----------
 
-export async function createBreakTx(tx, { studentId, startMonth, endMonth, reason, requestedBy, requestedAt,
-  status = 'pending', approvedBy, approvedAt, modifiedBy, modifiedAt }) {
+export async function createBreakTx(tx, { studentId, studentCode = '', studentName = '', startMonth, endMonth, plannedEndMonth, reason, requestedBy, requestedAt,
+  status = 'active', approvedBy, approvedAt, modifiedBy, modifiedAt }) {
   const breakRef = doc(collection(db, BREAKS_COL));
   tx.set(breakRef, {
-    id: breakRef.id, studentId, startMonth, endMonth, reason,
-    status, requestedBy, requestedAt, approvedBy, approvedAt, modifiedBy, modifiedAt,
+    id: breakRef.id, ctx: 'school', studentId, studentCode, studentName,
+    startMonth, endMonth: endMonth || plannedEndMonth || '',
+    plannedEndMonth: plannedEndMonth || endMonth || '',
+    effectiveEndMonth: plannedEndMonth || endMonth || '',
+    actualReturnDate: null, actualReturnMonth: null,
+    reason, status, requestedBy: requestedBy || null, requestedAt: requestedAt || null,
+    startedBy: approvedBy || requestedBy || null, startedAt: approvedAt || serverTimestamp(),
+    approvedBy: approvedBy || null, approvedAt: approvedAt || null,
+    modifiedBy: modifiedBy || null, modifiedAt: modifiedAt || null,
     createdAt: serverTimestamp(), updatedAt: serverTimestamp()
   });
   return breakRef.id;

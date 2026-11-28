@@ -258,27 +258,75 @@
   </div>
 </div>
 
-<!-- Unique Kids dashboard placeholder (preserved untouched) -->
+<!-- Unique Kids dashboard -->
 <section id="dash-kids-shell" class="page" hidden>
   <div class="page-head">
     <h2 id="dash-kids-greeting"></h2>
-    <p class="text-mute">Your overview appears here.</p>
+    <p class="text-mute" id="dash-kids-subtitle">Unique Kids overview — active students, breaks &amp; monthly billing.</p>
   </div>
-  <div class="kpi-strip">
-    <div class="kpi"><span class="kpi-label">Students</span><span class="kpi-value" id="dash-kids-students">—</span>
+  <div class="lp-stats" id="dash-kids-kpis" style="margin-bottom:18px;">
+    <div class="lp-stat green">
+      <div class="lp-stat-ic"><i data-lucide="check-circle"></i></div>
+      <div class="lp-stat-txt">
+        <span class="lp-stat-label">Active Students</span>
+        <span class="lp-stat-value" id="dash-kids-students">—</span>
+        <span class="lp-stat-sub" id="dash-kids-students-sub">Excludes on-break</span>
+      </div>
     </div>
-    <div class="kpi"><span class="kpi-label">Collected today</span><span class="kpi-value"
-        id="dash-kids-collected">—</span></div>
-    <div class="kpi"><span class="kpi-label">Dues pending</span><span class="kpi-value" id="dash-kids-dues">—</span>
+    <div class="lp-stat amber" id="dash-kids-break-card" style="cursor:pointer;" title="View students on break">
+      <div class="lp-stat-ic"><i data-lucide="pause-circle"></i></div>
+      <div class="lp-stat-txt">
+        <span class="lp-stat-label">On Break</span>
+        <span class="lp-stat-value" id="dash-kids-break">—</span>
+        <span class="lp-stat-sub" id="dash-kids-break-sub">Currently paused</span>
+      </div>
     </div>
-    <div class="kpi"><span class="kpi-label">Overdue</span><span class="kpi-value" id="dash-kids-overdue">—</span></div>
+    <div class="lp-stat red" id="dash-kids-break-overdue-card" style="cursor:pointer;" title="View breaks ended without rejoin">
+      <div class="lp-stat-ic"><i data-lucide="alert-circle"></i></div>
+      <div class="lp-stat-txt">
+        <span class="lp-stat-label">Break Ended - Not Rejoined</span>
+        <span class="lp-stat-value" id="dash-kids-break-overdue">—</span>
+        <span class="lp-stat-sub">Needs rejoin follow-up</span>
+      </div>
+    </div>
+    <div class="lp-stat indigo">
+      <div class="lp-stat-ic"><i data-lucide="wallet"></i></div>
+      <div class="lp-stat-txt">
+        <span class="lp-stat-label">Collected</span>
+        <span class="lp-stat-value" id="dash-kids-collected">—</span>
+        <span class="lp-stat-sub">Admission + monthly fees</span>
+      </div>
+    </div>
+    <div class="lp-stat blue">
+      <div class="lp-stat-ic"><i data-lucide="clock"></i></div>
+      <div class="lp-stat-txt">
+        <span class="lp-stat-label">Dues Pending</span>
+        <span class="lp-stat-value" id="dash-kids-dues">—</span>
+        <span class="lp-stat-sub">Excl. break months</span>
+      </div>
+    </div>
+    <div class="lp-stat red">
+      <div class="lp-stat-ic"><i data-lucide="alert-triangle"></i></div>
+      <div class="lp-stat-txt">
+        <span class="lp-stat-label">Overdue</span>
+        <span class="lp-stat-value" id="dash-kids-overdue">—</span>
+        <span class="lp-stat-sub">Past 10th due date</span>
+      </div>
+    </div>
   </div>
-  <div class="card">
-    <div class="card-body">
+  <div class="lp-card" id="dash-kids-breaks-card">
+    <div class="lp-card-head">
+      <div class="lp-card-title">
+        <i data-lucide="pause-circle"></i>
+        <span>Breaks &amp; Rejoin Follow-up</span>
+      </div>
+      <a href="#/school-break" class="ui-btn ghost sm"><i data-lucide="external-link"></i><span>Break Management</span></a>
+    </div>
+    <div id="dash-kids-breaks-body">
       <div class="empty-state">
         <i data-lucide="inbox"></i>
-        <h3>No activity to show yet</h3>
-        <p>Live figures appear here once students and fees are recorded.</p>
+        <h3>Loading Unique Kids overview...</h3>
+        <p>Checking active students, break schedules &amp; monthly dues.</p>
       </div>
     </div>
   </div>

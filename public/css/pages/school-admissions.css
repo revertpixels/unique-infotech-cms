@@ -118,6 +118,45 @@
   overflow: hidden;
   clip-path: inset(50%);
   white-space: nowrap;
+}
+.school-admissions .adm-monthly-row-stack {
+  display: block;
+}
+.school-admissions .adm-monthly-row-stack .adm-monthly-label {
+  display: block;
+  margin-bottom: 6px;
+}
+.school-admissions .adm-first-monthly-host .ui-dp-host {
+  width: 100%;
+}
+.school-admissions .adm-first-monthly-host .ui-dp-btn {
+  width: 100%;
+  min-height: 36px;
+  justify-content: flex-start;
+}
+.sk-bill-start-preview {
+  margin-top: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--primary, #0f766e);
+}
+.sk-bill-start-warn {
+  margin-top: 8px;
+}
+.sk-bill-start-confirm-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.adm-pill.break-overdue {
+  background: #FEF2F2;
+  color: #B91C1C;
+  border: 1px solid #FECACA;
+}
   border: 0;
 }
 .school-admissions .adm-none-reason-wrap > .ui-input-wrap {

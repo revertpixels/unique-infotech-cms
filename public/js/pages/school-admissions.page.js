@@ -7,25 +7,36 @@
 import { db } from '../config/firebase-config.js';
 import {
   collection, getDocs, query, where, doc, getDoc, addDoc, updateDoc, serverTimestamp,
-  runTransaction, deleteField, writeBatch, deleteDoc
+  runTransaction, deleteField, writeBatch, deleteDoc, arrayUnion
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.195';
-import { registerDirty, confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.195';
-import { buildStats, buildToolbar, renderPager, PAGE_SIZE } from '../components/list-page.js?v=1.8.195';
-import { createSelect } from '../components/ui-select.js?v=1.8.195';
-import { createBranchBatchFilter } from '../components/branch-batch-filter.js?v=1.8.195';
-import { openMenu } from '../components/ui-menu.js?v=1.8.195';
-import { openPopup } from '../components/modal.js?v=1.8.195';
-import { createDatePicker, createMonthPicker } from '../components/ui-datepicker.js?v=1.8.195';
-import { confirmDialog } from '../components/ui-confirm.js?v=1.8.195';
-import { formatINR, formatDateIN, initials } from '../utils/formatter.js?v=1.8.195';
-import { validatePhone, validateEmail, validateDOB, validateName, validateRequired } from '../utils/validator.js?v=1.8.195';
-import { readStudentId, readReceiptNo, writeCounter } from '../services/admission.service.js?v=1.8.195';
-import { isCourseActive, batchAllowsCourse, todayISO } from '../utils/session-rules.js?v=1.8.195';
-import { compressTo100KB, readAsDataURL, blobToDataURL, isImageFile } from '../utils/image-compress.js?v=1.8.195';
-import { firstMonthlyMonth } from '../utils/school-receipt.js?v=1.8.195';
-import { playPaymentSuccessSound } from '../utils/sound.js?v=1.8.195';
-import { getRoleTitle } from '../services/user-directory.service.js?v=1.8.195';
+import { showToast } from '../components/toast.js?v=1.8.196';
+import { registerDirty, confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.196';
+import { buildStats, buildToolbar, renderPager, PAGE_SIZE } from '../components/list-page.js?v=1.8.196';
+import { createSelect } from '../components/ui-select.js?v=1.8.196';
+import { createBranchBatchFilter } from '../components/branch-batch-filter.js?v=1.8.196';
+import { openMenu } from '../components/ui-menu.js?v=1.8.196';
+import { openPopup } from '../components/modal.js?v=1.8.196';
+import { createDatePicker, createMonthPicker } from '../components/ui-datepicker.js?v=1.8.196';
+import { confirmDialog } from '../components/ui-confirm.js?v=1.8.196';
+import { formatINR, formatDateIN, initials } from '../utils/formatter.js?v=1.8.196';
+import { validatePhone, validateEmail, validateDOB, validateName, validateRequired } from '../utils/validator.js?v=1.8.196';
+import { readStudentId, readReceiptNo, writeCounter } from '../services/admission.service.js?v=1.8.196';
+import { isCourseActive, batchAllowsCourse, todayISO } from '../utils/session-rules.js?v=1.8.196';
+import { compressTo100KB, readAsDataURL, blobToDataURL, isImageFile } from '../utils/image-compress.js?v=1.8.196';
+import { firstMonthlyMonth } from '../utils/school-receipt.js?v=1.8.196';
+import {
+  formatBreakStatusText,
+  isBreakOverdueReturn,
+  syncOpenKidsBills
+} from '../utils/school-billing.js?v=1.8.196';
+import {
+  createBillingStartSelector,
+  openKidsStartBreakModal,
+  openKidsResumeBreakModal,
+  openKidsUpgradePackageModal
+} from '../utils/school-break-modals.js?v=1.8.196';
+import { playPaymentSuccessSound } from '../utils/sound.js?v=1.8.196';
+import { getRoleTitle } from '../services/user-directory.service.js?v=1.8.196';
 
 const COL = 'students';
 const GENDERS = [
@@ -77,7 +88,7 @@ export async function mount({ container, profile, ctx }) {
   const feeAdj = $('adm-fee-adj');
   const feeDue = $('adm-fee-due');
   const monthlyFeeEl = $('adm-monthly-fee');
-  const firstMonthlyEl = $('adm-first-monthly');
+  const firstMonthlyHost = $('adm-first-monthly-host');
   const paymentModeFull = $('adm-paymentMode-full');
   const paymentModeDiff = $('adm-paymentMode-difference');
   const paymentModeNone = $('adm-paymentMode-none');
@@ -87,9 +98,11 @@ export async function mount({ container, profile, ctx }) {
   const noPaymentOtherInput = $('adm-noPaymentOther');
   const confirmReceivedWrap = $('adm-confirm-received-wrap');
   const confirmReceivedInput = $('adm-confirmReceived');
-  if ([form, addBtn, saveBtn, cancelBtn, rowsHost, emptyEl, loadingEl, noMatchEl, loadErrorEl, feeBreakdown, feeConfigured, feePrior, feeAdj, feeDue, monthlyFeeEl, firstMonthlyEl, paymentModeFull, paymentModeDiff, paymentModeNone, noPaymentReasonWrap, noPaymentReasonInput, noPaymentOtherWrap, noPaymentOtherInput, confirmReceivedWrap, confirmReceivedInput].some(el => !el)) {
+  if ([form, addBtn, saveBtn, cancelBtn, rowsHost, emptyEl, loadingEl, noMatchEl, loadErrorEl, feeBreakdown, feeConfigured, feePrior, feeAdj, feeDue, monthlyFeeEl, firstMonthlyHost, paymentModeFull, paymentModeDiff, paymentModeNone, noPaymentReasonWrap, noPaymentReasonInput, noPaymentOtherWrap, noPaymentOtherInput, confirmReceivedWrap, confirmReceivedInput].some(el => !el)) {
     showToast({ type: 'error', message: 'Admission page assets do not match. Refresh the page before continuing.' }); return;
   }
+
+  let billingStartSel = null;
 
   // Hide New admission for school_head (view-only).
   if (!isSuper) { addBtn.hidden = true; }
@@ -185,7 +198,8 @@ export async function mount({ container, profile, ctx }) {
   const tbFilters = [
     { id: 'status', label: 'Status', options: [
       { value: 'all', label: 'All statuses' }, { value: 'active', label: 'Active' },
-      { value: 'break', label: 'On break' }, { value: 'completed', label: 'Completed' }
+      { value: 'break', label: 'On break' }, { value: 'break-overdue', label: 'Break ended - not rejoined' },
+      { value: 'completed', label: 'Completed' }
     ]},
     { id: 'level', label: 'Level', options: [{ value: 'all', label: 'All levels', icon: 'book-open' }] }
   ];
@@ -319,9 +333,17 @@ export async function mount({ container, profile, ctx }) {
     waiver: 'Approved fee waiver / scholarship',
     other: 'Other approved reason'
   };
-  // These reasons imply the student already exists. They are unsupported for brand-new
-  // admissions because no verified existing-student / upgrade workflow is available.
-  const EXISTING_STUDENT_REASONS = ['migrated', 'returning', 'rejoining', 'previously-paid'];
+  const EXISTING_STUDENT_REASONS = [];
+
+  billingStartSel = createBillingStartSelector(firstMonthlyHost, {
+    mode: 'admission',
+    anchorDate: localToday(),
+    monthlyFee: 0,
+    ariaLabel: 'First monthly billing month',
+    onChange: () => {
+      if (!hydrating) { touched = true; refresh(); }
+    }
+  });
 
   function courseOf(id) { return coursesById[id] || {}; }
   function levelName(c) { return c && c.name || ''; }
@@ -398,9 +420,14 @@ export async function mount({ container, profile, ctx }) {
   }
 
   // ---------- renders ----------
-  function statusPill(st) {
+  function statusPill(st, s = null) {
+    if (st === 'break') {
+      const text = s ? formatBreakStatusText(s) : 'On Break';
+      const cls = s && isBreakOverdueReturn(s) ? 'break break-overdue' : 'break';
+      return '<span class="adm-pill ' + cls + '">' + text + '</span>';
+    }
     const cls = { active: 'active', completed: 'completed', archived: 'archived', inactive: 'inactive', ended: 'archived', break: 'break', dropped: 'inactive' }[st] || 'active';
-    const label = { active: 'Active', completed: 'Completed', archived: 'Archived', inactive: 'Inactive', ended: 'Ended', break: 'On break', dropped: 'Dropped' }[st] || st;
+    const label = { active: 'Active', completed: 'Completed', archived: 'Archived', inactive: 'Inactive', ended: 'Ended', break: 'On Break', dropped: 'Dropped' }[st] || st;
     return '<span class="adm-pill ' + cls + '">' + label + '</span>';
   }
 
@@ -439,7 +466,12 @@ export async function mount({ container, profile, ctx }) {
     if (dateErrEl) { dateErrEl.textContent = dr.err || ''; dateErrEl.hidden = !dr.err; }
     const bbVal = bbFilter ? bbFilter.getValue() : { branchId: 'HO', batchId: 'all' };
     const list = students.filter((s) => {
-      if (f.status && f.status !== 'all' && (s.status || 'active') !== f.status) return false;
+      const curSt = s.status || 'active';
+      if (f.status && f.status !== 'all') {
+        if (f.status === 'break-overdue') {
+          if (curSt !== 'break' || !isBreakOverdueReturn(s)) return false;
+        } else if (curSt !== f.status) return false;
+      }
       if (f.level && f.level !== 'all') {
         if (String(s.courseId || '') !== String(f.level)) return false;
       }
@@ -504,7 +536,7 @@ export async function mount({ container, profile, ctx }) {
         '<span class="adm-sub">' + (s.batchName || '-') + '</span>' +
         '</td>' +
         '<td class="hide-sm">' + formatDateIN(s.admissionDate) + '</td>' +
-        '<td class="hide-md">' + statusPill(s.status || 'active') + '</td>';
+        '<td class="hide-md">' + statusPill(s.status || 'active', s) + '</td>';
       const tdAct = mk('td', 'adm-actions');
       const kebab = mk('button', 'ui-kebab');
       kebab.type = 'button';
@@ -517,7 +549,7 @@ export async function mount({ container, profile, ctx }) {
       const st = s.status || 'active';
       const items = [
         { section: 'View', label: 'View details', icon: 'eye', onClick: () => viewDetailsPopup(s) },
-        { label: 'View student', icon: 'user', onClick: () => showToast({ type: 'info', message: 'The student profile page (with Edit) is the next build step.' }) },
+        { label: 'View student', icon: 'user', onClick: () => { location.hash = '#/students/' + encodeURIComponent(s.id); } },
         { label: 'View admission receipt', icon: 'file-text', onClick: () => { location.hash = '#/school-admissions/' + s.id + '/receipt'; } },
       ];
       if (isSuper) {
@@ -525,8 +557,9 @@ export async function mount({ container, profile, ctx }) {
         if (live) {
           items.push({ section: 'Manage' });
           items.push({ label: 'Change batch', icon: 'shuffle', onClick: () => changeBatchPopup(s) });
+          items.push({ label: 'Upgrade level / package', icon: 'trending-up', onClick: () => upgradePackagePopup(s) });
           if (st === 'active') items.push({ label: 'Start break', icon: 'pause-circle', onClick: () => startBreakPopup(s) });
-          if (st === 'break') items.push({ label: 'End break', icon: 'play-circle', onClick: () => endBreakPopup(s) });
+          if (st === 'break') items.push({ label: 'Resume / Rejoin', icon: 'play-circle', onClick: () => endBreakPopup(s) });
           items.push({ label: 'Mark course completed', icon: 'graduation-cap', onClick: () => completePopup(s) });
         }
         items.push({ section: 'Danger zone' });
@@ -576,12 +609,33 @@ export async function mount({ container, profile, ctx }) {
     setLoading(true);
     loadError = null;
     try {
-      const sSnap = await getDocs(query(collection(db, COL), where('ctx', '==', 'school')));
+      const [sSnap, cSnap, bSnap, brkSnap, billsSnap] = await Promise.all([
+        getDocs(query(collection(db, COL), where('ctx', '==', 'school'))),
+        getDocs(query(collection(db, 'courses'), where('ctx', '==', 'school'))),
+        getDocs(query(collection(db, 'batches'), where('ctx', '==', 'school'))),
+        getDocs(collection(db, 'breaks')).catch(() => null),
+        isSuper ? getDocs(collection(db, 'bills')).catch(() => null) : Promise.resolve(null)
+      ]);
       students = sSnap.docs.map((d) => Object.assign({ id: d.id }, d.data()));
-      const cSnap = await getDocs(query(collection(db, 'courses'), where('ctx', '==', 'school')));
+      const allBreaks = brkSnap ? brkSnap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((b) => !b.ctx || b.ctx === 'school') : [];
+      const activeBreakBySid = new Map();
+      allBreaks.forEach((b) => {
+        if (['active', 'approved'].includes(String(b.status || '').toLowerCase()) && !b.actualReturnDate) {
+          if (b.studentId) activeBreakBySid.set(b.studentId, b);
+          if (b.studentCode) activeBreakBySid.set(b.studentCode, b);
+        }
+      });
+      students.forEach((s) => {
+        const ab = activeBreakBySid.get(s.id) || (s.studentId ? activeBreakBySid.get(s.studentId) : null);
+        if (ab && !s.breakFrom) s.breakFrom = ab.startMonth || '';
+        if (ab && !s.breakTo) s.breakTo = ab.plannedEndMonth || ab.endMonth || '';
+      });
+      if (isSuper && billsSnap) {
+        const allBills = billsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        syncOpenKidsBills(db, { students, bills: allBills, breaks: allBreaks }).catch(() => {});
+      }
       levels = cSnap.docs.map((d) => Object.assign({ id: d.id }, d.data())).filter(c => (c.status || 'active') === 'active');
       coursesById = {}; levels.forEach((c) => { coursesById[c.id] = c; });
-      const bSnap = await getDocs(query(collection(db, 'batches'), where('ctx', '==', 'school')));
       batches = bSnap.docs.map((d) => Object.assign({ id: d.id }, d.data())).filter(b => (b.status || 'active') === 'active');
       tb.setFilterOptions('level', [{ value: 'all', label: 'All levels' }].concat(levels.map((c) => ({ value: c.id, label: c.name || c.id, icon: 'book-open' }))));
       levelSel.setOptions([{ value: '', label: 'Select a level', icon: 'book-open' }].concat(levels.map((c) => ({ value: c.id, label: c.name || c.id, icon: 'book-open' }))));
@@ -636,6 +690,16 @@ export async function mount({ container, profile, ctx }) {
       }
     }
     hydrating = false;
+    if (billingStartSel) {
+      const admCourse = r ? coursesById[r.courseId] : null;
+      billingStartSel.setConfig({
+        anchorDate: v.admissionDate || localToday(),
+        monthlyFee: r ? Number(r.monthlyFee || admCourse?.monthlyFee || 0) : 0,
+        value: r ? (r.firstMonthlyMonth || firstMonthlyMonth(v.admissionDate)) : undefined,
+        resetOverride: !r,
+        isLocked: !!r
+      });
+    }
     submitted = false;
     saved = snapshot(readForm());
     touched = false;
@@ -1046,189 +1110,19 @@ export async function mount({ container, profile, ctx }) {
     });
   }
 
-  // ---------- popup: start break ----------
-  async function startBreakPopup(s) {
-    let saving = false;
-    const popup = openPopup({
-      title: 'Start Student Break',
-      subtitle: (s.name || 'Student') + ' • ' + (s.studentId || ''),
-      icon: 'pause-circle',
-      tone: 'amber',
-      saving: () => saving
-    });
-    const c = popup.container;
-
-    // Clean single-sentence notice
-    const alert = mk('div', 'pk-alert warning');
-    alert.innerHTML = `<i data-lucide="pause-circle"></i><span>Approved break suspends monthly tuition fee generation. Past unpaid dues remain payable and the student resumes upon return.</span>`;
-    c.appendChild(alert);
-
-    const wait = pNote('Checking billed months...');
-    c.appendChild(wait);
-    const bills = await billsFor(s);
-    wait.remove();
-
-    const currentYM = ymOf(todayISO());
-    let lastBilled = null;
-    if (bills && bills.length > 0) {
-      const bMonths = bills.map(b => b.month).filter(Boolean);
-      bMonths.sort();
-      lastBilled = bMonths[bMonths.length - 1];
-    }
-    const earliestYM = lastBilled && lastBilled > currentYM ? lastBilled : currentYM;
-    const initialFrom = addMonthsYM(earliestYM, 1);
-    const initialTo = initialFrom;
-
-    const fromHost = document.createElement('div');
-    const fromPicker = createDatePicker(fromHost, {
-      value: ymToFirstDate(initialFrom),
-      min: ymToFirstDate(initialFrom),
-      mode: 'month',
-      ariaLabel: 'Break start month',
-      onChange: (v) => {
-        const fromYM = dateToYM(v);
-        if (toPicker) {
-          toPicker.setMin(ymToFirstDate(fromYM));
-          if (dateToYM(toPicker.value) < fromYM) toPicker.setValue(ymToFirstDate(fromYM));
-        }
-        check();
-      }
-    });
-
-    const toHost = document.createElement('div');
-    const toPicker = createDatePicker(toHost, {
-      value: ymToFirstDate(initialTo),
-      min: ymToFirstDate(initialFrom),
-      mode: 'month',
-      ariaLabel: 'Break end month',
-      onChange: () => check()
-    });
-
-    const fFrom = pField('Break starts (Month)', fromHost, { required: true });
-    const fTo = pField('Break ends (Inclusive)', toHost, { required: true });
-    c.appendChild(pFieldRow(fFrom, fTo));
-
-    const { wrap: reasonWrap, textarea: reasonTa } = pTextarea('Enter reason for break...');
-    const fReason = pField('Reason for break', reasonWrap, { required: true });
-    c.appendChild(fReason);
-
-    c.appendChild(pNote('Unpaid bills in the break window will be cancelled safely.'));
-
-    const { cancelBtn, okBtn, setSaving } = pButtons(popup, 'Start Break', { icon: 'pause-circle', tone: 'primary' });
-
-    const check = () => {
-      const fromVal = fromPicker ? dateToYM(fromPicker.value) : '';
-      const toVal = toPicker ? dateToYM(toPicker.value) : '';
-      const reasonVal = reasonTa ? reasonTa.value.trim() : '';
-      okBtn.disabled = saving || !fromVal || !toVal || !reasonVal || fromVal > toVal;
-    };
-    reasonTa.addEventListener('input', check);
-    check();
-
-    okBtn.addEventListener('click', async () => {
-      saving = true;
-      setSaving(true);
-      const fromYM = dateToYM(fromPicker.value);
-      const toYM = dateToYM(toPicker.value);
-      const reason = reasonTa.value.trim();
-
-      try {
-        const ymList = ymRange(fromYM, toYM);
-        const wb = writeBatch(db);
-
-        let cancelledCount = 0;
-        bills.forEach(b => {
-          if (ymList.includes(b.month) && isUntouchedUnpaid(b)) {
-            wb.update(b._ref, {
-              status: 'cancelled',
-              cancelReason: 'Student break approved: ' + reason,
-              cancelledAt: serverTimestamp(),
-              updatedAt: serverTimestamp()
-            });
-            cancelledCount++;
-          }
-        });
-
-        wb.update(doc(db, 'students', s.id), {
-          status: 'break',
-          breakFrom: fromYM,
-          breakTo: toYM,
-          breakReason: reason,
-          breakApprovedAt: serverTimestamp(),
-          breakHistory: arrayUnion({
-            from: fromYM,
-            to: toYM,
-            reason,
-            by: (profile && profile.email) || 'admin',
-            at: new Date().toISOString(),
-            billsCancelled: cancelledCount
-          }),
-          updatedAt: serverTimestamp()
-        });
-
-        await wb.commit();
-        showToast({ type: 'success', message: `Break started for ${s.name || 'Student'}` });
-        popup.close();
-        load();
-      } catch (err) {
-        console.error('[school-admissions] startBreak failed', err);
-        showToast({ type: 'error', message: 'Could not start break: ' + (err.message || 'error') });
-        saving = false;
-        setSaving(false);
-      }
-    });
+  // ---------- popup: start break / resume break / upgrade ----------
+  function notifyAndReload() {
+    window.dispatchEvent(new CustomEvent('uic:data-mutated', { detail: { reason: 'kids:lifecycle' } }));
+    return load();
   }
-
-  // ---------- popup: end break ----------
+  async function startBreakPopup(s) {
+    return openKidsStartBreakModal({ student: s, profile, onSuccess: notifyAndReload });
+  }
   async function endBreakPopup(s) {
-    let saving = false;
-    const popup = openPopup({
-      title: 'End Break & Resume',
-      subtitle: (s.name || 'Student') + ' • ' + (s.studentId || ''),
-      icon: 'play-circle',
-      tone: 'default',
-      saving: () => saving
-    });
-    const c = popup.container;
-
-    // Active Break Summary
-    const curRow = mk('div', 'pk-badge-row');
-    const curBadge = mk('div', 'pk-current-badge');
-    curBadge.innerHTML = `Break Period: <strong>${s.breakFrom || '-'} to ${s.breakTo || '-'}</strong> (${s.breakReason || 'No reason specified'})`;
-    curRow.appendChild(curBadge);
-    c.appendChild(curRow);
-
-    const dateHost = document.createElement('div');
-    const dPicker = createDatePicker(dateHost, { value: todayISO(), ariaLabel: 'Return date' });
-    c.appendChild(pField('Student return date', dateHost, { required: true }));
-
-    c.appendChild(pNote('Student will return to active status. Monthly fee generation resumes from return date.'));
-
-    const { cancelBtn, okBtn, setSaving } = pButtons(popup, 'Resume Student', { icon: 'play-circle', tone: 'primary' });
-    okBtn.disabled = false;
-
-    okBtn.addEventListener('click', async () => {
-      saving = true;
-      setSaving(true);
-      const returnDate = dPicker.value || todayISO();
-      try {
-        await updateDoc(doc(db, 'students', s.id), {
-          status: 'active',
-          breakResumedAt: serverTimestamp(),
-          breakReturnDate: returnDate,
-          breakResumedBy: (profile && profile.email) || 'admin',
-          updatedAt: serverTimestamp()
-        });
-        showToast({ type: 'success', message: `${s.name || 'Student'} resumed successfully.` });
-        popup.close();
-        load();
-      } catch (err) {
-        console.error('[school-admissions] endBreak failed', err);
-        showToast({ type: 'error', message: 'Could not resume: ' + (err.message || 'error') });
-        saving = false;
-        setSaving(false);
-      }
-    });
+    return openKidsResumeBreakModal({ student: s, profile, onSuccess: notifyAndReload });
+  }
+  async function upgradePackagePopup(s) {
+    return openKidsUpgradePackageModal({ student: s, levels, batches, profile, onSuccess: notifyAndReload });
   }
 
   // ---------- popup: mark completed ----------
@@ -1470,7 +1364,7 @@ export async function mount({ container, profile, ctx }) {
       name: v.name || '', guardianName: v.guardianName || '', phone: v.phone || '', altPhone: v.altPhone || '',
       email: v.email || '', aadhaar: v.aadhaar || '', dob: v.dob || '', gender: v.gender || '',
       address: v.address || '', schoolClass: v.schoolClass || '', levelId: v.levelId || '', batchId: v.batchId || '',
-      admissionDate: v.admissionDate || '', paymentMode: v.paymentMode || 'full', noPaymentReason: v.noPaymentReason || '', noPaymentOther: v.noPaymentOther || '', confirmedReceived: !!v.confirmReceived, documents: DOC_KEYS.map(k => docFiles[k] ? docFiles[k].dataUrl || 'pending' : '')
+      admissionDate: v.admissionDate || '', paymentMode: v.paymentMode || 'full', noPaymentReason: v.noPaymentReason || '', noPaymentOther: v.noPaymentOther || '', firstMonthlyMonth: v.firstMonthlyMonth || '', firstMonthlyEarlyConfirmed: !!v.firstMonthlyEarlyConfirmed, confirmedReceived: !!v.confirmReceived, documents: DOC_KEYS.map(k => docFiles[k] ? docFiles[k].dataUrl || 'pending' : '')
     });
   }
 
@@ -1531,8 +1425,16 @@ export async function mount({ container, profile, ctx }) {
       feeAdj.textContent = adj > 0 ? ('- ' + formatINR(adj)) : '�';
       feeDue.textContent = formatINR(due);
     }
-    monthlyFeeEl.textContent = c ? formatINR(editId ? Number(editRow.monthlyFee ?? monthly) : monthly) : '�';
-    firstMonthlyEl.textContent = c && $('adm-admissionDate').value ? formatBillingMonth(firstMonthlyMonth($('adm-admissionDate').value)) : '�';
+    monthlyFeeEl.textContent = c ? formatINR(editId ? Number(editRow.monthlyFee ?? monthly) : monthly) : '—';
+    if (billingStartSel && !hydrating) {
+      const admDateVal = $('adm-admissionDate').value || localToday();
+      const feeNum = editId ? Number(editRow.monthlyFee ?? monthly) : monthly;
+      billingStartSel.setConfig({
+        anchorDate: admDateVal,
+        monthlyFee: feeNum,
+        ...(editId ? { value: editRow.firstMonthlyMonth || firstMonthlyMonth(editRow.admissionDate), isLocked: true } : { isLocked: false })
+      });
+    }
 
     // Difference is unavailable for new admissions (no upgrade / verified-history infrastructure).
     paymentModeDiff.disabled = true;
@@ -1611,6 +1513,8 @@ export async function mount({ container, profile, ctx }) {
       admissionDate: $('adm-admissionDate').value.trim(),
       admissionAmount: String(amountDue ?? 0),
       paymentMode,
+      firstMonthlyMonth: billingStartSel ? (billingStartSel.value || '') : '',
+      firstMonthlyEarlyConfirmed: billingStartSel ? billingStartSel.getState().earlyConfirmed : true,
       confirmReceived: confirmReceivedInput.checked,
       noPaymentReason: paymentMode === 'none' ? (noPaymentReasonInput ? noPaymentReasonInput.value : '') : '',
       noPaymentOther: paymentMode === 'none' && noPaymentReasonInput.value === 'other' ? (noPaymentOtherInput ? noPaymentOtherInput.value.trim() : '') : ''
@@ -1652,11 +1556,14 @@ export async function mount({ container, profile, ctx }) {
     if (!editId && amountDue > 0 && !v.confirmReceived) e.confirmReceived = 'Confirm that the displayed admission amount was received in full.';
     if (!editId && !['full', 'none'].includes(v.paymentMode)) e.paymentMode = 'Difference requires the separate verified upgrade workflow.';
     if (!Number.isFinite(amountDue) || amountDue < 0) e.paymentMode = 'Invalid configured admission fee.';
+    const bSt = billingStartSel ? billingStartSel.getState() : null;
+    if (!editId && (!bSt || !bSt.value)) e.firstMonthlyMonth = 'Select first monthly billing month.';
+    else if (!editId && bSt.needsEarlyConfirm && !bSt.earlyConfirmed) e.firstMonthlyMonth = 'Confirm starting monthly billing before the admission month.';
     return e;
   }
 
   function showErrors(err) {
-    ['name', 'guardianName', 'phone', 'altPhone', 'email', 'aadhaar', 'dob', 'gender', 'address', 'schoolClass', 'levelId', 'batchId', 'admissionDate', 'paymentMode', 'noPaymentReason', 'noPaymentOther', 'confirmReceived', 'photo', 'signature'].forEach((k) => {
+    ['name', 'guardianName', 'phone', 'altPhone', 'email', 'aadhaar', 'dob', 'gender', 'address', 'schoolClass', 'levelId', 'batchId', 'admissionDate', 'paymentMode', 'noPaymentReason', 'noPaymentOther', 'firstMonthlyMonth', 'confirmReceived', 'photo', 'signature'].forEach((k) => {
       const field = k === 'levelId' ? 'level' : k === 'batchId' ? 'batch' : k;
       const box = $('adm-' + field + '-err');
       if (box) box.textContent = err[k] || '';
@@ -1828,8 +1735,12 @@ export async function mount({ container, profile, ctx }) {
           writeCounter(tx,sid.ref,sid.next,{org:'school',sessionYear:admissionYear});
           writeCounter(tx,rc.ref,rc.next,{org:'school',type:'AD',branchCode:centreCode,date:v.admissionDate});
         }
+        const bSt = billingStartSel ? billingStartSel.getState() : null;
+        const chosenFirstMonthly = updating ? (old.firstMonthlyMonth || firstMonthlyMonth(v.admissionDate)) : (bSt?.value || firstMonthlyMonth(v.admissionDate));
+        const defaultFirstMonthly = updating ? (old.defaultFirstMonthlyMonth || firstMonthlyMonth(v.admissionDate)) : (bSt?.defaultValue || firstMonthlyMonth(v.admissionDate));
+        const firstMonthlyChanged = updating ? Boolean(old.firstMonthlyChangedFromDefault) : (chosenFirstMonthly !== defaultFirstMonthly);
         const data={studentId,receiptNo,...(!updating ? {receiptCentreCode:centreCode} : {}),name:v.name,guardianName:v.guardianName,phone:v.phone,altPhone:v.altPhone || '',email:v.email || '',dob:v.dob,gender:v.gender,address:v.address,schoolClass:v.schoolClass,
-          admissionDate:v.admissionDate,firstMonthlyMonth:firstMonthlyMonth(v.admissionDate),
+          admissionDate:v.admissionDate,firstMonthlyMonth:chosenFirstMonthly,defaultFirstMonthlyMonth:defaultFirstMonthly,firstMonthlyChangedFromDefault:firstMonthlyChanged,
           status:updating ? old.status : 'active',ctx:'school',branchId:'HO',branchName:'Head Office',
           courseId:course.id,courseName:updating ? old.courseName : course.name,courseLevelName:updating ? old.courseLevelName : course.name,
           admissionFee:updating ? Number(old.admissionFee || 0) : charge,
@@ -1844,9 +1755,21 @@ export async function mount({ container, profile, ctx }) {
         if(!updating) tx.set(doc(db,COL,studentRef.id,'payment','payment'),{
           studentId,receiptNo,receiptCentreCode:centreCode,admissionFee:charge,configuredAdmissionFee:Number(course.admissionFee || 0),monthlyFee:Number(course.monthlyFee || 0),receivedTotal:charge,feeReceived:charge>0,
           paymentMode:v.paymentMode,eligiblePriorAdmissionPayments:priorAdmissionPaid,actualAmountReceived:charge,noPaymentReason:v.noPaymentReason || '',noPaymentOther:v.noPaymentOther || '',
-          admissionDate:v.admissionDate,firstMonthlyMonth:firstMonthlyMonth(v.admissionDate),createdAt:serverTimestamp(),createdBy:who});
-        return {id:studentRef.id,studentId,receiptNo};
+          admissionDate:v.admissionDate,firstMonthlyMonth:chosenFirstMonthly,defaultFirstMonthlyMonth:defaultFirstMonthly,firstMonthlyChangedFromDefault:firstMonthlyChanged,createdAt:serverTimestamp(),createdBy:who});
+        return {id:studentRef.id,studentId,receiptNo,chosenFirstMonthly,monthlyFee:Number(course.monthlyFee || 0),courseId:course.id,courseName:course.name,batchId:batch.id,batchName:batch.name};
       });
+      if (!updating) {
+        await syncOpenKidsBills(db, {
+          students: [{
+            id: result.id, studentId: result.studentId, ctx: 'school', status: 'active',
+            courseId: result.courseId, courseName: result.courseName, courseLevelName: result.courseName,
+            batchId: result.batchId, batchName: result.batchName,
+            monthlyFee: result.monthlyFee, admissionDate: v.admissionDate, firstMonthlyMonth: result.chosenFirstMonthly
+          }],
+          bills: [], breaks: []
+        }).catch(() => {});
+      }
+      window.dispatchEvent(new CustomEvent('uic:data-mutated', { detail: { reason: updating ? 'student:edit' : 'student:admit' } }));
       closeForm();
       if (!updating) playPaymentSuccessSound();
       showToast({type:'success',message:updating?'Student details updated. Original payment unchanged.':'Admission saved.'});

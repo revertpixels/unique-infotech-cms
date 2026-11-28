@@ -39,6 +39,41 @@
 
 ---
 
+### [2026-11-28 13:30] Version 1.8.196 — Unique Kids Break Management & Selectable First Monthly Billing Month (Pushed to main, Pending Deploy Approval)
+
+**What was built:**
+- **Whole-month Planned Break & Rejoin Engine (`public/js/utils/school-billing.js`, `public/js/utils/school-lifecycle.js`)**:
+  - Added whole-month break planning helpers (`computeStartBreakRange`, `resolveEffectiveBreakMonthRange`, `isBreakOverdueReturn`, `formatBreakPeriod`, `formatBreakStatusText`, `computeKidsStudentDues`, `syncOpenKidsBills` with deterministic `${studentId}_${month}` open bill IDs, `startKidsBreak`, `resumeKidsBreak`, and `upgradeKidsPackage`).
+  - Enforced next-month-minimum break starts (mid-month requests auto-default `startMonth` to next month and explain current month is charged in full), zero bills/overdue/late-fees for break months, early return reactivation from `rejoinMonth` only (leaving later planned break months unbilled), and overdue non-rejoined breaks staying unbilled until `resumeKidsBreak` bills in full from `rejoinMonth`.
+- **Shared Billing-Start Picker & Break/Upgrade Modals (`public/js/utils/school-break-modals.js`)**:
+  - Created `createBillingStartSelector` (`-1` to `+3` months around anchor date, auto-preview `"Monthly fee ... will be billed from ..."`, early-billing confirmation warning & checkbox when selected month is before anchor month, preserving manual selection across parent form `change` events).
+  - Created shared modals: `openKidsStartBreakModal` (unpaid dues + late-fee warning banner before starting break), `openKidsResumeBreakModal` (rejoin date picker, early/late return notice), and `openKidsUpgradePackageModal` (upgrade difference / no payment / full admission with selectable `First monthly billing month`).
+- **Kids UI Pages & Read-Only `school_head` Access (`public/js/core/router.js`, `public/js/pages/school-admissions.page.js`, `public/js/pages/school-break.page.js`, `public/js/pages/school-fees.page.js`, `public/js/pages/dashboard.page.js`, `public/js/pages/student-profile.page.js`, `public/js/services/report.service.js`, `public/js/utils/school-receipt.js`, HTML/CSS)**:
+  - Enabled `First monthly billing month` picker on Kids Admissions (`school-admissions.page.js`), removed the old `EXISTING_STUDENT_REASONS` block so `No payment` accepts returning/rejoining/upgraded students cleanly, saved `firstMonthlyMonth`, `defaultFirstMonthlyMonth`, and `firstMonthlyChangedFromDefault` audit fields, and formatted exemption reasons on admission receipts (`school-receipt.js`).
+  - Rebuilt Break Management (`school-break.page.js`) with `On Break`, `Break Ended - Not Rejoined`, `Rejoined`, and `Total Records` KPIs, `+ Start Break`, `Resume`, deep-link filters (`?filter=active|overdue|completed`), and strict read-only access for `school_head`.
+  - Updated Kids Dashboard (`dashboard.page.js`), Collect Fees (`school-fees.page.js`), Pending & Overdue (`report.service.js`), and Student Profile (`student-profile.page.js`) with `On Break (<Period>)` / `Rejoin overdue` status pills, `Break (₹0)` bill pills, Break History table (`#sp-kids-breaks-card`), Upgrade/Break hero actions (Super Admin only), and read-only `school_head` gating (Youth Centre paths untouched).
+- **Indexes (`firestore.indexes.json`) & Versioning (`tools/bump-version.js 1.8.196`)**:
+  - Added composite indexes for `bills` `[ctx, status]`, `breaks` `[ctx, status]`, and `breaks` `[ctx, studentId]` (`30` composite indexes + `1` override total); bumped `APP_VERSION` and module `?v=` query strings across `55` files to `1.8.196`.
+
+**Why:**
+- Support client-confirmed whole-month planned breaks without partial fees or phantom overdue bills during pause/overdue-rejoin periods, allow selecting `firstMonthlyMonth` for returning Kids admissions and package upgrades, and grant `school_head` safe read-only visibility into Kids breaks and student profiles while keeping Youth Centre isolated.
+
+**Files touched (created / modified):**
+- CREATED: `public/js/utils/school-break-modals.js`
+- MODIFIED: `firestore.indexes.json`, `public/js/core/router.js`, `public/js/utils/school-billing.js`, `public/js/utils/school-lifecycle.js`, `public/js/utils/school-receipt.js`, `public/js/services/report.service.js`, `public/js/pages/school-admissions.page.js`, `public/js/pages/school-break.page.js`, `public/js/pages/school-fees.page.js`, `public/js/pages/dashboard.page.js`, `public/js/pages/student-profile.page.js`, `public/pages/school-admissions.html`, `public/pages/school-break.html`, `public/pages/dashboard.html`, `public/pages/student-profile.html`, `public/css/components/doc-card.css`, `public/css/pages/school-admissions.css`, `public/css/pages/school-break.css`, `public/css/pages/student-profile.css`, `docs/02-PROGRESS-LOG.md` (+ `bump-version.js 1.8.196` across `public/` assets).
+
+**Firestore changes:**
+- Indexes added to `firestore.indexes.json`: `bills` `[ctx ASC, status ASC]`, `breaks` `[ctx ASC, status ASC]`, `breaks` `[ctx ASC, studentId ASC]` (not yet deployed — awaiting user confirmation).
+- `firestore.rules`: unchanged (`school_head` read rules already scoped to `ctx == 'school'`, `bills`, `breaks`, `enrolments`, `payments`, `waivers`, `students/{id}/docs`).
+
+**Tested on (post-final-edit `1.8.196`):**
+- `node tools/check-imports.js` (`115` files, `448` imports, `388` exports, `0` errors) + `JSON.parse('firestore.indexes.json')`: ✅
+- `verify-kids-break-v196.mjs` (unit tests + Firebase Auth & Firestore Emulators with real `firestore.rules` + headless Chrome): ✅ verified Kids Dashboard break KPIs, Course Upgrade with billing-start picker, Start Break dues warning & next-month floor, Early Resume bill reactivation, Overdue Break gap suppression & Late Return billing, New `No payment` Rejoining admission with custom early `firstMonthlyMonth` warning/confirmation & receipt, `school_head` read-only UI + Firestore `permission-denied` checks, and Youth profile isolation (`0` console/runtime errors).
+- `scratch/run-tests.mjs`, `verify-router-regression.mjs`, `verify-reports.mjs`, `verify-archives.mjs`, `verify-auth-profile.mjs`, `verify-dashboard.mjs` (Kids assertion updated from placeholder `finReads === 0` to `hasBreakCards && youthCgReads === 0`, Youth Super Admin & Branch Head desktop/mobile verified): ✅
+- Deployed: ⏳ Not yet deployed (awaiting user go-ahead for `firestore:indexes` -> `[READY]` -> `firestore:rules` -> `hosting`).
+
+---
+
 ### [2026-11-28 12:35] Version 1.8.195 — Firestore Aggregation & Composite Indexes + Silent Fallback (Deployed Live)
 
 **What was built:**

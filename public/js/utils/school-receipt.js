@@ -1,8 +1,8 @@
 // school-receipt.js � pure view-model builders for the Kids admission receipt.
 // No Firebase, no DOM. Safe to unit-test in plain Node.
 
-import { formatDateIN, formatPersonName, formatGenderDisplay } from './formatter.js?v=1.8.195';
-import { getStudentPhotoSrc, getStudentDocSrc } from './student-media.js?v=1.8.195';
+import { formatDateIN, formatPersonName, formatGenderDisplay } from './formatter.js?v=1.8.196';
+import { getStudentPhotoSrc, getStudentDocSrc } from './student-media.js?v=1.8.196';
 
 const MONTH_NAMES = [
   'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
@@ -105,6 +105,11 @@ export function inWords(num) {
 }
 
 export function formatNoPaymentReason(reason, other) {
+  if (reason === 'migrated') return 'Migrated / existing student';
+  if (reason === 'returning') return 'Returning after a long break';
+  if (reason === 'rejoining') return 'Rejoining after course ended';
+  if (reason === 'previously-paid') return 'Admission fee previously paid';
+  if (reason === 'waiver') return 'Approved fee waiver / scholarship';
   if (reason === 'staff_child') return 'Staff child';
   if (reason === 'scholarship') return 'Scholarship / Concession';
   if (reason === 'trial') return 'Free trial';

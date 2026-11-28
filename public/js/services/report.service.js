@@ -27,22 +27,23 @@ import {
   fetchStudentPayments,
   calculateStudentFinancials,
   isStudentEligibleForDues
-} from './payment.service.js?v=1.8.195';
+} from './payment.service.js?v=1.8.196';
 import {
   evaluateKidsPendingBills,
-  buildKidsPaymentLedger
-} from '../utils/school-billing.js?v=1.8.195';
-import { getStudentPhotoSrc } from '../utils/student-media.js?v=1.8.195';
+  buildKidsPaymentLedger,
+  syncOpenKidsBills
+} from '../utils/school-billing.js?v=1.8.196';
+import { getStudentPhotoSrc } from '../utils/student-media.js?v=1.8.196';
 import {
   todayISO,
   fmtDate,
   getOrgTimezone
-} from '../utils/session-rules.js?v=1.8.195';
-import { formatINR } from '../utils/formatter.js?v=1.8.195';
-import { formatPersonName } from '../utils/formatter.js?v=1.8.195';
-import { resolveUserDisplay, loadUsersDirectory, getRoleTitle } from './user-directory.service.js?v=1.8.195';
-import { loadPdfMake, urlToDataUrl } from '../utils/admission-receipt-pdf.js?v=1.8.195';
-import { loadAllSessions, getAllCachedSessions, hasFreshSessionsCache } from '../core/sessions.js?v=1.8.195';
+} from '../utils/session-rules.js?v=1.8.196';
+import { formatINR } from '../utils/formatter.js?v=1.8.196';
+import { formatPersonName } from '../utils/formatter.js?v=1.8.196';
+import { resolveUserDisplay, loadUsersDirectory, getRoleTitle } from './user-directory.service.js?v=1.8.196';
+import { loadPdfMake, urlToDataUrl } from '../utils/admission-receipt-pdf.js?v=1.8.196';
+import { loadAllSessions, getAllCachedSessions, hasFreshSessionsCache } from '../core/sessions.js?v=1.8.196';
 
 const CACHE_KEY = 'financialReports';
 export const CACHE_STALE_MS = 30000;
@@ -1569,8 +1570,8 @@ export async function loadKidsPendingReport({
 
   const [stSnap, billsSnap, brkSnap] = await Promise.all([
     getDocs(query(collection(db, 'students'), where('ctx', '==', 'school'))),
-    getDocs(query(collection(db, 'bills'), where('status', 'in', ['unpaid', 'partial']))),
-    getDocs(query(collection(db, 'breaks'), where('status', '==', 'approved')))
+    getDocs(collection(db, 'bills')),
+    getDocs(collection(db, 'breaks'))
   ]);
 
   readCount += stSnap.size + billsSnap.size + brkSnap.size;
@@ -1583,8 +1584,15 @@ export async function loadKidsPendingReport({
   const studentsById = {};
   students.forEach((s) => { studentsById[s.id] = s; });
 
-  const bills = billsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
-  const breaks = brkSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  let bills = billsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  const breaks = brkSnap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((b) => !b.ctx || b.ctx === 'school');
+
+  if (profile?.role === 'superadmin') {
+    const createdBills = await syncOpenKidsBills(db, { students, bills, breaks, asOfDate }).catch(() => []);
+    if (createdBills && createdBills.length > 0) {
+      bills = bills.concat(createdBills);
+    }
+  }
 
   const rawItems = filterOverdueItems(
     evaluateKidsPendingBills({ students, bills, breaks, asOfDate }),

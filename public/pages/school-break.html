@@ -3,18 +3,19 @@
     <section class="pg-head">
       <div class="pg-crumbs">Students / <span>Break Management</span></div>
       <h2>Break Management</h2>
-      <p>Approved break months: no classes, no monthly fee, not overdue. Store reason and approval history.</p>
+      <p>Whole-month student breaks: no monthly bills during break months, full month on rejoin, full history &amp; overdue-return tracking.</p>
     </section>
+    <button type="button" class="ui-btn primary" id="skb-add" hidden><i data-lucide="pause-circle"></i><span>Start Break</span></button>
   </div>
 
   <div id="skb-stats"></div>
   <div id="skb-toolbar"></div>
 
-    <div class="sk-table-card">
+  <div class="sk-table-card">
     <div class="sk-scroll">
       <div id="skb-loading" class="sk-empty" hidden>
         <i data-lucide="loader-circle"></i>
-        <b>Loading break requests</b>
+        <b>Loading break records</b>
         <span>Please wait while break records are loaded.</span>
       </div>
       <table class="sk-table">
@@ -22,10 +23,11 @@
           <tr>
             <th>Student ID</th>
             <th>Student</th>
-            <th>Break period</th>
+            <th>Break Period</th>
+            <th>Actual Return</th>
             <th>Reason</th>
             <th>Status</th>
-            <th>Requested by</th>
+            <th>Recorded / Resumed By</th>
             <th class="skb-actions">Action</th>
           </tr>
         </thead>
@@ -33,8 +35,8 @@
       </table>
       <div id="skb-empty" class="sk-empty" hidden>
         <i data-lucide="pause-circle"></i>
-        <b>No break requests yet</b>
-        <span>Approved break requests will appear here.</span>
+        <b>No breaks recorded yet</b>
+        <span>Use "Start Break" (here or from a student's profile/menu) to record whole-month student breaks.</span>
       </div>
       <div id="skb-no-match" class="sk-empty" hidden>
         <i data-lucide="search"></i>
@@ -44,11 +46,12 @@
       </div>
       <div id="skb-load-error" class="sk-empty" hidden>
         <i data-lucide="alert-circle"></i>
-        <b>Could not load break requests</b>
+        <b>Could not load break records</b>
         <span id="skb-load-error-msg"></span>
         <button type="button" id="skb-load-error-retry" class="ui-btn primary"><i data-lucide="refresh-cw"></i>Retry</button>
         <button type="button" id="skb-load-error-back" class="ui-btn ghost">Back</button>
       </div>
       <div class="sk-card-foot" id="skb-foot" hidden></div>
+    </div>
   </div>
 </div>

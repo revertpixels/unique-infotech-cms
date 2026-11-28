@@ -1,12 +1,12 @@
 // payment-popup.js — Single Shared Payment Popup for Student Profile and Pay Fees
 import { auth } from '../config/firebase-config.js';
-import { openPopup } from './modal.js?v=1.8.199';
-import { createSelect } from './ui-select.js?v=1.8.199';
-import { formatINR, formatDateIN } from '../utils/formatter.js?v=1.8.199';
-import { todayISO } from '../utils/session-rules.js?v=1.8.199';
-import { getRoleTitle, resolveUserDisplay } from '../services/user-directory.service.js?v=1.8.199';
-import { showToast } from './toast.js?v=1.8.199';
-import { playPaymentSuccessSound } from '../utils/sound.js?v=1.8.199';
+import { openPopup } from './modal.js?v=1.8.200';
+import { createSelect } from './ui-select.js?v=1.8.200';
+import { formatINR, formatDateIN } from '../utils/formatter.js?v=1.8.200';
+import { todayISO } from '../utils/session-rules.js?v=1.8.200';
+import { getRoleTitle, resolveUserDisplay } from '../services/user-directory.service.js?v=1.8.200';
+import { showToast } from './toast.js?v=1.8.200';
+import { playPaymentSuccessSound } from '../utils/sound.js?v=1.8.200';
 import {
   recordPayment,
   recordAdmissionWithPayment,
@@ -16,13 +16,13 @@ import {
   isAdmissionFeePaid,
   isMaterialFeePaid,
   isExamFeePaid
-} from '../services/payment.service.js?v=1.8.199';
+} from '../services/payment.service.js?v=1.8.200';
 import {
   computeLateFee,
   formatShortMonthYear,
   fetchOpenKidsBillsForStudent,
   recordKidsBillPayment
-} from '../utils/school-billing.js?v=1.8.199';
+} from '../utils/school-billing.js?v=1.8.200';
 
 function formatDateTime(d) {
   const dt = d instanceof Date ? d : new Date(d);
@@ -252,30 +252,32 @@ function escapePopupHtml(str) {
 }
 
 /**
- * Shared Kids admission success modal (used by both Paid and No-payment flows).
+ * Shared New Admission success modal for BOTH Youth Centre and Unique Kids
+ * (Paid and No-payment). Always opens above the already-rendered receipt / slip preview.
  */
-export function promptKidsAdmissionSuccess({
+export function promptAdmissionSuccess({
+  ctx = 'youth',
   studentDocId,
   studentId = '',
   studentName = 'Student',
   courseName = '',
-  batchName = '',
+  feeHeadLabel = '',
   receiptNo = '',
-  admFeePaid = 0,
-  paymentMode = 'full',
-  mode = '',
+  amount = 0,
+  mode = 'cash',
   txnId = '',
+  isNoPayment = false,
   noPaymentReasonLabel = '',
   monthlyFee = 0,
   firstMonthlyMonthLabel = '',
-  onAdmitAnother = null
+  date = new Date()
 }) {
   const prevFocus = document.activeElement;
   const back = document.createElement('div');
   back.className = 'ui-modal-back pf-success-back';
 
   const modal = document.createElement('div');
-  modal.className = 'ui-modal pf-success-modal is-admission';
+  modal.className = 'ui-modal pf-success-modal';
   modal.setAttribute('role', 'dialog');
   modal.setAttribute('aria-modal', 'true');
 
@@ -315,14 +317,13 @@ export function promptKidsAdmissionSuccess({
 
   const title = document.createElement('h3');
   title.className = 'pf-success-title';
-  title.textContent = 'Admission successful';
+  title.textContent = 'Admission Successful!';
 
-  const isNoPay = paymentMode === 'none' || Number(admFeePaid || 0) === 0;
   const subtitle = document.createElement('p');
   subtitle.className = 'pf-success-subtitle';
-  subtitle.textContent = isNoPay
-    ? 'Student admitted & admission slip ready.'
-    : 'Student admitted, admission fee recorded & slip ready.';
+  subtitle.textContent = isNoPayment
+    ? 'Admission recorded & admission slip ready in the background.'
+    : 'Admission recorded & receipt preview ready in the background.';
 
   const summary = document.createElement('div');
   summary.className = 'pf-success-summary';
@@ -341,93 +342,97 @@ export function promptKidsAdmissionSuccess({
   }
 
   addRow(
-    'Slip / Receipt No.',
+    isNoPayment ? 'Slip No.' : 'Receipt No.',
     `<span style="font-family:monospace; font-weight:700; color:#3730A3; background:#EEF2FF; border:1px solid #E0E7FF; padding:2px 8px; border-radius:6px; font-size:12px;">${escapePopupHtml(receiptNo || '—')}</span>`
   );
   addRow(
     'Student',
     `<span class="font-semibold">${escapePopupHtml(studentName || 'Student')}</span>${studentId ? ` <span style="font-weight:400; color:var(--text-mute, #64748b); font-size:12px;">(${escapePopupHtml(studentId)})</span>` : ''}`
   );
-  addRow(
-    'Level & Batch',
-    `${escapePopupHtml(courseName || '—')}${batchName ? ` <span style="color:var(--text-mute,#64748b);">· ${escapePopupHtml(batchName)}</span>` : ''}`
-  );
 
-  if (isNoPay) {
-    addRow(
-      'Admission Fee',
-      `<span style="display:inline-block;background:#FFF7ED;border:1px dashed #FB923C;color:#C2410C;padding:2px 9px;border-radius:9px;font-size:12px;font-weight:600;">&#8377;0 (No payment)</span>`
-    );
-    if (noPaymentReasonLabel) {
-      addRow('Reason', escapePopupHtml(noPaymentReasonLabel));
-    }
+  if (ctx === 'school') {
+    const lvlDisplay = courseName || feeHeadLabel || 'Unique Kids';
+    addRow('Level', escapePopupHtml(isNoPayment ? lvlDisplay : (feeHeadLabel ? `${lvlDisplay} (${feeHeadLabel})` : lvlDisplay)));
   } else {
+    const headDisplay = [feeHeadLabel || 'Admission Fee', courseName].filter(Boolean).join(' · ');
+    addRow('Fee Head', escapePopupHtml(headDisplay));
+  }
+
+  if (isNoPayment) {
+    addRow(
+      'Amount',
+      `<span style="display:inline-block;background:#FFF7ED;border:1px dashed #FB923C;color:#C2410C;padding:2px 9px;border-radius:9px;font-size:12px;font-weight:600;">&#8377;0 (No payment) &ndash; ${escapePopupHtml(noPaymentReasonLabel || 'Exempt')}</span>`
+    );
+    addRow(
+      'Monthly',
+      `Monthly ${formatINR(Number(monthlyFee || 0))}${firstMonthlyMonthLabel ? ` from <strong>${escapePopupHtml(firstMonthlyMonthLabel)}</strong>` : ''}`
+    );
+  } else {
+    addRow(
+      'Amount Paid',
+      `<span class="font-semibold" style="color:var(--success,#16a34a); font-size:15px; font-weight:700;">${formatINR(amount)}</span>`
+    );
     const modeVal = (mode || 'Cash').toUpperCase();
     const modeClass = (mode || 'cash').toLowerCase();
     addRow(
-      'Admission Fee Paid',
-      `<span class="font-semibold" style="color:var(--success,#16a34a);">${formatINR(admFeePaid)}</span> <span class="la-mode ${escapePopupHtml(modeClass)}">${escapePopupHtml(modeVal)}</span>${txnId ? ` <span style="font-size:11.5px; color:var(--text-mute,#64748b); font-family:monospace;">(${escapePopupHtml(txnId)})</span>` : ''}`
+      'Payment Mode',
+      `<span class="la-mode ${escapePopupHtml(modeClass)}">${escapePopupHtml(modeVal)}</span>${txnId ? ` <span style="font-size:11.5px; color:var(--text-mute, #64748b); font-family:monospace;">(${escapePopupHtml(txnId)})</span>` : ''}`
     );
   }
 
   addRow(
-    'Monthly Billing',
-    `${formatINR(Number(monthlyFee || 0))}/mo${firstMonthlyMonthLabel ? ` from <strong>${escapePopupHtml(firstMonthlyMonthLabel)}</strong>` : ''}`
+    'Date',
+    `<span style="color:var(--text-mute, #64748b); font-size:12px;">${formatDateTime(date || new Date())}</span>`
   );
 
   const actions = document.createElement('div');
-  actions.className = 'pf-success-actions is-grid';
-
-  const encodedId = encodeURIComponent(studentDocId);
-
-  const slipBtn = document.createElement('button');
-  slipBtn.type = 'button';
-  slipBtn.className = 'ui-btn primary';
-  slipBtn.innerHTML = '<i data-lucide="file-text"></i><span>View admission slip</span>';
-  slipBtn.onclick = () => {
-    close();
-    location.hash = `#/school-admissions/${encodedId}/receipt`;
-  };
+  actions.className = 'pf-success-actions';
 
   const printBtn = document.createElement('button');
   printBtn.type = 'button';
-  printBtn.className = 'ui-btn ghost';
-  printBtn.innerHTML = '<i data-lucide="printer"></i><span>Print</span>';
-  printBtn.onclick = () => {
+  printBtn.className = 'ui-btn primary';
+  printBtn.style.flex = '1.15';
+  printBtn.innerHTML = `<i data-lucide="printer"></i><span>${isNoPayment ? 'Print slip' : 'Print receipt'}</span>`;
+  printBtn.onclick = async () => {
     close();
-    location.hash = `#/school-admissions/${encodedId}/receipt?print=1`;
-  };
-
-  const profileBtn = document.createElement('button');
-  profileBtn.type = 'button';
-  profileBtn.className = 'ui-btn ghost';
-  profileBtn.innerHTML = '<i data-lucide="user"></i><span>Open profile</span>';
-  profileBtn.onclick = () => {
-    close();
-    location.hash = `#/students/${encodedId}`;
+    const sheetSel = ctx === 'school' ? '#uk-sheet .uk-page' : '#ar-sheet .ar-page';
+    const loaderSel = ctx === 'school' ? '#uk-loading' : '#ar-loading';
+    const deadline = Date.now() + 8000;
+    while (Date.now() < deadline) {
+      const sheetReady = document.querySelector(sheetSel);
+      const loader = document.querySelector(loaderSel);
+      if (sheetReady && (!loader || loader.hidden)) break;
+      await new Promise((r) => setTimeout(r, 60));
+    }
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    window.print();
   };
 
   const anotherBtn = document.createElement('button');
   anotherBtn.type = 'button';
   anotherBtn.className = 'ui-btn ghost';
+  anotherBtn.style.flex = '1.1';
   anotherBtn.innerHTML = '<i data-lucide="user-plus"></i><span>Admit another</span>';
   anotherBtn.onclick = () => {
     close();
-    if (typeof onAdmitAnother === 'function') {
-      onAdmitAnother();
-    } else if (!location.hash.startsWith('#/school-students')) {
-      location.hash = '#/school-students';
-    }
+    location.hash = ctx === 'school' ? '#/school-students?new=1' : '#/students?new=1';
   };
 
-  actions.append(slipBtn, printBtn, profileBtn, anotherBtn);
+  const doneBtn = document.createElement('button');
+  doneBtn.type = 'button';
+  doneBtn.className = 'ui-btn ghost';
+  doneBtn.style.flex = '0.85';
+  doneBtn.innerHTML = '<i data-lucide="check"></i><span>Done</span>';
+  doneBtn.onclick = () => close();
+
+  actions.append(printBtn, anotherBtn, doneBtn);
 
   modal.append(closeBtn, iconWrap, title, subtitle, summary, actions);
   back.appendChild(modal);
   document.body.appendChild(back);
 
   if (typeof lucide !== 'undefined') lucide.createIcons();
-  slipBtn.focus();
+  printBtn.focus();
 }
 
 /**
@@ -1128,20 +1133,21 @@ export async function openPaymentPopup({
               from: from || 'profile'
             });
           } else {
-            promptKidsAdmissionSuccess({
-              studentDocId: kidsRes.id || kidsRes.studentDocId || s.id,
+            const kidsDocId = kidsRes.id || kidsRes.studentDocId || s.id;
+            location.hash = '#/school-admissions/' + encodeURIComponent(kidsDocId) + '/receipt';
+            promptAdmissionSuccess({
+              ctx: 'school',
+              studentDocId: kidsDocId,
               studentId: kidsRes.studentId || s.studentId || '',
               studentName: s.name,
               courseName: kidsRes.courseName || pendingAdmission.courseName || s.courseName || '',
-              batchName: kidsRes.batchName || pendingAdmission.batchName || '',
+              feeHeadLabel: pendingAdmission.paymentMode === 'difference' ? 'Admission Fee (Difference)' : 'Admission Fee',
               receiptNo: kidsRes.receiptNo,
-              admFeePaid: baseAmount,
-              paymentMode: pendingAdmission.paymentMode || 'full',
+              amount: baseAmount,
               mode: modeSel.value,
               txnId: txnInput.value.trim(),
-              monthlyFee: kidsRes.monthlyFee ?? pendingAdmission.monthlyFee ?? 0,
-              firstMonthlyMonthLabel: pendingAdmission.firstMonthlyMonthLabel || '',
-              onAdmitAnother: pendingAdmission.onAdmitAnother || null
+              isNoPayment: false,
+              date: new Date()
             });
           }
           if (typeof onSuccess === 'function') {
@@ -1174,24 +1180,28 @@ export async function openPaymentPopup({
           ? (Number(pendingAdmission.matFee || 0) > 0 ? 'Course Fee (Paid in Full) & Study Material' : 'Course Fee (Paid in Full)')
           : (Number(pendingAdmission.matFee || 0) > 0 ? 'Admission & Material Fee' : 'Admission Fee');
 
-        promptOpenReceipt({
-          studentDocId: res.studentDocId,
-          paymentId: res.paymentId,
-          receiptNo: res.receiptNo,
-          student: { name: s.name, studentId: res.studentId },
-          forText,
-          amount: res.totalPaid,
-          lateFee: 0,
-          totalPaid: res.totalPaid,
-          mode: modeSel.value,
-          txnId: txnInput.value.trim(),
-          date: new Date(),
-          from: 'admissions'
-        });
-
         if (typeof onSuccess === 'function') {
           await onSuccess({ res, studentDocId: res.studentDocId, studentId: res.studentId, receiptNo: res.receiptNo, paymentId: res.paymentId });
         }
+        const expectedHash = '#/admissions/' + encodeURIComponent(res.studentDocId) + '/receipt';
+        if (!location.hash.includes('/receipt')) {
+          location.hash = expectedHash;
+        }
+
+        promptAdmissionSuccess({
+          ctx: 'youth',
+          studentDocId: res.studentDocId,
+          studentId: res.studentId,
+          studentName: s.name,
+          courseName: pendingAdmission.studentData?.courseName || s.courseName || '',
+          feeHeadLabel: forText,
+          receiptNo: res.receiptNo,
+          amount: res.totalPaid,
+          mode: modeSel.value,
+          txnId: txnInput.value.trim(),
+          isNoPayment: false,
+          date: new Date()
+        });
       } catch (err) {
         console.error('[payment-popup] admission payment transaction failed', err);
         showToast({ type: 'error', message: 'Admission save failed: ' + (err.message || 'Transaction error') });

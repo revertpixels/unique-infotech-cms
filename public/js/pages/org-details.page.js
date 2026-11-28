@@ -1,10 +1,10 @@
 import { db } from '../config/firebase-config.js';
-import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.199';
-import { showToast } from '../components/toast.js?v=1.8.199';
-import { createManageDataController } from '../core/data-transfer.js?v=1.8.199';
-import { mount as mountBranchHeads } from './branch-heads.page.js?v=1.8.199';
-import { mountAuthorisedUsers } from './authorised-users.js?v=1.8.199';
-import { syncPublicBranding } from '../services/user-directory.service.js?v=1.8.199';
+import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.200';
+import { showToast } from '../components/toast.js?v=1.8.200';
+import { createManageDataController } from '../core/data-transfer.js?v=1.8.200';
+import { mount as mountBranchHeads } from './branch-heads.page.js?v=1.8.200';
+import { mountAuthorisedUsers } from './authorised-users.js?v=1.8.200';
+import { syncPublicBranding } from '../services/user-directory.service.js?v=1.8.200';
 import { doc, getDoc, setDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
 
 const KEYS = ['name', 'tagline', 'phones', 'receiptCode', 'email', 'website', 'address'];
@@ -38,8 +38,7 @@ function readForm() {
     if (k === 'phones') {
       v.phones = phoneInputs().map((e) => e.value.trim()).filter(Boolean);
     } else if (k === 'receiptCode') {
-      const el = input(k);
-      v[k] = el ? el.value.trim().toUpperCase() : '';
+      v[k] = 'HO';
     } else {
       const el = input(k);
       v[k] = el ? el.value.trim() : '';
@@ -60,7 +59,6 @@ function validate(v) {
   err._badPhones = badIdx;
   if (v.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.email)) err.email = 'Enter a valid email address.';
   if (v.website && !/^(https?:\/\/)?[^\s.]+(\.[^\s.]+)+$/i.test(v.website)) err.website = 'Enter a valid website, e.g. www.example.com';
-  if (!RECEIPT_CODE_RE.test(v.receiptCode || '')) err.receiptCode = 'Receipt code is required (2-12 uppercase letters or digits).';
   return err;
 }
 
@@ -157,7 +155,7 @@ export async function mount({ profile }) {
     if (!isSuper || usersMounted || usersLoading || !usersHost) return;
     usersLoading = true;
     try {
-      const res = await fetch('pages/branch-heads.html?v=1.8.199');
+      const res = await fetch('pages/branch-heads.html?v=1.8.200');
       if (!res.ok) throw new Error('HTTP ' + res.status);
       usersHost.innerHTML = await res.text();
       const ctrl = await mountBranchHeads({ profile });
@@ -351,7 +349,7 @@ export async function mount({ profile }) {
       saved.name = d.orgName || '';
       saved.tagline = d.tagline || '';
       saved.phones = Array.isArray(d.phones) ? d.phones.filter(Boolean) : (d.phone ? [d.phone] : []);
-      saved.receiptCode = String(d.receiptCode || '').toUpperCase();
+      saved.receiptCode = 'HO';
       saved.email = d.email || '';
       saved.website = d.website || '';
       saved.address = d.address || '';

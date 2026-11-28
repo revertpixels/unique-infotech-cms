@@ -1,8 +1,8 @@
-// school-admissions.page.js � Unique Kids admissions (school context, Super Admin only).
+// school-admissions.page.js — Unique Kids admissions (school context, Super Admin only).
 // Kids batches are session-independent: no session field, no branch selector, Head Office
 // (branchId 'HO') is used internally. Student IDs are YYYYNNNN from the admission year;
-// receipt numbers use the shared Youth counter service with the configured
-// organisation receipt code, or the Kids built-in Head Office code (HO). Save runs inside ONE runTransaction: all counter reads first, then all
+// receipt numbers use the shared counter service with Unique Kids' fixed Head Office
+// code ('HO'). Save runs inside ONE runTransaction: all counter reads first, then all
 // writes (counters, student, photo/signature docs, private Aadhaar doc, payment record).
 import { db } from '../config/firebase-config.js';
 import {
@@ -36,7 +36,7 @@ import {
   openKidsUpgradePackageModal
 } from '../utils/school-break-modals.js?v=1.8.199';
 import { playPaymentSuccessSound } from '../utils/sound.js?v=1.8.199';
-import { openPaymentPopup, promptKidsAdmissionSuccess } from '../components/payment-popup.js?v=1.8.199';
+import { openPaymentPopup, promptAdmissionSuccess } from '../components/payment-popup.js?v=1.8.199';
 import { getRoleTitle } from '../services/user-directory.service.js?v=1.8.199';
 import {
   ensureReferenceData,
@@ -67,7 +67,7 @@ function isDataUrl(v) { return typeof v === 'string' && /^data:image\/[^;]+;base
 function num(v) { if (v === '' || v === null || v === undefined) return null; const n = Number(v); return Number.isFinite(n) ? n : null; }
 
 let cleanupPage = null;
-export function unmount() { if(cleanupPage) cleanupPage(); cleanupPage=null; }
+export function unmount() { if (cleanupPage) cleanupPage(); cleanupPage = null; }
 
 export async function mount({ container, profile, ctx }) {
   const school = ctx === 'school';
@@ -170,12 +170,12 @@ export async function mount({ container, profile, ctx }) {
 
   const reasonHost = $('adm-reason-custom');
   const reasonSelect = createSelect(reasonHost, {
-    options: Array.from(noPaymentReasonInput.options).map(o => ({value:o.value,label:o.textContent,icon:o.value ? 'check-circle' : 'list'})),
+    options: Array.from(noPaymentReasonInput.options).map(o => ({ value: o.value, label: o.textContent, icon: o.value ? 'check-circle' : 'list' })),
     value: noPaymentReasonInput.value, ariaLabel: 'Reason for no payment',
     onChange: value => {
       if (saving || editId) return;
       noPaymentReasonInput.value = value;
-      noPaymentReasonInput.dispatchEvent(new Event('change', {bubbles:true}));
+      noPaymentReasonInput.dispatchEvent(new Event('change', { bubbles: true }));
     }
   });
   // Prevent the component's pre-change input event from refreshing stale values.
@@ -185,7 +185,7 @@ export async function mount({ container, profile, ctx }) {
     if (button && button.getAttribute('aria-expanded') === 'true') button.click();
   };
   reasonHost.querySelector('.ui-select-btn').setAttribute('aria-labelledby', 'adm-reason-label');
-  ['full','difference','none'].forEach(mode => {
+  ['full', 'difference', 'none'].forEach(mode => {
     const card = $('adm-mode-card-' + mode), radio = $('adm-paymentMode-' + mode);
     card.addEventListener('click', e => {
       if (radio.disabled || e.target.closest('button,select,option,input,textarea,label,a,.ui-select,.adm-none-reason-wrap')) return;
@@ -195,11 +195,13 @@ export async function mount({ container, profile, ctx }) {
 
   // ---------- toolbar ----------
   const tbFilters = [
-    { id: 'status', label: 'Status', options: [
-      { value: 'all', label: 'All statuses' }, { value: 'active', label: 'Active' },
-      { value: 'break', label: 'On break' }, { value: 'break-overdue', label: 'Break ended - not rejoined' },
-      { value: 'completed', label: 'Completed' }
-    ]},
+    {
+      id: 'status', label: 'Status', options: [
+        { value: 'all', label: 'All statuses' }, { value: 'active', label: 'Active' },
+        { value: 'break', label: 'On break' }, { value: 'break-overdue', label: 'Break ended - not rejoined' },
+        { value: 'completed', label: 'Completed' }
+      ]
+    },
     { id: 'level', label: 'Level', options: [{ value: 'all', label: 'All levels', icon: 'book-open' }] }
   ];
   const tb = buildToolbar({
@@ -373,7 +375,7 @@ export async function mount({ container, profile, ctx }) {
       if (cachedMeta && cachedDs) {
         applyLoadedData(cachedMeta, cachedDs);
         if (!background && (isCacheStale(cachedMeta) || isCacheStale(cachedDs))) {
-          load({ deltaRefresh: true, background: true }).catch(() => {});
+          load({ deltaRefresh: true, background: true }).catch(() => { });
         }
         return;
       }
@@ -471,7 +473,7 @@ export async function mount({ container, profile, ctx }) {
     remove.type = 'button';
     remove.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>';
     remove.setAttribute('aria-label', 'Remove file');
-    remove.addEventListener('click', (ev) => { ev.stopPropagation(); if(saving) return; uploadVersions[key]++; setDocPreview(key, null); $('adm-'+key+'-file').value=''; touched=true; refresh(); });
+    remove.addEventListener('click', (ev) => { ev.stopPropagation(); if (saving) return; uploadVersions[key]++; setDocPreview(key, null); $('adm-' + key + '-file').value = ''; touched = true; refresh(); });
     box.appendChild(remove);
     preview.appendChild(box);
     if (emptyEl) emptyEl.style.display = 'none';
@@ -518,141 +520,141 @@ export async function mount({ container, profile, ctx }) {
     if (!rowsHost) return;
     try {
       loading = false;
-    rowsHost.hidden = false;
-    rowsHost.innerHTML = '';
-    loadingEl.hidden = true;
-    emptyEl.hidden = true;
-    noMatchEl.hidden = true;
-    loadErrorEl.hidden = true;
+      rowsHost.hidden = false;
+      rowsHost.innerHTML = '';
+      loadingEl.hidden = true;
+      emptyEl.hidden = true;
+      noMatchEl.hidden = true;
+      loadErrorEl.hidden = true;
 
-    const f = tb.state;
-    const dr = admDateRange();
-    if (dateErrEl) { dateErrEl.textContent = dr.err || ''; dateErrEl.hidden = !dr.err; }
-    const bbVal = bbFilter ? bbFilter.getValue() : { branchId: 'HO', batchId: 'all' };
-    const list = students.filter((s) => {
-      const curSt = s.status || 'active';
-      if (f.status && f.status !== 'all') {
-        if (f.status === 'break-overdue') {
-          if (curSt !== 'break' || !isBreakOverdueReturn(s)) return false;
-        } else if (curSt !== f.status) return false;
-      }
-      if (f.level && f.level !== 'all') {
-        if (String(s.courseId || '') !== String(f.level)) return false;
-      }
-      if (bbVal.batchId && bbVal.batchId !== 'all' && s.batchId !== bbVal.batchId) return false;
-      const ad = s.admissionDate || '';
-      if (dr.from && ad < dr.from) return false;
-      if (dr.to && ad > dr.to) return false;
-      if (f.course && f.course !== 'all') {
-        const c = courseOf(s.courseId);
-        return (c.courseCode || c.code || c.id) === f.course || (c.name || '') === f.course;
-      }
-      if (f.q) {
-        const hay = [(s.name || ''), (s.studentId || ''), (s.phone || ''), (s.guardianName || '')].join(' ').toLowerCase();
-        if (!hay.includes(f.q)) return false;
-      }
-      return true;
-    });
-
-    if (students.length === 0) {
-      emptyEl.hidden = false;
-      footEl.hidden = true;
-      stats.update(0, 0, 'All records');
-      stats.update(1, 0, 'Currently enrolled');
-      stats.update(2, 0, 'Currently on break');
-      stats.update(3, 0, 'This calendar month');
-      return;
-    }
-
-    if (!list.length) {
-      noMatchEl.hidden = false;
-      footEl.hidden = true;
-      stats.update(0, students.length, 'All records');
-      stats.update(1, students.filter((s) => (s.status || 'active') === 'active').length, 'Currently enrolled');
-      stats.update(2, students.filter((s) => { const st = s.status || 'active'; return st === 'break'; }).length, 'Currently on break');
-      const now = new Date();
-      stats.update(3, students.filter((s) => { if (!s.admissionDate) return false; const d = new Date(s.admissionDate); return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear(); }).length, 'This calendar month');
-      const clearBtn = $('adm-no-match-clear');
-      if (clearBtn) {
-        clearBtn.onclick = (ev) => { ev.preventDefault(); tb.state.q = ''; tb.state.status = 'all'; tb.state.level = 'all'; if (bbFilter) bbFilter.reset(); admDateFilter = 'all'; admDateFrom = ''; admDateTo = ''; dateSel.value = 'all'; dateCustomWrap.hidden = true; fromInp.value = ''; toInp.value = ''; render(); };
-      }
-      return;
-    }
-
-    const pageSize = PAGE_SIZE;
-    const totalPages = Math.max(1, Math.ceil(list.length / pageSize));
-    if (page > totalPages) page = totalPages;
-    const start = (page - 1) * pageSize;
-    const pageList = list.slice(start, start + pageSize);
-
-    pageList.forEach((s) => {
-      const c = courseOf(s.courseId);
-      const tr = document.createElement('tr');
-      tr.innerHTML =
-        '<td>' + (s.studentId || '-') + '</td>' +
-        '<td>' +
-        '<b>' + (s.name || '-') + '</b><br>' +
-        '<span class="adm-sub">' + (s.guardianName || '-') + '</span>' +
-        '</td>' +
-        '<td class="hide-sm">' + (s.phone || '-') + '</td>' +
-        '<td>' +
-        '<span>' + (c ? (c.name || '-') : '-') + '</span><br>' +
-        '<span class="adm-sub">' + (s.batchName || '-') + '</span>' +
-        '</td>' +
-        '<td class="hide-sm">' + formatDateIN(s.admissionDate) + '</td>' +
-        '<td class="hide-md">' + statusPill(s.status || 'active', s) + '</td>';
-      const tdAct = mk('td', 'adm-actions');
-      const kebab = mk('button', 'ui-kebab');
-      kebab.type = 'button';
-      kebab.setAttribute('aria-label', 'Actions for ' + (s.name || 'student'));
-      kebab.setAttribute('aria-haspopup', 'menu');
-      kebab.setAttribute('aria-expanded', 'false');
-      const ki = document.createElement('i');
-      ki.setAttribute('data-lucide', 'more-vertical');
-      kebab.appendChild(ki);
-      const st = s.status || 'active';
-      const items = [
-        { section: 'View', label: 'View details', icon: 'eye', onClick: () => viewDetailsPopup(s) },
-        { label: 'View student', icon: 'user', onClick: () => { location.hash = '#/students/' + encodeURIComponent(s.id); } },
-        { label: 'View admission receipt', icon: 'file-text', onClick: () => { location.hash = '#/school-admissions/' + s.id + '/receipt'; } },
-      ];
-      if (isSuper) {
-        const live = st === 'active' || st === 'break';
-        if (live) {
-          items.push({ section: 'Manage' });
-          items.push({ label: 'Change batch', icon: 'shuffle', onClick: () => changeBatchPopup(s) });
-          items.push({ label: 'Upgrade level / package', icon: 'trending-up', onClick: () => upgradePackagePopup(s) });
-          if (st === 'active') items.push({ label: 'Start break', icon: 'pause-circle', onClick: () => startBreakPopup(s) });
-          if (st === 'break') items.push({ label: 'Resume / Rejoin', icon: 'play-circle', onClick: () => endBreakPopup(s) });
-          items.push({ label: 'Mark course completed', icon: 'graduation-cap', onClick: () => completePopup(s) });
+      const f = tb.state;
+      const dr = admDateRange();
+      if (dateErrEl) { dateErrEl.textContent = dr.err || ''; dateErrEl.hidden = !dr.err; }
+      const bbVal = bbFilter ? bbFilter.getValue() : { branchId: 'HO', batchId: 'all' };
+      const list = students.filter((s) => {
+        const curSt = s.status || 'active';
+        if (f.status && f.status !== 'all') {
+          if (f.status === 'break-overdue') {
+            if (curSt !== 'break' || !isBreakOverdueReturn(s)) return false;
+          } else if (curSt !== f.status) return false;
         }
-        items.push({ section: 'Danger zone' });
-        if (live) items.push({ label: 'Drop student', icon: 'user-x', danger: true, onClick: () => removeStudentPopup(s, 'drop') });
-        items.push({ label: 'Delete permanently', icon: 'trash-2', danger: true, onClick: () => removeStudentPopup(s, 'delete') });
-      }
-      kebab.addEventListener('click', () => openMenu(kebab, items));
-      tdAct.appendChild(kebab);
-      tr.appendChild(tdAct);
-      rowsHost.appendChild(tr);
-    });
-    if (typeof lucide !== 'undefined') lucide.createIcons();
+        if (f.level && f.level !== 'all') {
+          if (String(s.courseId || '') !== String(f.level)) return false;
+        }
+        if (bbVal.batchId && bbVal.batchId !== 'all' && s.batchId !== bbVal.batchId) return false;
+        const ad = s.admissionDate || '';
+        if (dr.from && ad < dr.from) return false;
+        if (dr.to && ad > dr.to) return false;
+        if (f.course && f.course !== 'all') {
+          const c = courseOf(s.courseId);
+          return (c.courseCode || c.code || c.id) === f.course || (c.name || '') === f.course;
+        }
+        if (f.q) {
+          const hay = [(s.name || ''), (s.studentId || ''), (s.phone || ''), (s.guardianName || '')].join(' ').toLowerCase();
+          if (!hay.includes(f.q)) return false;
+        }
+        return true;
+      });
 
-    const activeN = students.filter((s) => (s.status || 'active') === 'active').length;
-    const onBreakN = students.filter((s) => { const st = s.status || 'active'; return st === 'break'; }).length;
-    const studentN = students.length;
-    const now = new Date();
-    const thisMonthN = students.filter((s) => {
-      if (!s.admissionDate) return false;
-      const d = new Date(s.admissionDate);
-      return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-    }).length;
-    stats.update(0, studentN, 'All records');
-    stats.update(1, activeN, 'Currently enrolled');
-    stats.update(2, onBreakN, 'Currently on break');
-    stats.update(3, thisMonthN, 'This calendar month');
-    if (footEl) {
-      renderPager(footEl, { page, pageSize: PAGE_SIZE, totalItems: list.length, onPageChange: (p) => { page = p; render(); } });
-    }
+      if (students.length === 0) {
+        emptyEl.hidden = false;
+        footEl.hidden = true;
+        stats.update(0, 0, 'All records');
+        stats.update(1, 0, 'Currently enrolled');
+        stats.update(2, 0, 'Currently on break');
+        stats.update(3, 0, 'This calendar month');
+        return;
+      }
+
+      if (!list.length) {
+        noMatchEl.hidden = false;
+        footEl.hidden = true;
+        stats.update(0, students.length, 'All records');
+        stats.update(1, students.filter((s) => (s.status || 'active') === 'active').length, 'Currently enrolled');
+        stats.update(2, students.filter((s) => { const st = s.status || 'active'; return st === 'break'; }).length, 'Currently on break');
+        const now = new Date();
+        stats.update(3, students.filter((s) => { if (!s.admissionDate) return false; const d = new Date(s.admissionDate); return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear(); }).length, 'This calendar month');
+        const clearBtn = $('adm-no-match-clear');
+        if (clearBtn) {
+          clearBtn.onclick = (ev) => { ev.preventDefault(); tb.state.q = ''; tb.state.status = 'all'; tb.state.level = 'all'; if (bbFilter) bbFilter.reset(); admDateFilter = 'all'; admDateFrom = ''; admDateTo = ''; dateSel.value = 'all'; dateCustomWrap.hidden = true; fromInp.value = ''; toInp.value = ''; render(); };
+        }
+        return;
+      }
+
+      const pageSize = PAGE_SIZE;
+      const totalPages = Math.max(1, Math.ceil(list.length / pageSize));
+      if (page > totalPages) page = totalPages;
+      const start = (page - 1) * pageSize;
+      const pageList = list.slice(start, start + pageSize);
+
+      pageList.forEach((s) => {
+        const c = courseOf(s.courseId);
+        const tr = document.createElement('tr');
+        tr.innerHTML =
+          '<td>' + (s.studentId || '-') + '</td>' +
+          '<td>' +
+          '<b>' + (s.name || '-') + '</b><br>' +
+          '<span class="adm-sub">' + (s.guardianName || '-') + '</span>' +
+          '</td>' +
+          '<td class="hide-sm">' + (s.phone || '-') + '</td>' +
+          '<td>' +
+          '<span>' + (c ? (c.name || '-') : '-') + '</span><br>' +
+          '<span class="adm-sub">' + (s.batchName || '-') + '</span>' +
+          '</td>' +
+          '<td class="hide-sm">' + formatDateIN(s.admissionDate) + '</td>' +
+          '<td class="hide-md">' + statusPill(s.status || 'active', s) + '</td>';
+        const tdAct = mk('td', 'adm-actions');
+        const kebab = mk('button', 'ui-kebab');
+        kebab.type = 'button';
+        kebab.setAttribute('aria-label', 'Actions for ' + (s.name || 'student'));
+        kebab.setAttribute('aria-haspopup', 'menu');
+        kebab.setAttribute('aria-expanded', 'false');
+        const ki = document.createElement('i');
+        ki.setAttribute('data-lucide', 'more-vertical');
+        kebab.appendChild(ki);
+        const st = s.status || 'active';
+        const items = [
+          { section: 'View', label: 'View details', icon: 'eye', onClick: () => viewDetailsPopup(s) },
+          { label: 'View student', icon: 'user', onClick: () => { location.hash = '#/students/' + encodeURIComponent(s.id); } },
+          { label: 'View admission receipt', icon: 'file-text', onClick: () => { location.hash = '#/school-admissions/' + s.id + '/receipt'; } },
+        ];
+        if (isSuper) {
+          const live = st === 'active' || st === 'break';
+          if (live) {
+            items.push({ section: 'Manage' });
+            items.push({ label: 'Change batch', icon: 'shuffle', onClick: () => changeBatchPopup(s) });
+            items.push({ label: 'Upgrade level / package', icon: 'trending-up', onClick: () => upgradePackagePopup(s) });
+            if (st === 'active') items.push({ label: 'Start break', icon: 'pause-circle', onClick: () => startBreakPopup(s) });
+            if (st === 'break') items.push({ label: 'Resume / Rejoin', icon: 'play-circle', onClick: () => endBreakPopup(s) });
+            items.push({ label: 'Mark course completed', icon: 'graduation-cap', onClick: () => completePopup(s) });
+          }
+          items.push({ section: 'Danger zone' });
+          if (live) items.push({ label: 'Drop student', icon: 'user-x', danger: true, onClick: () => removeStudentPopup(s, 'drop') });
+          items.push({ label: 'Delete permanently', icon: 'trash-2', danger: true, onClick: () => removeStudentPopup(s, 'delete') });
+        }
+        kebab.addEventListener('click', () => openMenu(kebab, items));
+        tdAct.appendChild(kebab);
+        tr.appendChild(tdAct);
+        rowsHost.appendChild(tr);
+      });
+      if (typeof lucide !== 'undefined') lucide.createIcons();
+
+      const activeN = students.filter((s) => (s.status || 'active') === 'active').length;
+      const onBreakN = students.filter((s) => { const st = s.status || 'active'; return st === 'break'; }).length;
+      const studentN = students.length;
+      const now = new Date();
+      const thisMonthN = students.filter((s) => {
+        if (!s.admissionDate) return false;
+        const d = new Date(s.admissionDate);
+        return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+      }).length;
+      stats.update(0, studentN, 'All records');
+      stats.update(1, activeN, 'Currently enrolled');
+      stats.update(2, onBreakN, 'Currently on break');
+      stats.update(3, thisMonthN, 'This calendar month');
+      if (footEl) {
+        renderPager(footEl, { page, pageSize: PAGE_SIZE, totalItems: list.length, onPageChange: (p) => { page = p; render(); } });
+      }
     } catch (e) {
       console.error('[school-admissions] render failed', e);
       const msg = e && e.message ? e.message : String(e);
@@ -673,8 +675,8 @@ export async function mount({ container, profile, ctx }) {
   // ---------- form ----------
   async function openForm(r) {
     if (saving) return;
-    if (!form.hidden && isDirty(readForm()) && !await confirmLeave({clear:false})) return;
-    DOC_KEYS.forEach(k => { uploadVersions[k]++; setDocPreview(k, null); const i=$('adm-'+k+'-file'); if(i) i.value=''; });
+    if (!form.hidden && isDirty(readForm()) && !await confirmLeave({ clear: false })) return;
+    DOC_KEYS.forEach(k => { uploadVersions[k]++; setDocPreview(k, null); const i = $('adm-' + k + '-file'); if (i) i.value = ''; });
     priorAdmissionPaid = 0;
     editId = r ? r.id : null;
     editRow = r || null;
@@ -698,16 +700,16 @@ export async function mount({ container, profile, ctx }) {
         if (!alive) return;
         v.aadhaar = snaps[0].exists() ? (snaps[0].data().aadhaar || '') : '';
         $v('adm-aadhaar', v.aadhaar);
-        DOC_KEYS.forEach((k,i) => {
-          if(snaps[i+1].exists()) {
-            const d=snaps[i+1].data();
-            docFiles[k]={dataUrl:d.data, existing:true, name:d.name || k};
-            setDocPreview(k,true);
+        DOC_KEYS.forEach((k, i) => {
+          if (snaps[i + 1].exists()) {
+            const d = snaps[i + 1].data();
+            docFiles[k] = { dataUrl: d.data, existing: true, name: d.name || k };
+            setDocPreview(k, true);
           }
         });
-      } catch(e) {
-        hydrating=false;
-        showToast({type:'error',message:'Could not load the existing admission documents. Please retry.'});
+      } catch (e) {
+        hydrating = false;
+        showToast({ type: 'error', message: 'Could not load the existing admission documents. Please retry.' });
         return;
       }
     }
@@ -738,7 +740,7 @@ export async function mount({ container, profile, ctx }) {
   // ---------- popup UI helpers (v1.8.96) ----------
   const who = () => (profile && profile.email) || '';
   const courseNameOf = (s) => (coursesById[s.courseId] || {}).name || s.courseName || '-';
-  const studentSub = (s) => `${s.name || '-'} � ${s.studentId || '-'} � ${courseNameOf(s)} / ${s.batchName || '-'}`;
+  const studentSub = (s) => `${s.name || '-'} · ${s.studentId || '-'} · ${courseNameOf(s)} / ${s.batchName || '-'}`;
   const ymOf = (iso) => String(iso || '').slice(0, 7);
   function nextYM(ym) { let [y, m] = ym.split('-').map(Number); m++; if (m > 12) { m = 1; y++; } return y + '-' + String(m).padStart(2, '0'); }
   function monthsBetween(a, b) { if (!a || !b) return 0; const [y1, m1] = a.split('-').map(Number); const [y2, m2] = b.split('-').map(Number); return Math.max(0, (y2 - y1) * 12 + (m2 - m1)); }
@@ -1402,7 +1404,7 @@ export async function mount({ container, profile, ctx }) {
     if (submitted) showErrors(validate(v));
     saveBtn.disabled = saving || DOC_KEYS.some(k => docFiles[k]?.pending) || !dirty;
     cancelBtn.disabled = saving;
-    if (!saving) setState(dirty ? 'Unsaved changes' : (editId ? 'Existing admission � payment unchanged' : 'New admission � not submitted'), dirty ? 'dirty' : '');
+    if (!saving) setState(dirty ? 'Unsaved changes' : (editId ? 'Existing admission · payment unchanged' : 'New admission · not submitted'), dirty ? 'dirty' : '');
   }
 
   function updateCounters() {
@@ -1443,9 +1445,9 @@ export async function mount({ container, profile, ctx }) {
     $('adm-monthly-placeholder').hidden = !!c;
     if (c) {
       feeConfigured.textContent = formatINR(editId ? Number(editRow.configuredAdmissionFee ?? configured) : configured);
-      feePrior.textContent = priorAdmissionPaid ? formatINR(priorAdmissionPaid) : '�';
+      feePrior.textContent = priorAdmissionPaid ? formatINR(priorAdmissionPaid) : '—';
       const adj = configured - due;
-      feeAdj.textContent = adj > 0 ? ('- ' + formatINR(adj)) : '�';
+      feeAdj.textContent = adj > 0 ? ('- ' + formatINR(adj)) : '—';
       feeDue.textContent = formatINR(due);
     }
     monthlyFeeEl.textContent = c ? formatINR(editId ? Number(editRow.monthlyFee ?? monthly) : monthly) : '—';
@@ -1497,15 +1499,15 @@ export async function mount({ container, profile, ctx }) {
   function formatBillingMonth(month) {
     if (!/^\d{4}-\d{2}$/.test(month || '')) return 'Select an admission date';
     const [year, number] = month.split('-').map(Number);
-    return new Intl.DateTimeFormat('en-IN', {month:'long',year:'numeric'}).format(new Date(year, number - 1, 1));
+    return new Intl.DateTimeFormat('en-IN', { month: 'long', year: 'numeric' }).format(new Date(year, number - 1, 1));
   }
   function localToday() {
-    const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+    const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
   }
   function validCalendarDate(s) {
-    if(!/^\d{4}-\d{2}-\d{2}$/.test(s || '')) return false;
-    const [y,m,d]=s.split('-').map(Number); const a=new Date(0); a.setFullYear(y,m-1,d); a.setHours(12,0,0,0);
-    return y>=1900 && a.getFullYear()===y && a.getMonth()===m-1 && a.getDate()===d;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(s || '')) return false;
+    const [y, m, d] = s.split('-').map(Number); const a = new Date(0); a.setFullYear(y, m - 1, d); a.setHours(12, 0, 0, 0);
+    return y >= 1900 && a.getFullYear() === y && a.getMonth() === m - 1 && a.getDate() === d;
   }
 
   function setState(text, cls) {
@@ -1561,7 +1563,7 @@ export async function mount({ container, profile, ctx }) {
     }
     if (!v.admissionDate) e.admissionDate = 'Select an admission date.';
     else if (!validCalendarDate(v.admissionDate) || v.admissionDate > localToday()) e.admissionDate = 'Admission date cannot be in the future.';
-    DOC_KEYS.forEach(k => { const d=docFiles[k]; if (!d || !d.dataUrl || d.pending) e[k]='Upload a valid '+(k==='photo'?'student photo':"student's signature")+'.'; });
+    DOC_KEYS.forEach(k => { const d = docFiles[k]; if (!d || !d.dataUrl || d.pending) e[k] = 'Upload a valid ' + (k === 'photo' ? 'student photo' : "student's signature") + '.'; });
     if (editId && (v.levelId !== editRow.courseId || v.batchId !== editRow.batchId || v.admissionDate !== editRow.admissionDate))
       e.levelId = 'Existing admission level, batch and admission date cannot be rewritten here. A separate upgrade/transfer flow is required.';
     if (v.paymentMode === 'none') {
@@ -1647,42 +1649,42 @@ export async function mount({ container, profile, ctx }) {
 
   // File input, click, keyboard and drag/drop share one validated pipeline.
   DOC_KEYS.forEach(key => {
-    const input=$('adm-'+key+'-file'), box=$('adm-'+key+'-upload'), err=$('adm-'+key+'-err');
+    const input = $('adm-' + key + '-file'), box = $('adm-' + key + '-upload'), err = $('adm-' + key + '-err');
     box.appendChild(input); // Keep input reachable when empty-state content is hidden.
-    box.tabIndex=0; box.setAttribute('role','button'); box.setAttribute('aria-label','Upload student '+key);
+    box.tabIndex = 0; box.setAttribute('role', 'button'); box.setAttribute('aria-label', 'Upload student ' + key);
     async function accept(file) {
-      if(saving || !file) return;
-      if(!/^image\/(jpeg|jpg|png|webp)$/i.test(file.type)) { err.textContent='Only JPG, PNG or WEBP images are supported.'; return; }
-      if(file.size>MAX_UPLOAD_BYTES) { err.textContent='File too large (max 10 MB).'; return; }
-      const token=++uploadVersions[key], previous=docFiles[key];
-      docFiles[key]={file,pending:true}; err.textContent=''; box.classList.add('compressing'); refresh();
+      if (saving || !file) return;
+      if (!/^image\/(jpeg|jpg|png|webp)$/i.test(file.type)) { err.textContent = 'Only JPG, PNG or WEBP images are supported.'; return; }
+      if (file.size > MAX_UPLOAD_BYTES) { err.textContent = 'File too large (max 10 MB).'; return; }
+      const token = ++uploadVersions[key], previous = docFiles[key];
+      docFiles[key] = { file, pending: true }; err.textContent = ''; box.classList.add('compressing'); refresh();
       try {
-        const result=await compressTo100KB(file,key);
-        const dataUrl=await blobToDataURL(result.blob);
-        if(!alive || uploadVersions[key]!==token) return;
-        docFiles[key]={file,compressedBlob:result.blob,dataUrl,pending:false};
-        setDocPreview(key,file); touched=true;
-      } catch(e) {
-        if(uploadVersions[key]===token) { docFiles[key]=previous || null; err.textContent=e.message || 'Could not process image. Try another JPG/PNG/WEBP image.'; }
+        const result = await compressTo100KB(file, key);
+        const dataUrl = await blobToDataURL(result.blob);
+        if (!alive || uploadVersions[key] !== token) return;
+        docFiles[key] = { file, compressedBlob: result.blob, dataUrl, pending: false };
+        setDocPreview(key, file); touched = true;
+      } catch (e) {
+        if (uploadVersions[key] === token) { docFiles[key] = previous || null; err.textContent = e.message || 'Could not process image. Try another JPG/PNG/WEBP image.'; }
       } finally {
-        input.value='';
-        if(uploadVersions[key]===token) { box.classList.remove('compressing'); refresh(); }
+        input.value = '';
+        if (uploadVersions[key] === token) { box.classList.remove('compressing'); refresh(); }
       }
     }
-    input.addEventListener('change',e=>accept(e.target.files?.[0]));
-    box.addEventListener('click',e=>{if(e.target===input || e.target.closest('.adm-doc-remove')) return; if(!saving) input.click();});
-    box.addEventListener('keydown',e=>{if(e.target===box && (e.key==='Enter'||e.key===' ')){e.preventDefault();if(!saving)input.click();}});
-    box.addEventListener('dragover',e=>{e.preventDefault();box.classList.add('dragover');});
-    box.addEventListener('dragleave',()=>box.classList.remove('dragover'));
-    box.addEventListener('drop',e=>{e.preventDefault();box.classList.remove('dragover');accept(e.dataTransfer?.files?.[0]);});
+    input.addEventListener('change', e => accept(e.target.files?.[0]));
+    box.addEventListener('click', e => { if (e.target === input || e.target.closest('.adm-doc-remove')) return; if (!saving) input.click(); });
+    box.addEventListener('keydown', e => { if (e.target === box && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); if (!saving) input.click(); } });
+    box.addEventListener('dragover', e => { e.preventDefault(); box.classList.add('dragover'); });
+    box.addEventListener('dragleave', () => box.classList.remove('dragover'));
+    box.addEventListener('drop', e => { e.preventDefault(); box.classList.remove('dragover'); accept(e.dataTransfer?.files?.[0]); });
   });
-  form.addEventListener('input',()=>{if(!hydrating){touched=true;refresh();}});
-  form.addEventListener('change',()=>{if(!hydrating){touched=true;refresh();}});
-  const unregisterDirty = registerDirty(()=>!form.hidden && !saving && isDirty(readForm()));
-  const previousCleanup=cleanupPage; cleanupPage=()=>{previousCleanup();unregisterDirty();};
-  cancelBtn.addEventListener('click',async()=>{if(!saving && (!isDirty(readForm()) || await confirmLeave({clear:false}))) closeForm();});
-  addBtn.addEventListener('click',()=>openForm(null));
-  emptyEl.querySelector('#adm-empty-add').addEventListener('click',()=>openForm(null));
+  form.addEventListener('input', () => { if (!hydrating) { touched = true; refresh(); } });
+  form.addEventListener('change', () => { if (!hydrating) { touched = true; refresh(); } });
+  const unregisterDirty = registerDirty(() => !form.hidden && !saving && isDirty(readForm()));
+  const previousCleanup = cleanupPage; cleanupPage = () => { previousCleanup(); unregisterDirty(); };
+  cancelBtn.addEventListener('click', async () => { if (!saving && (!isDirty(readForm()) || await confirmLeave({ clear: false }))) closeForm(); });
+  addBtn.addEventListener('click', () => openForm(null));
+  emptyEl.querySelector('#adm-empty-add').addEventListener('click', () => openForm(null));
 
   // ---------- save ----------
   form.addEventListener('submit', async ev => {
@@ -1763,12 +1765,8 @@ export async function mount({ container, profile, ctx }) {
 
         let sid = null, rc = null, centreCode = old?.receiptCentreCode || '';
         if (!updating) {
-          const orgSnap = await tx.get(doc(db, 'settings', 'org_config'));
-          const configuredCode = String(orgSnap.exists() ? orgSnap.data().receiptCode || '' : '').trim().toUpperCase();
-          if (configuredCode && !/^[A-Z0-9]{2,12}$/.test(configuredCode)) {
-            throw new Error('The organisation receipt code is invalid. Use 2-12 letters or digits in Organisation settings.');
-          }
-          centreCode = configuredCode || 'HO';
+          // Unique Kids operates exclusively at Head Office ('HO'); existing receipts keep their saved code.
+          centreCode = 'HO';
           sid = await readStudentId(tx, { org: 'school', sessionYear: admissionYear });
           rc = await readReceiptNo(tx, { org: 'school', type: 'AD', branchCode: centreCode, date: v.admissionDate });
         }
@@ -1835,7 +1833,7 @@ export async function mount({ container, profile, ctx }) {
             monthlyFee: result.monthlyFee, admissionDate: v.admissionDate, firstMonthlyMonth: result.chosenFirstMonthly
           }],
           bills: [], breaks: []
-        }).catch(() => {});
+        }).catch(() => { });
       }
       window.dispatchEvent(new CustomEvent('uic:data-mutated', { detail: { reason: updating ? 'student:edit' : 'student:admit' } }));
       return result;
@@ -1911,22 +1909,23 @@ export async function mount({ container, profile, ctx }) {
           saving = false;
           popup.close();
           closeForm();
-          load({ forceRefresh: false });
           playPaymentSuccessSound();
           showToast({ type: 'success', message: 'Admission saved! Student ID: ' + result.studentId });
-          promptKidsAdmissionSuccess({
+          location.hash = '#/school-admissions/' + encodeURIComponent(result.id) + '/receipt';
+          promptAdmissionSuccess({
+            ctx: 'school',
             studentDocId: result.id,
             studentId: result.studentId,
             studentName: v.name,
             courseName: result.courseName || selCourse?.name || '',
-            batchName: result.batchName || selBatch?.name || '',
+            feeHeadLabel: 'Admission Fee',
             receiptNo: result.receiptNo,
-            admFeePaid: 0,
-            paymentMode: v.paymentMode || 'none',
+            amount: 0,
+            isNoPayment: true,
             noPaymentReasonLabel: reasonLabel,
             monthlyFee: result.monthlyFee ?? monthlyFeeNum,
             firstMonthlyMonthLabel: billingMonthLabel,
-            onAdmitAnother: () => openForm(null)
+            date: new Date()
           });
         } catch (e) {
           saving = false;
@@ -1964,13 +1963,11 @@ export async function mount({ container, profile, ctx }) {
           batchName: selBatch?.name || '',
           monthlyFee: Number(selCourse?.monthlyFee || 0),
           firstMonthlyMonthLabel: billingMonthLabel,
-          onAdmitAnother: () => openForm(null),
           onConfirmPayment: async (pp) => {
             const res = await executeKidsAdmissionSave(pp);
             saved = {};
             clearDirty();
             closeForm();
-            load({ forceRefresh: false });
             return res;
           }
         },
@@ -2013,6 +2010,21 @@ export async function mount({ container, profile, ctx }) {
 
   try { await load(); } catch (e) { console.error('[school-admissions] init load', e); setError('Could not load admissions.'); }
   form.addEventListener('reset', () => { touched = false; refresh(); });
+
+  const rawHash = location.hash || '';
+  const qIdx = rawHash.indexOf('?');
+  if (isSuper && qIdx !== -1 && new URLSearchParams(rawHash.slice(qIdx)).get('new') === '1') {
+    try {
+      history.replaceState(null, '', '#/school-students');
+      window.dispatchEvent(new CustomEvent('uic:route-url-replaced'));
+    } catch (_) {}
+    await openForm(null);
+    requestAnimationFrame(() => {
+      const nameEl = $('adm-name');
+      if (nameEl && nameEl.focus) nameEl.focus({ preventScroll: true });
+    });
+  }
+
   if (typeof lucide !== 'undefined') lucide.createIcons();
 }
 

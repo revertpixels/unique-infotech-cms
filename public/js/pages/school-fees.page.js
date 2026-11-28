@@ -1,19 +1,19 @@
-// school-fees.page.js � Unique Kids monthly fee collection (school context, Super Admin).
+// school-fees.page.js — Unique Kids monthly fee collection (school context, Super Admin).
 // Lists monthly bills with status (unpaid/paid/partial), late fees, and allows recording
 // payments. Kids billing is session-independent: monthly bills open on the 1st, due by the
 // 10th, late fine Rs 1/day from the 11th.
 import { db } from '../config/firebase-config.js';
 import { collection, getDocs, query, where } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.199';
-import { PAGE_SIZE, buildStats, buildToolbar, renderPager } from '../components/list-page.js?v=1.8.199';
-import { createSelect } from '../components/ui-select.js?v=1.8.199';
-import { openMenu } from '../components/ui-menu.js?v=1.8.199';
-import { formatINR, formatDateIN, formatPersonName } from '../utils/formatter.js?v=1.8.199';
-import { getRoleTitle } from '../services/user-directory.service.js?v=1.8.199';
-import { isCourseActive } from '../utils/session-rules.js?v=1.8.199';
-import { localToday, monthSeq, nextMonth } from '../utils/school-lifecycle.js?v=1.8.199';
-import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.199';
-import { daysLate, computeLateFee, syncOpenKidsBills } from '../utils/school-billing.js?v=1.8.199';
+import { showToast } from '../components/toast.js?v=1.8.200';
+import { PAGE_SIZE, buildStats, buildToolbar, renderPager } from '../components/list-page.js?v=1.8.200';
+import { createSelect } from '../components/ui-select.js?v=1.8.200';
+import { openMenu } from '../components/ui-menu.js?v=1.8.200';
+import { formatINR, formatDateIN, formatPersonName } from '../utils/formatter.js?v=1.8.200';
+import { getRoleTitle } from '../services/user-directory.service.js?v=1.8.200';
+import { isCourseActive } from '../utils/session-rules.js?v=1.8.200';
+import { localToday, monthSeq, nextMonth } from '../utils/school-lifecycle.js?v=1.8.200';
+import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.200';
+import { daysLate, computeLateFee, syncOpenKidsBills } from '../utils/school-billing.js?v=1.8.200';
 import {
   ensureReferenceData,
   getCachedReferenceData,
@@ -23,7 +23,7 @@ import {
   syncKidsDatasetDelta,
   isCacheStale,
   scheduleDelayedSkeleton
-} from '../services/report.service.js?v=1.8.199';
+} from '../services/report.service.js?v=1.8.200';
 
 const COL = 'students';
 const BILLS_COL = 'bills';

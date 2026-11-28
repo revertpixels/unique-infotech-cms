@@ -1,4 +1,4 @@
-// school-billing.js � Monthly bill generation, late fees, and payment allocation
+// school-billing.js — Monthly bill generation, late fees, and payment allocation
 // for Unique Kids (ongoing, session-independent billing).
 //
 // Canonical bill identity: studentId + month (YYYY-MM). Idempotent generation.
@@ -11,11 +11,11 @@ import {
   collection, getDocs, query, where, doc, getDoc, addDoc, updateDoc, serverTimestamp,
   runTransaction, writeBatch, arrayUnion
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.199';
-import { localToday, monthSeq, nextMonth, previousMonth } from './school-lifecycle.js?v=1.8.199';
-import { firstMonthlyMonth } from './school-receipt.js?v=1.8.199';
-import { fineFor } from './session-rules.js?v=1.8.199';
-import { readReceiptNo, writeCounter } from '../services/admission.service.js?v=1.8.199';
+import { showToast } from '../components/toast.js?v=1.8.200';
+import { localToday, monthSeq, nextMonth, previousMonth } from './school-lifecycle.js?v=1.8.200';
+import { firstMonthlyMonth } from './school-receipt.js?v=1.8.200';
+import { fineFor } from './session-rules.js?v=1.8.200';
+import { readReceiptNo, writeCounter } from '../services/admission.service.js?v=1.8.200';
 
 const BILLS_COL = 'bills';
 const PAYMENTS_COL = 'payments';
@@ -352,8 +352,6 @@ export async function recordKidsBillPayment({
 
   return runTransaction(db, async (tx) => {
     const billRef = doc(db, BILLS_COL, bill.id);
-    const orgRef = doc(db, 'settings', 'org_config');
-    const orgSnap = await tx.get(orgRef);
     const liveBillSnap = await tx.get(billRef);
     if (!liveBillSnap.exists()) throw new Error('Monthly bill no longer exists.');
     const liveBill = { id: liveBillSnap.id, ...liveBillSnap.data() };
@@ -362,8 +360,8 @@ export async function recordKidsBillPayment({
       throw new Error('This monthly bill has already been settled.');
     }
 
-    const configuredCode = String(orgSnap.exists() ? orgSnap.data().receiptCode || '' : '').trim().toUpperCase();
-    const centreCode = /^[A-Z0-9]{2,12}$/.test(configuredCode) ? configuredCode : (studentDoc.receiptCentreCode || 'HO');
+    // Unique Kids operates exclusively at Head Office; always use fixed 'HO' for new receipts.
+    const centreCode = 'HO';
     const rc = await readReceiptNo(tx, { org: 'school', type: 'MN', branchCode: centreCode, date: payDate });
 
     const monthlyFee = rupees(liveBill.monthlyFee || 0);
@@ -1224,9 +1222,7 @@ export async function upgradeKidsPackage({
 
   if (charge > 0) {
     await runTransaction(targetDb, async (tx) => {
-      const orgSnap = await tx.get(doc(targetDb, 'settings', 'org_config'));
-      const configuredCode = String(orgSnap.exists() ? orgSnap.data().receiptCode || '' : '').trim().toUpperCase();
-      const centreCode = /^[A-Z0-9]{2,12}$/.test(configuredCode) ? configuredCode : (student.receiptCentreCode || 'HO');
+      const centreCode = 'HO';
       const rc = await readReceiptNo(tx, { org: 'school', type: 'UP', branchCode: centreCode, date: today });
       const payRef = doc(collection(targetDb, PAYMENTS_COL));
       paymentId = payRef.id;

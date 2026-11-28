@@ -342,12 +342,21 @@
   }
   .ui-modal {
     max-width: 100%;
-    max-height: 90vh;
+    max-height: min(92dvh, calc(100vh - 16px));
     border-bottom-left-radius: 0;
     border-bottom-right-radius: 0;
     border-bottom: none;
     animation: slideUp .22s ease;
   }
+}
+@media (max-width: 480px) {
+  .adm-view-head {
+    padding: 12px 16px;
+    min-height: 60px;
+    gap: 10px;
+  }
+  .adm-view-title { font-size: 16px; }
+  .adm-view-body { padding: 14px 16px; }
 }
 .ui-modal textarea.ui-input { min-height: 56px; height: 56px; padding: 8px 12px 8px 38px; resize: none; }
 .ui-modal .ui-input-wrap.top > svg.lucide { top: 10px; }
@@ -362,12 +371,17 @@ input.pk-confirm-id.matched {
 }
 .pk-current-badge {
   display: inline-block;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow-wrap: anywhere;
   padding: 7px 12px;
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: var(--r);
   font-size: 13px;
   color: var(--text-sec);
+  line-height: 1.4;
+}
 }
 .pk-current-badge strong {
   color: var(--text);
@@ -565,6 +579,7 @@ input.pk-confirm-id.matched {
 /* 3. FOOTER */
 .adm-view-foot {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
   gap: 10px;
@@ -575,6 +590,24 @@ input.pk-confirm-id.matched {
   width: 100%;
   box-sizing: border-box;
   flex-shrink: 0;
+}
+@media (max-width: 480px) {
+  .adm-view-foot {
+    flex-direction: column-reverse;
+    align-items: stretch;
+    gap: 8px;
+    padding-top: 12px;
+    margin-top: 14px;
+  }
+  .adm-view-foot .ui-btn {
+    width: 100%;
+    justify-content: center;
+    white-space: normal;
+    text-align: center;
+    min-height: 40px;
+    height: auto;
+    padding: 8px 14px;
+  }
 }
 .ui-btn.success { background: var(--success); color: var(--surface); }
 .ui-btn.success:hover:not(:disabled) { background: color-mix(in srgb, var(--success) 88%, var(--text)); }

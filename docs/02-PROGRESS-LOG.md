@@ -39,6 +39,42 @@
 
 ---
 
+### [2026-11-28 21:16] Version 1.8.200 — Unified Youth & Kids Admission Success Popup, Clean UTF-8, Fixed Kids HO Receipt Code & Mobile Modal Overflow Fixes
+
+**What was built:**
+- **Unified New Admission Success Popup (`public/js/components/payment-popup.js`, `public/js/pages/admissions.page.js`, `public/js/pages/school-admissions.page.js`)**:
+  - Removed `promptKidsAdmissionSuccess` (4 buttons) and replaced both Youth and Kids post-admission modals with ONE shared `promptAdmissionSuccess` popup (`"Admission Successful!"` with green animated checkmark and summary box).
+  - For Youth Paid, Kids Paid, and Kids No-payment admissions, the receipt / admission slip preview (`#/admissions/<id>/receipt` or `#/school-admissions/<id>/receipt`) now opens behind the popup automatically.
+  - Displays **3 icon buttons in order**: `Print receipt` (or `Print slip` for Kids no payment — waits until the background sheet finishes rendering, closes modal, calls `window.print()`), `Admit another` (navigates to `#/students?new=1` or `#/school-students?new=1` to open a blank admission form), and `Done` (closes the popup, revealing the receipt/slip behind it).
+  - Kept **"Payment Recorded!"** (`promptOpenReceipt`: `Open Receipt`, `Print`, `Done`) unchanged for monthly fee / installment / upgrade payments, and kept Kids `"Confirm admission"` popup before No-payment admissions. Added `?new=1` form-open support in `school-admissions.page.js`.
+- **Clean UTF-8 Across Project (`public/js/components/ui-datepicker.js` + `11` Kids `public/js/**` files)**:
+  - Replaced raw Windows-1252 `0x97` byte in `ui-datepicker.js` and all `\uFFFD` (``) replacement characters across `12` source files (including `"New admission · not submitted"` / `"Existing admission · payment unchanged"`, subtitle `·`, and table placeholders `—`) with valid UTF-8 characters. Verified `0` BOMs, `0` invalid UTF-8 files, and `0` mojibake across the repo.
+- **Fixed Kids Receipt Centre Code (`HO`) (`public/js/pages/school-admissions.page.js`, `public/js/utils/school-billing.js`, `public/pages/org-details.html`, `public/js/pages/org-details.page.js`)**:
+  - Removed live overrides from `settings/org_config.receiptCode` (which caused new slips like `UK26AD-UKKKKK-0005` when stale test data `'UKKKKK'` sat in `org_config`). New Kids admission (`UK<YY>AD-HO-<NNNN>`), monthly (`UK<YY>MN-HO-<NNNN>`), and upgrade (`UK<YY>UP-HO-<NNNN>`) receipts now always use Kids' Head Office code `'HO'`. Existing receipt numbers in Firestore remain untouched. Set `#org-receiptCode` in `#/org` to read-only `'HO'`.
+- **Popup Overflow Fixes Across `360px`, `768px`, `1440px` (`public/css/components/list-page.css`, `public/css/pages/pay-fees.css`, `public/css/pages/student-profile.css`)**:
+  - Made `.pf-success-modal` scrollable within viewport (`max-height: min(92dvh, calc(100vh - 24px))`, `overflow-y: auto`), stacked `.pf-success-actions` and `.adm-view-foot` buttons cleanly on narrow mobile (`<= 480px`), collapsed `.sp-pay-summary-box` to 1 column at `<= 480px`, wrapped `.pk-current-badge` & `.pf-success-val`, and compacted mobile modal headers/bodies (`<= 480px`).
+
+**Why:**
+- Deliver one consistent admission confirmation flow across Youth and Kids over the live receipt preview, eliminate encoding artifacts (``), stop stale `org_config.receiptCode` test values (`UKKKKK`) from corrupting new Kids receipt numbers, and ensure zero button/grid overflow down to `360px` viewports.
+
+**Files touched:**
+- CREATED: `docs/reports/v1.8.200-report.md`, `docs/reports/v1.8.200-changes.txt`
+- MODIFIED: `public/js/components/payment-popup.js`, `public/js/pages/admissions.page.js`, `public/js/pages/school-admissions.page.js`, `public/js/utils/school-billing.js`, `public/pages/org-details.html`, `public/js/pages/org-details.page.js`, `public/js/components/ui-datepicker.js`, `public/js/pages/school-admission-receipt.page.js`, `public/js/pages/school-delete.page.js`, `public/js/pages/school-end.page.js`, `public/js/pages/school-fees.page.js`, `public/js/pages/school-students.page.js`, `public/js/pages/school-transfer.page.js`, `public/js/utils/school-lifecycle.js`, `public/js/utils/school-receipt-pdf.js`, `public/js/utils/school-receipt.js`, `public/css/components/list-page.css`, `public/css/pages/pay-fees.css`, `public/css/pages/student-profile.css`, `docs/02-PROGRESS-LOG.md` (+ `bump-version.js 1.8.200` across `55` files in `public/`)
+
+**Firestore changes:**
+- None (existing receipt numbers and documents untouched; new Kids receipts increment `HO` counters `counters/rcpt_UK_<YY>_<TYPE>_HO`).
+
+**Tested on (post-final-edit, test data / emulators only):**
+- `node tools/check-imports.js`: ✅ (`115` files, `455` imports, `399` exports, `0` errors)
+- `scratch/run-tests.mjs`: ✅
+- `verify-kids-break-v196.mjs` (Auth + Firestore Emulators + Chrome): ✅ Youth & Kids `Admission Successful!` (`3` buttons over background receipt, `Print receipt`/`Admit another`/`Done`), `UKKKKK` -> `HO` new receipts while preserving legacy `UK26AD-UKKKKK-0005`, `#/org` fixed `HO`, `360px`/`768px`/`1440px` modal overflow checks, `0` errors.
+- `verify-router-regression.mjs`, `verify-dashboard.mjs`, `verify-reports.mjs`, `verify-archives.mjs`, `verify-auth-profile.mjs`: ✅ all passed cleanly.
+
+**Next task:**
+- Await user confirmation to deploy `v1.8.200` (`firebase deploy --only hosting`) or next feature request.
+
+---
+
 ### [2026-11-28 20:40] Version 1.8.199 — Optional Non-Cash TXN ID, Two Kids Profile Docs & Unified Kids Admission Popups
 
 **What was built:**

@@ -917,13 +917,20 @@
 /* Summary Box in Record Payment Modal */
 .sp-pay-summary-box {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
   background: var(--bg, #F6F6F8);
   border: 1px solid var(--border, #EAEAEA);
   padding: 12px 16px;
   border-radius: var(--r-ctrl, 8px);
   margin: 0;
+}
+@media (max-width: 480px) {
+  .sp-pay-summary-box {
+    grid-template-columns: 1fr;
+    padding: 10px 12px;
+    gap: 8px;
+  }
 }
 .sp-pay-summary-box .sp-stat-col {
   display: flex;
@@ -1598,19 +1605,33 @@
   }
 }
 
-/* Redesigned Payment Success Modal */
+/* Redesigned Payment & Admission Success Modal */
 .ui-modal.pf-success-modal {
-  max-width: 450px !important;
+  max-width: min(490px, 100%) !important;
   width: 100%;
+  max-height: min(92dvh, calc(100vh - 24px));
   border-radius: 16px;
   padding: 26px 24px 22px !important;
   box-shadow: 0 24px 64px rgba(16, 24, 40, .28);
   position: relative;
-  overflow: visible;
+  overflow-y: auto;
+  overflow-x: hidden;
   display: flex;
   flex-direction: column;
   align-items: center;
   box-sizing: border-box;
+}
+@media (max-width: 640px) {
+  .ui-modal.pf-success-modal {
+    max-width: 100% !important;
+    max-height: min(92dvh, calc(100vh - 16px));
+    border-radius: 16px 16px 0 0;
+  }
+}
+@media (max-width: 480px) {
+  .ui-modal.pf-success-modal {
+    padding: 20px 16px 16px !important;
+  }
 }
 .pf-success-close {
   position: absolute;
@@ -1682,7 +1703,7 @@
 .pf-success-row {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
   font-size: 13px;
   gap: 12px;
 }
@@ -1695,7 +1716,9 @@
   color: var(--text, #0f172a);
   font-weight: 500;
   text-align: right;
+  min-width: 0;
   word-break: break-word;
+  overflow-wrap: anywhere;
 }
 .pf-success-val.is-total {
   font-weight: 800;
@@ -1704,11 +1727,23 @@
 }
 .pf-success-actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: center;
   gap: 10px;
   width: 100%;
   box-sizing: border-box;
+}
+@media (max-width: 480px) {
+  .pf-success-actions {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+  .pf-success-actions .ui-btn {
+    width: 100%;
+    flex: none !important;
+  }
 }
 .pf-success-actions .ui-btn {
   justify-content: center;

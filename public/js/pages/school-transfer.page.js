@@ -1,14 +1,14 @@
-// school-transfer.page.js � Batch-only transfer for Youth and Kids.
+// school-transfer.page.js — Batch-only transfer for Youth and Kids.
 // Changes batch membership only. Does NOT change course/level, fees, billing dates,
 // or Student ID. Kids: school context, compatible active Kids batch.
 // Youth: youth context, same authorised branch/session/course.
 import { db } from '../config/firebase-config.js';
 import { doc, getDoc, getDocs, query, where, updateDoc, runTransaction, serverTimestamp, collection } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.199';
-import { formatINR, formatDateIN } from '../utils/formatter.js?v=1.8.199';
-import { isCourseActive, batchAllowsCourse } from '../utils/session-rules.js?v=1.8.199';
-import { localToday } from '../utils/school-lifecycle.js?v=1.8.199';
-import { getRoleTitle } from '../services/user-directory.service.js?v=1.8.199';
+import { showToast } from '../components/toast.js?v=1.8.200';
+import { formatINR, formatDateIN } from '../utils/formatter.js?v=1.8.200';
+import { isCourseActive, batchAllowsCourse } from '../utils/session-rules.js?v=1.8.200';
+import { localToday } from '../utils/school-lifecycle.js?v=1.8.200';
+import { getRoleTitle } from '../services/user-directory.service.js?v=1.8.200';
 
 const COL = 'students';
 const ENROLMENTS_COL = 'enrolments';

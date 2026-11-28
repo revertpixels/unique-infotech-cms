@@ -4,18 +4,18 @@
 // permanent delete). Search by name, Student ID, or parent phone. Siblings may share phone.
 import { db } from '../config/firebase-config.js';
 import { collection, getDocs, query, where, doc, getDoc } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.198';
-import { registerDirty, confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.198';
-import { buildStats, buildToolbar } from '../components/list-page.js?v=1.8.198';
-import { createSelect } from '../components/ui-select.js?v=1.8.198';
-import { openMenu } from '../components/ui-menu.js?v=1.8.198';
-import { confirmDialog } from '../components/ui-confirm.js?v=1.8.198';
-import { formatINR, formatDateIN, formatPersonName, initials } from '../utils/formatter.js?v=1.8.198';
-import { isCourseActive } from '../utils/session-rules.js?v=1.8.198';
-import { localToday } from '../utils/school-lifecycle.js?v=1.8.198';
-import { getRoleTitle } from '../services/user-directory.service.js?v=1.8.198';
-import { loadStudentPhotos, getCachedStudentPhoto } from '../services/report.service.js?v=1.8.198';
-import { getStudentPhotoSrc } from '../utils/student-media.js?v=1.8.198';
+import { showToast } from '../components/toast.js?v=1.8.199';
+import { registerDirty, confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.199';
+import { buildStats, buildToolbar } from '../components/list-page.js?v=1.8.199';
+import { createSelect } from '../components/ui-select.js?v=1.8.199';
+import { openMenu } from '../components/ui-menu.js?v=1.8.199';
+import { confirmDialog } from '../components/ui-confirm.js?v=1.8.199';
+import { formatINR, formatDateIN, formatPersonName, initials } from '../utils/formatter.js?v=1.8.199';
+import { isCourseActive } from '../utils/session-rules.js?v=1.8.199';
+import { localToday } from '../utils/school-lifecycle.js?v=1.8.199';
+import { getRoleTitle } from '../services/user-directory.service.js?v=1.8.199';
+import { loadStudentPhotos, getCachedStudentPhoto } from '../services/report.service.js?v=1.8.199';
+import { getStudentPhotoSrc } from '../utils/student-media.js?v=1.8.199';
 
 const COL = 'students';
 const GENDER_LABELS = { male: 'Male', female: 'Female', other: 'Other' };

@@ -1,12 +1,12 @@
 // payment-popup.js — Single Shared Payment Popup for Student Profile and Pay Fees
 import { auth } from '../config/firebase-config.js';
-import { openPopup } from './modal.js?v=1.8.198';
-import { createSelect } from './ui-select.js?v=1.8.198';
-import { formatINR, formatDateIN } from '../utils/formatter.js?v=1.8.198';
-import { todayISO } from '../utils/session-rules.js?v=1.8.198';
-import { getRoleTitle, resolveUserDisplay } from '../services/user-directory.service.js?v=1.8.198';
-import { showToast } from './toast.js?v=1.8.198';
-import { playPaymentSuccessSound } from '../utils/sound.js?v=1.8.198';
+import { openPopup } from './modal.js?v=1.8.199';
+import { createSelect } from './ui-select.js?v=1.8.199';
+import { formatINR, formatDateIN } from '../utils/formatter.js?v=1.8.199';
+import { todayISO } from '../utils/session-rules.js?v=1.8.199';
+import { getRoleTitle, resolveUserDisplay } from '../services/user-directory.service.js?v=1.8.199';
+import { showToast } from './toast.js?v=1.8.199';
+import { playPaymentSuccessSound } from '../utils/sound.js?v=1.8.199';
 import {
   recordPayment,
   recordAdmissionWithPayment,
@@ -16,13 +16,13 @@ import {
   isAdmissionFeePaid,
   isMaterialFeePaid,
   isExamFeePaid
-} from '../services/payment.service.js?v=1.8.198';
+} from '../services/payment.service.js?v=1.8.199';
 import {
   computeLateFee,
   formatShortMonthYear,
   fetchOpenKidsBillsForStudent,
   recordKidsBillPayment
-} from '../utils/school-billing.js?v=1.8.198';
+} from '../utils/school-billing.js?v=1.8.199';
 
 function formatDateTime(d) {
   const dt = d instanceof Date ? d : new Date(d);
@@ -241,6 +241,193 @@ export function promptOpenReceipt({
 
   if (typeof lucide !== 'undefined') lucide.createIcons();
   openBtn.focus();
+}
+
+function escapePopupHtml(str) {
+  return String(str == null ? '' : str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+/**
+ * Shared Kids admission success modal (used by both Paid and No-payment flows).
+ */
+export function promptKidsAdmissionSuccess({
+  studentDocId,
+  studentId = '',
+  studentName = 'Student',
+  courseName = '',
+  batchName = '',
+  receiptNo = '',
+  admFeePaid = 0,
+  paymentMode = 'full',
+  mode = '',
+  txnId = '',
+  noPaymentReasonLabel = '',
+  monthlyFee = 0,
+  firstMonthlyMonthLabel = '',
+  onAdmitAnother = null
+}) {
+  const prevFocus = document.activeElement;
+  const back = document.createElement('div');
+  back.className = 'ui-modal-back pf-success-back';
+
+  const modal = document.createElement('div');
+  modal.className = 'ui-modal pf-success-modal is-admission';
+  modal.setAttribute('role', 'dialog');
+  modal.setAttribute('aria-modal', 'true');
+
+  let closed = false;
+  function close() {
+    if (closed) return;
+    closed = true;
+    document.removeEventListener('keydown', onKey);
+    back.remove();
+    if (prevFocus && typeof prevFocus.focus === 'function') {
+      try { prevFocus.focus(); } catch (_) {}
+    }
+  }
+
+  function onKey(e) {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      close();
+    }
+  }
+
+  back.addEventListener('click', (e) => {
+    if (e.target === back) close();
+  });
+  document.addEventListener('keydown', onKey);
+
+  const closeBtn = document.createElement('button');
+  closeBtn.type = 'button';
+  closeBtn.className = 'pf-success-close';
+  closeBtn.setAttribute('aria-label', 'Close');
+  closeBtn.innerHTML = '<i data-lucide="x"></i>';
+  closeBtn.onclick = () => close();
+
+  const iconWrap = document.createElement('div');
+  iconWrap.className = 'pf-success-icon-wrap is-animated';
+  iconWrap.innerHTML = '<i data-lucide="check"></i>';
+
+  const title = document.createElement('h3');
+  title.className = 'pf-success-title';
+  title.textContent = 'Admission successful';
+
+  const isNoPay = paymentMode === 'none' || Number(admFeePaid || 0) === 0;
+  const subtitle = document.createElement('p');
+  subtitle.className = 'pf-success-subtitle';
+  subtitle.textContent = isNoPay
+    ? 'Student admitted & admission slip ready.'
+    : 'Student admitted, admission fee recorded & slip ready.';
+
+  const summary = document.createElement('div');
+  summary.className = 'pf-success-summary';
+
+  function addRow(label, valueHtml) {
+    const row = document.createElement('div');
+    row.className = 'pf-success-row';
+    const lbl = document.createElement('span');
+    lbl.className = 'pf-success-label';
+    lbl.textContent = label;
+    const val = document.createElement('span');
+    val.className = 'pf-success-val';
+    val.innerHTML = valueHtml;
+    row.append(lbl, val);
+    summary.appendChild(row);
+  }
+
+  addRow(
+    'Slip / Receipt No.',
+    `<span style="font-family:monospace; font-weight:700; color:#3730A3; background:#EEF2FF; border:1px solid #E0E7FF; padding:2px 8px; border-radius:6px; font-size:12px;">${escapePopupHtml(receiptNo || '—')}</span>`
+  );
+  addRow(
+    'Student',
+    `<span class="font-semibold">${escapePopupHtml(studentName || 'Student')}</span>${studentId ? ` <span style="font-weight:400; color:var(--text-mute, #64748b); font-size:12px;">(${escapePopupHtml(studentId)})</span>` : ''}`
+  );
+  addRow(
+    'Level & Batch',
+    `${escapePopupHtml(courseName || '—')}${batchName ? ` <span style="color:var(--text-mute,#64748b);">· ${escapePopupHtml(batchName)}</span>` : ''}`
+  );
+
+  if (isNoPay) {
+    addRow(
+      'Admission Fee',
+      `<span style="display:inline-block;background:#FFF7ED;border:1px dashed #FB923C;color:#C2410C;padding:2px 9px;border-radius:9px;font-size:12px;font-weight:600;">&#8377;0 (No payment)</span>`
+    );
+    if (noPaymentReasonLabel) {
+      addRow('Reason', escapePopupHtml(noPaymentReasonLabel));
+    }
+  } else {
+    const modeVal = (mode || 'Cash').toUpperCase();
+    const modeClass = (mode || 'cash').toLowerCase();
+    addRow(
+      'Admission Fee Paid',
+      `<span class="font-semibold" style="color:var(--success,#16a34a);">${formatINR(admFeePaid)}</span> <span class="la-mode ${escapePopupHtml(modeClass)}">${escapePopupHtml(modeVal)}</span>${txnId ? ` <span style="font-size:11.5px; color:var(--text-mute,#64748b); font-family:monospace;">(${escapePopupHtml(txnId)})</span>` : ''}`
+    );
+  }
+
+  addRow(
+    'Monthly Billing',
+    `${formatINR(Number(monthlyFee || 0))}/mo${firstMonthlyMonthLabel ? ` from <strong>${escapePopupHtml(firstMonthlyMonthLabel)}</strong>` : ''}`
+  );
+
+  const actions = document.createElement('div');
+  actions.className = 'pf-success-actions is-grid';
+
+  const encodedId = encodeURIComponent(studentDocId);
+
+  const slipBtn = document.createElement('button');
+  slipBtn.type = 'button';
+  slipBtn.className = 'ui-btn primary';
+  slipBtn.innerHTML = '<i data-lucide="file-text"></i><span>View admission slip</span>';
+  slipBtn.onclick = () => {
+    close();
+    location.hash = `#/school-admissions/${encodedId}/receipt`;
+  };
+
+  const printBtn = document.createElement('button');
+  printBtn.type = 'button';
+  printBtn.className = 'ui-btn ghost';
+  printBtn.innerHTML = '<i data-lucide="printer"></i><span>Print</span>';
+  printBtn.onclick = () => {
+    close();
+    location.hash = `#/school-admissions/${encodedId}/receipt?print=1`;
+  };
+
+  const profileBtn = document.createElement('button');
+  profileBtn.type = 'button';
+  profileBtn.className = 'ui-btn ghost';
+  profileBtn.innerHTML = '<i data-lucide="user"></i><span>Open profile</span>';
+  profileBtn.onclick = () => {
+    close();
+    location.hash = `#/students/${encodedId}`;
+  };
+
+  const anotherBtn = document.createElement('button');
+  anotherBtn.type = 'button';
+  anotherBtn.className = 'ui-btn ghost';
+  anotherBtn.innerHTML = '<i data-lucide="user-plus"></i><span>Admit another</span>';
+  anotherBtn.onclick = () => {
+    close();
+    if (typeof onAdmitAnother === 'function') {
+      onAdmitAnother();
+    } else if (!location.hash.startsWith('#/school-students')) {
+      location.hash = '#/school-students';
+    }
+  };
+
+  actions.append(slipBtn, printBtn, profileBtn, anotherBtn);
+
+  modal.append(closeBtn, iconWrap, title, subtitle, summary, actions);
+  back.appendChild(modal);
+  document.body.appendChild(back);
+
+  if (typeof lucide !== 'undefined') lucide.createIcons();
+  slipBtn.focus();
 }
 
 /**
@@ -686,7 +873,7 @@ export async function openPaymentPopup({
   const onModeChange = (modeVal) => {
     const isCash = modeVal === 'cash';
     txnInput.disabled = isCash;
-    txnInput.required = !isCash;
+    txnInput.required = false;
     txnWrap.classList.remove('is-invalid');
     txnErr.textContent = '';
     if (isCash) {
@@ -696,8 +883,8 @@ export async function openPaymentPopup({
       txnWrap.classList.add('is-disabled');
     } else {
       const mLabel = MODE_OPTIONS.find((m) => m.value === modeVal)?.label || modeVal.toUpperCase();
-      txnLabel.innerHTML = 'Transaction / Reference ID <em style="color:var(--danger,#dc2626);font-style:normal;">*</em> <span style="font-weight: normal; color: var(--text-mute, #64748b); font-size: 11.5px;">(Required)</span>';
-      txnInput.placeholder = 'Enter ' + mLabel + ' Transaction / Ref ID';
+      txnLabel.innerHTML = 'Transaction / Reference ID <span style="font-weight: normal; color: var(--text-mute, #64748b); font-size: 11.5px;">(Optional)</span>';
+      txnInput.placeholder = 'Optional (' + mLabel + ' Ref / TXN ID)';
       txnWrap.classList.remove('is-disabled');
     }
   };
@@ -878,17 +1065,6 @@ export async function openPaymentPopup({
       return;
     }
 
-    const selectedMode = String(modeSel.value || 'cash').toLowerCase().trim() || 'cash';
-    const trimmedTxn = selectedMode !== 'cash' ? txnInput.value.trim() : '';
-    if (selectedMode !== 'cash' && !trimmedTxn) {
-      const mLabel = MODE_OPTIONS.find((m) => m.value === selectedMode)?.label || selectedMode.toUpperCase();
-      txnWrap.classList.add('is-invalid');
-      txnErr.textContent = `Transaction / Reference ID is required for ${mLabel} payments.`;
-      showToast({ type: 'error', message: `Transaction / Reference ID is required for ${mLabel} payments.` });
-      txnInput.focus();
-      return;
-    }
-
     const val = typeSel.value;
     if (!val) {
       showToast({ type: 'error', message: 'Please select a valid payment type.' });
@@ -936,22 +1112,38 @@ export async function openPaymentPopup({
           playPaymentSuccessSound();
           confirmedPayment = true;
           popup.close();
-          promptOpenReceipt({
-            studentDocId: kidsRes.id || kidsRes.studentDocId || s.id,
-            paymentId: isUpgrade ? (kidsRes.paymentId || 'latest') : 'payment',
-            receiptNo: kidsRes.receiptNo,
-            student: { name: s.name, studentId: kidsRes.studentId || s.studentId },
-            forText: isUpgrade
-              ? ('Level Upgrade (' + (pendingAdmission.courseName || 'Package') + ')')
-              : ('Admission Fee (' + (pendingAdmission.paymentMode === 'difference' ? 'Difference' : 'Full Payment') + ')'),
-            amount: baseAmount,
-            lateFee: 0,
-            totalPaid: baseAmount,
-            mode: modeSel.value,
-            txnId: txnInput.value.trim(),
-            date: new Date(),
-            from: isUpgrade ? (from || 'profile') : 'school-admissions'
-          });
+          if (isUpgrade) {
+            promptOpenReceipt({
+              studentDocId: kidsRes.id || kidsRes.studentDocId || s.id,
+              paymentId: kidsRes.paymentId || 'latest',
+              receiptNo: kidsRes.receiptNo,
+              student: { name: s.name, studentId: kidsRes.studentId || s.studentId },
+              forText: 'Level Upgrade (' + (pendingAdmission.courseName || 'Package') + ')',
+              amount: baseAmount,
+              lateFee: 0,
+              totalPaid: baseAmount,
+              mode: modeSel.value,
+              txnId: txnInput.value.trim(),
+              date: new Date(),
+              from: from || 'profile'
+            });
+          } else {
+            promptKidsAdmissionSuccess({
+              studentDocId: kidsRes.id || kidsRes.studentDocId || s.id,
+              studentId: kidsRes.studentId || s.studentId || '',
+              studentName: s.name,
+              courseName: kidsRes.courseName || pendingAdmission.courseName || s.courseName || '',
+              batchName: kidsRes.batchName || pendingAdmission.batchName || '',
+              receiptNo: kidsRes.receiptNo,
+              admFeePaid: baseAmount,
+              paymentMode: pendingAdmission.paymentMode || 'full',
+              mode: modeSel.value,
+              txnId: txnInput.value.trim(),
+              monthlyFee: kidsRes.monthlyFee ?? pendingAdmission.monthlyFee ?? 0,
+              firstMonthlyMonthLabel: pendingAdmission.firstMonthlyMonthLabel || '',
+              onAdmitAnother: pendingAdmission.onAdmitAnother || null
+            });
+          }
           if (typeof onSuccess === 'function') {
             await onSuccess({ ...kidsRes, mode: modeSel.value, txnId: txnInput.value.trim() });
           }

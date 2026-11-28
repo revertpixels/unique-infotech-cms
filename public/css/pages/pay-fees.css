@@ -1013,10 +1013,30 @@
   margin: 0 auto 12px;
   box-shadow: 0 0 0 6px #f0fdf4;
 }
+.pf-success-icon-wrap.is-animated {
+  animation: pfSuccessPop .38s cubic-bezier(.22, 1, .36, 1) both;
+}
 .pf-success-icon-wrap svg.lucide {
   width: 28px;
   height: 28px;
   stroke-width: 2.5;
+}
+.pf-success-icon-wrap.is-animated svg.lucide path,
+.pf-success-icon-wrap.is-animated svg.lucide polyline {
+  stroke-dasharray: 36;
+  stroke-dashoffset: 36;
+  animation: pfCheckDraw .35s cubic-bezier(.22, 1, .36, 1) .12s forwards;
+}
+@keyframes pfSuccessPop {
+  0% { transform: scale(.65); opacity: 0; }
+  70% { transform: scale(1.06); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+@keyframes pfCheckDraw {
+  to { stroke-dashoffset: 0; }
+}
+.ui-modal.pf-success-modal.is-admission {
+  max-width: 500px !important;
 }
 .pf-success-title {
   font-size: 20px;
@@ -1074,6 +1094,16 @@
   gap: 10px;
   width: 100%;
   box-sizing: border-box;
+}
+.pf-success-actions.is-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+@media (max-width: 460px) {
+  .pf-success-actions.is-grid {
+    grid-template-columns: 1fr;
+  }
 }
 .pf-success-actions .ui-btn {
   justify-content: center;

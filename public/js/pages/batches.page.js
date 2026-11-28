@@ -1,16 +1,16 @@
 import { db } from '../config/firebase-config.js';
 import { collection, getDocs, getDoc, query, where, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, deleteField } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.198';
-import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.198';
-import { PAGE_SIZE, buildStats, buildToolbar, renderPager, renderEmptyTableState } from '../components/list-page.js?v=1.8.198';
-import { createSelect } from '../components/ui-select.js?v=1.8.198';
-import { createMultiSelect } from '../components/multi-select.js?v=1.8.198';
-import { openMenu } from '../components/ui-menu.js?v=1.8.198';
-import { confirmDialog } from '../components/ui-confirm.js?v=1.8.198';
-import { loadSessions, getSelectedSessionId, getSelectedSession, getCachedSessions } from '../core/sessions.js?v=1.8.198';
-import { ensureReferenceData, loadAllYouthSessionsForCompare, getCachedReferenceData } from '../services/report.service.js?v=1.8.198';
-import { batchAllowsCourse, batchCourseLabel, batchCourseTooltip, isCourseActive } from '../utils/session-rules.js?v=1.8.198';
-import { getRoleTitle } from '../services/user-directory.service.js?v=1.8.198';
+import { showToast } from '../components/toast.js?v=1.8.199';
+import { registerDirty, confirmLeave } from '../utils/unsaved-guard.js?v=1.8.199';
+import { PAGE_SIZE, buildStats, buildToolbar, renderPager, renderEmptyTableState } from '../components/list-page.js?v=1.8.199';
+import { createSelect } from '../components/ui-select.js?v=1.8.199';
+import { createMultiSelect } from '../components/multi-select.js?v=1.8.199';
+import { openMenu } from '../components/ui-menu.js?v=1.8.199';
+import { confirmDialog } from '../components/ui-confirm.js?v=1.8.199';
+import { loadSessions, getSelectedSessionId, getSelectedSession, getCachedSessions } from '../core/sessions.js?v=1.8.199';
+import { ensureReferenceData, loadAllYouthSessionsForCompare, getCachedReferenceData } from '../services/report.service.js?v=1.8.199';
+import { batchAllowsCourse, batchCourseLabel, batchCourseTooltip, isCourseActive } from '../utils/session-rules.js?v=1.8.199';
+import { getRoleTitle } from '../services/user-directory.service.js?v=1.8.199';
 // Batches Part 2A/2B: add/edit form, delete, student capacity
 
 const TEXT_KEYS = ['name', 'code', 'capacity'];

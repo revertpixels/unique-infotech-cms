@@ -3,29 +3,29 @@
 // and "Break ended - not rejoined" follow-up list.
 import { db } from '../config/firebase-config.js';
 import { collection, getDocs, query, where } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.198';
-import { PAGE_SIZE, buildStats, buildToolbar, renderPager } from '../components/list-page.js?v=1.8.198';
-import { openPopup } from '../components/modal.js?v=1.8.198';
-import { createSelect } from '../components/ui-select.js?v=1.8.198';
-import { formatDateIN, formatPersonName } from '../utils/formatter.js?v=1.8.198';
-import { localToday } from '../utils/school-lifecycle.js?v=1.8.198';
+import { showToast } from '../components/toast.js?v=1.8.199';
+import { PAGE_SIZE, buildStats, buildToolbar, renderPager } from '../components/list-page.js?v=1.8.199';
+import { openPopup } from '../components/modal.js?v=1.8.199';
+import { createSelect } from '../components/ui-select.js?v=1.8.199';
+import { formatDateIN, formatPersonName } from '../utils/formatter.js?v=1.8.199';
+import { localToday } from '../utils/school-lifecycle.js?v=1.8.199';
 import {
   formatBreakPeriod,
   formatShortMonthYear,
   isBreakOverdueReturn
-} from '../utils/school-billing.js?v=1.8.198';
+} from '../utils/school-billing.js?v=1.8.199';
 import {
   openKidsStartBreakModal,
   openKidsResumeBreakModal
-} from '../utils/school-break-modals.js?v=1.8.198';
-import { getRoleTitle, resolveUserDisplay } from '../services/user-directory.service.js?v=1.8.198';
+} from '../utils/school-break-modals.js?v=1.8.199';
+import { getRoleTitle, resolveUserDisplay } from '../services/user-directory.service.js?v=1.8.199';
 import {
   ensureKidsDataset,
   getCachedKidsDataset,
   syncKidsDatasetDelta,
   isCacheStale,
   scheduleDelayedSkeleton
-} from '../services/report.service.js?v=1.8.198';
+} from '../services/report.service.js?v=1.8.199';
 
 const COL = 'students';
 const BREAKS_COL = 'breaks';

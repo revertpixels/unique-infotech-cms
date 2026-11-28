@@ -9,35 +9,35 @@ import {
   collection, getDocs, query, where, doc, getDoc, addDoc, updateDoc, serverTimestamp,
   runTransaction, deleteField, writeBatch, deleteDoc, arrayUnion
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.198';
-import { registerDirty, confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.198';
-import { buildStats, buildToolbar, renderPager, PAGE_SIZE } from '../components/list-page.js?v=1.8.198';
-import { createSelect } from '../components/ui-select.js?v=1.8.198';
-import { createBranchBatchFilter } from '../components/branch-batch-filter.js?v=1.8.198';
-import { openMenu } from '../components/ui-menu.js?v=1.8.198';
-import { openPopup } from '../components/modal.js?v=1.8.198';
-import { createDatePicker } from '../components/ui-datepicker.js?v=1.8.198';
-import { confirmDialog } from '../components/ui-confirm.js?v=1.8.198';
-import { formatINR, formatDateIN, initials } from '../utils/formatter.js?v=1.8.198';
-import { validatePhone, validateEmail, validateDOB, validateName, validateRequired } from '../utils/validator.js?v=1.8.198';
-import { readStudentId, readReceiptNo, writeCounter } from '../services/admission.service.js?v=1.8.198';
-import { isCourseActive, batchAllowsCourse, todayISO } from '../utils/session-rules.js?v=1.8.198';
-import { compressTo100KB, readAsDataURL, blobToDataURL, isImageFile } from '../utils/image-compress.js?v=1.8.198';
-import { firstMonthlyMonth } from '../utils/school-receipt.js?v=1.8.198';
+import { showToast } from '../components/toast.js?v=1.8.199';
+import { registerDirty, confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.199';
+import { buildStats, buildToolbar, renderPager, PAGE_SIZE } from '../components/list-page.js?v=1.8.199';
+import { createSelect } from '../components/ui-select.js?v=1.8.199';
+import { createBranchBatchFilter } from '../components/branch-batch-filter.js?v=1.8.199';
+import { openMenu } from '../components/ui-menu.js?v=1.8.199';
+import { openPopup } from '../components/modal.js?v=1.8.199';
+import { createDatePicker } from '../components/ui-datepicker.js?v=1.8.199';
+import { confirmDialog } from '../components/ui-confirm.js?v=1.8.199';
+import { formatINR, formatDateIN, initials } from '../utils/formatter.js?v=1.8.199';
+import { validatePhone, validateEmail, validateDOB, validateName, validateRequired } from '../utils/validator.js?v=1.8.199';
+import { readStudentId, readReceiptNo, writeCounter } from '../services/admission.service.js?v=1.8.199';
+import { isCourseActive, batchAllowsCourse, todayISO } from '../utils/session-rules.js?v=1.8.199';
+import { compressTo100KB, readAsDataURL, blobToDataURL, isImageFile } from '../utils/image-compress.js?v=1.8.199';
+import { firstMonthlyMonth, formatNoPaymentReason } from '../utils/school-receipt.js?v=1.8.199';
 import {
   formatBreakStatusText,
   isBreakOverdueReturn,
   syncOpenKidsBills
-} from '../utils/school-billing.js?v=1.8.198';
+} from '../utils/school-billing.js?v=1.8.199';
 import {
   createBillingStartSelector,
   openKidsStartBreakModal,
   openKidsResumeBreakModal,
   openKidsUpgradePackageModal
-} from '../utils/school-break-modals.js?v=1.8.198';
-import { playPaymentSuccessSound } from '../utils/sound.js?v=1.8.198';
-import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.198';
-import { getRoleTitle } from '../services/user-directory.service.js?v=1.8.198';
+} from '../utils/school-break-modals.js?v=1.8.199';
+import { playPaymentSuccessSound } from '../utils/sound.js?v=1.8.199';
+import { openPaymentPopup, promptKidsAdmissionSuccess } from '../components/payment-popup.js?v=1.8.199';
+import { getRoleTitle } from '../services/user-directory.service.js?v=1.8.199';
 import {
   ensureReferenceData,
   getCachedReferenceData,
@@ -47,7 +47,7 @@ import {
   syncKidsDatasetDelta,
   isCacheStale,
   scheduleDelayedSkeleton
-} from '../services/report.service.js?v=1.8.198';
+} from '../services/report.service.js?v=1.8.199';
 
 const COL = 'students';
 const GENDERS = [
@@ -1841,6 +1841,111 @@ export async function mount({ container, profile, ctx }) {
       return result;
     }
 
+    const selBatch = batches.find((b) => b.id === v.batchId) || null;
+    const chosenFirstMonth = v.firstMonthlyMonth || firstMonthlyMonth(v.admissionDate);
+    const billingMonthLabel = formatBillingMonth(chosenFirstMonth);
+
+    function openKidsNoPaymentConfirmPopup() {
+      const reasonLabel = v.paymentMode === 'none'
+        ? formatNoPaymentReason(v.noPaymentReason, v.noPaymentOther)
+        : 'Configured level admission fee is \u20B90';
+      const monthlyFeeNum = Number(selCourse?.monthlyFee || 0);
+      const popup = openPopup({
+        title: 'Confirm admission',
+        width: '480px',
+        onBeforeClose: () => !saving
+      });
+
+      const body = mk('div', 'sp-modal-form');
+      const summary = mk('div', 'pf-success-summary');
+      summary.style.marginBottom = '6px';
+
+      function addConfirmRow(label, value) {
+        const row = mk('div', 'pf-success-row');
+        const lbl = mk('span', 'pf-success-label', label);
+        const val = mk('span', 'pf-success-val');
+        if (typeof value === 'string') val.textContent = value;
+        else if (value) val.appendChild(value);
+        row.append(lbl, val);
+        summary.appendChild(row);
+      }
+
+      addConfirmRow('Student', mk('span', 'font-semibold', v.name));
+      addConfirmRow('Level', selCourse?.name || '-');
+      addConfirmRow('Batch', selBatch?.name || '-');
+      addConfirmRow('Admission date', formatDateIN(v.admissionDate) || v.admissionDate || '-');
+      const feeBadge = mk('span', '', 'Admission fee: \u20B90 (No payment)');
+      feeBadge.style.cssText = 'display:inline-block;background:#FFF7ED;border:1px dashed #FB923C;color:#C2410C;padding:2px 9px;border-radius:9px;font-size:12px;font-weight:600;';
+      addConfirmRow('Fee status', feeBadge);
+      addConfirmRow('Reason', reasonLabel);
+
+      const billingBanner = mk('div');
+      billingBanner.style.cssText = 'background:#EEF2FF;border:1px solid #C7D2FE;color:#312E81;border-radius:10px;padding:10px 12px;font-size:13px;font-weight:500;';
+      billingBanner.textContent = `Monthly fee ${formatINR(monthlyFeeNum)} will be billed from ${billingMonthLabel}`;
+
+      const footer = mk('div', 'adm-view-foot');
+      footer.style.marginTop = '4px';
+      const popCancelBtn = mk('button', 'ui-btn ghost', 'Cancel');
+      popCancelBtn.type = 'button';
+      const popConfirmBtn = mk('button', 'ui-btn primary', 'Confirm admission');
+      popConfirmBtn.type = 'button';
+
+      popCancelBtn.onclick = () => {
+        if (saving) return;
+        popup.close();
+      };
+
+      popConfirmBtn.onclick = async () => {
+        if (saving) return;
+        saving = true;
+        refresh();
+        popCancelBtn.disabled = true;
+        popConfirmBtn.disabled = true;
+        popConfirmBtn.innerHTML = '<i data-lucide="loader-2" class="spin"></i> Saving...';
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+        setState('Saving...', 'dirty');
+        try {
+          const result = await executeKidsAdmissionSave({ mode: '', txnId: '', remarks: '' });
+          saved = {};
+          clearDirty();
+          saving = false;
+          popup.close();
+          closeForm();
+          load({ forceRefresh: false });
+          playPaymentSuccessSound();
+          showToast({ type: 'success', message: 'Admission saved! Student ID: ' + result.studentId });
+          promptKidsAdmissionSuccess({
+            studentDocId: result.id,
+            studentId: result.studentId,
+            studentName: v.name,
+            courseName: result.courseName || selCourse?.name || '',
+            batchName: result.batchName || selBatch?.name || '',
+            receiptNo: result.receiptNo,
+            admFeePaid: 0,
+            paymentMode: v.paymentMode || 'none',
+            noPaymentReasonLabel: reasonLabel,
+            monthlyFee: result.monthlyFee ?? monthlyFeeNum,
+            firstMonthlyMonthLabel: billingMonthLabel,
+            onAdmitAnother: () => openForm(null)
+          });
+        } catch (e) {
+          saving = false;
+          popCancelBtn.disabled = false;
+          popConfirmBtn.disabled = false;
+          popConfirmBtn.textContent = 'Confirm admission';
+          refresh();
+          setState('Save failed', 'error');
+          showToast({ type: 'error', message: e.message || 'Admission could not be saved. Please retry.' });
+        }
+      };
+
+      footer.append(popCancelBtn, popConfirmBtn);
+      body.append(summary, billingBanner, footer);
+      popup.container.appendChild(body);
+      if (typeof lucide !== 'undefined') lucide.createIcons();
+      popConfirmBtn.focus();
+    }
+
     if (!updating && previewCharge > 0) {
       openPaymentPopup({
         student: {
@@ -1856,6 +1961,10 @@ export async function mount({ container, profile, ctx }) {
           paymentMode: v.paymentMode,
           admFee: previewCharge,
           courseName: selCourse?.name || '',
+          batchName: selBatch?.name || '',
+          monthlyFee: Number(selCourse?.monthlyFee || 0),
+          firstMonthlyMonthLabel: billingMonthLabel,
+          onAdmitAnother: () => openForm(null),
           onConfirmPayment: async (pp) => {
             const res = await executeKidsAdmissionSave(pp);
             saved = {};
@@ -1872,12 +1981,16 @@ export async function mount({ container, profile, ctx }) {
       return;
     }
 
+    if (!updating && (v.paymentMode === 'none' || previewCharge === 0)) {
+      openKidsNoPaymentConfirmPopup();
+      return;
+    }
+
     saving = true; refresh(); saveBtn.disabled = true; cancelBtn.disabled = true; setState('Saving...', 'dirty');
     try {
       const result = await executeKidsAdmissionSave({ mode: '', txnId: '', remarks: '' });
       closeForm();
-      if (!updating) playPaymentSuccessSound();
-      showToast({ type: 'success', message: updating ? 'Student details updated. Original payment unchanged.' : 'Admission saved.' });
+      showToast({ type: 'success', message: 'Student details updated. Original payment unchanged.' });
       location.hash = '#/school-admissions/' + encodeURIComponent(result.id) + '/receipt';
     } catch (e) {
       if (alive) { saving = false; refresh(); setState('Save failed', 'error'); showToast({ type: 'error', message: e.message || 'Admission could not be saved. Please retry.' }); }

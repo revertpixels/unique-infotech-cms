@@ -10,11 +10,11 @@ import {
   query,
   where
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.198';
-import { createSelect } from '../components/ui-select.js?v=1.8.198';
-import { buildYouthReceiptData, fmtRs } from '../utils/admission-receipt.js?v=1.8.198';
-import { downloadYouthReceiptPdf } from '../utils/admission-receipt-pdf.js?v=1.8.198';
-import { getStudentDocRecord } from '../utils/student-media.js?v=1.8.198';
+import { showToast } from '../components/toast.js?v=1.8.199';
+import { createSelect } from '../components/ui-select.js?v=1.8.199';
+import { buildYouthReceiptData, fmtRs } from '../utils/admission-receipt.js?v=1.8.199';
+import { downloadYouthReceiptPdf } from '../utils/admission-receipt-pdf.js?v=1.8.199';
+import { getStudentDocRecord } from '../utils/student-media.js?v=1.8.199';
 
 const COL = 'students';
 let studentDocId = '';

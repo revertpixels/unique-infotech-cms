@@ -6,15 +6,15 @@
 
 import { db } from '../config/firebase-config.js';
 import { collection, getDocs, query, where } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.198';
-import { openPopup } from '../components/modal.js?v=1.8.198';
-import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.198';
-import { createSelect } from '../components/ui-select.js?v=1.8.198';
-import { createDatePicker, createMonthPicker } from '../components/ui-datepicker.js?v=1.8.198';
-import { formatINR } from '../utils/formatter.js?v=1.8.198';
-import { isCourseActive, batchAllowsCourse } from '../utils/session-rules.js?v=1.8.198';
-import { resolveUserDisplay } from '../services/user-directory.service.js?v=1.8.198';
-import { localToday, monthSeq } from './school-lifecycle.js?v=1.8.198';
+import { showToast } from '../components/toast.js?v=1.8.199';
+import { openPopup } from '../components/modal.js?v=1.8.199';
+import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.199';
+import { createSelect } from '../components/ui-select.js?v=1.8.199';
+import { createDatePicker, createMonthPicker } from '../components/ui-datepicker.js?v=1.8.199';
+import { formatINR } from '../utils/formatter.js?v=1.8.199';
+import { isCourseActive, batchAllowsCourse } from '../utils/session-rules.js?v=1.8.199';
+import { resolveUserDisplay } from '../services/user-directory.service.js?v=1.8.199';
+import { localToday, monthSeq } from './school-lifecycle.js?v=1.8.199';
 import {
   addMonthsYM,
   formatBreakPeriod,
@@ -27,7 +27,7 @@ import {
   resumeKidsBreak,
   upgradeKidsPackage,
   isBreakOverdueReturn
-} from './school-billing.js?v=1.8.198';
+} from './school-billing.js?v=1.8.199';
 
 function mk(tag, cls, text) {
   const e = document.createElement(tag);

@@ -3,12 +3,12 @@
 // Scope: Super Admin.
 import { db } from '../config/firebase-config.js';
 import { doc, getDoc, getDocs, collection, query, where } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.198';
-import { createSelect } from '../components/ui-select.js?v=1.8.198';
-import { formatDateIN } from '../utils/formatter.js?v=1.8.198';
-import { buildSchoolReceiptData, fmtRs } from '../utils/school-receipt.js?v=1.8.198';
-import { downloadSchoolReceiptPdf } from '../utils/school-receipt-pdf.js?v=1.8.198';
-import { getStudentDocRecord } from '../utils/student-media.js?v=1.8.198';
+import { showToast } from '../components/toast.js?v=1.8.199';
+import { createSelect } from '../components/ui-select.js?v=1.8.199';
+import { formatDateIN } from '../utils/formatter.js?v=1.8.199';
+import { buildSchoolReceiptData, fmtRs } from '../utils/school-receipt.js?v=1.8.199';
+import { downloadSchoolReceiptPdf } from '../utils/school-receipt-pdf.js?v=1.8.199';
+import { getStudentDocRecord } from '../utils/student-media.js?v=1.8.199';
 
 const COL = 'students';
 let studentDocId = '';
@@ -500,7 +500,7 @@ function renderReceipt(container, d) {
     `;
   } else if (d.paymentMode === 'none') {
     paymentRows = `
-      <tr><td>Admission fee (one-time)</td><td><span class="uk-pill due">No payment (${escapeHtml(d.noPaymentReasonFormatted)})</span></td><td>${fmtRs(0)}</td></tr>
+      <tr><td>Admission fee (one-time)</td><td><span class="uk-pill due">No payment &ndash; ${escapeHtml(d.noPaymentReasonFormatted)}</span></td><td>&#8377;0</td></tr>
     `;
   } else {
     // Full payment
@@ -521,13 +521,13 @@ function renderReceipt(container, d) {
       <thead><tr><th>Description</th><th>Status</th><th>Amount</th></tr></thead>
       <tbody>
         ${paymentRows}
-        ${d.actualAmountReceived > 0 ? `<tr><td>Payment mode</td><td><span class="uk-pill">${escapeHtml(d.paymentMethodLabel || 'Cash')}</span></td><td>${d.txnId ? 'TXN: ' + escapeHtml(d.txnId) : '—'}</td></tr>` : ''}
+        ${d.paymentMode !== 'none' && d.actualAmountReceived > 0 ? `<tr><td>Payment mode</td><td><span class="uk-pill">${escapeHtml(d.paymentMethodLabel || 'Cash')}</span></td><td>${d.txnId ? 'TXN: ' + escapeHtml(d.txnId) : '—'}</td></tr>` : ''}
       </tbody>
     </table>
     <div class="uk-pbox">
       <div class="uk-pcell">
         <em>Total received</em>
-        <b>${fmtRs(d.actualAmountReceived)}</b>
+        <b>${d.paymentMode === 'none' ? '&#8377;0' : fmtRs(d.actualAmountReceived)}</b>
         <span class="w">(${escapeHtml(d.amountInWords)})</span>
       </div>
       <div class="uk-pcell bal">

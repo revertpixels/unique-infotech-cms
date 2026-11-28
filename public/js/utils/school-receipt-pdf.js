@@ -2,7 +2,7 @@
 // using pdfmake. Loaded dynamically on demand. Produces real, selectable,
 // searchable text with exact 2-page layout matching reference-templates/uk.html.
 
-import { fmtRs } from './school-receipt.js?v=1.8.198';
+import { fmtRs } from './school-receipt.js?v=1.8.199';
 
 const INK = '#1D1A3A';
 const MUTED = '#5B5F85';
@@ -415,7 +415,7 @@ export function buildSchoolReceiptPdfDefinition(d, logoDataUrl) {
   } else if (d.paymentMode === 'none') {
     payRows.push([
       { text: 'Admission fee (one-time)', fontSize: 7.5 },
-      { text: 'No payment (' + (d.noPaymentReasonFormatted || 'Exempt') + ')', fontSize: 7.5, color: '#C2410C' },
+      { text: 'No payment \u2013 ' + (d.noPaymentReasonFormatted || 'Exempt'), fontSize: 7.5, color: '#C2410C' },
       { text: fmtRs(0), fontSize: 7.5, alignment: 'right' }
     ]);
   } else {
@@ -425,7 +425,7 @@ export function buildSchoolReceiptPdfDefinition(d, logoDataUrl) {
       { text: fmtRs(d.actualAmountReceived), fontSize: 7.5, alignment: 'right' }
     ]);
   }
-  if (Number(d.actualAmountReceived || 0) > 0) {
+  if (d.paymentMode !== 'none' && Number(d.actualAmountReceived || 0) > 0) {
     payRows.push([
       { text: 'Payment mode', fontSize: 7.5 },
       { text: d.paymentMethodLabel || 'Cash', fontSize: 7.5, color: NAVY, bold: true },

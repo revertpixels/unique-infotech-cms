@@ -11,11 +11,11 @@ import {
   collection, getDocs, query, where, doc, getDoc, addDoc, updateDoc, serverTimestamp,
   runTransaction, writeBatch, arrayUnion
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.198';
-import { localToday, monthSeq, nextMonth, previousMonth } from './school-lifecycle.js?v=1.8.198';
-import { firstMonthlyMonth } from './school-receipt.js?v=1.8.198';
-import { fineFor } from './session-rules.js?v=1.8.198';
-import { readReceiptNo, writeCounter } from '../services/admission.service.js?v=1.8.198';
+import { showToast } from '../components/toast.js?v=1.8.199';
+import { localToday, monthSeq, nextMonth, previousMonth } from './school-lifecycle.js?v=1.8.199';
+import { firstMonthlyMonth } from './school-receipt.js?v=1.8.199';
+import { fineFor } from './session-rules.js?v=1.8.199';
+import { readReceiptNo, writeCounter } from '../services/admission.service.js?v=1.8.199';
 
 const BILLS_COL = 'bills';
 const PAYMENTS_COL = 'payments';

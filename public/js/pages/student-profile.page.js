@@ -11,20 +11,20 @@ import {
   serverTimestamp,
   runTransaction
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.198';
-import { openPopup } from '../components/modal.js?v=1.8.198';
-import { createSelect } from '../components/ui-select.js?v=1.8.198';
-import { confirmDialog } from '../components/ui-confirm.js?v=1.8.198';
-import { openMenu } from '../components/ui-menu.js?v=1.8.198';
-import { formatINR, formatDateIN, formatPersonName, formatGenderDisplay, initials } from '../utils/formatter.js?v=1.8.198';
-import { validatePhone, validateEmail, validateDOB, validateName } from '../utils/validator.js?v=1.8.198';
-import { registerDirty } from '../utils/unsaved-guard.js?v=1.8.198';
-import { resolveUserDisplay, getRoleTitle, loadUsersDirectory } from '../services/user-directory.service.js?v=1.8.198';
-import { compressTo100KB, blobToDataURL, isImageFile, formatBytes } from '../utils/image-compress.js?v=1.8.198';
-import { getStudentPhotoSrc, getStudentDocRecord, getStudentDocSrc, getStudentDocMime } from '../utils/student-media.js?v=1.8.198';
-import { todayISO } from '../utils/session-rules.js?v=1.8.198';
-import { getSelectedSessionId } from '../core/sessions.js?v=1.8.198';
-import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.198';
+import { showToast } from '../components/toast.js?v=1.8.197';
+import { openPopup } from '../components/modal.js?v=1.8.197';
+import { createSelect } from '../components/ui-select.js?v=1.8.197';
+import { confirmDialog } from '../components/ui-confirm.js?v=1.8.197';
+import { openMenu } from '../components/ui-menu.js?v=1.8.197';
+import { formatINR, formatDateIN, formatPersonName, formatGenderDisplay, initials } from '../utils/formatter.js?v=1.8.197';
+import { validatePhone, validateEmail, validateDOB, validateName } from '../utils/validator.js?v=1.8.197';
+import { registerDirty } from '../utils/unsaved-guard.js?v=1.8.197';
+import { resolveUserDisplay, getRoleTitle, loadUsersDirectory } from '../services/user-directory.service.js?v=1.8.197';
+import { compressTo100KB, blobToDataURL, isImageFile, formatBytes } from '../utils/image-compress.js?v=1.8.197';
+import { getStudentPhotoSrc, getStudentDocRecord, getStudentDocSrc, getStudentDocMime } from '../utils/student-media.js?v=1.8.197';
+import { todayISO } from '../utils/session-rules.js?v=1.8.197';
+import { getSelectedSessionId } from '../core/sessions.js?v=1.8.197';
+import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.197';
 import {
   fetchStudentPayments,
   recordPaymentTx,
@@ -35,8 +35,8 @@ import {
   calculateStudentFinancials,
   buildReceiptMenuItems,
   repairStudentAdmissionPayment
-} from '../services/payment.service.js?v=1.8.198';
-import { courseFeeOf, discountOf } from '../utils/fees.js?v=1.8.198';
+} from '../services/payment.service.js?v=1.8.197';
+import { courseFeeOf, discountOf } from '../utils/fees.js?v=1.8.197';
 import {
   isBreakOverdueReturn,
   formatBreakStatusText,
@@ -45,13 +45,13 @@ import {
   computeKidsStudentDues,
   computeLateFee,
   syncOpenKidsBills
-} from '../utils/school-billing.js?v=1.8.198';
+} from '../utils/school-billing.js?v=1.8.197';
 import {
   openKidsStartBreakModal,
   openKidsResumeBreakModal,
   openKidsUpgradePackageModal
-} from '../utils/school-break-modals.js?v=1.8.198';
-import { firstMonthlyMonth } from '../utils/school-receipt.js?v=1.8.198';
+} from '../utils/school-break-modals.js?v=1.8.197';
+import { firstMonthlyMonth } from '../utils/school-receipt.js?v=1.8.197';
 import {
   ensureReferenceData,
   getCachedReferenceData,
@@ -60,7 +60,7 @@ import {
   getCachedKidsHistory,
   isCacheStale,
   scheduleDelayedSkeleton
-} from '../services/report.service.js?v=1.8.198';
+} from '../services/report.service.js?v=1.8.197';
 
 const COL = 'students';
 const QUALIFICATIONS = ['VIII Pass', 'Secondary (X) Pass', 'Higher Secondary (XII) Pass', 'ITI', 'Diploma', 'Undergraduate (Graduate)', 'Postgraduate', 'Other'];
@@ -81,7 +81,6 @@ let paymentsCache = [];
 let kidsBillsCache = [];
 let kidsBreaksCache = [];
 let kidsWaiversCache = [];
-let kidsPaymentsHydrated = false;
 let branchesCache = null;
 let usersCache = null;
 let coursesCache = null;
@@ -142,7 +141,6 @@ function hydrateKidsCachesFromMemory(student) {
   }
   const hist = getCachedKidsHistory();
   if (hist?.entries) {
-    kidsPaymentsHydrated = true;
     const mine = hist.entries.filter((e) => e.studentDocId === student.id || (student.studentId && e.studentId === student.studentId));
     paymentsCache = mine
       .filter((e) => !e.isPureWaiver)
@@ -184,8 +182,6 @@ function hydrateKidsCachesFromMemory(student) {
         waivedByName: e.recordedByName || '',
         waivedByDesignation: e.recordedByDesignation || ''
       }));
-  } else {
-    kidsPaymentsHydrated = false;
   }
   return true;
 }
@@ -206,7 +202,7 @@ async function getMyBranchId() {
         }
       }
     }
-  } catch (_) {}
+  } catch (_) { }
   return null;
 }
 
@@ -455,7 +451,7 @@ export async function mount({ container, profile, ctx }) {
         if (activeTab === 'documents') renderDocumentsTab();
         else if (activeTab === 'payments') renderKidsPaymentsTab();
         else if (activeTab === 'course') renderCourseTab();
-      }).catch(() => {});
+      }).catch(() => { });
       return;
     }
 
@@ -587,7 +583,6 @@ export function unmount() {
   kidsBillsCache = [];
   kidsBreaksCache = [];
   kidsWaiversCache = [];
-  kidsPaymentsHydrated = false;
 }
 
 function showLoading(show) {
@@ -1073,9 +1068,14 @@ function renderMetrics() {
     if (barText) barText.textContent = `${paidBillsCount} monthly bill${paidBillsCount === 1 ? '' : 's'} paid`;
     const barFill = $('sp-stats-bar-fill');
     if (barFill) barFill.style.width = pct + '%';
+    const docTabDesc = document.querySelector('#sp-tab-documents .sp-tab-desc');
+    if (docTabDesc) docTabDesc.textContent = 'Passport photo & student signature';
     setTxt('sp-m-inst-paid', `${paidBillsCount}/${payableBillsCount} paid`);
     return;
   }
+
+  const docTabDescYouth = document.querySelector('#sp-tab-documents .sp-tab-desc');
+  if (docTabDescYouth) docTabDescYouth.textContent = 'Certificates & identification proofs';
 
   setMetricCardLabels([
     { label: 'Total Fee', sub: 'Course package' },
@@ -1283,9 +1283,9 @@ function openEditPersonalModal() {
 
   const unreg = registerDirty(() => {
     return nameField.input.value !== (s.name || '') ||
-           dobField.input.value !== (s.dob || '') ||
-           genderSel.value.toLowerCase() !== (s.gender || '').toLowerCase() ||
-           qualField.input.value !== (s.qualification || '');
+      dobField.input.value !== (s.dob || '') ||
+      genderSel.value.toLowerCase() !== (s.gender || '').toLowerCase() ||
+      qualField.input.value !== (s.qualification || '');
   });
 
   saveBtn.onclick = async () => {
@@ -1355,9 +1355,9 @@ function openEditContactModal() {
 
   const unreg = registerDirty(() => {
     return phoneField.input.value !== (s.phone || '') ||
-           altPhoneField.input.value !== (s.altPhone || '') ||
-           emailField.input.value !== (s.email || '') ||
-           addrField.input.value !== (s.address || '');
+      altPhoneField.input.value !== (s.altPhone || '') ||
+      emailField.input.value !== (s.email || '') ||
+      addrField.input.value !== (s.address || '');
   });
 
   saveBtn.onclick = async () => {
@@ -1633,27 +1633,43 @@ function renderDocumentsTab() {
   if (!grid) return;
   grid.textContent = '';
 
+  const isKids = currentStudent?.ctx === 'school';
+  const docTabDesc = document.querySelector('#sp-tab-documents .sp-tab-desc');
+  if (docTabDesc) {
+    docTabDesc.textContent = isKids
+      ? 'Passport photo & student signature'
+      : 'Certificates & identification proofs';
+  }
+
+  // Unique Kids profiles only expose Passport Photo & Student Signature;
+  // leave any legacy dobProof/marksheet docs untouched in Firestore.
+  const baseKeys = isKids
+    ? DOC_KEYS.filter((d) => d.key === 'photo' || d.key === 'signature')
+    : DOC_KEYS;
+
   const shownDocIds = new Set();
-  const displayItems = DOC_KEYS.map((item) => {
+  const displayItems = baseKeys.map((item) => {
     const rec = getStudentDocRecord(docsCache, item.key, currentStudent);
     if (rec && rec.id) shownDocIds.add(String(rec.id).toLowerCase());
     shownDocIds.add(String(item.key).toLowerCase());
     return { key: item.key, label: item.label, docData: rec };
   });
 
-  // Also include any additional uploaded document keys saved under docs/ (e.g. aadhaar, certificate)
-  Object.entries(docsCache || {}).forEach(([k, val]) => {
-    const low = String(k || '').toLowerCase();
-    const recKey = String(val?.key || val?.docType || k).toLowerCase();
-    if (shownDocIds.has(low) || shownDocIds.has(recKey)) return;
-    if (!getStudentDocSrc(val)) return;
-    shownDocIds.add(low);
-    displayItems.push({
-      key: k,
-      label: val?.label || formatPersonName(k.replace(/([A-Z])/g, ' $1').replace(/_/g, ' ')) || 'Document',
-      docData: val
+  if (!isKids) {
+    // Also include any additional uploaded document keys saved under docs/ (e.g. aadhaar, certificate)
+    Object.entries(docsCache || {}).forEach(([k, val]) => {
+      const low = String(k || '').toLowerCase();
+      const recKey = String(val?.key || val?.docType || k).toLowerCase();
+      if (shownDocIds.has(low) || shownDocIds.has(recKey)) return;
+      if (!getStudentDocSrc(val)) return;
+      shownDocIds.add(low);
+      displayItems.push({
+        key: k,
+        label: val?.label || formatPersonName(k.replace(/([A-Z])/g, ' $1').replace(/_/g, ' ')) || 'Document',
+        docData: val
+      });
     });
-  });
+  }
 
   displayItems.forEach(({ key, label, docData }) => {
     const docSrc = getStudentDocSrc(docData, getStudentDocMime(docData));
@@ -2035,10 +2051,10 @@ function openDocReplaceModal(key, label, existingDoc, droppedFile) {
             <span class="sp-compare-filename" title="${existingDoc.name || label}">${existingDoc.name || label}</span>
           </div>
           <div class="sp-compare-preview">
-            ${isOldPdf 
-              ? `<div class="sp-replace-pdf-wrap"><i data-lucide="file-text"></i><span>PDF Document</span></div>`
-              : `<img src="${existingSrc}" alt="Current">`
-            }
+            ${isOldPdf
+            ? `<div class="sp-replace-pdf-wrap"><i data-lucide="file-text"></i><span>PDF Document</span></div>`
+            : `<img src="${existingSrc}" alt="Current">`
+          }
           </div>
           <div class="sp-compare-footer">
             <span class="sp-compare-pill old">Will be replaced</span>
@@ -2057,9 +2073,9 @@ function openDocReplaceModal(key, label, existingDoc, droppedFile) {
           </div>
           <div class="sp-compare-preview">
             ${isNewPdf
-              ? `<div class="sp-replace-pdf-wrap"><i data-lucide="file-text"></i><span>${readyPayload.name}</span></div>`
-              : `<img src="${readyPayload.data}" alt="New">`
-            }
+            ? `<div class="sp-replace-pdf-wrap"><i data-lucide="file-text"></i><span>${readyPayload.name}</span></div>`
+            : `<img src="${readyPayload.data}" alt="New">`
+          }
           </div>
           <div class="sp-compare-footer">
             <span class="sp-replace-meta-pill"><i data-lucide="check-circle-2"></i> Ready · ${formatBytes(readyPayload.sizeBytes)}</span>
@@ -2395,7 +2411,7 @@ async function renderCourseTab() {
           if (cd) coursesCache.byCode[cd] = course;
         }
       }
-    } catch (_) {}
+    } catch (_) { }
   }
 
   // 2. Resolve Session
@@ -2415,7 +2431,7 @@ async function renderCourseTab() {
             if (sn) sessionsCache.byName[sn] = sess;
           }
         }
-      } catch (_) {}
+      } catch (_) { }
     }
   }
 
@@ -2431,7 +2447,7 @@ async function renderCourseTab() {
           batchesCache.byId[bDoc.id] = batch;
         }
       }
-    } catch (_) {}
+    } catch (_) { }
   }
 
   if (s.ctx === 'school') {
@@ -2486,7 +2502,7 @@ async function renderCourseTab() {
             coursesCache.byId[pDoc.id] = prereqCourse;
           }
         }
-      } catch (_) {}
+      } catch (_) { }
     }
   } else if (pCode && coursesCache?.byCode?.[String(pCode).trim().toUpperCase()]) {
     prereqCourse = coursesCache.byCode[String(pCode).trim().toUpperCase()];
@@ -2775,7 +2791,6 @@ async function loadPayments({ forceFresh = false } = {}) {
       kidsBillsCache = bills;
       kidsBreaksCache = breaks;
       kidsWaiversCache = waivers;
-      kidsPaymentsHydrated = true;
       return;
     }
 
@@ -2827,7 +2842,6 @@ async function loadPayments({ forceFresh = false } = {}) {
     kidsBillsCache = bills;
     kidsBreaksCache = breaks;
     kidsWaiversCache = waivers;
-    kidsPaymentsHydrated = true;
     return;
   }
 
@@ -3561,15 +3575,6 @@ function renderKidsTransactionsLedger() {
 
   const s = currentStudent;
   if (!s) return;
-
-  if (!kidsPaymentsHydrated) {
-    const tr = mk('tr');
-    const td = mk('td', 'text-mute text-center', 'Loading payment transactions…');
-    td.colSpan = 9;
-    tr.appendChild(td);
-    tbody.appendChild(tr);
-    return;
-  }
 
   const txns = [];
   const admDoc = paymentsCache.find((p) => {

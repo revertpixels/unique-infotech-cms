@@ -39,6 +39,42 @@
 
 ---
 
+### [2026-11-28 20:40] Version 1.8.199 — Optional Non-Cash TXN ID, Two Kids Profile Docs & Unified Kids Admission Popups
+
+**What was built:**
+- **Transaction / Reference ID Optional Again (`public/js/components/payment-popup.js`, Youth + Kids)**:
+  - Restored Transaction / Reference ID to optional for all non-cash modes (`UPI`, `Card`, `Bank Transfer`, `Cheque`) with label `(Optional)`, `required = false`, and no empty validation block on save; kept `Cash` disabled (`(N/A for Cash)`).
+- **Kids Admission & Profile Documents Restricted to 2 (`public/pages/school-admissions.html`, `public/js/pages/student-profile.page.js`)**:
+  - Updated Kids admission form card labels to **Passport Photo** and **Student Signature** (no `dobProof`/`marksheet` inputs).
+  - Updated `renderMetrics()` and `renderDocumentsTab()` in `student-profile.page.js` so `ctx === 'school'` displays strictly `Passport Photo` and `Student Signature` only (leaving any legacy `dobProof`/`marksheet` Firestore docs untouched in DB). Youth Centre (`ctx === 'youth'`) still shows all 4 document slots unchanged.
+- **Kids No-Payment Confirm Popup, Unified `"Admission successful"` Popup & Slip Polish (`public/js/pages/school-admissions.page.js`, `public/js/components/payment-popup.js`, `public/css/pages/pay-fees.css`, `public/js/pages/school-admission-receipt.page.js`, `public/js/utils/school-receipt-pdf.js`)**:
+  - Added `"Confirm admission"` modal (`openKidsNoPaymentConfirmPopup`) on `#/school-students` for `No payment` (`charge === 0`) showing Student, Level, Batch, Admission Date, `Admission fee: ₹0 (No payment)`, Reason, Monthly Billing summary, and **Cancel** (closes without saving, keeps form filled) / **Confirm admission** buttons.
+  - Added shared `promptKidsAdmissionSuccess` (`"Admission successful"`, animated green checkmark draw + pop via `@keyframes pfSuccessPop` / `pfCheckDraw`, 4 buttons: **View admission slip**, **Print**, **Open profile**, **Admit another**) used by BOTH Paid (`!isUpgrade`) and No-payment Kids admissions (`openPaymentPopup` Upgrade & Monthly fees still use `"Payment Recorded!"` / `promptOpenReceipt`).
+  - Updated Kids No-payment Admission Slip (HTML & PDF) to show `"No payment – <reason>"` and `₹0` (HTML), and strictly omit Payment mode & TXN ID rows whenever `paymentMode === 'none'` or `actualAmountReceived <= 0`.
+- **Version Bump & Report**:
+  - Bumped `?v=` / `APP_VERSION` to `1.8.199` (`360` replacements across `55` files) and added `docs/reports/v1.8.199-report.md` and `docs/reports/v1.8.199-changes.txt` (plain `.txt` diff; no `.diff` files). **Not deployed yet** (awaiting user deploy go-ahead).
+
+**Why:**
+- Make TXN ID entry non-blocking when collecting UPI/Card/Bank/Cheque receipts, keep Kids records limited to Passport Photo & Student Signature only, prevent accidental one-click No-payment Kids admissions, and give both Paid and No-payment Kids admissions one consistent success experience with slip/print/profile/admit-another actions.
+
+**Files touched:**
+- CREATED: `docs/reports/v1.8.199-report.md`, `docs/reports/v1.8.199-changes.txt`
+- MODIFIED: `public/js/components/payment-popup.js`, `public/pages/school-admissions.html`, `public/js/pages/school-admissions.page.js`, `public/js/pages/student-profile.page.js`, `public/js/pages/school-admission-receipt.page.js`, `public/js/utils/school-receipt-pdf.js`, `public/css/pages/pay-fees.css`, `docs/02-PROGRESS-LOG.md` (+ `bump-version.js 1.8.199` across `55` files in `public/`)
+
+**Firestore changes:**
+- None (schema, rules, indexes, and existing Firestore documents untouched).
+
+**Tested on (post-final-edit, test data / emulators only):**
+- `node tools/check-imports.js`: ✅ (`115` files, `455` imports, `399` exports, `0` errors)
+- `scratch/run-tests.mjs`: ✅
+- `verify-kids-break-v196.mjs` (Auth + Firestore Emulators + Chrome): ✅ (`0` errors)
+- `verify-router-regression.mjs`, `verify-dashboard.mjs`, `verify-reports.mjs`, `verify-archives.mjs`, `verify-auth-profile.mjs`: ✅ all passed cleanly.
+
+**Next task:**
+- Await user confirmation to deploy `v1.8.199` (`firebase deploy --only hosting`) or next feature request.
+
+---
+
 ### [2026-11-28 19:55] Version 1.8.198 — Kids Upgrade Payment Popup, Required Non-Cash TXN ID & Live Deploy
 
 **What was built:**

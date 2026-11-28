@@ -18,6 +18,12 @@ import { openMenu } from '../components/ui-menu.js?v=1.8.199';
 import { openPopup } from '../components/modal.js?v=1.8.199';
 import { createDatePicker } from '../components/ui-datepicker.js?v=1.8.199';
 import { confirmDialog } from '../components/ui-confirm.js?v=1.8.199';
+import {
+  scrollElementBelowTopbar,
+  focusFirstFormField,
+  cancelPendingScroll,
+  markRouteScrollHandled
+} from '../utils/dom-scroll.js?v=1.8.200';
 import { formatINR, formatDateIN, initials } from '../utils/formatter.js?v=1.8.199';
 import { validatePhone, validateEmail, validateDOB, validateName, validateRequired } from '../utils/validator.js?v=1.8.199';
 import { readStudentId, readReceiptNo, writeCounter } from '../services/admission.service.js?v=1.8.199';
@@ -67,7 +73,7 @@ function isDataUrl(v) { return typeof v === 'string' && /^data:image\/[^;]+;base
 function num(v) { if (v === '' || v === null || v === undefined) return null; const n = Number(v); return Number.isFinite(n) ? n : null; }
 
 let cleanupPage = null;
-export function unmount() { if (cleanupPage) cleanupPage(); cleanupPage = null; }
+export function unmount() { cancelPendingScroll(); if (cleanupPage) cleanupPage(); cleanupPage = null; }
 
 export async function mount({ container, profile, ctx }) {
   const school = ctx === 'school';
@@ -730,10 +736,13 @@ export async function mount({ container, profile, ctx }) {
     touched = false;
     showErrors({});
     refresh();
+    $t('adm-form-title', r ? 'Edit admission' : 'New admission');
     form.hidden = false;
-    form.scrollIntoView({ behavior: 'smooth', block: 'start' });
     refresh();
-    $('adm-name').focus({ preventScroll: true });
+    focusFirstFormField($('adm-name'));
+    scrollElementBelowTopbar(form, {
+      onComplete: () => focusFirstFormField($('adm-name'))
+    });
     if (typeof lucide !== 'undefined') lucide.createIcons();
   }
 
@@ -984,6 +993,12 @@ export async function mount({ container, profile, ctx }) {
 
     // Footer
     const foot = mk('div', 'adm-view-foot');
+    if (isSuper && (s.status || 'active') !== 'deleted') {
+      const editBtn = mk('button', 'ui-btn primary', 'Edit');
+      editBtn.type = 'button';
+      editBtn.addEventListener('click', () => { popup.close(); openForm(s); });
+      foot.appendChild(editBtn);
+    }
     const closeBtn = mk('button', 'ui-btn ghost', 'Close');
     closeBtn.type = 'button';
     closeBtn.addEventListener('click', () => popup.close());
@@ -1370,7 +1385,7 @@ export async function mount({ container, profile, ctx }) {
     });
   }
 
-  function closeForm() {
+  function closeForm({ scrollToList = true } = {}) {
     form.hidden = true;
     editId = null;
     editRow = null;
@@ -1382,6 +1397,10 @@ export async function mount({ container, profile, ctx }) {
     cancelBtn.disabled = true;
     setState('Fill in the details', '');
     showErrors({});
+    if (scrollToList) {
+      const listTarget = document.querySelector('.adm-table-card') || document.querySelector('.adm-head-row');
+      scrollElementBelowTopbar(listTarget);
+    }
   }
 
   function snapshot(v) {
@@ -1908,7 +1927,7 @@ export async function mount({ container, profile, ctx }) {
           clearDirty();
           saving = false;
           popup.close();
-          closeForm();
+          closeForm({ scrollToList: false });
           playPaymentSuccessSound();
           showToast({ type: 'success', message: 'Admission saved! Student ID: ' + result.studentId });
           location.hash = '#/school-admissions/' + encodeURIComponent(result.id) + '/receipt';
@@ -1967,7 +1986,7 @@ export async function mount({ container, profile, ctx }) {
             const res = await executeKidsAdmissionSave(pp);
             saved = {};
             clearDirty();
-            closeForm();
+            closeForm({ scrollToList: false });
             return res;
           }
         },
@@ -1986,7 +2005,7 @@ export async function mount({ container, profile, ctx }) {
     saving = true; refresh(); saveBtn.disabled = true; cancelBtn.disabled = true; setState('Saving...', 'dirty');
     try {
       const result = await executeKidsAdmissionSave({ mode: '', txnId: '', remarks: '' });
-      closeForm();
+      closeForm({ scrollToList: false });
       showToast({ type: 'success', message: 'Student details updated. Original payment unchanged.' });
       location.hash = '#/school-admissions/' + encodeURIComponent(result.id) + '/receipt';
     } catch (e) {
@@ -2017,12 +2036,9 @@ export async function mount({ container, profile, ctx }) {
     try {
       history.replaceState(null, '', '#/school-students');
       window.dispatchEvent(new CustomEvent('uic:route-url-replaced'));
-    } catch (_) {}
+    } catch (_) { }
+    markRouteScrollHandled();
     await openForm(null);
-    requestAnimationFrame(() => {
-      const nameEl = $('adm-name');
-      if (nameEl && nameEl.focus) nameEl.focus({ preventScroll: true });
-    });
   }
 
   if (typeof lucide !== 'undefined') lucide.createIcons();

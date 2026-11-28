@@ -1,14 +1,39 @@
 <div class="sk-wrap uk-break-page">
-  <div class="sk-head-row">
+  <div class="sk-head-row lp-head-row">
     <section class="pg-head">
       <div class="pg-crumbs">Students / <span>Break Management</span></div>
       <h2>Break Management</h2>
       <p>Whole-month student breaks: no monthly bills during break months, full month on rejoin, full history &amp; overdue-return tracking.</p>
     </section>
-    <button type="button" class="ui-btn primary" id="skb-add" hidden><i data-lucide="pause-circle"></i><span>Start Break</span></button>
+    <div class="lp-head-actions">
+      <button type="button" class="ui-btn ghost" id="skb-export-csv"><i data-lucide="download"></i><span>Export CSV</span></button>
+      <button type="button" class="ui-btn ghost" id="skb-print"><i data-lucide="printer"></i><span>Print Report</span></button>
+      <button type="button" class="ui-btn primary" id="skb-add" hidden><i data-lucide="plus"></i><span>Start break</span></button>
+    </div>
   </div>
 
   <div id="skb-stats"></div>
+
+  <!-- Tabs: On break / Break ended - not rejoined / Rejoined (history) / All -->
+  <div class="org-tabs skb-tabs" id="skb-tabs" role="tablist" aria-label="Break views">
+    <button type="button" role="tab" class="org-tab" id="skb-tab-active" data-tab="active" aria-selected="false">
+      <i data-lucide="pause-circle"></i><span>On break</span>
+      <span class="lp-count" id="skb-tab-cnt-active">0</span>
+    </button>
+    <button type="button" role="tab" class="org-tab" id="skb-tab-overdue" data-tab="overdue" aria-selected="false">
+      <i data-lucide="alert-circle"></i><span>Break ended - not rejoined</span>
+      <span class="lp-count" id="skb-tab-cnt-overdue">0</span>
+    </button>
+    <button type="button" role="tab" class="org-tab" id="skb-tab-completed" data-tab="completed" aria-selected="false">
+      <i data-lucide="history"></i><span>Rejoined (history)</span>
+      <span class="lp-count" id="skb-tab-cnt-completed">0</span>
+    </button>
+    <button type="button" role="tab" class="org-tab is-active" id="skb-tab-all" data-tab="all" aria-selected="true">
+      <i data-lucide="layers"></i><span>All</span>
+      <span class="lp-count" id="skb-tab-cnt-all">0</span>
+    </button>
+  </div>
+
   <div id="skb-toolbar"></div>
 
   <div class="sk-table-card">
@@ -23,11 +48,11 @@
           <tr>
             <th>Student ID</th>
             <th>Student</th>
-            <th>Break Period</th>
-            <th>Actual Return</th>
+            <th>Period</th>
+            <th>Months</th>
             <th>Reason</th>
             <th>Status</th>
-            <th>Recorded / Resumed By</th>
+            <th>Started / Resumed By</th>
             <th class="skb-actions">Action</th>
           </tr>
         </thead>
@@ -36,7 +61,7 @@
       <div id="skb-empty" class="sk-empty" hidden>
         <i data-lucide="pause-circle"></i>
         <b>No breaks recorded yet</b>
-        <span>Use "Start Break" (here or from a student's profile/menu) to record whole-month student breaks.</span>
+        <span>Use "+ Start break" (here or from a student's profile) to record whole-month student breaks.</span>
       </div>
       <div id="skb-no-match" class="sk-empty" hidden>
         <i data-lucide="search"></i>

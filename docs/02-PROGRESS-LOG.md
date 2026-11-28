@@ -39,6 +39,45 @@
 
 ---
 
+### [2026-11-28 21:50] Version 1.8.201 — Admission Form Auto-Scroll/Focus, Kids Pay-Fees Style Collect Fees & Break Management Completion
+
+**What was built:**
+- **Admission Form Auto-Scroll & Focus (Youth `#/students` & Kids `#/school-students`) (`public/js/utils/dom-scroll.js`, `public/js/core/router.js`, `public/css/pages/admissions.css`, `public/css/pages/school-admissions.css`, `public/js/pages/admissions.page.js`, `public/js/pages/school-admissions.page.js`)**:
+  - Created shared `dom-scroll.js` helper (`scrollElementBelowTopbar`, `focusFirstFormField`, `cancelPendingScroll`, `markRouteScrollHandled`, `consumeRouteScrollHandled`) and updated `router.js` so post-mount `resetScroll()` does not override deep-link / `?new=1` form scrolls.
+  - Opening `#adm-form` via `"+ New admission"`, `"Admit another"`, `?new=1`, or row `Edit` smoothly scrolls `#adm-form` cleanly below the sticky topbar (`scroll-margin-top: calc(var(--topbar-h, 64px) + 16px)`) on both desktop (`1440px`) and mobile (`360px`), and focuses `#adm-name` without scroll jump; `Cancel`/close smoothly returns to `.adm-table-card`.
+  - Added `"View details"` in Youth row kebab menu, fixed an SVG `className` error on New-after-Edit lock icon toggle in `admissions.page.js`, and added `"Edit"` in Kids `viewDetailsPopup`.
+- **Kids Collect Fees Rebuilt Like Youth Pay Fees (`public/pages/school-fees.html`, `public/css/pages/school-fees.css`, `public/js/pages/school-fees.page.js`, `public/js/utils/school-billing.js`, `public/js/components/payment-popup.js`, `public/js/pages/payment-receipt.page.js`)**:
+  - Added `Collect Fees` (default) + `All bills` tabs. Search box (`#sf-search-input`) supports instant lookup by student name, Student ID, or phone with autocomplete dropdown and multi-match grid.
+  - Selecting a student renders Student Card (photo, name, Student ID + copy, status badge including `"On Break (Jan-Mar 2027)"`, Level, Batch, Phone, Head Office `HO`), 4 metric cards (`Monthly Fee Rate`, `Paid Months`, `Unpaid Fee Due`, `Late Fine Today`), and Month-wise Bills (`Month`, `Fee`, `Late fine`, `Status`, `Receipt no.`, `Action`) with planned break months rendered greyed and non-collectable (`Break - no fee`).
+  - Added `Collect all due` (`BILL_ALL`) + atomic `recordKidsAllBillsPayment` issuing a single `UK<YY>MN-HO-<NNNN>` batch receipt, `"Today's collections"` summary table, `from=school-fees` return navigation in `payment-receipt.page.js`, and warm shared-cache loading (`ensureKidsDataset`, `loadKidsPaymentHistory`). Preserved `#sf-rows` on `All bills`.
+- **Kids Break Management Completion (`public/pages/school-break.html`, `public/css/pages/school-break.css`, `public/js/pages/school-break.page.js`, `public/js/utils/school-break-modals.js`, `public/js/utils/school-billing.js`)**:
+  - Added searchable student selector + dynamic unpaid dues warning inside `"+ Start break"`, 4 filter tabs (`On break` / `Break ended - not rejoined` / `Rejoined (history)` / `All`, defaulting to `all`), `Months` (`N mo`) column, `Extend` action (`openKidsExtendBreakModal` + `extendKidsBreak`, future months only), `Month` + `Status` filters, top summary metrics, CSV export (`downloadCsv`), and Print Report (`openPrintSheet`), while keeping `school_head` strictly view-only.
+- **Version Bump & Reports**:
+  - Bumped `APP_VERSION` / `?v=` to `1.8.201` (`361` replacements across `55` files in `public/`), added `docs/reports/v1.8.201-report.md` and `docs/reports/v1.8.201-changes.txt`. **Not deployed yet** (awaiting user deploy approval).
+
+**Why:**
+- Fix hidden/unscrolled admission forms on `#/students` and `#/school-students`, bring fast Pay Fees instant search + single/batch monthly collection + Today's collections to Unique Kids without touching Youth Centre behaviour, and finish `#/school-break` (searchable break creation, future-only Extend, tabs, stats, Print/CSV).
+
+**Files touched:**
+- CREATED: `public/js/utils/dom-scroll.js`, `docs/reports/v1.8.201-report.md`, `docs/reports/v1.8.201-changes.txt`
+- MODIFIED: `public/js/core/router.js`, `public/css/pages/admissions.css`, `public/css/pages/school-admissions.css`, `public/js/pages/admissions.page.js`, `public/js/pages/school-admissions.page.js`, `public/js/utils/school-billing.js`, `public/js/utils/school-break-modals.js`, `public/js/components/payment-popup.js`, `public/js/pages/payment-receipt.page.js`, `public/pages/school-fees.html`, `public/css/pages/school-fees.css`, `public/js/pages/school-fees.page.js`, `public/pages/school-break.html`, `public/css/pages/school-break.css`, `public/js/pages/school-break.page.js`, `docs/02-PROGRESS-LOG.md` (+ `bump-version.js 1.8.201` across `55` files in `public/`)
+
+**Firestore changes:**
+- None (no new collections or rules/index changes; multi-month batch receipts write summary fields `months`, `allocations`, `feeCovered`, `lateFeeCovered` into existing Kids `payments` docs, and `extendKidsBreak` updates `plannedEndMonth` / `endMonth` on `breaks`, `students.breakTo`, and `bills`).
+
+**Tested on (post-final-edit, test data / emulators only):**
+- `node tools/check-imports.js`: ✅ (`116` files, `454` imports, `408` exports, `0` errors)
+- UTF-8 / BOM / `\uFFFD` scan: ✅ (`172` files scanned, `hasBom: []`, `invalidUtf8: []`, `hasFFFD: []`)
+- `scratch/run-tests.mjs`: ✅
+- `verify-v18201.mjs` (Auth + Firestore Emulators + Chrome): ✅ (`20/20` desktop & mobile scroll/focus checks, Kids Collect Fees single + `Collect all due` + break-month protection + `Today's collections` + `All bills`, Kids Break Management Start/Extend/Tabs/CSV/Print/Resume + `school_head` view-only, `0` console errors)
+- `verify-kids-break-v196.mjs` (Auth + Firestore Emulators + Chrome): ✅ (`0` errors)
+- `verify-router-regression.mjs`, `verify-dashboard.mjs`, `verify-reports.mjs`, `verify-archives.mjs`, `verify-auth-profile.mjs`: ✅ all passed cleanly
+
+**Next task:**
+- Await user confirmation to deploy `v1.8.201` (`firebase deploy --only hosting`) or next feature request.
+
+---
+
 ### [2026-11-28 21:16] Version 1.8.200 — Unified Youth & Kids Admission Success Popup, Clean UTF-8, Fixed Kids HO Receipt Code & Mobile Modal Overflow Fixes
 
 **What was built:**

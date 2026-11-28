@@ -15,23 +15,29 @@ import {
   arrayUnion,
   addDoc
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.200';
-import { registerDirty, confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.200';
-import { buildStats, buildToolbar, renderPager, renderEmptyTableState, PAGE_SIZE } from '../components/list-page.js?v=1.8.200';
-import { createSelect } from '../components/ui-select.js?v=1.8.200';
-import { createBranchBatchFilter } from '../components/branch-batch-filter.js?v=1.8.200';
-import { openMenu } from '../components/ui-menu.js?v=1.8.200';
-import { confirmDialog } from '../components/ui-confirm.js?v=1.8.200';
-import { openPopup } from '../components/modal.js?v=1.8.200';
-import { createDatePicker } from '../components/ui-datepicker.js?v=1.8.200';
-import { getSelectedSessionId, getSelectedSession, getCachedSessions, loadSessions, hasFreshSessionsCache, todayISO } from '../core/sessions.js?v=1.8.200';
-import { firstInstallmentOf, admissionState, sessionLabel, installmentSchedule, batchAllowsCourse, batchCourseLabel, isCourseActive } from '../utils/session-rules.js?v=1.8.200';
-import { formatINR, formatDateIN, formatPersonName, formatGenderDisplay, initials } from '../utils/formatter.js?v=1.8.200';
-import { validatePhone, validateEmail, validateDOB, validateName, validateRequired } from '../utils/validator.js?v=1.8.200';
-import { listStudentsRaw, checkDuplicatePhone, readStudentId, readReceiptNo, writeCounter, createStudentWithDocs, updateStudentWithDocs, updateStudent, deleteStudent } from '../services/admission.service.js?v=1.8.200';
-import { feeTotal, courseFeeOf, discountOf } from '../utils/fees.js?v=1.8.200';
-import { compressTo100KB, readAsDataURL, blobToDataURL, isImageFile, formatBytes } from '../utils/image-compress.js?v=1.8.200';
-import { fetchStudentPayments, calculateStudentFinancials, buildReceiptMenuItems } from '../services/payment.service.js?v=1.8.200';
+import { showToast } from '../components/toast.js?v=1.8.201';
+import { registerDirty, confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.201';
+import { buildStats, buildToolbar, renderPager, renderEmptyTableState, PAGE_SIZE } from '../components/list-page.js?v=1.8.201';
+import { createSelect } from '../components/ui-select.js?v=1.8.201';
+import { createBranchBatchFilter } from '../components/branch-batch-filter.js?v=1.8.201';
+import { openMenu } from '../components/ui-menu.js?v=1.8.201';
+import { confirmDialog } from '../components/ui-confirm.js?v=1.8.201';
+import { openPopup } from '../components/modal.js?v=1.8.201';
+import { createDatePicker } from '../components/ui-datepicker.js?v=1.8.201';
+import { getSelectedSessionId, getSelectedSession, getCachedSessions, loadSessions, hasFreshSessionsCache, todayISO } from '../core/sessions.js?v=1.8.201';
+import {
+  scrollElementBelowTopbar,
+  focusFirstFormField,
+  cancelPendingScroll,
+  markRouteScrollHandled
+} from '../utils/dom-scroll.js?v=1.8.201';
+import { firstInstallmentOf, admissionState, sessionLabel, installmentSchedule, batchAllowsCourse, batchCourseLabel, isCourseActive } from '../utils/session-rules.js?v=1.8.201';
+import { formatINR, formatDateIN, formatPersonName, formatGenderDisplay, initials } from '../utils/formatter.js?v=1.8.201';
+import { validatePhone, validateEmail, validateDOB, validateName, validateRequired } from '../utils/validator.js?v=1.8.201';
+import { listStudentsRaw, checkDuplicatePhone, readStudentId, readReceiptNo, writeCounter, createStudentWithDocs, updateStudentWithDocs, updateStudent, deleteStudent } from '../services/admission.service.js?v=1.8.201';
+import { feeTotal, courseFeeOf, discountOf } from '../utils/fees.js?v=1.8.201';
+import { compressTo100KB, readAsDataURL, blobToDataURL, isImageFile, formatBytes } from '../utils/image-compress.js?v=1.8.201';
+import { fetchStudentPayments, calculateStudentFinancials, buildReceiptMenuItems } from '../services/payment.service.js?v=1.8.201';
 import {
   ensureReferenceData,
   getCachedReferenceData,
@@ -42,11 +48,11 @@ import {
   scheduleDelayedSkeleton,
   loadStudentPhotos,
   getCachedStudentPhoto
-} from '../services/report.service.js?v=1.8.200';
-import { getStudentPhotoSrc, getStudentDocSrc, getStudentDocMime } from '../utils/student-media.js?v=1.8.200';
-import { playPaymentSuccessSound } from '../utils/sound.js?v=1.8.200';
-import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.200';
-import { APP_CACHE } from '../core/app.js?v=1.8.200';
+} from '../services/report.service.js?v=1.8.201';
+import { getStudentPhotoSrc, getStudentDocSrc, getStudentDocMime } from '../utils/student-media.js?v=1.8.201';
+import { playPaymentSuccessSound } from '../utils/sound.js?v=1.8.201';
+import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.201';
+import { APP_CACHE } from '../core/app.js?v=1.8.201';
 
 const COL = 'students';
 
@@ -1400,30 +1406,41 @@ export async function mount({ container, profile, ctx }) {
     batchSel.disabled = !!editId;
     const admDateEl = $('adm-admissionDate');
     if (admDateEl) admDateEl.disabled = !!editId;
-    if (editId) {
-      ['adm-session-host', 'adm-branch-host', 'adm-course-host', 'adm-batch-host'].forEach((hostId) => {
-        const host = $(hostId);
-        if (!host) return;
-        const btn = host.querySelector('.ui-select-btn');
-        if (btn) {
-          btn.disabled = true;
-          const chev = btn.querySelector('.ui-select-chev');
-          if (chev && !btn.querySelector('[data-lucide="lock"]')) {
-            chev.setAttribute('data-lucide', 'lock');
-            chev.className = 'ui-select-chev';
-          }
+    ['adm-session-host', 'adm-branch-host', 'adm-course-host', 'adm-batch-host'].forEach((hostId) => {
+      const host = $(hostId);
+      if (!host) return;
+      const btn = host.querySelector('.ui-select-btn');
+      if (!btn) return;
+      const chev = btn.querySelector('.ui-select-chev');
+      if (editId) {
+        btn.disabled = true;
+        if (chev && chev.getAttribute('data-lucide') !== 'lock') {
+          const lock = document.createElement('i');
+          lock.setAttribute('data-lucide', 'lock');
+          lock.className = 'ui-select-chev';
+          chev.replaceWith(lock);
         }
-      });
-      if (admDateEl) {
-        const wrap = admDateEl.closest('.ui-input-wrap');
-        if (wrap && !wrap.querySelector('[data-lucide="lock"]')) {
+      } else if (chev && chev.getAttribute('data-lucide') === 'lock') {
+        const down = document.createElement('i');
+        down.setAttribute('data-lucide', 'chevron-down');
+        down.className = 'ui-select-chev';
+        chev.replaceWith(down);
+      }
+    });
+    if (admDateEl) {
+      const wrap = admDateEl.closest('.ui-input-wrap');
+      if (editId) {
+        if (wrap && !wrap.querySelector('.ui-input-lock')) {
           const lock = document.createElement('i');
           lock.setAttribute('data-lucide', 'lock');
           lock.className = 'ui-input-lock';
           wrap.appendChild(lock);
         }
+      } else if (wrap) {
+        wrap.querySelectorAll('.ui-input-lock').forEach((el) => el.remove());
       }
     }
+    if (typeof lucide !== 'undefined') lucide.createIcons();
     if (editId && v.prereqCheck) {
       prereqCheck = Object.assign({}, v.prereqCheck);
       const pc = getPrereq(courseOf(v.courseId));
@@ -1724,6 +1741,11 @@ export async function mount({ container, profile, ctx }) {
             // SECTION: View
             const viewItems = [
               {
+                label: 'View details',
+                icon: 'eye',
+                onClick: () => viewStudent(s)
+              },
+              {
                 label: 'View student',
                 icon: 'user',
                 onClick: () => {
@@ -1871,7 +1893,8 @@ export async function mount({ container, profile, ctx }) {
         altPhone: r.altPhone || '', email: r.email || '', aadhaar: '', dob: r.dob || '',
         admissionDate: r.admissionDate || '', gender: r.gender || '',
         qualification: r.qualification || '', address: r.address || '',
-        branchId: isSuper ? (r.branchId || '') : (fixedBranch || ''), courseId: r.courseId || '', batchId: r.batchId || ''
+        branchId: isSuper ? (r.branchId || '') : (fixedBranch || ''), courseId: r.courseId || '', batchId: r.batchId || '',
+        sessionId: r.sessionId || '', sessionName: r.sessionName || ''
       } : {
         name: '', guardianName: '', phone: '', altPhone: '', email: '', aadhaar: '', dob: '',
         admissionDate: new Date().toISOString().slice(0, 10), gender: '',
@@ -1886,9 +1909,10 @@ export async function mount({ container, profile, ctx }) {
       showErrors({});
       saved = snapshot();
       refreshForm();
-      form.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      const nameEl = $('adm-name');
-      if (nameEl && nameEl.focus) nameEl.focus({ preventScroll: true });
+      scrollElementBelowTopbar(form, {
+        onComplete: () => focusFirstFormField($('adm-name'))
+      });
+      focusFirstFormField($('adm-name'));
 
       if (r) {
         try {
@@ -1916,7 +1940,7 @@ export async function mount({ container, profile, ctx }) {
     }
   }
 
-  function closeForm() {
+  function closeForm({ scrollToList = true } = {}) {
     form.hidden = true;
     editId = null;
     editRow = null;
@@ -1938,6 +1962,10 @@ export async function mount({ container, profile, ctx }) {
     }
     totalRowEl = null;
     showErrors({});
+    if (scrollToList) {
+      const listTarget = document.querySelector('.adm-table-card') || document.querySelector('.adm-head-row');
+      scrollElementBelowTopbar(listTarget);
+    }
   }
 
   function focusFirstError(err) {
@@ -2226,7 +2254,7 @@ export async function mount({ container, profile, ctx }) {
         onSuccess: async (payRes) => {
           saved = snapshot();
           clearDirty();
-          closeForm();
+          closeForm({ scrollToList: false });
           showToast('Admission & payment recorded - ' + payRes.studentId, 'success');
           location.hash = '#/admissions/' + encodeURIComponent(payRes.studentDocId) + '/receipt';
         }
@@ -3292,15 +3320,13 @@ export async function mount({ container, profile, ctx }) {
       history.replaceState(null, '', '#/students');
       window.dispatchEvent(new CustomEvent('uic:route-url-replaced'));
     } catch (_) {}
+    markRouteScrollHandled();
     await openForm(null);
-    requestAnimationFrame(() => {
-      const nameEl = $('adm-name');
-      if (nameEl && nameEl.focus) nameEl.focus({ preventScroll: true });
-    });
   }
 }
 
 export function unmount() {
+  cancelPendingScroll();
   clearDirty();
   if (window.__admLoadCleanup) {
     window.__admLoadCleanup();

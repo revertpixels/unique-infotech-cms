@@ -15,7 +15,7 @@ import {
   deleteObject
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-storage.js';
 import { getFunctions, httpsCallable } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-functions.js';
-import { formatPersonName } from '../utils/formatter.js?v=1.8.200';
+import { formatPersonName } from '../utils/formatter.js?v=1.8.201';
 
 const DEFAULT_ROLE_TITLES = {
   superadmin: 'Super Admin',

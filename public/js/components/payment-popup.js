@@ -1,12 +1,12 @@
 // payment-popup.js — Single Shared Payment Popup for Student Profile and Pay Fees
 import { auth } from '../config/firebase-config.js';
-import { openPopup } from './modal.js?v=1.8.200';
-import { createSelect } from './ui-select.js?v=1.8.200';
-import { formatINR, formatDateIN } from '../utils/formatter.js?v=1.8.200';
-import { todayISO } from '../utils/session-rules.js?v=1.8.200';
-import { getRoleTitle, resolveUserDisplay } from '../services/user-directory.service.js?v=1.8.200';
-import { showToast } from './toast.js?v=1.8.200';
-import { playPaymentSuccessSound } from '../utils/sound.js?v=1.8.200';
+import { openPopup } from './modal.js?v=1.8.201';
+import { createSelect } from './ui-select.js?v=1.8.201';
+import { formatINR, formatDateIN } from '../utils/formatter.js?v=1.8.201';
+import { todayISO } from '../utils/session-rules.js?v=1.8.201';
+import { getRoleTitle, resolveUserDisplay } from '../services/user-directory.service.js?v=1.8.201';
+import { showToast } from './toast.js?v=1.8.201';
+import { playPaymentSuccessSound } from '../utils/sound.js?v=1.8.201';
 import {
   recordPayment,
   recordAdmissionWithPayment,
@@ -16,13 +16,14 @@ import {
   isAdmissionFeePaid,
   isMaterialFeePaid,
   isExamFeePaid
-} from '../services/payment.service.js?v=1.8.200';
+} from '../services/payment.service.js?v=1.8.201';
 import {
   computeLateFee,
   formatShortMonthYear,
   fetchOpenKidsBillsForStudent,
-  recordKidsBillPayment
-} from '../utils/school-billing.js?v=1.8.200';
+  recordKidsBillPayment,
+  recordKidsAllBillsPayment
+} from '../utils/school-billing.js?v=1.8.201';
 
 function formatDateTime(d) {
   const dt = d instanceof Date ? d : new Date(d);
@@ -513,7 +514,21 @@ export async function openPaymentPopup({
     if (!openBills || !openBills.length) {
       openBills = await fetchOpenKidsBillsForStudent(s);
     }
-    openBills.slice().sort((a, b) => String(a.month || '').localeCompare(String(b.month || ''))).forEach((b) => {
+    const sortedOpen = openBills.slice().sort((a, b) => String(a.month || '').localeCompare(String(b.month || '')));
+    if (sortedOpen.length > 1) {
+      const totalBaseDue = sortedOpen.reduce((sum, b) => (
+        sum + Math.max(0, Math.round((Number(b.monthlyFee || 0) - Number(b.paidAmount || 0) - Number(b.waivedAmount || 0)) * 100) / 100)
+      ), 0);
+      const firstLbl = formatShortMonthYear(sortedOpen[0].month) || sortedOpen[0].month || '';
+      const lastLbl = formatShortMonthYear(sortedOpen[sortedOpen.length - 1].month) || sortedOpen[sortedOpen.length - 1].month || '';
+      typeOptions.push({
+        value: 'BILL_ALL',
+        label: `Collect All Due (${sortedOpen.length} months: ${firstLbl} – ${lastLbl}) — ${formatINR(totalBaseDue)}`,
+        icon: 'layers',
+        allBills: sortedOpen
+      });
+    }
+    sortedOpen.forEach((b) => {
       const baseRem = Math.max(0, Math.round((Number(b.monthlyFee || 0) - Number(b.paidAmount || 0) - Number(b.waivedAmount || 0)) * 100) / 100);
       const mLabel = formatShortMonthYear(b.month) || b.month || 'Bill';
       typeOptions.push({
@@ -613,7 +628,10 @@ export async function openPaymentPopup({
   }
 
   let initialTypeVal = typeOptions[0]?.value;
-  if (isKids && preselectedBillId) {
+  if (isKids && preselectedOption === 'BILL_ALL') {
+    const allOpt = typeOptions.find((o) => o.value === 'BILL_ALL');
+    if (allOpt) initialTypeVal = 'BILL_ALL';
+  } else if (isKids && preselectedBillId) {
     const foundBillOpt = typeOptions.find((o) => o.value === 'BILL_' + preselectedBillId);
     if (foundBillOpt) initialTypeVal = foundBillOpt.value;
   } else if (preselectedOption) {
@@ -970,6 +988,13 @@ export async function openPaymentPopup({
         baseAmt = fullAmt + actualMatFee;
         fineAmt = 0;
       }
+    } else if (val === 'BILL_ALL') {
+      const allOpt = typeOptions.find((o) => o.value === 'BILL_ALL');
+      const list = allOpt?.allBills || [];
+      baseAmt = Math.round(list.reduce((sum, b) => (
+        sum + Math.max(0, Number(b.monthlyFee || 0) - Number(b.paidAmount || 0) - Number(b.waivedAmount || 0))
+      ), 0) * 100) / 100;
+      fineAmt = Math.round(list.reduce((sum, b) => sum + computeLateFee(b), 0) * 100) / 100;
     } else if (val && val.startsWith('BILL_')) {
       const billOpt = typeOptions.find((o) => o.value === val);
       const b = billOpt?.billObj;
@@ -1212,42 +1237,68 @@ export async function openPaymentPopup({
       return;
     }
 
-    if (isKids && val.startsWith('BILL_')) {
+    if (isKids && (val === 'BILL_ALL' || val.startsWith('BILL_'))) {
       saveBtn.disabled = true;
       saveBtn.innerHTML = '<i data-lucide="loader-2" class="spin"></i> Processing...';
       if (typeof lucide !== 'undefined') lucide.createIcons();
 
       try {
-        const billOpt = typeOptions.find((o) => o.value === val);
         const authEmail = auth?.currentUser?.email || profile?.email || '';
         const userDisp = resolveUserDisplay(authEmail, profile?.name, profile?.designation);
-        const kidsPayRes = await recordKidsBillPayment({
-          studentDoc: s,
-          bill: billOpt?.billObj,
-          mode: modeSel.value,
-          txnId: txnInput.value.trim(),
-          remarks: remInput.value.trim(),
-          waived,
-          waiverReason,
-          paymentDate: todayISO(),
-          userEmail: authEmail,
-          userName: userDisp.name || profile?.name || '',
-          userDesignation: userDisp.designation || profile?.designation || '',
-          userRole: profile?.role || ''
-        });
+        let kidsPayRes;
+        let forText = '';
+        if (val === 'BILL_ALL') {
+          const allOpt = typeOptions.find((o) => o.value === 'BILL_ALL');
+          const batchBills = allOpt?.allBills || [];
+          kidsPayRes = await recordKidsAllBillsPayment({
+            studentDoc: s,
+            bills: batchBills,
+            mode: modeSel.value,
+            txnId: txnInput.value.trim(),
+            remarks: remInput.value.trim(),
+            waived,
+            waiverReason,
+            paymentDate: todayISO(),
+            userEmail: authEmail,
+            userName: userDisp.name || profile?.name || '',
+            userDesignation: userDisp.designation || profile?.designation || '',
+            userRole: profile?.role || ''
+          });
+          const ms = (kidsPayRes.months || []).slice().sort();
+          const fLbl = ms.length ? (formatShortMonthYear(ms[0]) || ms[0]) : '';
+          const lLbl = ms.length ? (formatShortMonthYear(ms[ms.length - 1]) || ms[ms.length - 1]) : '';
+          forText = ms.length > 1 ? `Monthly Fees (${fLbl} – ${lLbl}, ${ms.length} months)` : `Monthly Fee (${fLbl || 'Monthly'})`;
+        } else {
+          const billOpt = typeOptions.find((o) => o.value === val);
+          kidsPayRes = await recordKidsBillPayment({
+            studentDoc: s,
+            bill: billOpt?.billObj,
+            mode: modeSel.value,
+            txnId: txnInput.value.trim(),
+            remarks: remInput.value.trim(),
+            waived,
+            waiverReason,
+            paymentDate: todayISO(),
+            userEmail: authEmail,
+            userName: userDisp.name || profile?.name || '',
+            userDesignation: userDisp.designation || profile?.designation || '',
+            userRole: profile?.role || ''
+          });
+          const mText = formatShortMonthYear(kidsPayRes.month) || kidsPayRes.month || 'Monthly Fee';
+          forText = `Monthly Fee (${mText})`;
+        }
         window.dispatchEvent(new CustomEvent('uic:data-mutated', { detail: { reason: 'kids:payment' } }));
         showToast({ type: 'success', message: 'Payment recorded! Receipt No: ' + kidsPayRes.receiptNo });
         playPaymentSuccessSound();
         confirmedPayment = true;
         popup.close();
 
-        const mText = formatShortMonthYear(kidsPayRes.month) || kidsPayRes.month || 'Monthly Fee';
         promptOpenReceipt({
           studentDocId: kidsPayRes.studentDocId || s.id,
           paymentId: kidsPayRes.paymentId,
           receiptNo: kidsPayRes.receiptNo,
           student: s,
-          forText: `Monthly Fee (${mText})`,
+          forText,
           amount: kidsPayRes.feeCovered,
           lateFee: kidsPayRes.lateFeePaid,
           totalPaid: kidsPayRes.totalPaid,

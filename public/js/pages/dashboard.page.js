@@ -1,31 +1,31 @@
 // dashboard.page.js — Read-only Youth Centre Dashboard (#/dashboard) + preserved Unique Kids placeholder.
 
-import { ROUTES } from '../core/router.js?v=1.8.200';
+import { ROUTES } from '../core/router.js?v=1.8.201';
 import { db } from '../config/firebase-config.js';
 import { collection, getDocs, query, where } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { createSelect } from '../components/ui-select.js?v=1.8.200';
+import { createSelect } from '../components/ui-select.js?v=1.8.201';
 import {
   renderDonutChart,
   renderBarChart,
   renderStackedBarChart,
   renderLineChart
-} from '../components/charts.js?v=1.8.200';
-import { openPaymentDetailsModal } from '../components/payment-details-modal.js?v=1.8.200';
-import { loadDashboardArchiveReminder, getCachedDashboardArchiveReminder } from '../services/archive.service.js?v=1.8.200';
-import { resolveUserDisplay, getRoleTitle } from '../services/user-directory.service.js?v=1.8.200';
-import { getCachedSessions, loadSessions, getSelectedSession, getSelectedSessionId, hasFreshSessionsCache } from '../core/sessions.js?v=1.8.200';
-import { getOrgTimezone } from '../utils/session-rules.js?v=1.8.200';
-import { formatPersonName, initials, formatDateIN } from '../utils/formatter.js?v=1.8.200';
-import { buildYouthDashboardData } from '../services/dashboard.service.js?v=1.8.200';
-import { localToday } from '../utils/school-lifecycle.js?v=1.8.200';
+} from '../components/charts.js?v=1.8.201';
+import { openPaymentDetailsModal } from '../components/payment-details-modal.js?v=1.8.201';
+import { loadDashboardArchiveReminder, getCachedDashboardArchiveReminder } from '../services/archive.service.js?v=1.8.201';
+import { resolveUserDisplay, getRoleTitle } from '../services/user-directory.service.js?v=1.8.201';
+import { getCachedSessions, loadSessions, getSelectedSession, getSelectedSessionId, hasFreshSessionsCache } from '../core/sessions.js?v=1.8.201';
+import { getOrgTimezone } from '../utils/session-rules.js?v=1.8.201';
+import { formatPersonName, initials, formatDateIN } from '../utils/formatter.js?v=1.8.201';
+import { buildYouthDashboardData } from '../services/dashboard.service.js?v=1.8.201';
+import { localToday } from '../utils/school-lifecycle.js?v=1.8.201';
 import {
   isBreakOverdueReturn,
   formatBreakPeriod,
   formatShortMonthYear,
   evaluateKidsPendingBills,
   syncOpenKidsBills
-} from '../utils/school-billing.js?v=1.8.200';
-import { openKidsResumeBreakModal } from '../utils/school-break-modals.js?v=1.8.200';
+} from '../utils/school-billing.js?v=1.8.201';
+import { openKidsResumeBreakModal } from '../utils/school-break-modals.js?v=1.8.201';
 import {
   ensureReferenceData,
   getCachedReferenceData,
@@ -50,7 +50,7 @@ import {
   modeDisplayMeta,
   formatINR,
   fmtDate
-} from '../services/report.service.js?v=1.8.200';
+} from '../services/report.service.js?v=1.8.201';
 
 let state = null;
 let profileListener = null;

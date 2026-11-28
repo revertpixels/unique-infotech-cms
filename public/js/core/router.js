@@ -1,6 +1,7 @@
-import { APP_VERSION } from './app.js?v=1.8.200';
-import { confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.200';
-import { getRoleTitle } from '../services/user-directory.service.js?v=1.8.200';
+import { APP_VERSION } from './app.js?v=1.8.201';
+import { confirmLeave, clearDirty } from '../utils/unsaved-guard.js?v=1.8.201';
+import { getRoleTitle } from '../services/user-directory.service.js?v=1.8.201';
+import { consumeRouteScrollHandled } from '../utils/dom-scroll.js?v=1.8.201';
 
 const htmlCache = new Map();
 const htmlInflight = new Map();
@@ -289,7 +290,7 @@ export function startRouter({ profile, getContext, setContext, onRouteChange }) 
       }
 
       if (thisNav !== navCounter) return;
-      resetScroll();
+      if (!consumeRouteScrollHandled()) resetScroll();
       setTitle(title);
       if (onRouteChange) onRouteChange(routeKey, routeObj);
       if (typeof lucide !== 'undefined') {

@@ -2,19 +2,19 @@
 // Matches reference-templates/monthly-payment-receipt (2).html and monthly-payment-receipt-late-fine (1).html
 import { db } from '../config/firebase-config.js';
 import { doc, getDoc, getDocs, collection, query, where } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { inWords } from '../utils/admission-receipt.js?v=1.8.200';
-import { showToast } from '../components/toast.js?v=1.8.200';
-import { fmtDate, todayISO } from '../utils/session-rules.js?v=1.8.200';
-import { formatPersonName } from '../utils/formatter.js?v=1.8.200';
-import { getStudentPhotoSrc } from '../utils/student-media.js?v=1.8.200';
-import { getRoleTitle } from '../services/user-directory.service.js?v=1.8.200';
-import { dueDateForMonth, formatShortMonthYear } from '../utils/school-billing.js?v=1.8.200';
+import { inWords } from '../utils/admission-receipt.js?v=1.8.201';
+import { showToast } from '../components/toast.js?v=1.8.201';
+import { fmtDate, todayISO } from '../utils/session-rules.js?v=1.8.201';
+import { formatPersonName } from '../utils/formatter.js?v=1.8.201';
+import { getStudentPhotoSrc } from '../utils/student-media.js?v=1.8.201';
+import { getRoleTitle } from '../services/user-directory.service.js?v=1.8.201';
+import { dueDateForMonth, formatShortMonthYear } from '../utils/school-billing.js?v=1.8.201';
 import {
   fetchStudentPayments,
   isInstallmentPaid,
   installmentCourseFee,
   installmentBalanceDue
-} from '../services/payment.service.js?v=1.8.200';
+} from '../services/payment.service.js?v=1.8.201';
 
 function $(id) {
   return document.getElementById(id);
@@ -116,7 +116,7 @@ function bindActions() {
     } else if (fromParam === 'school-payments') {
       location.hash = '#/school-payments';
     } else if (fromParam === 'school-fees') {
-      location.hash = '#/school-fees';
+      location.hash = studentDocId ? `#/school-fees?student=${encodeURIComponent(studentDocId)}` : '#/school-fees';
     } else if (fromParam === 'school-pending') {
       location.hash = '#/school-pending';
     } else if (window.history.length > 1) {
@@ -557,12 +557,22 @@ function renderKidsReceiptHTML({ student, payment, org, orgLogo, bills, photoUrl
   const payType = String(payment.type || 'KIDS_MONTHLY').toUpperCase().trim();
   const isUpgrade = payType === 'UPGRADE';
   const monthStr = payment.month || '';
+  const batchMonths = Array.isArray(payment.months) && payment.months.length
+    ? payment.months.slice().sort()
+    : (Array.isArray(payment.allocations) ? payment.allocations.map((a) => a.month).filter(Boolean).sort() : []);
+  const batchBillIds = new Set(
+    Array.isArray(payment.billIds) && payment.billIds.length
+      ? payment.billIds
+      : (Array.isArray(payment.allocations) ? payment.allocations.map((a) => a.billId).filter(Boolean) : [])
+  );
+  if (payment.billId) batchBillIds.add(payment.billId);
   const allBills = Array.isArray(bills) ? [...bills] : [];
   allBills.sort((a, b) => String(a.month || '').localeCompare(String(b.month || '')));
 
   const thisBill = allBills.find((b) => b.id === payment.billId)
     || allBills.find((b) => monthStr && b.month === monthStr)
     || null;
+  const coveredBills = allBills.filter((b) => batchBillIds.has(b.id) || (batchMonths.includes(b.month)));
 
   const pDateStr = fmtDate(payment.receivedDate || payment.paidOn || payment.date);
   const rNo = payment.receiptNo || thisBill?.receiptNo || 'RCPT-PREVIEW';
@@ -595,16 +605,23 @@ function renderKidsReceiptHTML({ student, payment, org, orgLogo, bills, photoUrl
 
   const paidForText = isUpgrade
     ? (String(payment.paymentMode || '').toLowerCase() === 'full' ? 'Level Upgrade (Full Admission)' : 'Level Upgrade Difference')
-    : (monthStr ? `Monthly Fee (${formatShortMonthYear(monthStr)})` : 'Monthly Tuition Fee');
+    : (batchMonths.length > 1
+      ? `Monthly Fees (${formatShortMonthYear(batchMonths[0])} – ${formatShortMonthYear(batchMonths[batchMonths.length - 1])}, ${batchMonths.length} months)`
+      : (monthStr ? `Monthly Fee (${formatShortMonthYear(monthStr)})` : 'Monthly Tuition Fee'));
   const dueDateText = isUpgrade
     ? 'At Upgrade'
-    : (thisBill?.dueDate ? fmtDate(thisBill.dueDate) : (monthStr ? fmtDate(dueDateForMonth(monthStr)) : '—'));
+    : (batchMonths.length > 1
+      ? `10th of each month (${batchMonths.length} bills)`
+      : (thisBill?.dueDate ? fmtDate(thisBill.dueDate) : (monthStr ? fmtDate(dueDateForMonth(monthStr)) : '—')));
   const lateFineText = (waivedAmt > 0 || payment.waived)
     ? `Waived (${payment.waivedByDesignation || payment.recordedByDesignation || getRoleTitle('superadmin')})`
     : (lateFee > 0 ? fmtMoney(lateFee) : 'Rs. 0.00');
 
   const ledgerBills = [];
-  if (thisBill) ledgerBills.push(thisBill);
+  coveredBills.forEach((b) => {
+    if (!ledgerBills.some((x) => x.id === b.id)) ledgerBills.push(b);
+  });
+  if (thisBill && !ledgerBills.some((x) => x.id === thisBill.id)) ledgerBills.push(thisBill);
   openBills.forEach((b) => {
     if (!ledgerBills.some((x) => x.id === b.id)) ledgerBills.push(b);
   });
@@ -738,15 +755,21 @@ function renderKidsReceiptHTML({ student, payment, org, orgLogo, bills, photoUrl
             </tr>
           ` : ledgerBills.map((b) => {
             const st = String(b.status || 'unpaid').toLowerCase();
-            const isCur = (thisBill && b.id === thisBill.id) || (monthStr && b.month === monthStr);
+            const allocMatch = Array.isArray(payment.allocations)
+              ? payment.allocations.find((a) => a.billId === b.id || (b.month && a.month === b.month))
+              : null;
+            const isCur = Boolean(allocMatch) || batchBillIds.has(b.id) || (thisBill && b.id === thisBill.id) || (monthStr && b.month === monthStr);
             const pillCls = st === 'paid' ? '' : (st === 'partial' ? 'due' : 'due');
             const stLabel = st === 'paid' ? 'Paid' : (st === 'partial' ? 'Partial' : 'Due');
+            const rowAmt = isCur
+              ? (allocMatch ? Number(allocMatch.amountPaid ?? (allocMatch.feeCovered + allocMatch.lateFeeCovered)) : totalReceived)
+              : Number(b.monthlyFee || 0);
             return `
               <tr class="${isCur ? 'cur' : ''}">
                 <td>${escapeHtml(b.month ? formatShortMonthYear(b.month) : 'Monthly bill')} ${isCur ? '(this receipt)' : ''}</td>
                 <td>${escapeHtml(fmtDate(b.dueDate || (b.month ? dueDateForMonth(b.month) : '')))}</td>
                 <td><span class="mpr-pill ${pillCls}">${stLabel}</span></td>
-                <td>${fmtMoney(isCur ? totalReceived : (b.monthlyFee || 0))}</td>
+                <td>${fmtMoney(rowAmt)}</td>
               </tr>
             `;
           }).join('')}

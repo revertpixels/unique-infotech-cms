@@ -6,17 +6,18 @@
 
 import { db } from '../config/firebase-config.js';
 import { collection, getDocs, query, where } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.200';
-import { openPopup } from '../components/modal.js?v=1.8.200';
-import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.200';
-import { createSelect } from '../components/ui-select.js?v=1.8.200';
-import { createDatePicker, createMonthPicker } from '../components/ui-datepicker.js?v=1.8.200';
-import { formatINR } from '../utils/formatter.js?v=1.8.200';
-import { isCourseActive, batchAllowsCourse } from '../utils/session-rules.js?v=1.8.200';
-import { resolveUserDisplay } from '../services/user-directory.service.js?v=1.8.200';
-import { localToday, monthSeq } from './school-lifecycle.js?v=1.8.200';
+import { showToast } from '../components/toast.js?v=1.8.201';
+import { openPopup } from '../components/modal.js?v=1.8.201';
+import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.201';
+import { createSelect } from '../components/ui-select.js?v=1.8.201';
+import { createDatePicker, createMonthPicker } from '../components/ui-datepicker.js?v=1.8.201';
+import { formatINR } from '../utils/formatter.js?v=1.8.201';
+import { isCourseActive, batchAllowsCourse } from '../utils/session-rules.js?v=1.8.201';
+import { resolveUserDisplay } from '../services/user-directory.service.js?v=1.8.201';
+import { localToday, monthSeq } from './school-lifecycle.js?v=1.8.201';
 import {
   addMonthsYM,
+  ymRange,
   formatBreakPeriod,
   formatLongMonthYear,
   formatShortMonthYear,
@@ -25,9 +26,10 @@ import {
   computeKidsStudentDues,
   startKidsBreak,
   resumeKidsBreak,
+  extendKidsBreak,
   upgradeKidsPackage,
   isBreakOverdueReturn
-} from './school-billing.js?v=1.8.200';
+} from './school-billing.js?v=1.8.201';
 
 function mk(tag, cls, text) {
   const e = document.createElement(tag);
@@ -219,48 +221,163 @@ export function createBillingStartSelector(host, {
 
 /**
  * Shared Start Break popup (Unique Kids only, Super Admin only).
+ * Supports both preselected `student` (Profile / Students kebab) and searchable
+ * student picker (`student == null` + `students` list from `#/school-break`).
  */
-export async function openKidsStartBreakModal({ student, profile, onSuccess } = {}) {
-  if (!student || !student.id) return;
+export async function openKidsStartBreakModal({ student = null, students = [], profile, onSuccess } = {}) {
+  const activePool = (Array.isArray(students) ? students : [])
+    .filter((s) => s && (s.status || 'active') === 'active')
+    .sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
+  let selectedStudent = student && student.id ? student : null;
+  if (!selectedStudent && !activePool.length) {
+    showToast({ type: 'info', message: 'No active Unique Kids students available to put on break.' });
+    return;
+  }
+
   let saving = false;
   const popup = openPopup({
     title: 'Start Student Break',
-    subtitle: `${student.name || 'Student'} • ${student.studentId || ''}`,
+    subtitle: selectedStudent
+      ? `${selectedStudent.name || 'Student'} • ${selectedStudent.studentId || ''}`
+      : 'Search and select an active student to schedule a whole-month break',
     icon: 'pause-circle',
     tone: 'amber',
     saving: () => saving
   });
   const c = popup.container;
 
-  const wait = pNote('Checking existing bills & unpaid dues...');
-  c.appendChild(wait);
+  const duesHost = mk('div');
+  c.appendChild(duesHost);
 
-  const keys = [...new Set([student.id, student.studentId].filter(Boolean))];
-  const bills = [];
-  const breaks = [];
-  try {
-    for (const k of keys) {
-      const [bSnap, brSnap] = await Promise.all([
-        getDocs(query(collection(db, 'bills'), where('studentId', '==', k))),
-        getDocs(query(collection(db, 'breaks'), where('studentId', '==', k)))
-      ]);
-      bSnap.docs.forEach((d) => { if (!bills.some((x) => x.id === d.id)) bills.push({ id: d.id, ...d.data() }); });
-      brSnap.docs.forEach((d) => { if (!breaks.some((x) => x.id === d.id)) breaks.push({ id: d.id, ...d.data() }); });
-    }
-  } catch (err) {
-    console.warn('[school-break-modals] dues check warning:', err);
+  // If no student preselected, render live searchable student selector
+  let pickerWrap = null;
+  if (!selectedStudent) {
+    pickerWrap = mk('div', 'ui-field pk-field-full');
+    const lr = mk('div', 'ui-label-row');
+    const lab = mk('label', null, 'Search student ');
+    lab.appendChild(mk('em', null, '*'));
+    lr.appendChild(lab);
+
+    const searchWrap = mk('div', 'ui-input-wrap skb-modal-search-wrap');
+    const ic = document.createElement('i');
+    ic.setAttribute('data-lucide', 'search');
+    const searchInp = document.createElement('input');
+    searchInp.type = 'search';
+    searchInp.className = 'ui-input';
+    searchInp.placeholder = 'Type student name, Student ID or phone...';
+    searchInp.autocomplete = 'off';
+    const clearSelBtn = mk('button', 'ui-btn ghost sm', 'Change');
+    clearSelBtn.type = 'button';
+    clearSelBtn.hidden = true;
+    clearSelBtn.style.marginLeft = '6px';
+    searchWrap.append(ic, searchInp);
+
+    const pickedBadge = mk('div', 'pk-current-badge');
+    pickedBadge.hidden = true;
+    pickedBadge.style.marginTop = '6px';
+    pickedBadge.style.justifyContent = 'space-between';
+    pickedBadge.style.alignItems = 'center';
+
+    const pickedTxt = mk('span');
+    pickedBadge.append(pickedTxt, clearSelBtn);
+
+    const ddBox = mk('div', 'skb-modal-suggest');
+    ddBox.hidden = true;
+
+    const renderPickMatches = (qRaw) => {
+      const q = String(qRaw || '').trim().toLowerCase();
+      ddBox.innerHTML = '';
+      const filtered = activePool.filter((s) => {
+        if (!q) return true;
+        return [s.name || '', s.studentId || '', s.phone || ''].join(' ').toLowerCase().includes(q);
+      }).slice(0, 8);
+      if (!filtered.length) {
+        const em = mk('div', 'skb-modal-suggest-empty', 'No active Unique Kids students match.');
+        ddBox.appendChild(em);
+      } else {
+        filtered.forEach((st) => {
+          const row = mk('button', 'skb-modal-suggest-item');
+          row.type = 'button';
+          row.innerHTML =
+            `<strong>${st.name || 'Student'}</strong>` +
+            `<span class="skb-modal-suggest-meta">${st.studentId || st.id}${st.courseLevelName || st.courseName ? ' · ' + (st.courseLevelName || st.courseName) : ''}${st.phone ? ' · ' + st.phone : ''}</span>`;
+          row.addEventListener('click', () => {
+            selectedStudent = st;
+            ddBox.hidden = true;
+            searchWrap.hidden = true;
+            pickedTxt.innerHTML = `Selected: <strong>${st.name || 'Student'}</strong> (${st.studentId || st.id})`;
+            pickedBadge.style.display = 'flex';
+            pickedBadge.hidden = false;
+            clearSelBtn.hidden = false;
+            checkDues(st);
+            check();
+          });
+          ddBox.appendChild(row);
+        });
+      }
+      ddBox.hidden = false;
+    };
+
+    searchInp.addEventListener('focus', () => { if (!selectedStudent) renderPickMatches(searchInp.value); });
+    searchInp.addEventListener('input', () => { renderPickMatches(searchInp.value); });
+    clearSelBtn.addEventListener('click', () => {
+      selectedStudent = null;
+      pickedBadge.style.display = 'none';
+      pickedBadge.hidden = true;
+      clearSelBtn.hidden = true;
+      searchWrap.hidden = false;
+      duesHost.innerHTML = '';
+      renderPickMatches(searchInp.value);
+      searchInp.focus();
+      check();
+    });
+
+    pickerWrap.append(lr, searchWrap, pickedBadge, ddBox);
+    c.appendChild(pickerWrap);
+    requestAnimationFrame(() => searchInp.focus());
   }
-  wait.remove();
+
+  let duesReqSeq = 0;
+  async function checkDues(stu) {
+    const seq = ++duesReqSeq;
+    duesHost.innerHTML = '';
+    if (!stu || !stu.id) return;
+    const wait = pNote('Checking existing bills & unpaid dues...');
+    duesHost.appendChild(wait);
+
+    const keys = [...new Set([stu.id, stu.studentId].filter(Boolean))];
+    const bills = [];
+    const breaks = [];
+    try {
+      for (const k of keys) {
+        const [bSnap, brSnap] = await Promise.all([
+          getDocs(query(collection(db, 'bills'), where('studentId', '==', k))),
+          getDocs(query(collection(db, 'breaks'), where('studentId', '==', k)))
+        ]);
+        bSnap.docs.forEach((d) => { if (!bills.some((x) => x.id === d.id)) bills.push({ id: d.id, ...d.data() }); });
+        brSnap.docs.forEach((d) => { if (!breaks.some((x) => x.id === d.id)) breaks.push({ id: d.id, ...d.data() }); });
+      }
+    } catch (err) {
+      console.warn('[school-break-modals] dues check warning:', err);
+    }
+    if (seq !== duesReqSeq || !duesHost.isConnected) return;
+    duesHost.innerHTML = '';
+
+    const today = localToday();
+    const dues = computeKidsStudentDues(stu, bills, breaks, today);
+    if (dues.totalDue > 0) {
+      const dueWarn = mk('div', 'pk-alert warning');
+      dueWarn.innerHTML = `<i data-lucide="alert-triangle"></i><span><strong>Unpaid dues warning:</strong> Student has <strong>${formatINR(dues.totalDue)}</strong> pending (${dues.billCount} unpaid bill${dues.billCount === 1 ? '' : 's'}). Existing dues stay payable; you can still start the break.</span>`;
+      duesHost.appendChild(dueWarn);
+      if (typeof lucide !== 'undefined') lucide.createIcons();
+    }
+  }
+
+  if (selectedStudent) {
+    await checkDues(selectedStudent);
+  }
 
   const today = localToday();
-  const dues = computeKidsStudentDues(student, bills, breaks, today);
-
-  if (dues.totalDue > 0) {
-    const dueWarn = mk('div', 'pk-alert warning');
-    dueWarn.innerHTML = `<i data-lucide="alert-triangle"></i><span><strong>Unpaid dues warning:</strong> Student has <strong>${formatINR(dues.totalDue)}</strong> pending (${dues.billCount} unpaid bill${dues.billCount === 1 ? '' : 's'}). Existing dues stay payable; you can still start the break.</span>`;
-    c.appendChild(dueWarn);
-  }
-
   const ruleRange = computeStartBreakRange({ requestDate: today, today });
   const ruleBanner = mk('div', 'pk-note sk-break-rule-note');
   const ruleIcon = document.createElement('i');
@@ -271,7 +388,7 @@ export async function openKidsStartBreakModal({ student, profile, onSuccess } = 
 
   // Request / Notice Date (mid-month rule helper)
   const reqHost = mk('div');
-  const reqPicker = createDatePicker(reqHost, {
+  createDatePicker(reqHost, {
     value: today,
     min: today.slice(0, 7) + '-01',
     ariaLabel: 'Break notice date',
@@ -287,6 +404,7 @@ export async function openKidsStartBreakModal({ student, profile, onSuccess } = 
         toPicker.setMin(effFrom);
         if (!toPicker.value || toPicker.value < effFrom) toPicker.value = effFrom;
       }
+      updatePeriodNote();
       check();
     }
   });
@@ -294,6 +412,19 @@ export async function openKidsStartBreakModal({ student, profile, onSuccess } = 
 
   const fromHost = mk('div');
   const toHost = mk('div');
+  const periodSummary = mk('div', 'sk-bill-start-preview');
+
+  function updatePeriodNote() {
+    const fVal = fromPicker?.value || '';
+    const tVal = toPicker?.value || '';
+    if (fVal && tVal && tVal >= fVal) {
+      const cnt = ymRange(fVal, tVal).length;
+      periodSummary.textContent = `Break duration: ${cnt} month${cnt === 1 ? '' : 's'} (${formatBreakPeriod(fVal, tVal)}) · ₹0 monthly fee`;
+    } else {
+      periodSummary.textContent = '';
+    }
+  }
+
   const fromPicker = createMonthPicker(fromHost, {
     value: ruleRange.autoStartMonth,
     min: ruleRange.minStartMonth,
@@ -305,6 +436,7 @@ export async function openKidsStartBreakModal({ student, profile, onSuccess } = 
       }
       const prevM = formatLongMonthYear(addMonthsYM(fromYM, -1));
       ruleTxt.textContent = `${prevM} is charged in full; break starts ${formatShortMonthYear(fromYM)} (whole months, ₹0 monthly fee).`;
+      updatePeriodNote();
       check();
     }
   });
@@ -312,13 +444,15 @@ export async function openKidsStartBreakModal({ student, profile, onSuccess } = 
     value: ruleRange.autoStartMonth,
     min: ruleRange.autoStartMonth,
     ariaLabel: 'Planned end month',
-    onChange: () => check()
+    onChange: () => { updatePeriodNote(); check(); }
   });
 
   c.appendChild(pFieldRow(
     pField('Break start month (from next month)', fromHost, { half: true, required: true }),
     pField('Planned end month (inclusive)', toHost, { half: true, required: true })
   ));
+  c.appendChild(periodSummary);
+  updatePeriodNote();
 
   const { wrap: reasonWrap, textarea: reasonTa } = pTextarea('Enter reason for student break...');
   c.appendChild(pField('Reason for break', reasonWrap, { required: true }));
@@ -332,13 +466,14 @@ export async function openKidsStartBreakModal({ student, profile, onSuccess } = 
     const tVal = toPicker.value || '';
     const rVal = reasonTa.value.trim();
     const minS = ruleRange.minStartMonth;
-    okBtn.disabled = saving || !fVal || !tVal || !rVal || fVal < minS || tVal < fVal;
+    okBtn.disabled = saving || !selectedStudent || !fVal || !tVal || !rVal || fVal < minS || tVal < fVal;
   };
   reasonTa.addEventListener('input', check);
   check();
   if (typeof lucide !== 'undefined') lucide.createIcons();
 
   okBtn.addEventListener('click', async () => {
+    if (!selectedStudent) return;
     saving = true;
     setSaving(true);
     try {
@@ -346,7 +481,7 @@ export async function openKidsStartBreakModal({ student, profile, onSuccess } = 
       const disp = resolveUserDisplay(who, profile?.name, profile?.designation);
       await startKidsBreak({
         db,
-        student,
+        student: selectedStudent,
         startMonth: fromPicker.value,
         plannedEndMonth: toPicker.value,
         reason: reasonTa.value.trim(),
@@ -355,7 +490,7 @@ export async function openKidsStartBreakModal({ student, profile, onSuccess } = 
         actorDesignation: disp.designation || profile?.designation || '',
         asOfDate: today
       });
-      showToast({ type: 'success', message: `Break recorded for ${student.name || 'Student'} (${formatBreakPeriod(fromPicker.value, toPicker.value)}).` });
+      showToast({ type: 'success', message: `Break recorded for ${selectedStudent.name || 'Student'} (${formatBreakPeriod(fromPicker.value, toPicker.value)}).` });
       window.dispatchEvent(new CustomEvent('uic:data-mutated', { detail: { reason: 'break:start' } }));
       popup.close(true);
       if (onSuccess) await onSuccess();
@@ -455,6 +590,103 @@ export async function openKidsResumeBreakModal({ student, breakDoc = null, profi
       showToast({ type: 'error', message: err.message || 'Could not resume student.' });
       saving = false;
       setSaving(false);
+    }
+  });
+}
+
+/**
+ * Shared Extend Break popup (change planned end month, future months only).
+ */
+export async function openKidsExtendBreakModal({ student, breakDoc = null, profile, onSuccess } = {}) {
+  if (!student || !student.id) return;
+  let saving = false;
+  const today = localToday();
+  const curYM = today.slice(0, 7);
+  const minFutureYM = addMonthsYM(curYM, 1);
+
+  const startYM = String(breakDoc?.startMonth || student.breakFrom || '').slice(0, 7);
+  const currentEndYM = String(breakDoc?.plannedEndMonth || breakDoc?.endMonth || student.breakTo || '').slice(0, 7);
+  const reason = breakDoc?.reason || student.breakReason || 'Student break';
+
+  const minAllowedYM = (startYM && monthSeq(startYM) > monthSeq(minFutureYM)) ? startYM : minFutureYM;
+  const anchorForDefault = (currentEndYM && monthSeq(currentEndYM) >= monthSeq(curYM)) ? currentEndYM : curYM;
+  const defaultNewEnd = addMonthsYM(anchorForDefault, 1);
+
+  const popup = openPopup({
+    title: 'Extend / Update Break',
+    subtitle: `${student.name || 'Student'} • ${student.studentId || ''}`,
+    icon: 'calendar-plus',
+    tone: 'amber',
+    saving: () => saving
+  });
+  const c = popup.container;
+
+  const curRow = mk('div', 'pk-badge-row');
+  const curBadge = mk('div', 'pk-current-badge');
+  const curCnt = (startYM && currentEndYM) ? ymRange(startYM, currentEndYM).length : 0;
+  curBadge.innerHTML = `Current Break: <strong>${formatBreakPeriod(startYM, currentEndYM)}</strong>${curCnt ? ` (${curCnt} mo)` : ''} — ${reason}`;
+  curRow.appendChild(curBadge);
+  c.appendChild(curRow);
+
+  c.appendChild(pNote(`Only future months (from ${formatLongMonthYear(minFutureYM)} onward) can be selected. Break months carry ₹0 monthly fee.`));
+
+  const endHost = mk('div');
+  const previewEl = mk('div', 'sk-bill-start-preview');
+  const endPicker = createMonthPicker(endHost, {
+    value: defaultNewEnd >= minAllowedYM ? defaultNewEnd : minAllowedYM,
+    min: minAllowedYM,
+    ariaLabel: 'New planned end month',
+    onChange: () => syncUI()
+  });
+
+  const { okBtn, setSaving } = pButtons(popup, 'Save Planned End Month', { icon: 'calendar-plus', tone: 'primary' });
+
+  function syncUI() {
+    const val = endPicker.value || '';
+    const validFuture = Boolean(val) && monthSeq(val) >= monthSeq(minFutureYM) && (!startYM || monthSeq(val) >= monthSeq(startYM));
+    const changed = !currentEndYM || val !== currentEndYM;
+    if (validFuture && startYM) {
+      const nextCnt = ymRange(startYM, val).length;
+      previewEl.textContent = `Updated period: ${formatBreakPeriod(startYM, val)} (${nextCnt} month${nextCnt === 1 ? '' : 's'}).`;
+    } else if (validFuture) {
+      previewEl.textContent = `New planned end month: ${formatLongMonthYear(val)}.`;
+    } else {
+      previewEl.textContent = '';
+    }
+    okBtn.disabled = saving || !validFuture || !changed;
+  }
+
+  c.insertBefore(pField('New planned end month (future months only)', endHost, { required: true }), okBtn.parentElement);
+  c.insertBefore(previewEl, okBtn.parentElement);
+  syncUI();
+  if (typeof lucide !== 'undefined') lucide.createIcons();
+
+  okBtn.addEventListener('click', async () => {
+    saving = true;
+    setSaving(true);
+    try {
+      const who = (profile && profile.email) || 'admin';
+      const disp = resolveUserDisplay(who, profile?.name, profile?.designation);
+      await extendKidsBreak({
+        db,
+        student,
+        breakDoc,
+        newEndMonth: endPicker.value,
+        actorEmail: who,
+        actorName: disp.name || profile?.name || '',
+        actorDesignation: disp.designation || profile?.designation || '',
+        asOfDate: today
+      });
+      showToast({ type: 'success', message: `Break updated to ${formatBreakPeriod(startYM, endPicker.value)}.` });
+      window.dispatchEvent(new CustomEvent('uic:data-mutated', { detail: { reason: 'break:extend' } }));
+      popup.close(true);
+      if (onSuccess) await onSuccess();
+    } catch (err) {
+      console.error('[school-break-modals] extendBreak failed', err);
+      showToast({ type: 'error', message: err.message || 'Could not extend break.' });
+      saving = false;
+      setSaving(false);
+      syncUI();
     }
   });
 }

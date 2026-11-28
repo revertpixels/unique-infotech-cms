@@ -1,56 +1,268 @@
-<div class="sf-wrap uk-fees-page">
-  <div class="sk-head-row">
+<div class="pf-wrap sf-wrap uk-fees-page">
+  <div class="sk-head-row pf-head-row">
     <section class="pg-head">
-      <div class="pg-crumbs">Students / <span>Collect Fees</span></div>
+      <div class="pg-crumbs">Fees / <span>Collect Fees</span></div>
       <h2>Collect Fees</h2>
-      <p>Monthly billing is ongoing (no sessions). Bills open on the 1st, due by the 10th, late fine ₹1/day from the 11th.</p>
+      <p id="sf-subtitle">Search Kids students by name, Student ID or phone to view monthly bills and collect fees.</p>
     </section>
   </div>
 
-  <div id="sk-stats"></div>
-  <div id="sk-toolbar"></div>
+  <!-- Tabs: Collect Fees (default, Pay Fees style) | All bills -->
+  <div class="org-tabs sf-tabs" role="tablist" aria-label="Collect Fees views">
+    <button type="button" role="tab" class="org-tab is-active" id="sf-tab-collect" data-tab="collect" aria-selected="true">
+      <i data-lucide="wallet"></i><span>Collect Fees</span>
+    </button>
+    <button type="button" role="tab" class="org-tab" id="sf-tab-all" data-tab="all" aria-selected="false">
+      <i data-lucide="list"></i><span>All bills</span>
+      <span class="lp-count" id="sf-all-count" hidden>0</span>
+    </button>
+  </div>
+
+  <!-- TAB 1: Pay-Fees Style Student Search & Collection View -->
+  <div id="sf-collect-view" class="pf-payments-container">
+    <!-- Search Card -->
+    <div class="pf-search-card">
+      <div class="pf-search-bar-wrap">
+        <div class="ui-input-wrap pf-search-input-wrap">
+          <i data-lucide="search" class="pf-search-icon"></i>
+          <input
+            type="text"
+            id="sf-search-input"
+            class="ui-input pf-search-input"
+            placeholder="Search by student name, Student ID (e.g. UK26-0001) or phone number..."
+            autocomplete="off"
+          />
+          <button type="button" id="sf-search-clear" class="pf-clear-btn" title="Clear search" hidden>
+            <i data-lucide="x"></i>
+          </button>
+          <div id="sf-search-dropdown" class="pf-search-dropdown" hidden></div>
+        </div>
+        <button type="button" id="sf-search-btn" class="ui-btn primary pf-search-btn">
+          <i data-lucide="search"></i>
+          <span>Search</span>
+        </button>
+      </div>
+      <div class="pf-search-hint">
+        <span class="pf-hint-item"><i data-lucide="hash"></i> Student ID (e.g. UK26-0001)</span>
+        <span class="pf-hint-sep">•</span>
+        <span class="pf-hint-item"><i data-lucide="phone"></i> 10 digits: Phone number</span>
+        <span class="pf-hint-sep">•</span>
+        <span class="pf-hint-item"><i data-lucide="user"></i> Text: Student name</span>
+        <span class="pf-hint-sep">•</span>
+        <span class="pf-hint-session"><i data-lucide="calendar"></i> Billing: <strong id="sf-billing-badge">Monthly (1st open · due 10th)</strong></span>
+      </div>
+    </div>
+
+    <!-- Multiple Search Results Grid Card -->
+    <div id="sf-multi-card" class="pf-card pf-multi-card" hidden>
+      <div class="lp-card-head">
+        <div class="lp-card-title"><i data-lucide="users"></i><span>Matching Students (<span id="sf-multi-count">0</span>)</span></div>
+        <span class="pf-multi-note">Select a student to view monthly bills and collect fees</span>
+      </div>
+      <div id="sf-multi-list" class="pf-multi-list"></div>
+    </div>
+
+    <!-- Search Empty / Not Found State -->
+    <div id="sf-search-empty" class="pf-empty-card" hidden>
+      <div class="pf-empty-icon-wrap">
+        <i data-lucide="user-x"></i>
+      </div>
+      <h3 id="sf-search-empty-title">No student found</h3>
+      <p id="sf-search-empty-msg">No Unique Kids student matches your search query.</p>
+    </div>
+
+    <!-- Selected Student Panel -->
+    <div id="sf-panel" class="pf-panel" hidden>
+      <div class="pf-card pf-student-card">
+        <div class="pf-student-header">
+          <div class="pf-avatar-wrap" id="sf-avatar-wrap">
+            <div class="pf-avatar-initials" id="sf-avatar-text">ST</div>
+            <img id="sf-avatar-img" class="pf-avatar-img" src="" alt="Student photo" hidden />
+          </div>
+          <div class="pf-student-info">
+            <div class="pf-name-row">
+              <h3 id="sf-student-name">Student Name</h3>
+              <span id="sf-student-status" class="pill up">Active</span>
+              <div class="pf-id-badge">
+                <span>ID: <strong id="sf-student-id">—</strong></span>
+                <button type="button" id="sf-btn-copy-id" class="pf-icon-action" title="Copy Student ID">
+                  <i data-lucide="copy"></i>
+                </button>
+              </div>
+            </div>
+            <div class="pf-meta-pills">
+              <span class="pf-meta-pill"><i data-lucide="book-open"></i> <span id="sf-level-name">Level</span></span>
+              <span class="pf-meta-pill"><i data-lucide="users"></i> <span id="sf-batch-name">Batch</span></span>
+              <span class="pf-meta-pill"><i data-lucide="phone"></i> <span id="sf-phone-text">—</span></span>
+              <span class="pf-meta-pill"><i data-lucide="map-pin"></i> <span>Head Office (HO)</span></span>
+            </div>
+          </div>
+          <div class="pf-header-actions">
+            <button type="button" id="sf-btn-view-profile" class="ui-btn ghost">
+              <i data-lucide="external-link"></i>
+              <span>View Full Profile</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Financial Metrics -->
+        <div class="pf-metrics-grid">
+          <div class="pf-metric-card">
+            <div class="pf-metric-icon bg-indigo"><i data-lucide="wallet"></i></div>
+            <div class="pf-metric-data">
+              <span class="pf-metric-label">Monthly Fee Rate</span>
+              <strong class="pf-metric-val" id="sf-m-rate">₹0</strong>
+              <span class="pf-metric-sub" id="sf-m-start">Ongoing billing</span>
+            </div>
+          </div>
+          <div class="pf-metric-card">
+            <div class="pf-metric-icon bg-green"><i data-lucide="check-circle-2"></i></div>
+            <div class="pf-metric-data">
+              <span class="pf-metric-label">Paid Months</span>
+              <strong class="pf-metric-val text-success" id="sf-m-paid">₹0</strong>
+              <span class="pf-metric-sub" id="sf-m-paid-count">0 bills settled</span>
+            </div>
+          </div>
+          <div class="pf-metric-card">
+            <div class="pf-metric-icon bg-amber"><i data-lucide="clock"></i></div>
+            <div class="pf-metric-data">
+              <span class="pf-metric-label">Unpaid Fee Due</span>
+              <strong class="pf-metric-val text-danger" id="sf-m-due">₹0</strong>
+              <span class="pf-metric-sub" id="sf-m-due-count">0 bills unpaid</span>
+            </div>
+          </div>
+          <div class="pf-metric-card">
+            <div class="pf-metric-icon bg-rose"><i data-lucide="alert-triangle"></i></div>
+            <div class="pf-metric-data">
+              <span class="pf-metric-label">Late Fine Today</span>
+              <strong class="pf-metric-val text-danger" id="sf-m-late">₹0</strong>
+              <span class="pf-metric-sub">₹1 / day after 10th</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Month-wise Bills Card -->
+      <div class="pf-card pf-table-card">
+        <div class="lp-card-head">
+          <div class="lp-card-title">
+            <i data-lucide="calendar-days"></i>
+            <span>Month-wise Bills</span>
+            <span class="lp-count" id="sf-bills-count">0 months</span>
+          </div>
+          <div class="pf-card-head-actions">
+            <button type="button" id="sf-btn-all-payments" class="ui-btn ghost sm">
+              <i data-lucide="history"></i>
+              <span>Payment History</span>
+            </button>
+            <button type="button" id="sf-btn-collect-all" class="ui-btn primary sm" hidden>
+              <i data-lucide="layers"></i>
+              <span id="sf-btn-collect-all-lbl">Collect all due</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="adm-scroll">
+          <table class="adm-table pf-table sf-student-bills-table">
+            <thead>
+              <tr>
+                <th>Month</th>
+                <th class="num">Fee</th>
+                <th class="num">Late fine</th>
+                <th>Status</th>
+                <th>Receipt no.</th>
+                <th class="adm-actions">Action</th>
+              </tr>
+            </thead>
+            <tbody id="sf-student-bills-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Today's Collections List Card -->
+    <div class="pf-card sf-today-card" id="sf-today-card">
+      <div class="lp-card-head">
+        <div class="lp-card-title">
+          <i data-lucide="clock-3"></i>
+          <span>Today's collections</span>
+          <span class="lp-count" id="sf-today-count">0 collections</span>
+        </div>
+        <div class="sf-today-total-wrap">
+          <span class="sf-today-total-lbl">Total today:</span>
+          <strong class="sf-today-total-val" id="sf-today-total">₹0.00</strong>
+        </div>
+      </div>
+      <div class="adm-scroll">
+        <table class="adm-table pf-table sf-today-table">
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>Student</th>
+              <th>Month</th>
+              <th class="num">Amount</th>
+              <th>Mode</th>
+              <th>Receipt</th>
+            </tr>
+          </thead>
+          <tbody id="sf-today-tbody"></tbody>
+        </table>
+      </div>
+      <div id="sf-today-empty" class="sf-today-empty" hidden>
+        <i data-lucide="inbox"></i>
+        <span>No Kids fee collections recorded today yet.</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB 2: All Bills List (Existing View Preserved) -->
+  <div id="sf-all-view" hidden>
+    <div id="sk-stats"></div>
+    <div id="sk-toolbar"></div>
 
     <div class="sk-table-card">
-    <div class="sk-scroll">
-      <div id="sf-loading" class="sk-empty" hidden>
-        <i data-lucide="loader-circle"></i>
-        <b>Loading bills</b>
-        <span>Please wait while fee records are loaded.</span>
+      <div class="sk-scroll">
+        <div id="sf-loading" class="sk-empty" hidden>
+          <i data-lucide="loader-circle"></i>
+          <b>Loading bills</b>
+          <span>Please wait while fee records are loaded.</span>
+        </div>
+        <table class="sk-table">
+          <thead>
+            <tr>
+              <th>Student ID</th>
+              <th>Student</th>
+              <th class="hide-sm">Phone</th>
+              <th>Level</th>
+              <th>Month</th>
+              <th>Fee</th>
+              <th>Status</th>
+              <th>Late Fine</th>
+              <th class="sk-actions">Pay</th>
+            </tr>
+          </thead>
+          <tbody id="sf-rows"></tbody>
+        </table>
+        <div id="sf-empty" class="sk-empty" hidden>
+          <i data-lucide="credit-card"></i>
+          <b>No bills yet</b>
+          <span>Monthly bills will appear here once admissions are saved.</span>
+        </div>
+        <div id="sf-no-match" class="sk-empty" hidden>
+          <i data-lucide="search"></i>
+          <b>No matching records</b>
+          <span>Try clearing your search or filters.</span>
+          <button type="button" id="sf-no-match-clear" class="ui-btn ghost">Clear filters</button>
+        </div>
+        <div id="sf-load-error" class="sk-empty" hidden>
+          <i data-lucide="alert-circle"></i>
+          <b>Could not load bills</b>
+          <span id="sf-load-error-msg"></span>
+          <button type="button" id="sf-load-error-retry" class="ui-btn primary"><i data-lucide="refresh-cw"></i>Retry</button>
+          <button type="button" id="sf-load-error-back" class="ui-btn ghost">Back</button>
+        </div>
+        <div class="sk-card-foot" id="sf-foot" hidden></div>
       </div>
-      <table class="sk-table">
-        <thead>
-          <tr>
-            <th>Student ID</th>
-            <th>Student</th>
-            <th class="hide-sm">Phone</th>
-            <th>Level</th>
-            <th>Month</th>
-            <th>Fee</th>
-            <th>Status</th>
-            <th>Late Fine</th>
-            <th class="sk-actions">Pay</th>
-          </tr>
-        </thead>
-        <tbody id="sf-rows"></tbody>
-      </table>
-      <div id="sf-empty" class="sk-empty" hidden>
-        <i data-lucide="credit-card"></i>
-        <b>No bills yet</b>
-        <span>Monthly bills will appear here once admissions are saved.</span>
-      </div>
-      <div id="sf-no-match" class="sk-empty" hidden>
-        <i data-lucide="search"></i>
-        <b>No matching records</b>
-        <span>Try clearing your search or filters.</span>
-        <button type="button" id="sf-no-match-clear" class="ui-btn ghost">Clear filters</button>
-      </div>
-      <div id="sf-load-error" class="sk-empty" hidden>
-        <i data-lucide="alert-circle"></i>
-        <b>Could not load bills</b>
-        <span id="sf-load-error-msg"></span>
-        <button type="button" id="sf-load-error-retry" class="ui-btn primary"><i data-lucide="refresh-cw"></i>Retry</button>
-        <button type="button" id="sf-load-error-back" class="ui-btn ghost">Back</button>
-      </div>
-      <div class="sk-card-foot" id="sf-foot" hidden></div>
+    </div>
   </div>
 </div>

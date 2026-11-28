@@ -11,11 +11,11 @@ import {
   collection, getDocs, query, where, doc, getDoc, addDoc, updateDoc, serverTimestamp,
   runTransaction, writeBatch, arrayUnion
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.200';
-import { localToday, monthSeq, nextMonth, previousMonth } from './school-lifecycle.js?v=1.8.200';
-import { firstMonthlyMonth } from './school-receipt.js?v=1.8.200';
-import { fineFor } from './session-rules.js?v=1.8.200';
-import { readReceiptNo, writeCounter } from '../services/admission.service.js?v=1.8.200';
+import { showToast } from '../components/toast.js?v=1.8.201';
+import { localToday, monthSeq, nextMonth, previousMonth } from './school-lifecycle.js?v=1.8.201';
+import { firstMonthlyMonth } from './school-receipt.js?v=1.8.201';
+import { fineFor } from './session-rules.js?v=1.8.201';
+import { readReceiptNo, writeCounter } from '../services/admission.service.js?v=1.8.201';
 
 const BILLS_COL = 'bills';
 const PAYMENTS_COL = 'payments';
@@ -451,6 +451,216 @@ export async function recordKidsBillPayment({
       feeCovered: baseRemaining,
       lateFeePaid: latePaid,
       lateFeeWaived: waivedAmt,
+      totalPaid,
+      mode: cleanMode,
+      txnId: cleanTxn
+    };
+  });
+}
+
+/**
+ * Atomically records payment across multiple open Unique Kids monthly bills under one
+ * sequential Kids receipt (`UK<YY>MN-HO-<NNNN>`), updating all bills inside one transaction.
+ */
+export async function recordKidsAllBillsPayment({
+  studentDoc,
+  bills = [],
+  mode = 'cash',
+  txnId = '',
+  remarks = '',
+  waived = false,
+  waiverReason = '',
+  paymentDate,
+  userEmail = '',
+  userName = '',
+  userDesignation = '',
+  userRole = ''
+} = {}) {
+  if (!studentDoc || !studentDoc.id) throw new Error('Student record is required.');
+  const targetBills = (Array.isArray(bills) ? bills : [])
+    .filter((b) => b && b.id)
+    .slice()
+    .sort((a, b) => monthSeq(a.month) - monthSeq(b.month));
+  if (!targetBills.length) throw new Error('No open monthly bills selected.');
+  if (targetBills.length === 1) {
+    const single = await recordKidsBillPayment({
+      studentDoc,
+      bill: targetBills[0],
+      mode,
+      txnId,
+      remarks,
+      waived,
+      waiverReason,
+      paymentDate,
+      userEmail,
+      userName,
+      userDesignation,
+      userRole
+    });
+    return { ...single, billIds: [single.billId], months: single.month ? [single.month] : [] };
+  }
+
+  const payDate = paymentDate || localToday();
+  const cleanMode = String(mode || 'cash').toLowerCase().trim() || 'cash';
+  const cleanTxn = cleanMode !== 'cash' ? String(txnId || '').trim() : '';
+  const cleanRemarks = String(remarks || '').trim();
+  const cleanEmail = String(userEmail || '').toLowerCase().trim();
+  const cleanWaiverReason = waived ? String(waiverReason || '').trim() : '';
+  if (waived && !cleanWaiverReason) throw new Error('Waiver reason is required to waive late fine.');
+
+  return runTransaction(db, async (tx) => {
+    const liveBills = [];
+    for (const b of targetBills) {
+      const bRef = doc(db, BILLS_COL, b.id);
+      const snap = await tx.get(bRef);
+      if (!snap.exists()) throw new Error(`Monthly bill ${b.month || b.id} no longer exists.`);
+      const data = { id: snap.id, _ref: bRef, ...snap.data() };
+      const st = String(data.status || 'unpaid').toLowerCase();
+      if (st !== 'unpaid' && st !== 'partial') {
+        throw new Error(`Bill for ${formatShortMonthYear(data.month) || data.id} has already been settled.`);
+      }
+      liveBills.push(data);
+    }
+
+    const centreCode = 'HO';
+    const rc = await readReceiptNo(tx, { org: 'school', type: 'MN', branchCode: centreCode, date: payDate });
+
+    let totalFeeCovered = 0;
+    let totalLatePaid = 0;
+    let totalLateWaived = 0;
+    const allocations = [];
+    const waiverPayloads = [];
+    const billUpdates = [];
+
+    for (const lb of liveBills) {
+      const monthlyFee = rupees(lb.monthlyFee || 0);
+      const priorPaid = rupees(lb.paidAmount || 0);
+      const priorWaived = rupees(lb.waivedAmount || 0);
+      const baseRem = Math.max(0, rupees(monthlyFee - priorPaid - priorWaived));
+      const compLate = computeLateFee(lb, payDate);
+      const bWaived = (waived && compLate > 0) ? rupees(compLate) : 0;
+      const bLatePaid = (waived && compLate > 0) ? 0 : rupees(compLate);
+      const bPaidNow = rupees(baseRem + bLatePaid);
+
+      totalFeeCovered = rupees(totalFeeCovered + baseRem);
+      totalLatePaid = rupees(totalLatePaid + bLatePaid);
+      totalLateWaived = rupees(totalLateWaived + bWaived);
+
+      allocations.push({
+        billId: lb.id,
+        month: lb.month || '',
+        monthlyFee,
+        feeCovered: baseRem,
+        lateFeeCovered: bLatePaid,
+        lateFeeWaived: bWaived,
+        amountPaid: bPaidNow
+      });
+
+      billUpdates.push({
+        ref: lb._ref,
+        priorPaid,
+        bPaidNow,
+        bLatePaid,
+        bWaived,
+        priorWaivedField: rupees(lb.lateFeeWaived || 0)
+      });
+
+      if (bWaived > 0) {
+        waiverPayloads.push({ billId: lb.id, month: lb.month || '', amount: bWaived });
+      }
+    }
+
+    const totalPaid = rupees(totalFeeCovered + totalLatePaid);
+    if (totalPaid <= 0 && totalLateWaived <= 0) {
+      throw new Error('Nothing due for the selected monthly bills.');
+    }
+
+    const months = liveBills.map((lb) => lb.month).filter(Boolean);
+    const periodLabel = months.length > 1
+      ? `${formatShortMonthYear(months[0])} – ${formatShortMonthYear(months[months.length - 1])}`
+      : (formatShortMonthYear(months[0]) || 'Monthly bills');
+
+    const payRef = doc(collection(db, PAYMENTS_COL));
+    writeCounter(tx, rc.ref, rc.next, { org: 'school', type: 'MN', branchCode: centreCode, date: payDate });
+
+    tx.set(payRef, {
+      id: payRef.id,
+      ctx: 'school',
+      type: 'KIDS_MONTHLY',
+      studentId: studentDoc.id,
+      studentDocId: studentDoc.id,
+      ...(studentDoc.studentId ? { studentCode: studentDoc.studentId } : {}),
+      billIds: liveBills.map((lb) => lb.id),
+      months,
+      allocations,
+      receiptNo: rc.receiptNo,
+      receiptCentreCode: centreCode,
+      amount: totalPaid,
+      totalAmount: totalPaid,
+      feeCovered: totalFeeCovered,
+      lateFeeCovered: totalLatePaid,
+      lateFeeWaived: totalLateWaived,
+      waived: totalLateWaived > 0,
+      waiverReason: cleanWaiverReason,
+      mode: cleanMode,
+      txnId: cleanTxn,
+      remarks: cleanRemarks || `Monthly fees (${periodLabel})`,
+      receivedDate: payDate,
+      receivedBy: cleanEmail,
+      ...(userName ? { receivedByName: userName } : {}),
+      ...(userDesignation ? { recordedByDesignation: userDesignation } : {}),
+      ...(userRole ? { receivedByRole: userRole } : {}),
+      createdAt: serverTimestamp()
+    });
+
+    for (const u of billUpdates) {
+      tx.update(u.ref, {
+        ctx: 'school',
+        paidAmount: rupees(u.priorPaid + u.bPaidNow),
+        lateFee: u.bLatePaid,
+        ...(u.bWaived > 0 ? { lateFeeWaived: rupees(u.priorWaivedField + u.bWaived), waived: true, waiverReason: cleanWaiverReason } : {}),
+        status: 'paid',
+        receiptNo: rc.receiptNo,
+        lastPaymentId: payRef.id,
+        paymentMode: cleanMode,
+        txnId: cleanTxn,
+        updatedAt: serverTimestamp(),
+        updatedBy: cleanEmail
+      });
+    }
+
+    for (const wp of waiverPayloads) {
+      const wRef = doc(collection(db, WAIVERS_COL));
+      tx.set(wRef, {
+        id: wRef.id,
+        ctx: 'school',
+        studentId: studentDoc.id,
+        ...(studentDoc.studentId ? { studentCode: studentDoc.studentId } : {}),
+        billId: wp.billId,
+        month: wp.month,
+        amount: wp.amount,
+        reason: cleanWaiverReason,
+        receiptNo: rc.receiptNo,
+        waivedBy: cleanEmail,
+        ...(userName ? { waivedByName: userName } : {}),
+        ...(userDesignation ? { waivedByDesignation: userDesignation } : {}),
+        ...(userRole ? { waivedByRole: userRole } : {}),
+        waivedAt: payDate,
+        createdAt: serverTimestamp()
+      });
+    }
+
+    return {
+      studentDocId: studentDoc.id,
+      paymentId: payRef.id,
+      billIds: liveBills.map((lb) => lb.id),
+      months,
+      month: months.length === 1 ? months[0] : '',
+      allocations,
+      receiptNo: rc.receiptNo,
+      feeCovered: totalFeeCovered,
+      lateFeePaid: totalLatePaid,
+      lateFeeWaived: totalLateWaived,
       totalPaid,
       mode: cleanMode,
       txnId: cleanTxn
@@ -1003,6 +1213,132 @@ export async function resumeKidsBreak({
   return { rejoinMonth, endedEarly, effectiveEndMonth, createdMonths };
 }
 
+/**
+ * Updates the planned end month for an ongoing Unique Kids break (future months only).
+ */
+export async function extendKidsBreak({
+  db: dbOverride,
+  student,
+  breakDoc = null,
+  newEndMonth,
+  actorEmail = 'admin',
+  actorName = '',
+  actorDesignation = '',
+  asOfDate
+} = {}) {
+  const targetDb = dbOverride || db;
+  if (!student || !student.id) throw new Error('Student record is required.');
+  if (!newEndMonth || !/^\d{4}-\d{2}$/.test(newEndMonth)) throw new Error('Select a valid planned end month.');
+
+  const curYM = String(asOfDate || localToday()).slice(0, 7);
+  const minFutureYM = addMonthsYM(curYM, 1);
+  if (monthSeq(newEndMonth) < monthSeq(minFutureYM)) {
+    throw new Error(`Only future months (from ${formatShortMonthYear(minFutureYM)} onward) can be chosen when extending a break.`);
+  }
+
+  const [bills, existingBreaks] = await Promise.all([
+    queryStudentDocs(targetDb, BILLS_COL, student),
+    queryStudentDocs(targetDb, BREAKS_COL, student)
+  ]);
+
+  const targetBreak =
+    (breakDoc?.id ? existingBreaks.find((b) => b.id === breakDoc.id) : null)
+    || existingBreaks.find((b) => student.activeBreakId && b.id === student.activeBreakId)
+    || existingBreaks.find((b) => ['active', 'approved'].includes(String(b.status || '').toLowerCase()) && !b.actualReturnDate)
+    || null;
+
+  if (!targetBreak) {
+    throw new Error('Active break record not found for this student.');
+  }
+
+  const startMonth = String(targetBreak.startMonth || student.breakFrom || '').slice(0, 7);
+  const previousEndMonth = String(targetBreak.plannedEndMonth || targetBreak.endMonth || student.breakTo || '').slice(0, 7);
+  if (startMonth && monthSeq(newEndMonth) < monthSeq(startMonth)) {
+    throw new Error(`Planned end month must be on or after ${formatShortMonthYear(startMonth)}.`);
+  }
+  if (previousEndMonth && newEndMonth === previousEndMonth) {
+    throw new Error('Select a different planned end month to update the break.');
+  }
+
+  const ymSet = new Set(startMonth ? ymRange(startMonth, newEndMonth) : [newEndMonth]);
+  const nowIso = new Date().toISOString();
+  const wb = writeBatch(targetDb);
+
+  for (const b of bills) {
+    const bStatus = String(b.status || '').toLowerCase();
+    if (ymSet.has(b.month) && bStatus === 'unpaid' && !(Number(b.paidAmount || 0) > 0)) {
+      wb.update(b._ref, {
+        ctx: 'school',
+        status: 'break-waived',
+        breakId: targetBreak.id,
+        cancelReason: 'Student break: ' + (targetBreak.reason || student.breakReason || 'Student break'),
+        stoppedAt: serverTimestamp(),
+        stoppedBy: actorEmail,
+        updatedAt: serverTimestamp()
+      });
+    } else if (
+      b.breakId === targetBreak.id &&
+      bStatus === 'break-waived' &&
+      monthSeq(b.month) > monthSeq(newEndMonth) &&
+      monthSeq(b.month) <= monthSeq(curYM)
+    ) {
+      wb.update(b._ref, {
+        ctx: 'school',
+        status: 'unpaid',
+        cancelReason: null,
+        breakId: null,
+        stoppedAt: null,
+        stoppedBy: null,
+        updatedAt: serverTimestamp(),
+        updatedBy: actorEmail
+      });
+    }
+  }
+
+  const targetRef = targetBreak._ref || doc(targetDb, BREAKS_COL, targetBreak.id);
+  wb.update(targetRef, {
+    ctx: 'school',
+    endMonth: newEndMonth,
+    plannedEndMonth: newEndMonth,
+    effectiveEndMonth: newEndMonth,
+    extendedBy: actorEmail,
+    extendedByName: actorName || '',
+    extendedByDesignation: actorDesignation || '',
+    extendedAtISO: nowIso,
+    updatedAt: serverTimestamp()
+  });
+
+  const existingHist = Array.isArray(student.breakHistory) ? student.breakHistory.slice() : [];
+  let matchedIdx = -1;
+  for (let i = existingHist.length - 1; i >= 0; i--) {
+    const h = existingHist[i];
+    if ((targetBreak.id && h.breakId === targetBreak.id) || (!h.actualReturnDate && h.from === startMonth && h.to === previousEndMonth)) {
+      matchedIdx = i;
+      break;
+    }
+  }
+  if (matchedIdx !== -1) {
+    existingHist[matchedIdx] = {
+      ...existingHist[matchedIdx],
+      to: newEndMonth,
+      extendedBy: actorEmail,
+      extendedAt: nowIso
+    };
+  }
+
+  wb.update(doc(targetDb, STUDENTS_COL, student.id), {
+    ...(student.ctx ? {} : { ctx: 'school' }),
+    ...(student.branchId ? {} : { branchId: 'HO', branchName: 'Head Office' }),
+    breakTo: newEndMonth,
+    breakHistory: existingHist,
+    updatedAt: serverTimestamp(),
+    updatedBy: actorEmail
+  });
+
+  await wb.commit();
+  return { breakId: targetBreak.id, startMonth, previousEndMonth, newEndMonth };
+}
+
 export async function upgradeKidsPackage({
   db: dbOverride,
   student,
@@ -1439,17 +1775,34 @@ export function buildKidsPaymentLedger({ students = [], admissionPayments = [], 
     });
   }
 
+  const allocReceiptKeys = new Set(allocs.map(a => a.receiptNo).filter(Boolean));
+
   for (const p of summaries) {
-    if (String(p.type || '').toUpperCase() !== 'UPGRADE' && allocKeys.has(`${p.studentId || ''}|${p.receivedDate || ''}`)) continue;
+    const isUpgrade = String(p.type || '').toUpperCase() === 'UPGRADE';
+    const hasBatchMonths = Array.isArray(p.allocations) && p.allocations.length > 0 || (Array.isArray(p.billIds) && p.billIds.length > 0);
+    if (!isUpgrade && p.receiptNo && allocReceiptKeys.has(p.receiptNo)) continue;
+    if (!isUpgrade && !hasBatchMonths && allocKeys.has(`${p.studentId || ''}|${p.receivedDate || ''}`)) continue;
     const s = resolveStudent(p);
     if (!s) continue;
-    const amt = rupees(p.totalAmount ?? p.amount ?? 0);
-    if (amt <= 0) continue;
-    const isUpgrade = String(p.type || '').toUpperCase() === 'UPGRADE';
+    const lfPaid = rupees(p.lateFeeCovered || 0);
+    const waivedAmt = rupees(p.lateFeeWaived || 0);
+    const totalAmt = rupees(p.totalAmount ?? p.amount ?? 0);
+    const feePart = p.feeCovered != null ? rupees(p.feeCovered) : Math.max(0, rupees(totalAmt - lfPaid));
+    if (totalAmt <= 0 && waivedAmt <= 0) continue;
+    const monthsList = Array.isArray(p.months) && p.months.length
+      ? p.months
+      : (Array.isArray(p.allocations) ? p.allocations.map((a) => a.month).filter(Boolean) : []);
+    const sortedMonths = monthsList.slice().sort((a, b) => monthSeq(a) - monthSeq(b));
+    const batchPeriod = sortedMonths.length > 1
+      ? `${fmtMonthLabel(sortedMonths[0])} – ${fmtMonthLabel(sortedMonths[sortedMonths.length - 1])} (${sortedMonths.length} mo)`
+      : (sortedMonths.length === 1 ? fmtMonthLabel(sortedMonths[0]) : '');
     entries.push({
       id: p.id,
       ctx: 'school',
+      billIds: Array.isArray(p.billIds) ? p.billIds : [],
+      months: sortedMonths,
       allocations: Array.isArray(p.allocations) ? p.allocations : [],
+      billPeriod: batchPeriod,
       date: p.receivedDate || '',
       receiptNo: p.receiptNo || '—',
       studentDocId: s.id,
@@ -1471,21 +1824,23 @@ export function buildKidsPaymentLedger({ students = [], admissionPayments = [], 
       courseId: p.courseId || s.courseId || '',
       courseName: p.courseName || s.courseLevelName || s.courseName || '',
       type: isUpgrade ? 'UPGRADE' : 'KIDS_MONTHLY',
-      typeLabel: isUpgrade ? 'Upgrade difference' : 'Kids monthly fee',
+      typeLabel: isUpgrade ? 'Upgrade difference' : (batchPeriod ? `Kids monthly fees (${batchPeriod})` : 'Kids monthly fee'),
       mode: String(p.mode || p.paymentMethod || 'cash').toLowerCase(),
       txnId: p.txnId || '',
-      amount: amt,
-      lateFeePaid: 0,
-      lateFeeWaived: 0,
-      totalReceived: amt,
+      amount: feePart,
+      lateFeePaid: lfPaid,
+      lateFeeWaived: waivedAmt,
+      totalReceived: totalAmt,
       isPureWaiver: false,
       recordedBy: (p.receivedBy || '').toLowerCase(),
       recordedByName: p.receivedByName || p.recordedByName || '',
       recordedByDesignation: p.recordedByDesignation || '',
       remarks: p.remarks || '',
-      receiptRoute: (isUpgrade && p.id)
+      receiptRoute: (p.id && isUpgrade)
         ? `#/payments/${encodeURIComponent(s.id)}/${encodeURIComponent(p.id)}/receipt?from=school-payments`
-        : (isUpgrade ? `#/students/${encodeURIComponent(s.id)}?tab=course` : `#/students/${encodeURIComponent(s.id)}?tab=payments`),
+        : (p.id
+          ? `#/payments/${encodeURIComponent(s.id)}/${encodeURIComponent(p.id)}/receipt?from=school-payments`
+          : `#/students/${encodeURIComponent(s.id)}?tab=payments`),
       createdAtSec: toSec(p.createdAt)
     });
   }

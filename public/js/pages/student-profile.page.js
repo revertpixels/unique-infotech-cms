@@ -11,20 +11,20 @@ import {
   serverTimestamp,
   runTransaction
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.200';
-import { openPopup } from '../components/modal.js?v=1.8.200';
-import { createSelect } from '../components/ui-select.js?v=1.8.200';
-import { confirmDialog } from '../components/ui-confirm.js?v=1.8.200';
-import { openMenu } from '../components/ui-menu.js?v=1.8.200';
-import { formatINR, formatDateIN, formatPersonName, formatGenderDisplay, initials } from '../utils/formatter.js?v=1.8.200';
-import { validatePhone, validateEmail, validateDOB, validateName } from '../utils/validator.js?v=1.8.200';
-import { registerDirty } from '../utils/unsaved-guard.js?v=1.8.200';
-import { resolveUserDisplay, getRoleTitle, loadUsersDirectory } from '../services/user-directory.service.js?v=1.8.200';
-import { compressTo100KB, blobToDataURL, isImageFile, formatBytes } from '../utils/image-compress.js?v=1.8.200';
-import { getStudentPhotoSrc, getStudentDocRecord, getStudentDocSrc, getStudentDocMime } from '../utils/student-media.js?v=1.8.200';
-import { todayISO } from '../utils/session-rules.js?v=1.8.200';
-import { getSelectedSessionId } from '../core/sessions.js?v=1.8.200';
-import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.200';
+import { showToast } from '../components/toast.js?v=1.8.201';
+import { openPopup } from '../components/modal.js?v=1.8.201';
+import { createSelect } from '../components/ui-select.js?v=1.8.201';
+import { confirmDialog } from '../components/ui-confirm.js?v=1.8.201';
+import { openMenu } from '../components/ui-menu.js?v=1.8.201';
+import { formatINR, formatDateIN, formatPersonName, formatGenderDisplay, initials } from '../utils/formatter.js?v=1.8.201';
+import { validatePhone, validateEmail, validateDOB, validateName } from '../utils/validator.js?v=1.8.201';
+import { registerDirty } from '../utils/unsaved-guard.js?v=1.8.201';
+import { resolveUserDisplay, getRoleTitle, loadUsersDirectory } from '../services/user-directory.service.js?v=1.8.201';
+import { compressTo100KB, blobToDataURL, isImageFile, formatBytes } from '../utils/image-compress.js?v=1.8.201';
+import { getStudentPhotoSrc, getStudentDocRecord, getStudentDocSrc, getStudentDocMime } from '../utils/student-media.js?v=1.8.201';
+import { todayISO } from '../utils/session-rules.js?v=1.8.201';
+import { getSelectedSessionId } from '../core/sessions.js?v=1.8.201';
+import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.201';
 import {
   fetchStudentPayments,
   recordPaymentTx,
@@ -35,8 +35,8 @@ import {
   calculateStudentFinancials,
   buildReceiptMenuItems,
   repairStudentAdmissionPayment
-} from '../services/payment.service.js?v=1.8.200';
-import { courseFeeOf, discountOf } from '../utils/fees.js?v=1.8.200';
+} from '../services/payment.service.js?v=1.8.201';
+import { courseFeeOf, discountOf } from '../utils/fees.js?v=1.8.201';
 import {
   isBreakOverdueReturn,
   formatBreakStatusText,
@@ -45,13 +45,13 @@ import {
   computeKidsStudentDues,
   computeLateFee,
   syncOpenKidsBills
-} from '../utils/school-billing.js?v=1.8.200';
+} from '../utils/school-billing.js?v=1.8.201';
 import {
   openKidsStartBreakModal,
   openKidsResumeBreakModal,
   openKidsUpgradePackageModal
-} from '../utils/school-break-modals.js?v=1.8.200';
-import { firstMonthlyMonth } from '../utils/school-receipt.js?v=1.8.200';
+} from '../utils/school-break-modals.js?v=1.8.201';
+import { firstMonthlyMonth } from '../utils/school-receipt.js?v=1.8.201';
 import {
   ensureReferenceData,
   getCachedReferenceData,
@@ -60,7 +60,7 @@ import {
   getCachedKidsHistory,
   isCacheStale,
   scheduleDelayedSkeleton
-} from '../services/report.service.js?v=1.8.200';
+} from '../services/report.service.js?v=1.8.201';
 
 const COL = 'students';
 const QUALIFICATIONS = ['VIII Pass', 'Secondary (X) Pass', 'Higher Secondary (XII) Pass', 'ITI', 'Diploma', 'Undergraduate (Graduate)', 'Postgraduate', 'Other'];

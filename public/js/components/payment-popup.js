@@ -1,12 +1,12 @@
 // payment-popup.js — Single Shared Payment Popup for Student Profile and Pay Fees
 import { auth } from '../config/firebase-config.js';
-import { openPopup } from './modal.js?v=1.8.197';
-import { createSelect } from './ui-select.js?v=1.8.197';
-import { formatINR, formatDateIN } from '../utils/formatter.js?v=1.8.197';
-import { todayISO } from '../utils/session-rules.js?v=1.8.197';
-import { getRoleTitle, resolveUserDisplay } from '../services/user-directory.service.js?v=1.8.197';
-import { showToast } from './toast.js?v=1.8.197';
-import { playPaymentSuccessSound } from '../utils/sound.js?v=1.8.197';
+import { openPopup } from './modal.js?v=1.8.198';
+import { createSelect } from './ui-select.js?v=1.8.198';
+import { formatINR, formatDateIN } from '../utils/formatter.js?v=1.8.198';
+import { todayISO } from '../utils/session-rules.js?v=1.8.198';
+import { getRoleTitle, resolveUserDisplay } from '../services/user-directory.service.js?v=1.8.198';
+import { showToast } from './toast.js?v=1.8.198';
+import { playPaymentSuccessSound } from '../utils/sound.js?v=1.8.198';
 import {
   recordPayment,
   recordAdmissionWithPayment,
@@ -16,13 +16,13 @@ import {
   isAdmissionFeePaid,
   isMaterialFeePaid,
   isExamFeePaid
-} from '../services/payment.service.js?v=1.8.197';
+} from '../services/payment.service.js?v=1.8.198';
 import {
   computeLateFee,
   formatShortMonthYear,
   fetchOpenKidsBillsForStudent,
   recordKidsBillPayment
-} from '../utils/school-billing.js?v=1.8.197';
+} from '../utils/school-billing.js?v=1.8.198';
 
 function formatDateTime(d) {
   const dt = d instanceof Date ? d : new Date(d);
@@ -268,7 +268,8 @@ export async function openPaymentPopup({
   activeSession,
   payments,
   from = 'pay-fees',
-  onSuccess
+  onSuccess,
+  onCancel
 }) {
   const s = student;
   if (!s) return;
@@ -288,10 +289,11 @@ export async function openPaymentPopup({
     if (isKids) {
       const kAdmFee = Number(pa.admFee ?? admFee ?? 0);
       const pmLabel = pa.paymentMode === 'difference' ? 'Difference Payment' : 'Full Payment';
+      const itemTitle = pa.isUpgrade ? 'Level Upgrade Fee' : 'Admission Fee';
       typeOptions.push({
         value: 'AD',
-        label: `Admission Fee (${pmLabel}) — ${formatINR(kAdmFee)}`,
-        icon: 'credit-card'
+        label: `${itemTitle} (${pmLabel}) — ${formatINR(kAdmFee)}`,
+        icon: pa.isUpgrade ? 'trending-up' : 'credit-card'
       });
     } else if (pa.isFull || s.paymentPlan === 'full') {
       const fullAmt = Number(pa.fullAmt || s.fullPaymentAmount || s.dueAtAdmission?.full || s.feeTotal || 0);
@@ -444,11 +446,20 @@ export async function openPaymentPopup({
     ? `${s.name || 'New Student'} • ${courseCodeOrName || 'Admission'}`
     : `${s.name || 'Student'} • ${s.studentId || s.id || courseCodeOrName || 'Student'}`;
 
+  let confirmedPayment = false;
+  const popupTitle = pendingAdmission?.isUpgrade
+    ? 'Collect Upgrade Fee'
+    : ((isAdmission || pendingAdmission) ? 'Collect Admission Fee' : 'Record Payment');
   const popup = openPopup({
-    title: (isAdmission || pendingAdmission) ? 'Collect Admission Fee' : 'Record Payment',
+    title: popupTitle,
     subtitle: studentSubtitle,
     icon: 'wallet',
-    wide: true
+    wide: true,
+    onClose: () => {
+      if (!confirmedPayment && typeof onCancel === 'function') {
+        onCancel();
+      }
+    }
   });
 
   const form = document.createElement('form');
@@ -657,20 +668,36 @@ export async function openPaymentPopup({
   txnInput.className = 'ui-input';
   txnInput.style.paddingLeft = '12px';
   txnWrap.appendChild(txnInput);
-  txnGroup.append(txnLabelRow, txnWrap);
+  const txnErr = document.createElement('div');
+  txnErr.className = 'ui-err';
+  txnErr.style.minHeight = '16px';
+  txnErr.style.fontSize = '12px';
+  txnErr.style.color = 'var(--danger, #dc2626)';
+  txnErr.style.marginTop = '4px';
+  txnGroup.append(txnLabelRow, txnWrap, txnErr);
+
+  txnInput.addEventListener('input', () => {
+    if (txnInput.value.trim()) {
+      txnWrap.classList.remove('is-invalid');
+      txnErr.textContent = '';
+    }
+  });
 
   const onModeChange = (modeVal) => {
     const isCash = modeVal === 'cash';
     txnInput.disabled = isCash;
-    txnInput.required = false;
+    txnInput.required = !isCash;
+    txnWrap.classList.remove('is-invalid');
+    txnErr.textContent = '';
     if (isCash) {
       txnInput.value = '';
       txnLabel.innerHTML = 'Transaction / Reference ID <span style="font-weight: normal; color: var(--text-mute, #64748b); font-size: 11.5px;">(N/A for Cash)</span>';
       txnInput.placeholder = 'Not applicable for Cash payments';
       txnWrap.classList.add('is-disabled');
     } else {
-      txnLabel.innerHTML = 'Transaction / Reference ID <span style="font-weight: normal; color: var(--text-mute, #64748b); font-size: 11.5px;">(Optional)</span>';
-      txnInput.placeholder = 'Optional for ' + modeVal.toUpperCase();
+      const mLabel = MODE_OPTIONS.find((m) => m.value === modeVal)?.label || modeVal.toUpperCase();
+      txnLabel.innerHTML = 'Transaction / Reference ID <em style="color:var(--danger,#dc2626);font-style:normal;">*</em> <span style="font-weight: normal; color: var(--text-mute, #64748b); font-size: 11.5px;">(Required)</span>';
+      txnInput.placeholder = 'Enter ' + mLabel + ' Transaction / Ref ID';
       txnWrap.classList.remove('is-disabled');
     }
   };
@@ -851,6 +878,17 @@ export async function openPaymentPopup({
       return;
     }
 
+    const selectedMode = String(modeSel.value || 'cash').toLowerCase().trim() || 'cash';
+    const trimmedTxn = selectedMode !== 'cash' ? txnInput.value.trim() : '';
+    if (selectedMode !== 'cash' && !trimmedTxn) {
+      const mLabel = MODE_OPTIONS.find((m) => m.value === selectedMode)?.label || selectedMode.toUpperCase();
+      txnWrap.classList.add('is-invalid');
+      txnErr.textContent = `Transaction / Reference ID is required for ${mLabel} payments.`;
+      showToast({ type: 'error', message: `Transaction / Reference ID is required for ${mLabel} payments.` });
+      txnInput.focus();
+      return;
+    }
+
     const val = typeSel.value;
     if (!val) {
       showToast({ type: 'error', message: 'Please select a valid payment type.' });
@@ -882,28 +920,37 @@ export async function openPaymentPopup({
         const authEmail = auth?.currentUser?.email || profile?.email || '';
         const userDisp = resolveUserDisplay(authEmail, profile?.name, profile?.designation);
         if (isKids && typeof pendingAdmission?.onConfirmPayment === 'function') {
+          const isUpgrade = Boolean(pendingAdmission.isUpgrade);
           const kidsRes = await pendingAdmission.onConfirmPayment({
             mode: modeSel.value,
             txnId: txnInput.value.trim(),
             remarks: remInput.value.trim(),
             paymentDate: todayISO()
           });
-          showToast({ type: 'success', message: 'Admission & payment recorded! Student ID: ' + kidsRes.studentId + ' | Receipt No: ' + kidsRes.receiptNo });
+          showToast({
+            type: 'success',
+            message: isUpgrade
+              ? ('Level upgraded! Receipt No: ' + (kidsRes.receiptNo || '-'))
+              : ('Admission & payment recorded! Student ID: ' + kidsRes.studentId + ' | Receipt No: ' + kidsRes.receiptNo)
+          });
           playPaymentSuccessSound();
+          confirmedPayment = true;
           popup.close();
           promptOpenReceipt({
-            studentDocId: kidsRes.id || kidsRes.studentDocId,
-            paymentId: 'payment',
+            studentDocId: kidsRes.id || kidsRes.studentDocId || s.id,
+            paymentId: isUpgrade ? (kidsRes.paymentId || 'latest') : 'payment',
             receiptNo: kidsRes.receiptNo,
-            student: { name: s.name, studentId: kidsRes.studentId },
-            forText: 'Admission Fee (' + (pendingAdmission.paymentMode === 'difference' ? 'Difference' : 'Full Payment') + ')',
+            student: { name: s.name, studentId: kidsRes.studentId || s.studentId },
+            forText: isUpgrade
+              ? ('Level Upgrade (' + (pendingAdmission.courseName || 'Package') + ')')
+              : ('Admission Fee (' + (pendingAdmission.paymentMode === 'difference' ? 'Difference' : 'Full Payment') + ')'),
             amount: baseAmount,
             lateFee: 0,
             totalPaid: baseAmount,
             mode: modeSel.value,
             txnId: txnInput.value.trim(),
             date: new Date(),
-            from: 'school-admissions'
+            from: isUpgrade ? (from || 'profile') : 'school-admissions'
           });
           if (typeof onSuccess === 'function') {
             await onSuccess({ ...kidsRes, mode: modeSel.value, txnId: txnInput.value.trim() });
@@ -928,6 +975,7 @@ export async function openPaymentPopup({
 
         showToast({ type: 'success', message: 'Admission & payment recorded! Student ID: ' + res.studentId + ' | Receipt No: ' + res.receiptNo });
         playPaymentSuccessSound();
+        confirmedPayment = true;
         popup.close();
 
         const forText = pendingAdmission.isFull
@@ -988,6 +1036,7 @@ export async function openPaymentPopup({
         window.dispatchEvent(new CustomEvent('uic:data-mutated', { detail: { reason: 'kids:payment' } }));
         showToast({ type: 'success', message: 'Payment recorded! Receipt No: ' + kidsPayRes.receiptNo });
         playPaymentSuccessSound();
+        confirmedPayment = true;
         popup.close();
 
         const mText = formatShortMonthYear(kidsPayRes.month) || kidsPayRes.month || 'Monthly Fee';
@@ -1049,6 +1098,7 @@ export async function openPaymentPopup({
 
       showToast({ type: 'success', message: 'Payment recorded! Receipt No: ' + res.receiptNo });
       playPaymentSuccessSound();
+      confirmedPayment = true;
       popup.close();
 
       const forText = isExam

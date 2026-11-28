@@ -11,11 +11,11 @@ import {
   collection, getDocs, query, where, doc, getDoc, addDoc, updateDoc, serverTimestamp,
   runTransaction, writeBatch, arrayUnion
 } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.197';
-import { localToday, monthSeq, nextMonth, previousMonth } from './school-lifecycle.js?v=1.8.197';
-import { firstMonthlyMonth } from './school-receipt.js?v=1.8.197';
-import { fineFor } from './session-rules.js?v=1.8.197';
-import { readReceiptNo, writeCounter } from '../services/admission.service.js?v=1.8.197';
+import { showToast } from '../components/toast.js?v=1.8.198';
+import { localToday, monthSeq, nextMonth, previousMonth } from './school-lifecycle.js?v=1.8.198';
+import { firstMonthlyMonth } from './school-receipt.js?v=1.8.198';
+import { fineFor } from './session-rules.js?v=1.8.198';
+import { readReceiptNo, writeCounter } from '../services/admission.service.js?v=1.8.198';
 
 const BILLS_COL = 'bills';
 const PAYMENTS_COL = 'payments';
@@ -1014,11 +1014,15 @@ export async function upgradeKidsPackage({
   defaultStartMonth,
   paymentMode = 'difference',
   diffCharge = 0,
+  mode = 'cash',
+  txnId = '',
+  remarks = '',
   noPaymentReason = '',
   noPaymentOther = '',
   actorEmail = 'admin',
   actorName = '',
   actorDesignation = '',
+  actorRole = '',
   paidDate,
   asOfDate
 } = {}) {
@@ -1034,6 +1038,9 @@ export async function upgradeKidsPackage({
   const prevPaid = rupees(student.actualAmountReceived ?? student.admissionFee ?? 0);
   const newConfiguredAdm = rupees(newCourse.admissionFee || 0);
   const charge = rupees(diffCharge || 0);
+  const cleanMode = charge > 0 ? (String(mode || 'cash').toLowerCase().trim() || 'cash') : '';
+  const cleanTxn = (charge > 0 && cleanMode !== 'cash') ? String(txnId || '').trim() : '';
+  const cleanRemarks = String(remarks || '').trim();
 
   const [bills, enrols, breaks] = await Promise.all([
     queryStudentDocs(targetDb, BILLS_COL, student),
@@ -1041,170 +1048,207 @@ export async function upgradeKidsPackage({
     queryStudentDocs(targetDb, BREAKS_COL, student)
   ]);
 
-  const wb = writeBatch(targetDb);
   const prevEndMonth = addMonthsYM(billingStartMonth, -1);
-
-  for (const en of enrols) {
-    if (String(en.status || '').toLowerCase() === 'active') {
-      wb.update(en._ref, {
-        status: 'upgraded',
-        billingTo: prevEndMonth,
-        upgradedAt: serverTimestamp(),
-        upgradedBy: actorEmail,
-        updatedAt: serverTimestamp()
-      });
-    }
-  }
-
-  const newEnrolRef = doc(collection(targetDb, ENROLMENTS_COL));
-  wb.set(newEnrolRef, {
-    id: newEnrolRef.id,
-    ctx: 'school',
-    studentId: student.id,
-    studentCode: student.studentId || '',
-    type: 'upgrade',
-    courseId: newCourse.id,
-    courseName: newCourse.name || newCourse.id,
-    courseLevelName: newCourse.name || newCourse.id,
-    batchId: newBatch.id,
-    batchName: newBatch.name || newBatch.id,
-    admissionFee: charge,
-    monthlyFee: newMonthly,
-    firstMonthlyMonth: billingStartMonth,
-    defaultFirstMonthlyMonth: defaultStartMonth || billingStartMonth,
-    firstMonthlyChangedFromDefault: Boolean(defaultStartMonth && billingStartMonth !== defaultStartMonth),
-    billingFrom: billingStartMonth,
-    billingTo: null,
-    status: 'active',
-    previousCourseId: student.courseId || '',
-    previousCourseName: student.courseName || '',
-    createdAt: serverTimestamp(),
-    createdBy: actorEmail
-  });
-
-  // Update untouched unpaid bills from billingStartMonth onward to the new level & monthly fee (no double billing),
-  // leaving earlier months untouched on the old package.
-  const existingMonthSet = new Set();
-  for (const b of bills) {
-    existingMonthSet.add(b.month);
-    if (monthSeq(b.month) >= monthSeq(billingStartMonth) && String(b.status || '').toLowerCase() === 'unpaid' && !(Number(b.paidAmount || 0) > 0)) {
-      wb.update(b._ref, {
-        ctx: 'school',
-        enrolmentId: newEnrolRef.id,
-        courseId: newCourse.id,
-        courseName: newCourse.name || newCourse.id,
-        courseLevelName: newCourse.name || newCourse.id,
-        batchId: newBatch.id,
-        batchName: newBatch.name || newBatch.id,
-        monthlyFee: newMonthly,
-        updatedAt: serverTimestamp(),
-        updatedBy: actorEmail
-      });
-    }
-  }
-
-  // Generate open bills >= billingStartMonth up to currentMonth if active and not on break.
   const breakMap = buildApprovedBreakMonthsMap(breaks);
   const skipSet = new Set([
     ...(breakMap.get(student.id) || []),
     ...(student.studentId ? (breakMap.get(student.studentId) || []) : [])
   ]);
-  if (isKidsStudentEligible(student) && monthSeq(billingStartMonth) <= monthSeq(currentMonth)) {
-    let m = billingStartMonth;
-    let guard = 0;
-    while (m && monthSeq(m) <= monthSeq(currentMonth) && guard < 120) {
-      if (!existingMonthSet.has(m) && !skipSet.has(m)) {
-        const bRef = doc(targetDb, BILLS_COL, `${student.id}_${m}`);
-        wb.set(bRef, {
-          id: bRef.id,
+  const newEnrolRef = doc(collection(targetDb, ENROLMENTS_COL));
+  const nowIso = new Date().toISOString();
+
+  function applyUpgradeWrites(writer, { payRef = null, receiptNo = '', centreCode = '' } = {}) {
+    for (const en of enrols) {
+      if (String(en.status || '').toLowerCase() === 'active') {
+        writer.update(en._ref, {
+          status: 'upgraded',
+          billingTo: prevEndMonth,
+          upgradedAt: serverTimestamp(),
+          upgradedBy: actorEmail,
+          updatedAt: serverTimestamp()
+        });
+      }
+    }
+
+    writer.set(newEnrolRef, {
+      id: newEnrolRef.id,
+      ctx: 'school',
+      studentId: student.id,
+      studentCode: student.studentId || '',
+      type: 'upgrade',
+      courseId: newCourse.id,
+      courseName: newCourse.name || newCourse.id,
+      courseLevelName: newCourse.name || newCourse.id,
+      batchId: newBatch.id,
+      batchName: newBatch.name || newBatch.id,
+      admissionFee: charge,
+      monthlyFee: newMonthly,
+      firstMonthlyMonth: billingStartMonth,
+      defaultFirstMonthlyMonth: defaultStartMonth || billingStartMonth,
+      firstMonthlyChangedFromDefault: Boolean(defaultStartMonth && billingStartMonth !== defaultStartMonth),
+      billingFrom: billingStartMonth,
+      billingTo: null,
+      status: 'active',
+      previousCourseId: student.courseId || '',
+      previousCourseName: student.courseName || '',
+      createdAt: serverTimestamp(),
+      createdBy: actorEmail
+    });
+
+    // Update untouched unpaid bills from billingStartMonth onward to the new level & monthly fee (no double billing),
+    // leaving earlier months untouched on the old package.
+    const existingMonthSet = new Set();
+    for (const b of bills) {
+      existingMonthSet.add(b.month);
+      if (monthSeq(b.month) >= monthSeq(billingStartMonth) && String(b.status || '').toLowerCase() === 'unpaid' && !(Number(b.paidAmount || 0) > 0)) {
+        writer.update(b._ref, {
           ctx: 'school',
-          studentId: student.id,
-          ...(student.studentId ? { studentCode: student.studentId } : {}),
           enrolmentId: newEnrolRef.id,
           courseId: newCourse.id,
           courseName: newCourse.name || newCourse.id,
           courseLevelName: newCourse.name || newCourse.id,
           batchId: newBatch.id,
           batchName: newBatch.name || newBatch.id,
-          month: m,
           monthlyFee: newMonthly,
-          status: 'unpaid',
-          dueDate: dueDateForMonth(m),
-          lateFee: 0,
-          paidAmount: 0,
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp()
+          updatedAt: serverTimestamp(),
+          updatedBy: actorEmail
         });
       }
-      m = addMonthsYM(m, 1);
-      guard += 1;
     }
-  }
 
-  if (charge > 0) {
-    const payRef = doc(collection(targetDb, PAYMENTS_COL));
-    wb.set(payRef, {
-      id: payRef.id,
-      ctx: 'school',
-      type: 'UPGRADE',
-      studentId: student.id,
-      studentCode: student.studentId || '',
+    // Generate open bills >= billingStartMonth up to currentMonth if active and not on break.
+    if (isKidsStudentEligible(student) && monthSeq(billingStartMonth) <= monthSeq(currentMonth)) {
+      let m = billingStartMonth;
+      let guard = 0;
+      while (m && monthSeq(m) <= monthSeq(currentMonth) && guard < 120) {
+        if (!existingMonthSet.has(m) && !skipSet.has(m)) {
+          const bRef = doc(targetDb, BILLS_COL, `${student.id}_${m}`);
+          writer.set(bRef, {
+            id: bRef.id,
+            ctx: 'school',
+            studentId: student.id,
+            ...(student.studentId ? { studentCode: student.studentId } : {}),
+            enrolmentId: newEnrolRef.id,
+            courseId: newCourse.id,
+            courseName: newCourse.name || newCourse.id,
+            courseLevelName: newCourse.name || newCourse.id,
+            batchId: newBatch.id,
+            batchName: newBatch.name || newBatch.id,
+            month: m,
+            monthlyFee: newMonthly,
+            status: 'unpaid',
+            dueDate: dueDateForMonth(m),
+            lateFee: 0,
+            paidAmount: 0,
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp()
+          });
+        }
+        m = addMonthsYM(m, 1);
+        guard += 1;
+      }
+    }
+
+    if (charge > 0 && payRef) {
+      writer.set(payRef, {
+        id: payRef.id,
+        ctx: 'school',
+        type: 'UPGRADE',
+        studentId: student.id,
+        studentDocId: student.id,
+        studentCode: student.studentId || '',
+        courseId: newCourse.id,
+        courseName: newCourse.name || newCourse.id,
+        receiptNo,
+        receiptCentreCode: centreCode,
+        amount: charge,
+        feeCovered: charge,
+        totalAmount: charge,
+        paymentMode,
+        mode: cleanMode,
+        paymentMethod: cleanMode,
+        txnId: cleanTxn,
+        receivedDate: today,
+        receivedBy: actorEmail,
+        ...(actorName ? { receivedByName: actorName } : {}),
+        ...(actorDesignation ? { recordedByDesignation: actorDesignation } : {}),
+        ...(actorRole ? { receivedByRole: actorRole } : {}),
+        remarks: cleanRemarks || `Level upgrade (${student.courseName || '-'} -> ${newCourse.name || newCourse.id})`,
+        createdAt: serverTimestamp()
+      });
+    }
+
+    writer.update(doc(targetDb, STUDENTS_COL, student.id), {
+      ...(student.ctx ? {} : { ctx: 'school' }),
+      ...(student.branchId ? {} : { branchId: 'HO', branchName: 'Head Office' }),
       courseId: newCourse.id,
       courseName: newCourse.name || newCourse.id,
-      amount: charge,
-      totalAmount: charge,
-      paymentMode,
-      receivedDate: today,
-      receivedBy: actorEmail,
-      ...(actorName ? { receivedByName: actorName } : {}),
-      ...(actorDesignation ? { recordedByDesignation: actorDesignation } : {}),
-      remarks: `Level upgrade (${student.courseName || '-'} -> ${newCourse.name || newCourse.id})`,
-      createdAt: serverTimestamp()
+      courseLevelName: newCourse.name || newCourse.id,
+      batchId: newBatch.id,
+      batchName: newBatch.name || newBatch.id,
+      monthlyFee: newMonthly,
+      configuredAdmissionFee: newConfiguredAdm,
+      firstMonthlyMonth: billingStartMonth,
+      defaultFirstMonthlyMonth: defaultStartMonth || billingStartMonth,
+      firstMonthlyChangedFromDefault: Boolean(defaultStartMonth && billingStartMonth !== defaultStartMonth),
+      activeEnrolmentId: newEnrolRef.id,
+      upgradeDifferencePaid: rupees(Number(student.upgradeDifferencePaid || 0) + charge),
+      actualAmountReceived: rupees(prevPaid + charge),
+      packageHistory: arrayUnion({
+        type: 'upgrade',
+        fromCourseId: student.courseId || '',
+        fromCourseName: student.courseName || '',
+        toCourseId: newCourse.id,
+        toCourseName: newCourse.name || newCourse.id,
+        toBatchId: newBatch.id,
+        toBatchName: newBatch.name || newBatch.id,
+        newMonthlyFee: newMonthly,
+        billingStartMonth,
+        defaultStartMonth: defaultStartMonth || billingStartMonth,
+        changedFromDefault: Boolean(defaultStartMonth && billingStartMonth !== defaultStartMonth),
+        paymentMode,
+        diffPaid: charge,
+        ...(charge > 0 ? { mode: cleanMode, txnId: cleanTxn, receiptNo, paymentId: payRef?.id || '' } : {}),
+        noPaymentReason: noPaymentReason || '',
+        noPaymentOther: noPaymentOther || '',
+        by: actorEmail,
+        at: nowIso
+      }),
+      updatedAt: serverTimestamp(),
+      updatedBy: actorEmail
     });
   }
 
-  const nowIso = new Date().toISOString();
-  wb.update(doc(targetDb, STUDENTS_COL, student.id), {
-    ...(student.ctx ? {} : { ctx: 'school' }),
-    ...(student.branchId ? {} : { branchId: 'HO', branchName: 'Head Office' }),
-    courseId: newCourse.id,
-    courseName: newCourse.name || newCourse.id,
-    courseLevelName: newCourse.name || newCourse.id,
-    batchId: newBatch.id,
-    batchName: newBatch.name || newBatch.id,
-    monthlyFee: newMonthly,
-    configuredAdmissionFee: newConfiguredAdm,
-    firstMonthlyMonth: billingStartMonth,
-    defaultFirstMonthlyMonth: defaultStartMonth || billingStartMonth,
-    firstMonthlyChangedFromDefault: Boolean(defaultStartMonth && billingStartMonth !== defaultStartMonth),
-    activeEnrolmentId: newEnrolRef.id,
-    upgradeDifferencePaid: rupees(Number(student.upgradeDifferencePaid || 0) + charge),
-    actualAmountReceived: rupees(prevPaid + charge),
-    packageHistory: arrayUnion({
-      type: 'upgrade',
-      fromCourseId: student.courseId || '',
-      fromCourseName: student.courseName || '',
-      toCourseId: newCourse.id,
-      toCourseName: newCourse.name || newCourse.id,
-      toBatchId: newBatch.id,
-      toBatchName: newBatch.name || newBatch.id,
-      newMonthlyFee: newMonthly,
-      billingStartMonth,
-      defaultStartMonth: defaultStartMonth || billingStartMonth,
-      changedFromDefault: Boolean(defaultStartMonth && billingStartMonth !== defaultStartMonth),
-      paymentMode,
-      diffPaid: charge,
-      noPaymentReason: noPaymentReason || '',
-      noPaymentOther: noPaymentOther || '',
-      by: actorEmail,
-      at: nowIso
-    }),
-    updatedAt: serverTimestamp(),
-    updatedBy: actorEmail
-  });
+  let paymentId = '';
+  let receiptNo = '';
 
-  await wb.commit();
-  return { enrolmentId: newEnrolRef.id, billingStartMonth, charge };
+  if (charge > 0) {
+    await runTransaction(targetDb, async (tx) => {
+      const orgSnap = await tx.get(doc(targetDb, 'settings', 'org_config'));
+      const configuredCode = String(orgSnap.exists() ? orgSnap.data().receiptCode || '' : '').trim().toUpperCase();
+      const centreCode = /^[A-Z0-9]{2,12}$/.test(configuredCode) ? configuredCode : (student.receiptCentreCode || 'HO');
+      const rc = await readReceiptNo(tx, { org: 'school', type: 'UP', branchCode: centreCode, date: today });
+      const payRef = doc(collection(targetDb, PAYMENTS_COL));
+      paymentId = payRef.id;
+      receiptNo = rc.receiptNo;
+      writeCounter(tx, rc.ref, rc.next, { org: 'school', type: 'UP', branchCode: centreCode, date: today });
+      applyUpgradeWrites(tx, { payRef, receiptNo, centreCode });
+    });
+  } else {
+    const wb = writeBatch(targetDb);
+    applyUpgradeWrites(wb);
+    await wb.commit();
+  }
+
+  return {
+    enrolmentId: newEnrolRef.id,
+    billingStartMonth,
+    charge,
+    paymentId,
+    receiptNo,
+    studentDocId: student.id,
+    studentId: student.studentId || ''
+  };
 }
 
 export function evaluateKidsPendingBills({ students = [], bills = [], breaks = [], asOfDate } = {}) {
@@ -1430,9 +1474,9 @@ export function buildKidsPaymentLedger({ students = [], admissionPayments = [], 
       isCrossBranch: false,
       courseId: p.courseId || s.courseId || '',
       courseName: p.courseName || s.courseLevelName || s.courseName || '',
-      type: isUpgrade ? 'AD' : 'KIDS_MONTHLY',
+      type: isUpgrade ? 'UPGRADE' : 'KIDS_MONTHLY',
       typeLabel: isUpgrade ? 'Upgrade difference' : 'Kids monthly fee',
-      mode: (p.mode || 'cash').toLowerCase(),
+      mode: String(p.mode || p.paymentMethod || 'cash').toLowerCase(),
       txnId: p.txnId || '',
       amount: amt,
       lateFeePaid: 0,
@@ -1443,7 +1487,9 @@ export function buildKidsPaymentLedger({ students = [], admissionPayments = [], 
       recordedByName: p.receivedByName || p.recordedByName || '',
       recordedByDesignation: p.recordedByDesignation || '',
       remarks: p.remarks || '',
-      receiptRoute: isUpgrade ? `#/students/${encodeURIComponent(s.id)}?tab=course` : `#/students/${encodeURIComponent(s.id)}?tab=payments`,
+      receiptRoute: (isUpgrade && p.id)
+        ? `#/payments/${encodeURIComponent(s.id)}/${encodeURIComponent(p.id)}/receipt?from=school-payments`
+        : (isUpgrade ? `#/students/${encodeURIComponent(s.id)}?tab=course` : `#/students/${encodeURIComponent(s.id)}?tab=payments`),
       createdAtSec: toSec(p.createdAt)
     });
   }

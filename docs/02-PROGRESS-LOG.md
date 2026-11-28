@@ -39,6 +39,36 @@
 
 ---
 
+### [2026-11-28 19:55] Version 1.8.198 — Kids Upgrade Payment Popup, Required Non-Cash TXN ID & Live Deploy
+
+**What was built:**
+- **Kids Level Upgrade Shared Payment Popup (`public/js/utils/school-break-modals.js`, `public/js/utils/school-billing.js`, `public/js/components/payment-popup.js`, `public/js/pages/payment-receipt.page.js`)**:
+  - Updated `openKidsUpgradePackageModal` so whenever an upgrade charge is `> 0`, submitting opens `openPaymentPopup` (**Collect Upgrade Fee**) before committing. Cancelling writes nothing to Firestore and re-opens the Upgrade modal preserving the selected level, batch, payment option, and billing start month (`draft`).
+  - Updated `upgradeKidsPackage` (`runTransaction` when `charge > 0`) to assign sequential `UK<YY>UP-<CENTRE>-<NNNN>` receipts, record `mode`, `paymentMethod`, `txnId`, and `remarks` on both the `UPGRADE` payment doc and `packageHistory`, and return `paymentId` / `receiptNo`; updated `buildKidsPaymentLedger` upgrade `receiptRoute` to `#/payments/<studentDocId>/<paymentId>/receipt?from=school-payments`.
+- **Mandatory Non-Cash Transaction / Reference ID (`public/js/components/payment-popup.js`, Youth + Kids)**:
+  - Required non-empty Transaction / Reference ID on every non-cash mode (`UPI`, `Card`, `Bank Transfer`, `Cheque`) across both Youth and Kids, displaying `* (Required)` plus a clear inline field error (`Transaction / Reference ID is required for <Mode> payments.`) and toast on empty submit while keeping `Cash` disabled (`N/A for Cash`).
+- **Deploy, Reports & Diff**:
+  - Bumped `?v=` / `APP_VERSION` to `1.8.198` (`360` replacements across `55` files), deployed `firestore:indexes` (`33` index ops `Done = YES`), `firestore:rules`, and `hosting` (`184` files, `https://unique-infotech-cms.web.app`), and saved `docs/reports/v1.8.198-report.md` and `docs/reports/v1.8.198-changes.txt` (plain `.txt` diff; no `.diff` files).
+
+**Why:**
+- Eliminate the last Kids payment flow bypassing `openPaymentPopup` and enforce audit-complete Transaction / Reference IDs across all non-cash receipts in both programmes.
+
+**Files touched:**
+- CREATED: `docs/reports/v1.8.198-report.md`, `docs/reports/v1.8.198-changes.txt` (plus renamed `v1.8.197-changes.diff` -> `v1.8.197-changes.txt` committed cleanly)
+- MODIFIED: `public/js/components/payment-popup.js`, `public/js/utils/school-break-modals.js`, `public/js/utils/school-billing.js`, `public/js/pages/payment-receipt.page.js`, `docs/02-PROGRESS-LOG.md` (+ `bump-version.js 1.8.198` across `55` files in `public/`)
+
+**Firestore changes:**
+- Deployed `firestore.indexes.json` (`32` composite indexes + `1` override; `33` ops `Done = YES`), `firestore.rules`, and `hosting` (`https://unique-infotech-cms.web.app`). Upgrade payments use counter `counters/rcpt_UK_<YY>_UP_<CENTRE>`.
+
+**Tested on (post-final-edit):**
+- `node tools/check-imports.js`: ✅ (`115` files, `455` imports, `398` exports, `0` errors)
+- `scratch/run-tests.mjs`: ✅
+- `verify-kids-break-v196.mjs` (Firebase Emulators + Chrome): ✅ Kids Upgrade `openPaymentPopup` + Cancel preservation + `UPI-UPG-300` (`UK26UP-HO-0001`), empty TXN ID blocked across `UPI`/`Card`/`Bank`/`Cheque` + Youth `Cheque` `CHQ-990011`, `0` errors.
+- `verify-router-regression.mjs`, `verify-dashboard.mjs`, `verify-reports.mjs`, `verify-archives.mjs`, `verify-auth-profile.mjs`: ✅ all passed cleanly.
+- Live DevTools check: Blocked (desktop Chrome remote debugging not active; live DB untouched).
+
+---
+
 ### [2026-11-28 14:25] Version 1.8.197 — Unique Kids Shared Payment Popup, Mode/TXN Receipts & Profile Ledger (Pushed to main, Pending Deploy Approval)
 
 **What was built:**

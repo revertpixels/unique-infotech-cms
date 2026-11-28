@@ -6,14 +6,15 @@
 
 import { db } from '../config/firebase-config.js';
 import { collection, getDocs, query, where } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-import { showToast } from '../components/toast.js?v=1.8.197';
-import { openPopup } from '../components/modal.js?v=1.8.197';
-import { createSelect } from '../components/ui-select.js?v=1.8.197';
-import { createDatePicker, createMonthPicker } from '../components/ui-datepicker.js?v=1.8.197';
-import { formatINR } from '../utils/formatter.js?v=1.8.197';
-import { isCourseActive, batchAllowsCourse } from '../utils/session-rules.js?v=1.8.197';
-import { resolveUserDisplay } from '../services/user-directory.service.js?v=1.8.197';
-import { localToday, monthSeq } from './school-lifecycle.js?v=1.8.197';
+import { showToast } from '../components/toast.js?v=1.8.198';
+import { openPopup } from '../components/modal.js?v=1.8.198';
+import { openPaymentPopup } from '../components/payment-popup.js?v=1.8.198';
+import { createSelect } from '../components/ui-select.js?v=1.8.198';
+import { createDatePicker, createMonthPicker } from '../components/ui-datepicker.js?v=1.8.198';
+import { formatINR } from '../utils/formatter.js?v=1.8.198';
+import { isCourseActive, batchAllowsCourse } from '../utils/session-rules.js?v=1.8.198';
+import { resolveUserDisplay } from '../services/user-directory.service.js?v=1.8.198';
+import { localToday, monthSeq } from './school-lifecycle.js?v=1.8.198';
 import {
   addMonthsYM,
   formatBreakPeriod,
@@ -26,7 +27,7 @@ import {
   resumeKidsBreak,
   upgradeKidsPackage,
   isBreakOverdueReturn
-} from './school-billing.js?v=1.8.197';
+} from './school-billing.js?v=1.8.198';
 
 function mk(tag, cls, text) {
   const e = document.createElement(tag);
@@ -461,7 +462,7 @@ export async function openKidsResumeBreakModal({ student, breakDoc = null, profi
 /**
  * Shared Course Upgrade / Package Change modal (uses the exact same First monthly billing month selector).
  */
-export async function openKidsUpgradePackageModal({ student, levels = [], batches = [], profile, onSuccess } = {}) {
+export async function openKidsUpgradePackageModal({ student, levels = [], batches = [], profile, onSuccess, draft = null } = {}) {
   if (!student || !student.id) return;
   let saving = false;
   const today = localToday();
@@ -505,30 +506,41 @@ export async function openKidsUpgradePackageModal({ student, levels = [], batche
     }))
   );
 
-  let selectedLevelId = '';
-  let selectedBatchId = '';
-  let paymentMode = 'difference';
+  let selectedLevelId = draft?.levelId || '';
+  let selectedBatchId = draft?.batchId || '';
+  let paymentMode = draft?.paymentMode || 'difference';
+
+  function buildBatchOptionsForLevel(levelId) {
+    const cr = useLevels.find((l) => l.id === levelId) || null;
+    const bOpts = [{ value: '', label: 'Select destination batch', icon: 'layers' }];
+    if (cr) {
+      useBatches.filter((b) => batchAllowsCourse(b, cr.id, useLevels)).forEach((b) => {
+        bOpts.push({ value: b.id, label: b.name || b.id, icon: 'layers' });
+      });
+    }
+    return bOpts;
+  }
+
+  const initialBatchOpts = buildBatchOptionsForLevel(selectedLevelId);
+  if (selectedBatchId && !initialBatchOpts.some((o) => o.value === selectedBatchId)) {
+    selectedBatchId = '';
+  }
 
   const batchSel = createSelect(batHost, {
-    options: [{ value: '', label: 'Select destination batch', icon: 'layers' }],
-    value: '',
+    options: initialBatchOpts,
+    value: selectedBatchId,
     ariaLabel: 'New batch',
     onChange: (v) => { selectedBatchId = v; check(); }
   });
 
   const levelSel = createSelect(lvlHost, {
     options: lvlOpts,
-    value: '',
+    value: selectedLevelId,
     ariaLabel: 'New level',
     onChange: (v) => {
       selectedLevelId = v;
       const cr = useLevels.find((l) => l.id === v) || null;
-      const bOpts = [{ value: '', label: 'Select destination batch', icon: 'layers' }];
-      if (cr) {
-        useBatches.filter((b) => batchAllowsCourse(b, cr.id, useLevels)).forEach((b) => {
-          bOpts.push({ value: b.id, label: b.name || b.id, icon: 'layers' });
-        });
-      }
+      const bOpts = buildBatchOptionsForLevel(v);
       batchSel.setOptions(bOpts);
       if (cr && student.batchId && bOpts.some((o) => o.value === student.batchId)) {
         selectedBatchId = student.batchId;
@@ -556,7 +568,7 @@ export async function openKidsUpgradePackageModal({ student, levels = [], batche
       { value: 'none', label: 'No admission payment (upgraded student)', icon: 'shield-off' },
       { value: 'full', label: 'Full admission fee', icon: 'banknote' }
     ],
-    value: 'difference',
+    value: paymentMode,
     ariaLabel: 'Admission fee option',
     onChange: (v) => { paymentMode = v; syncBillingAndFee(); check(); }
   });
@@ -585,7 +597,7 @@ export async function openKidsUpgradePackageModal({ student, levels = [], batche
     return Math.max(0, cfg - prevPaid);
   }
 
-  function syncBillingAndFee() {
+  function syncBillingAndFee(explicitBillingStart) {
     const cr = useLevels.find((l) => l.id === selectedLevelId) || null;
     const chg = calcCharge();
     feeSummaryTxt.textContent = cr
@@ -594,7 +606,8 @@ export async function openKidsUpgradePackageModal({ student, levels = [], batche
     billingSelector.setConfig({
       anchorDate: today,
       monthlyFee: cr ? Number(cr.monthlyFee || 0) : 0,
-      paymentMode
+      paymentMode,
+      ...(explicitBillingStart !== undefined ? { value: explicitBillingStart } : {})
     });
   }
 
@@ -603,7 +616,7 @@ export async function openKidsUpgradePackageModal({ student, levels = [], batche
     okBtn.disabled = saving || !selectedLevelId || !selectedBatchId || !st.value;
   }
 
-  syncBillingAndFee();
+  syncBillingAndFee(draft?.billingStartMonth);
   check();
   if (typeof lucide !== 'undefined') lucide.createIcons();
 
@@ -612,11 +625,66 @@ export async function openKidsUpgradePackageModal({ student, levels = [], batche
     const br = useBatches.find((b) => b.id === selectedBatchId);
     if (!cr || !br) return;
     const st = billingSelector.getState();
+    const chg = calcCharge();
+    const who = (profile && profile.email) || 'admin';
+    const disp = resolveUserDisplay(who, profile?.name, profile?.designation);
+
+    if (chg > 0) {
+      const savedDraft = {
+        levelId: selectedLevelId,
+        batchId: selectedBatchId,
+        paymentMode,
+        billingStartMonth: st.value
+      };
+      popup.close(true);
+      openPaymentPopup({
+        student: { ...student, ctx: 'school', courseCode: cr.code || cr.courseCode || '', courseName: cr.name || cr.id },
+        pendingAdmission: {
+          org: 'school',
+          isUpgrade: true,
+          paymentMode,
+          admFee: chg,
+          courseName: cr.name || cr.id,
+          onConfirmPayment: async (pp) => {
+            const upgRes = await upgradeKidsPackage({
+              db,
+              student,
+              newCourse: cr,
+              newBatch: br,
+              billingStartMonth: st.value,
+              defaultStartMonth: st.defaultValue,
+              paymentMode,
+              diffCharge: chg,
+              mode: pp.mode,
+              txnId: pp.txnId,
+              remarks: pp.remarks,
+              actorEmail: who,
+              actorName: disp.name || profile?.name || '',
+              actorDesignation: disp.designation || profile?.designation || '',
+              actorRole: profile?.role || '',
+              paidDate: pp.paymentDate || today,
+              asOfDate: today
+            });
+            window.dispatchEvent(new CustomEvent('uic:data-mutated', { detail: { reason: 'student:upgrade' } }));
+            return upgRes;
+          }
+        },
+        isAdmission: true,
+        profile,
+        from: 'profile',
+        onSuccess: async () => {
+          if (onSuccess) await onSuccess();
+        },
+        onCancel: () => {
+          openKidsUpgradePackageModal({ student, levels: useLevels, batches: useBatches, profile, onSuccess, draft: savedDraft });
+        }
+      });
+      return;
+    }
+
     saving = true;
     setSaving(true);
     try {
-      const who = (profile && profile.email) || 'admin';
-      const disp = resolveUserDisplay(who, profile?.name, profile?.designation);
       await upgradeKidsPackage({
         db,
         student,
@@ -625,10 +693,11 @@ export async function openKidsUpgradePackageModal({ student, levels = [], batche
         billingStartMonth: st.value,
         defaultStartMonth: st.defaultValue,
         paymentMode,
-        diffCharge: calcCharge(),
+        diffCharge: 0,
         actorEmail: who,
         actorName: disp.name || profile?.name || '',
         actorDesignation: disp.designation || profile?.designation || '',
+        actorRole: profile?.role || '',
         paidDate: today,
         asOfDate: today
       });
